@@ -91,9 +91,12 @@ struct WordNode {
 	int level;
 };
 
-#define NP2_TREE_HEIGHT_LIMIT	16
+#define NP2_TREE_HEIGHT_LIMIT	32
+// TODO: since the tree is sorted, nodes greater than some level can be deleted to reduce total words.
+// or only limit word count in WordList_GetList().
 
 // Andersson Tree, source from http://www.eternallyconfuzzled.com/tuts/datastructures/jsw_tut_andersson.aspx
+// see also https://en.wikipedia.org/wiki/AA_tree
 #define aa_tree_skew(t) \
 	if ((t)->level && (t)->left && (t)->level == (t)->left->level) {\
 		struct WordNode *save = (t)->left;					\
@@ -114,7 +117,7 @@ static inline void WordList_AddBuffer(struct WordList *pWList) {
 	char *buffer = (char *)NP2HeapAlloc(pWList->capacity);
 	char *align = (char *)align_ptr(buffer);
 	pWList->bufferList[pWList->bufferCount] = buffer;
-	pWList->buffer = align;
+	pWList->buffer = buffer;
 	pWList->bufferCount++;
 	pWList->offset = (int)(align - buffer);
 }
