@@ -61,7 +61,6 @@ HWND	hwndMain;
 static HWND hwndNextCBChain = NULL;
 HWND	hDlgFindReplace = NULL;
 
-#define NUMTOOLBITMAPS		25
 #define MARGIN_LINE_NUMBER	0	// line number
 #define MARGIN_SELECTION	1	// selection margin
 #define MARGIN_FOLD_INDEX	2	// folding index
@@ -147,6 +146,7 @@ static BOOL bMarkOccurrencesMatchCase;
 static BOOL bMarkOccurrencesMatchWords;
 struct EditAutoCompletionConfig autoCompletionConfig;
 static BOOL bShowCodeFolding;
+static BOOL bShowFoldingLine;
 #if NP2_ENABLE_SHOW_CALL_TIPS
 static BOOL bShowCallTips = FALSE;
 static int iCallTipsWaitTime = 500; // 500 ms
@@ -201,7 +201,6 @@ typedef struct _wi {
 } WININFO;
 
 static WININFO wi;
-static BOOL bStickyWinPos;
 //BOOL	bIsAppThemed;
 
 static int cyReBar;
@@ -230,6 +229,11 @@ int		cyInsertTagDlg;
 int		xFindReplaceDlg;
 int		yFindReplaceDlg;
 int		cxFindReplaceDlg;
+
+extern int cxStyleSelectDlg;
+extern int cyStyleSelectDlg;
+extern int cxStyleCustomizeDlg;
+extern int cyStyleCustomizeDlg;
 
 static LPWSTR lpFileList[32];
 static int cFileList = 0;
@@ -1674,8 +1678,8 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	SciCall_MarkerDefine(SC_MARKNUM_FOLDEROPENMID, SC_MARK_BOXMINUSCONNECTED);
 	SciCall_MarkerDefine(SC_MARKNUM_FOLDERMIDTAIL, SC_MARK_TCORNER);
 #if !NP2_DEBUG_FOLD_LEVEL
-	// Draw below if not expanded
-	SciCall_SetFoldFlags(SC_FOLDFLAG_LINEAFTER_CONTRACTED);
+	// Draw folding line below when collapsed
+	SciCall_SetFoldFlags(bShowFoldingLine ? SC_FOLDFLAG_LINEAFTER_CONTRACTED : 0);
 #else
 	SciCall_SetFoldFlags(SC_FOLDFLAG_LEVELNUMBERS);
 #endif
@@ -1788,7 +1792,7 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 	BITMAP bmp;
 	GetObject(hbmp, sizeof(BITMAP), &bmp);
 
-	HIMAGELIST himl = ImageList_Create(bmp.bmWidth / NUMTOOLBITMAPS, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 0, 0);
+	HIMAGELIST himl = ImageList_Create(bmp.bmHeight, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 0, 0);
 	ImageList_AddMasked(himl, hbmp, CLR_DEFAULT);
 	DeleteObject(hbmp);
 	SendMessage(hwndToolbar, TB_SETIMAGELIST, 0, (LPARAM)himl);
@@ -1799,7 +1803,7 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 		if (hbmp != NULL) {
 			hbmp = ResizeImageForCurrentDPI(hbmp);
 			GetObject(hbmp, sizeof(BITMAP), &bmp);
-			himl = ImageList_Create(bmp.bmWidth / NUMTOOLBITMAPS, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 0, 0);
+			himl = ImageList_Create(bmp.bmHeight, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 0, 0);
 			ImageList_AddMasked(himl, hbmp, CLR_DEFAULT);
 			DeleteObject(hbmp);
 			SendMessage(hwndToolbar, TB_SETHOTIMAGELIST, 0, (LPARAM)himl);
@@ -1812,7 +1816,7 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 		if (hbmp != NULL) {
 			hbmp = ResizeImageForCurrentDPI(hbmp);
 			GetObject(hbmp, sizeof(BITMAP), &bmp);
-			himl = ImageList_Create(bmp.bmWidth / NUMTOOLBITMAPS, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 0, 0);
+			himl = ImageList_Create(bmp.bmHeight, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 0, 0);
 			ImageList_AddMasked(himl, hbmp, CLR_DEFAULT);
 			DeleteObject(hbmp);
 			SendMessage(hwndToolbar, TB_SETDISABLEDIMAGELIST, 0, (LPARAM)himl);
@@ -1828,7 +1832,7 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 			fProcessed = BitmapGrayScale(hbmpCopy);
 		}
 		if (fProcessed) {
-			himl = ImageList_Create(bmp.bmWidth / NUMTOOLBITMAPS, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 0, 0);
+			himl = ImageList_Create(bmp.bmHeight, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 0, 0);
 			ImageList_AddMasked(himl, hbmpCopy, CLR_DEFAULT);
 			SendMessage(hwndToolbar, TB_SETDISABLEDIMAGELIST, 0, (LPARAM)himl);
 		}
@@ -2329,7 +2333,8 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	//EnableCmd(hmenu, IDM_VIEW_FOLD_LEVEL8, i && bShowCodeFolding);
 	//EnableCmd(hmenu, IDM_VIEW_FOLD_LEVEL9, i && bShowCodeFolding);
 	//EnableCmd(hmenu, IDM_VIEW_FOLD_LEVEL10, i && bShowCodeFolding);
-	CheckCmd(hmenu, IDM_VIEW_FOLDING, bShowCodeFolding);
+	CheckCmd(hmenu, IDM_VIEW_SHOW_FOLDING, bShowCodeFolding);
+	CheckCmd(hmenu, IDM_VIEW_SHOW_FOLDING_LINE, bShowFoldingLine);
 
 	CheckCmd(hmenu, IDM_VIEW_USE2NDDEFAULT, bUse2ndDefaultStyle);
 	CheckCmd(hmenu, IDM_VIEW_USECODESTYLE_CODEFILE, fUseDefaultCodeStyle & UseDefaultCodeStyle_CodeFile);
@@ -2349,21 +2354,8 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	CheckCmd(hmenu, IDM_VIEW_MARGIN, bShowSelectionMargin);
 	EnableCmd(hmenu, IDM_EDIT_COMPLETEWORD, i);
 
-	switch (iMarkOccurrences) {
-	case 0:
-		i = IDM_VIEW_MARKOCCURRENCES_OFF;
-		break;
-	case 3:
-		i = IDM_VIEW_MARKOCCURRENCES_BLUE;
-		break;
-	case 2:
-		i = IDM_VIEW_MARKOCCURRENCES_GREEN;
-		break;
-	case 1:
-		i = IDM_VIEW_MARKOCCURRENCES_RED;
-		break;
-	}
-	CheckMenuRadioItem(hmenu, IDM_VIEW_MARKOCCURRENCES_OFF, IDM_VIEW_MARKOCCURRENCES_RED, i, MF_BYCOMMAND);
+	i = IDM_VIEW_MARKOCCURRENCES_OFF + iMarkOccurrences;
+	CheckMenuRadioItem(hmenu, IDM_VIEW_MARKOCCURRENCES_OFF, IDM_VIEW_MARKOCCURRENCES_CUSTOM, i, MF_BYCOMMAND);
 	CheckCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_CASE, bMarkOccurrencesMatchCase);
 	CheckCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_WORD, bMarkOccurrencesMatchWords);
 	EnableCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_CASE, iMarkOccurrences != 0);
@@ -2391,7 +2383,6 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	CheckCmd(hmenu, IDM_VIEW_REUSEWINDOW, bReuseWindow);
 	CheckCmd(hmenu, IDM_VIEW_SINGLEFILEINSTANCE, bSingleFileInstance);
-	CheckCmd(hmenu, IDM_VIEW_STICKYWINPOS, bStickyWinPos);
 	CheckCmd(hmenu, IDM_VIEW_ALWAYSONTOP, IsTopMost());
 	CheckCmd(hmenu, IDM_VIEW_MINTOTRAY, bMinimizeToTray);
 	CheckCmd(hmenu, IDM_VIEW_TRANSPARENT, bTransparentMode);
@@ -2450,8 +2441,6 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	EnableCmd(hmenu, CMD_OPENINIFILE, i);
 
 	EnableCmd(hmenu, IDM_VIEW_REUSEWINDOW, i);
-	EnableCmd(hmenu, IDM_VIEW_STICKYWINPOS, i);
-	EnableCmd(hmenu, IDM_VIEW_CLEARWINPOS, i);
 	EnableCmd(hmenu, IDM_VIEW_SINGLEFILEINSTANCE, i);
 	EnableCmd(hmenu, IDM_VIEW_NOSAVERECENT, i);
 	EnableCmd(hmenu, IDM_VIEW_NOSAVEFINDREPL, i);
@@ -3869,24 +3858,15 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_VIEW_MARKOCCURRENCES_OFF:
 		iMarkOccurrences = 0;
 		// clear all marks
-		SendMessage(hwndEdit, SCI_SETINDICATORCURRENT, 1, 0);
+		SendMessage(hwndEdit, SCI_SETINDICATORCURRENT, MarkOccurrencesIndicatorNumber, 0);
 		SendMessage(hwndEdit, SCI_INDICATORCLEARRANGE, 0, SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0));
 		break;
 
 	case IDM_VIEW_MARKOCCURRENCES_RED:
-		iMarkOccurrences = 1;
-		EditMarkAll(hwndEdit, iMarkOccurrences, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
-		UpdateStatusbar();
-		break;
-
 	case IDM_VIEW_MARKOCCURRENCES_GREEN:
-		iMarkOccurrences = 2;
-		EditMarkAll(hwndEdit, iMarkOccurrences, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
-		UpdateStatusbar();
-		break;
-
 	case IDM_VIEW_MARKOCCURRENCES_BLUE:
-		iMarkOccurrences = 3;
+	case IDM_VIEW_MARKOCCURRENCES_CUSTOM:
+		iMarkOccurrences = LOWORD(wParam) - IDM_VIEW_MARKOCCURRENCES_OFF;
 		EditMarkAll(hwndEdit, iMarkOccurrences, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
 		UpdateStatusbar();
 		break;
@@ -3902,13 +3882,18 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		UpdateStatusbar();
 		break;
 
-	case IDM_VIEW_FOLDING:
+	case IDM_VIEW_SHOW_FOLDING:
 		bShowCodeFolding = !bShowCodeFolding;
 		UpdateFoldMarginWidth();
 		UpdateToolbar();
 		if (!bShowCodeFolding) {
 			FoldToggleAll(FOLD_ACTION_EXPAND);
 		}
+		break;
+
+	case IDM_VIEW_SHOW_FOLDING_LINE:
+		bShowFoldingLine = !bShowFoldingLine;
+		SciCall_SetFoldFlags(bShowFoldingLine ? SC_FOLDFLAG_LINEAFTER_CONTRACTED : 0);
 		break;
 
 	case IDM_VIEW_TOGGLEFOLDS:
@@ -4040,27 +4025,8 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		SendWMSize(hwnd);
 		break;
 
-	case IDM_VIEW_STICKYWINPOS:
-		bStickyWinPos = !bStickyWinPos;
-		IniSetBool(INI_SECTION_NAME_FLAGS, L"StickyWindowPosition", bStickyWinPos);
-		if (bStickyWinPos) {
-			WINDOWPLACEMENT wndpl;
-			wndpl.length = sizeof(WINDOWPLACEMENT);
-			GetWindowPlacement(hwndMain, &wndpl);
-
-			wi.x = wndpl.rcNormalPosition.left;
-			wi.y = wndpl.rcNormalPosition.top;
-			wi.cx = wndpl.rcNormalPosition.right - wndpl.rcNormalPosition.left;
-			wi.cy = wndpl.rcNormalPosition.bottom - wndpl.rcNormalPosition.top;
-			wi.max = (IsZoomed(hwndMain) || (wndpl.flags & WPF_RESTORETOMAXIMIZED));
-
-			SaveWindowPosition();
-			InfoBox(0, L"MsgStickyWinPos", IDS_STICKYWINPOS);
-		}
-		break;
-
 	case IDM_VIEW_CLEARWINPOS:
-		IniClearSection(INI_SECTION_NAME_WINDOW_POSITION);
+		ClearWindowPositionHistory();
 		break;
 
 	case IDM_VIEW_REUSEWINDOW:
@@ -5084,7 +5050,6 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 			case STATUS_OVRMODE:
 				SendMessage(hwndEdit, SCI_EDITTOGGLEOVERTYPE, 0, 0);
-				UpdateStatusBarCache_OVRMode(TRUE);
 				return TRUE;
 
 			default:
@@ -5117,6 +5082,18 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	return 0;
 }
 
+static void GetWindowPositionSectionName(WCHAR sectionName[96]) {
+	HMONITOR hMonitor = MonitorFromWindow(hwndMain, MONITOR_DEFAULTTONEAREST);
+	MONITORINFO mi;
+	mi.cbSize = sizeof(mi);
+	GetMonitorInfo(hMonitor, &mi);
+
+	const int cxScreen = mi.rcMonitor.right - mi.rcMonitor.left;
+	const int cyScreen = mi.rcMonitor.bottom - mi.rcMonitor.top;
+
+	wsprintf(sectionName, L"%s %ix%i", INI_SECTION_NAME_WINDOW_POSITION, cxScreen, cyScreen);
+}
+
 //=============================================================================
 //
 // LoadSettings()
@@ -5140,6 +5117,24 @@ void LoadSettings(void) {
 	efrData.bFindClose = IniSectionGetBool(pIniSection, L"CloseFind", 0);
 	efrData.bReplaceClose = IniSectionGetBool(pIniSection, L"CloseReplace", 0);
 	efrData.bNoFindWrap = IniSectionGetBool(pIniSection, L"NoFindWrap", 0);
+
+	if (bSaveFindReplace) {
+		efrData.fuFlags = 0;
+		if (IniSectionGetBool(pIniSection, L"FindReplaceMatchCase", 0)) {
+			efrData.fuFlags |= SCFIND_MATCHCASE;
+		}
+		if (IniSectionGetBool(pIniSection, L"FindReplaceMatchWholeWorldOnly", 0)) {
+			efrData.fuFlags |= SCFIND_WHOLEWORD;
+		}
+		if (IniSectionGetBool(pIniSection, L"FindReplaceMatchBeginingWordOnly", 0)) {
+			efrData.fuFlags |= SCFIND_WORDSTART;
+		}
+		if (IniSectionGetBool(pIniSection, L"FindReplaceRegExpSearch", 0)) {
+			efrData.fuFlags |= SCFIND_REGEXP | SCFIND_POSIX;
+		}
+		efrData.bTransformBS = IniSectionGetBool(pIniSection, L"FindReplaceTransformBackslash", 0);
+		efrData.bWildcardSearch = IniSectionGetBool(pIniSection, L"FindReplaceWildcardSearch", 0);
+	}
 
 	LPCWSTR strValue = IniSectionGetValue(pIniSection, L"OpenWithDir");
 	if (StrIsEmpty(strValue)) {
@@ -5245,10 +5240,12 @@ void LoadSettings(void) {
 
 	bShowSelectionMargin = IniSectionGetBool(pIniSection, L"ShowSelectionMargin", 0);
 	bShowLineNumbers = IniSectionGetBool(pIniSection, L"ShowLineNumbers", 1);
-	bShowCodeFolding = IniSectionGetBool(pIniSection, L"ShowCodeFolding", 1);
+	iValue = IniSectionGetInt(pIniSection, L"ShowCodeFolding", 1);
+	bShowCodeFolding = iValue & 1;
+	bShowFoldingLine = (iValue >> 1) & 1;
 
 	iValue = IniSectionGetInt(pIniSection, L"MarkOccurrences", 3);
-	iMarkOccurrences = clamp_i(iValue, 0, 3);
+	iMarkOccurrences = clamp_i(iValue, 0, 4);
 	bMarkOccurrencesMatchCase = IniSectionGetBool(pIniSection, L"MarkOccurrencesMatchCase", 1);
 	bMarkOccurrencesMatchWords = IniSectionGetBool(pIniSection, L"MarkOccurrencesMatchWholeWords", 0);
 
@@ -5363,90 +5360,70 @@ void LoadSettings(void) {
 	iFullScreenMode = iValue;
 	bInFullScreenMode = iValue & FullScreenMode_OnStartup;
 
-	cxRunDlg = IniSectionGetInt(pIniSection, L"RunDlgSizeX", 0);
-	cxEncodingDlg = IniSectionGetInt(pIniSection, L"EncodingDlgSizeX", 0);
-	cyEncodingDlg = IniSectionGetInt(pIniSection, L"EncodingDlgSizeY", 0);
-	cxRecodeDlg = IniSectionGetInt(pIniSection, L"RecodeDlgSizeX", 0);
-	cyRecodeDlg = IniSectionGetInt(pIniSection, L"RecodeDlgSizeY", 0);
-	cxFileMRUDlg = IniSectionGetInt(pIniSection, L"FileMRUDlgSizeX", 0);
-	cyFileMRUDlg = IniSectionGetInt(pIniSection, L"FileMRUDlgSizeY", 0);
-	cxOpenWithDlg = IniSectionGetInt(pIniSection, L"OpenWithDlgSizeX", 0);
-	cyOpenWithDlg = IniSectionGetInt(pIniSection, L"OpenWithDlgSizeY", 0);
-	cxFavoritesDlg = IniSectionGetInt(pIniSection, L"FavoritesDlgSizeX", 0);
-	cyFavoritesDlg = IniSectionGetInt(pIniSection, L"FavoritesDlgSizeY", 0);
-	cxAddFavoritesDlg = IniSectionGetInt(pIniSection, L"AddFavoritesDlgSizeX", 0);
-	cxModifyLinesDlg = IniSectionGetInt(pIniSection, L"ModifyLinesDlgSizeX", 0);
-	cyModifyLinesDlg = IniSectionGetInt(pIniSection, L"ModifyLinesDlgSizeY", 0);
-	cxEncloseSelectionDlg = IniSectionGetInt(pIniSection, L"EncloseSelectionDlgSizeX", 0);
-	cyEncloseSelectionDlg = IniSectionGetInt(pIniSection, L"EncloseSelectionDlgSizeY", 0);
-	cxInsertTagDlg = IniSectionGetInt(pIniSection, L"InsertTagDlgSizeX", 0);
-	cyInsertTagDlg = IniSectionGetInt(pIniSection, L"InsertTagDlgSizeY", 0);
-	xFindReplaceDlg = IniSectionGetInt(pIniSection, L"FindReplaceDlgPosX", 0);
-	yFindReplaceDlg = IniSectionGetInt(pIniSection, L"FindReplaceDlgPosY", 0);
-	cxFindReplaceDlg = IniSectionGetInt(pIniSection, L"FindReplaceDlgSizeX", 0);
-
-	if (bSaveFindReplace) {
-		efrData.fuFlags = 0;
-		if (IniSectionGetBool(pIniSection, L"FindReplaceMatchCase", 0)) {
-			efrData.fuFlags |= SCFIND_MATCHCASE;
-		}
-		if (IniSectionGetBool(pIniSection, L"FindReplaceMatchWholeWorldOnly", 0)) {
-			efrData.fuFlags |= SCFIND_WHOLEWORD;
-		}
-		if (IniSectionGetBool(pIniSection, L"FindReplaceMatchBeginingWordOnly", 0)) {
-			efrData.fuFlags |= SCFIND_WORDSTART;
-		}
-		if (IniSectionGetBool(pIniSection, L"FindReplaceRegExpSearch", 0)) {
-			efrData.fuFlags |= SCFIND_REGEXP | SCFIND_POSIX;
-		}
-		efrData.bTransformBS = IniSectionGetBool(pIniSection, L"FindReplaceTransformBackslash", 0);
-		efrData.bWildcardSearch = IniSectionGetBool(pIniSection, L"FindReplaceWildcardSearch", 0);
-	}
-
-	LoadIniSection(INI_SECTION_NAME_TOOLBAR_IMAGES, pIniSectionBuf, cchIniSection);
-	IniSectionParse(pIniSection, pIniSectionBuf);
-
-	strValue = IniSectionGetValue(pIniSection, L"BitmapDefault");
-	if (StrNotEmpty(strValue)) {
-		tchToolbarBitmap = StrDup(strValue);
-	}
-	strValue = IniSectionGetValue(pIniSection, L"BitmapHot");
-	if (StrNotEmpty(strValue)) {
-		tchToolbarBitmapHot = StrDup(strValue);
-	}
-	strValue = IniSectionGetValue(pIniSection, L"BitmapDisabled");
-	if (StrNotEmpty(strValue)) {
-		tchToolbarBitmapDisabled = StrDup(strValue);
-	}
-
-	if (!flagPosParam /*|| bStickyWinPos*/) { // ignore window position if /p was specified
-		WCHAR tchPosX[32];
-		WCHAR tchPosY[32];
-		WCHAR tchSizeX[32];
-		WCHAR tchSizeY[32];
-		WCHAR tchMaximized[32];
-		const int ResX = GetSystemMetrics(SM_CXSCREEN);
-		const int ResY = GetSystemMetrics(SM_CYSCREEN);
-
-		const int len = wsprintf(tchPosX, L"%ix%i ", ResX, ResY);
-		lstrcpy(tchPosY, tchPosX);
-		lstrcpy(tchSizeX, tchPosX);
-		lstrcpy(tchSizeY, tchPosX);
-		lstrcpy(tchMaximized, tchPosX);
-		lstrcpy(tchPosX + len, L"PosX");
-		lstrcpy(tchPosY + len, L"PosY");
-		lstrcpy(tchSizeX + len, L"SizeX");
-		lstrcpy(tchSizeY + len, L"SizeY");
-		lstrcpy(tchMaximized + len, L"Maximized");
-
-		LoadIniSection(INI_SECTION_NAME_WINDOW_POSITION, pIniSectionBuf, cchIniSection);
+	// toolbar image section
+	{
+		LoadIniSection(INI_SECTION_NAME_TOOLBAR_IMAGES, pIniSectionBuf, cchIniSection);
 		IniSectionParse(pIniSection, pIniSectionBuf);
 
-		wi.x	= IniSectionGetIntEx(pIniSection, tchPosX, CW_USEDEFAULT);
-		wi.y	= IniSectionGetIntEx(pIniSection, tchPosY, CW_USEDEFAULT);
-		wi.cx	= IniSectionGetIntEx(pIniSection, tchSizeX, CW_USEDEFAULT);
-		wi.cy	= IniSectionGetIntEx(pIniSection, tchSizeY, CW_USEDEFAULT);
-		wi.max	= IniSectionGetBoolEx(pIniSection, tchMaximized, 0);
+		strValue = IniSectionGetValue(pIniSection, L"BitmapDefault");
+		if (StrNotEmpty(strValue)) {
+			tchToolbarBitmap = StrDup(strValue);
+		}
+		strValue = IniSectionGetValue(pIniSection, L"BitmapHot");
+		if (StrNotEmpty(strValue)) {
+			tchToolbarBitmapHot = StrDup(strValue);
+		}
+		strValue = IniSectionGetValue(pIniSection, L"BitmapDisabled");
+		if (StrNotEmpty(strValue)) {
+			tchToolbarBitmapDisabled = StrDup(strValue);
+		}
+	}
+
+	// window position section
+	{
+		WCHAR sectionName[96];
+		GetWindowPositionSectionName(sectionName);
+		LoadIniSection(sectionName, pIniSectionBuf, cchIniSection);
+		IniSectionParse(pIniSection, pIniSectionBuf);
+
+		// ignore window position if /p was specified
+		if (!flagPosParam) {
+			wi.x	= IniSectionGetInt(pIniSection, L"WindowPosX", CW_USEDEFAULT);
+			wi.y	= IniSectionGetInt(pIniSection, L"WindowPosY", CW_USEDEFAULT);
+			wi.cx	= IniSectionGetInt(pIniSection, L"WindowSizeX", CW_USEDEFAULT);
+			wi.cy	= IniSectionGetInt(pIniSection, L"WindowSizeY", CW_USEDEFAULT);
+			wi.max	= IniSectionGetBool(pIniSection, L"WindowMaximized", 0);
+		}
+
+		cxRunDlg = IniSectionGetInt(pIniSection, L"RunDlgSizeX", 0);
+		cxEncodingDlg = IniSectionGetInt(pIniSection, L"EncodingDlgSizeX", 0);
+		cyEncodingDlg = IniSectionGetInt(pIniSection, L"EncodingDlgSizeY", 0);
+		cxRecodeDlg = IniSectionGetInt(pIniSection, L"RecodeDlgSizeX", 0);
+		cyRecodeDlg = IniSectionGetInt(pIniSection, L"RecodeDlgSizeY", 0);
+
+		cxFileMRUDlg = IniSectionGetInt(pIniSection, L"FileMRUDlgSizeX", 0);
+		cyFileMRUDlg = IniSectionGetInt(pIniSection, L"FileMRUDlgSizeY", 0);
+		cxOpenWithDlg = IniSectionGetInt(pIniSection, L"OpenWithDlgSizeX", 0);
+		cyOpenWithDlg = IniSectionGetInt(pIniSection, L"OpenWithDlgSizeY", 0);
+		cxFavoritesDlg = IniSectionGetInt(pIniSection, L"FavoritesDlgSizeX", 0);
+		cyFavoritesDlg = IniSectionGetInt(pIniSection, L"FavoritesDlgSizeY", 0);
+		cxAddFavoritesDlg = IniSectionGetInt(pIniSection, L"AddFavoritesDlgSizeX", 0);
+
+		cxModifyLinesDlg = IniSectionGetInt(pIniSection, L"ModifyLinesDlgSizeX", 0);
+		cyModifyLinesDlg = IniSectionGetInt(pIniSection, L"ModifyLinesDlgSizeY", 0);
+		cxEncloseSelectionDlg = IniSectionGetInt(pIniSection, L"EncloseSelectionDlgSizeX", 0);
+		cyEncloseSelectionDlg = IniSectionGetInt(pIniSection, L"EncloseSelectionDlgSizeY", 0);
+		cxInsertTagDlg = IniSectionGetInt(pIniSection, L"InsertTagDlgSizeX", 0);
+		cyInsertTagDlg = IniSectionGetInt(pIniSection, L"InsertTagDlgSizeY", 0);
+
+		xFindReplaceDlg = IniSectionGetInt(pIniSection, L"FindReplaceDlgPosX", 0);
+		yFindReplaceDlg = IniSectionGetInt(pIniSection, L"FindReplaceDlgPosY", 0);
+		cxFindReplaceDlg = IniSectionGetInt(pIniSection, L"FindReplaceDlgSizeX", 0);
+
+		cxStyleSelectDlg = IniSectionGetInt(pIniSection, L"StyleSelectDlgSizeX", 0);
+		cyStyleSelectDlg = IniSectionGetInt(pIniSection, L"StyleSelectDlgSizeY", 0);
+		cxStyleCustomizeDlg = IniSectionGetInt(pIniSection, L"StyleCustomizeDlgSizeX", 0);
+		cyStyleCustomizeDlg = IniSectionGetInt(pIniSection, L"StyleCustomizeDlgSizeY", 0);
 	}
 
 	IniSectionFree(pIniSection);
@@ -5500,14 +5477,25 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBool(pIniSection, L"SaveSettings", bSaveSettings);
 	IniSectionSetBoolEx(pIniSection, L"SaveRecentFiles", bSaveRecentFiles, 0);
 	IniSectionSetBoolEx(pIniSection, L"SaveFindReplace", bSaveFindReplace, 0);
+
 	IniSectionSetBoolEx(pIniSection, L"CloseFind", efrData.bFindClose, 0);
 	IniSectionSetBoolEx(pIniSection, L"CloseReplace", efrData.bReplaceClose, 0);
 	IniSectionSetBoolEx(pIniSection, L"NoFindWrap", efrData.bNoFindWrap, 0);
+	if (bSaveFindReplace) {
+		IniSectionSetBoolEx(pIniSection, L"FindReplaceMatchCase", (efrData.fuFlags & SCFIND_MATCHCASE), 0);
+		IniSectionSetBoolEx(pIniSection, L"FindReplaceMatchWholeWorldOnly", (efrData.fuFlags & SCFIND_WHOLEWORD), 0);
+		IniSectionSetBoolEx(pIniSection, L"FindReplaceMatchBeginingWordOnly", (efrData.fuFlags & SCFIND_WORDSTART), 0);
+		IniSectionSetBoolEx(pIniSection, L"FindReplaceRegExpSearch", (efrData.fuFlags & (SCFIND_REGEXP | SCFIND_POSIX)), 0);
+		IniSectionSetBoolEx(pIniSection, L"FindReplaceTransformBackslash", efrData.bTransformBS, 0);
+		IniSectionSetBoolEx(pIniSection, L"FindReplaceWildcardSearch", efrData.bWildcardSearch, 0);
+	}
+
 	PathRelativeToApp(tchOpenWithDir, wchTmp, COUNTOF(wchTmp), FALSE, TRUE, flagPortableMyDocs);
 	IniSectionSetString(pIniSection, L"OpenWithDir", wchTmp);
 	PathRelativeToApp(tchFavoritesDir, wchTmp, COUNTOF(wchTmp), FALSE, TRUE, flagPortableMyDocs);
 	IniSectionSetString(pIniSection, L"Favorites", wchTmp);
 	IniSectionSetIntEx(pIniSection, L"PathNameFormat", iPathNameFormat, 1);
+
 	IniSectionSetBoolEx(pIniSection, L"WordWrap", fWordWrapG, 1);
 	IniSectionSetIntEx(pIniSection, L"WordWrapMode", iWordWrapMode, SC_WRAP_WORD);
 	IniSectionSetIntEx(pIniSection, L"WordWrapIndent", iWordWrapIndent, EditWrapIndentNone);
@@ -5546,7 +5534,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetIntEx(pIniSection, L"LongLineMode", iLongLineMode, EDGE_LINE);
 	IniSectionSetBoolEx(pIniSection, L"ShowSelectionMargin", bShowSelectionMargin, 0);
 	IniSectionSetBoolEx(pIniSection, L"ShowLineNumbers", bShowLineNumbers, 1);
-	IniSectionSetBoolEx(pIniSection, L"ShowCodeFolding", bShowCodeFolding, 1);
+	IniSectionSetIntEx(pIniSection, L"ShowCodeFolding", bShowCodeFolding | (bShowFoldingLine << 1), 1);
 	IniSectionSetIntEx(pIniSection, L"MarkOccurrences", iMarkOccurrences, 3);
 	IniSectionSetBoolEx(pIniSection, L"MarkOccurrencesMatchCase", bMarkOccurrencesMatchCase, 1);
 	IniSectionSetBoolEx(pIniSection, L"MarkOccurrencesMatchWholeWords", bMarkOccurrencesMatchWords, 0);
@@ -5593,42 +5581,29 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBoolEx(pIniSection, L"ShowToolbar", bShowToolbar, 1);
 	IniSectionSetBoolEx(pIniSection, L"ShowStatusbar", bShowStatusbar, 1);
 	IniSectionSetIntEx(pIniSection, L"FullScreenMode", iFullScreenMode, FullScreenMode_Default);
-	IniSectionSetInt(pIniSection, L"RunDlgSizeX", cxRunDlg);
-	IniSectionSetInt(pIniSection, L"EncodingDlgSizeX", cxEncodingDlg);
-	IniSectionSetInt(pIniSection, L"EncodingDlgSizeY", cyEncodingDlg);
-	IniSectionSetInt(pIniSection, L"RecodeDlgSizeX", cxRecodeDlg);
-	IniSectionSetInt(pIniSection, L"RecodeDlgSizeY", cyRecodeDlg);
-	IniSectionSetInt(pIniSection, L"FileMRUDlgSizeX", cxFileMRUDlg);
-	IniSectionSetInt(pIniSection, L"FileMRUDlgSizeY", cyFileMRUDlg);
-	IniSectionSetInt(pIniSection, L"OpenWithDlgSizeX", cxOpenWithDlg);
-	IniSectionSetInt(pIniSection, L"OpenWithDlgSizeY", cyOpenWithDlg);
-	IniSectionSetInt(pIniSection, L"FavoritesDlgSizeX", cxFavoritesDlg);
-	IniSectionSetInt(pIniSection, L"FavoritesDlgSizeY", cyFavoritesDlg);
-	IniSectionSetInt(pIniSection, L"AddFavoritesDlgSizeX", cxAddFavoritesDlg);
-	IniSectionSetInt(pIniSection, L"ModifyLinesDlgSizeX", cxModifyLinesDlg);
-	IniSectionSetInt(pIniSection, L"ModifyLinesDlgSizeY", cyModifyLinesDlg);
-	IniSectionSetInt(pIniSection, L"EncloseSelectionDlgSizeX", cxEncloseSelectionDlg);
-	IniSectionSetInt(pIniSection, L"EncloseSelectionDlgSizeY", cyEncloseSelectionDlg);
-	IniSectionSetInt(pIniSection, L"InsertTagDlgSizeX", cxInsertTagDlg);
-	IniSectionSetInt(pIniSection, L"InsertTagDlgSizeY", cyInsertTagDlg);
-	IniSectionSetInt(pIniSection, L"FindReplaceDlgPosX", xFindReplaceDlg);
-	IniSectionSetInt(pIniSection, L"FindReplaceDlgPosY", yFindReplaceDlg);
-	IniSectionSetInt(pIniSection, L"FindReplaceDlgSizeX", cxFindReplaceDlg);
-
-	if (bSaveFindReplace) {
-		IniSectionSetBoolEx(pIniSection, L"FindReplaceMatchCase", (efrData.fuFlags & SCFIND_MATCHCASE), 0);
-		IniSectionSetBoolEx(pIniSection, L"FindReplaceMatchWholeWorldOnly", (efrData.fuFlags & SCFIND_WHOLEWORD), 0);
-		IniSectionSetBoolEx(pIniSection, L"FindReplaceMatchBeginingWordOnly", (efrData.fuFlags & SCFIND_WORDSTART), 0);
-		IniSectionSetBoolEx(pIniSection, L"FindReplaceRegExpSearch", (efrData.fuFlags & (SCFIND_REGEXP | SCFIND_POSIX)), 0);
-		IniSectionSetBoolEx(pIniSection, L"FindReplaceTransformBackslash", efrData.bTransformBS, 0);
-		IniSectionSetBoolEx(pIniSection, L"FindReplaceWildcardSearch", efrData.bWildcardSearch, 0);
-	}
 
 	SaveIniSection(INI_SECTION_NAME_SETTINGS, pIniSectionBuf);
-	NP2HeapFree(pIniSectionBuf);
 
-	// SaveSettingsNow(): query Window Dimensions
-	if (bSaveSettingsNow) {
+	SaveWindowPosition(bSaveSettingsNow, pIniSectionBuf);
+	// Scintilla Styles
+	Style_Save();
+}
+
+void SaveWindowPosition(BOOL bSaveSettingsNow, WCHAR *pIniSectionBuf) {
+	IniSectionOnSave section;
+	if (pIniSectionBuf == NULL) {
+		pIniSectionBuf = (WCHAR *)NP2HeapAlloc(sizeof(WCHAR) * MAX_INI_SECTION_SIZE_SETTINGS);
+	} else {
+		ZeroMemory(pIniSectionBuf, NP2HeapSize(pIniSectionBuf));
+	}
+	IniSectionOnSave *pIniSection = &section;
+	pIniSection->next = pIniSectionBuf;
+
+	WCHAR sectionName[96];
+	GetWindowPositionSectionName(sectionName);
+
+	// query window dimensions when window is not minimized
+	if (bSaveSettingsNow && !IsIconic(hwndMain)) {
 		WINDOWPLACEMENT wndpl;
 		wndpl.length = sizeof(WINDOWPLACEMENT);
 		GetWindowPlacement(hwndMain, &wndpl);
@@ -5640,39 +5615,78 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 		wi.max = (IsZoomed(hwndMain) || (wndpl.flags & WPF_RESTORETOMAXIMIZED));
 	}
 
-	if (!bStickyWinPos) {
-		SaveWindowPosition();
-	}
+	IniSectionSetInt(pIniSection, L"WindowPosX", wi.x);
+	IniSectionSetInt(pIniSection, L"WindowPosY", wi.y);
+	IniSectionSetInt(pIniSection, L"WindowSizeX", wi.cx);
+	IniSectionSetInt(pIniSection, L"WindowSizeY", wi.cy);
+	IniSectionSetBoolEx(pIniSection, L"WindowMaximized", wi.max, 0);
 
-	// Scintilla Styles
-	Style_Save();
+	IniSectionSetIntEx(pIniSection, L"RunDlgSizeX", cxRunDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"EncodingDlgSizeX", cxEncodingDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"EncodingDlgSizeY", cyEncodingDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"RecodeDlgSizeX", cxRecodeDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"RecodeDlgSizeY", cyRecodeDlg, 0);
+
+	IniSectionSetIntEx(pIniSection, L"FileMRUDlgSizeX", cxFileMRUDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"FileMRUDlgSizeY", cyFileMRUDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"OpenWithDlgSizeX", cxOpenWithDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"OpenWithDlgSizeY", cyOpenWithDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"FavoritesDlgSizeX", cxFavoritesDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"FavoritesDlgSizeY", cyFavoritesDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"AddFavoritesDlgSizeX", cxAddFavoritesDlg, 0);
+
+	IniSectionSetIntEx(pIniSection, L"ModifyLinesDlgSizeX", cxModifyLinesDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"ModifyLinesDlgSizeY", cyModifyLinesDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"EncloseSelectionDlgSizeX", cxEncloseSelectionDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"EncloseSelectionDlgSizeY", cyEncloseSelectionDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"InsertTagDlgSizeX", cxInsertTagDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"InsertTagDlgSizeY", cyInsertTagDlg, 0);
+
+	IniSectionSetIntEx(pIniSection, L"FindReplaceDlgPosX", xFindReplaceDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"FindReplaceDlgPosY", yFindReplaceDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"FindReplaceDlgSizeX", cxFindReplaceDlg, 0);
+
+	IniSectionSetIntEx(pIniSection, L"StyleSelectDlgSizeX", cxStyleSelectDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"StyleSelectDlgSizeY", cyStyleSelectDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"StyleCustomizeDlgSizeX", cxStyleCustomizeDlg, 0);
+	IniSectionSetIntEx(pIniSection, L"StyleCustomizeDlgSizeY", cyStyleCustomizeDlg, 0);
+
+	SaveIniSection(sectionName, pIniSectionBuf);
+	NP2HeapFree(pIniSectionBuf);
 }
 
-void SaveWindowPosition(void) {
-	WCHAR tchPosX[32];
-	WCHAR tchPosY[32];
-	WCHAR tchSizeX[32];
-	WCHAR tchSizeY[32];
-	WCHAR tchMaximized[32];
-	const int ResX = GetSystemMetrics(SM_CXSCREEN);
-	const int ResY = GetSystemMetrics(SM_CYSCREEN);
+void ClearWindowPositionHistory(void) {
+	cxRunDlg = 0;
+	cxEncodingDlg = 0;
+	cyEncodingDlg = 0;
+	cxRecodeDlg = 0;
+	cyRecodeDlg = 0;
 
-	const int len = wsprintf(tchPosX, L"%ix%i ", ResX, ResY);
-	lstrcpy(tchPosY, tchPosX);
-	lstrcpy(tchSizeX, tchPosX);
-	lstrcpy(tchSizeY, tchPosX);
-	lstrcpy(tchMaximized, tchPosX);
-	lstrcpy(tchPosX + len, L"PosX");
-	lstrcpy(tchPosY + len, L"PosY");
-	lstrcpy(tchSizeX + len, L"SizeX");
-	lstrcpy(tchSizeY + len, L"SizeY");
-	lstrcpy(tchMaximized + len, L"Maximized");
+	cxFileMRUDlg = 0;
+	cyFileMRUDlg = 0;
+	cxOpenWithDlg = 0;
+	cyOpenWithDlg = 0;
+	cxFavoritesDlg = 0;
+	cyFavoritesDlg = 0;
+	cxAddFavoritesDlg = 0;
 
-	IniSetInt(INI_SECTION_NAME_WINDOW_POSITION, tchPosX, wi.x);
-	IniSetInt(INI_SECTION_NAME_WINDOW_POSITION, tchPosY, wi.y);
-	IniSetInt(INI_SECTION_NAME_WINDOW_POSITION, tchSizeX, wi.cx);
-	IniSetInt(INI_SECTION_NAME_WINDOW_POSITION, tchSizeY, wi.cy);
-	IniSetBool(INI_SECTION_NAME_WINDOW_POSITION, tchMaximized, wi.max);
+	cxModifyLinesDlg = 0;
+	cyModifyLinesDlg = 0;
+	cxEncloseSelectionDlg = 0;
+	cyEncloseSelectionDlg = 0;
+	cxInsertTagDlg = 0;
+	cyInsertTagDlg = 0;
+
+	xFindReplaceDlg = 0;
+	yFindReplaceDlg = 0;
+	cxFindReplaceDlg = 0;
+
+	cxStyleSelectDlg = 0;
+	cyStyleSelectDlg = 0;
+	cxStyleCustomizeDlg = 0;
+	cyStyleCustomizeDlg = 0;
+
+	IniDeleteAllSection(INI_SECTION_NAME_WINDOW_POSITION);
 }
 
 //=============================================================================
@@ -6320,7 +6334,6 @@ void LoadFlags(void) {
 
 	bSingleFileInstance = IniSectionGetBool(pIniSection, L"SingleFileInstance", 1);
 	bReuseWindow = IniSectionGetBool(pIniSection, L"ReuseWindow", 0);
-	bStickyWinPos = IniSectionGetBool(pIniSection, L"StickyWindowPosition", 0);
 
 	if (!flagReuseWindow && !flagNoReuseWindow) {
 		flagNoReuseWindow = !bReuseWindow;

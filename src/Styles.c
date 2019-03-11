@@ -253,12 +253,14 @@ int		iFontQuality = SC_EFF_QUALITY_LCD_OPTIMIZED;
 int		iCaretStyle = 1; // width 1, 0 for block
 int		iOvrCaretStyle = 0; // 0 for bar, 1 for block
 int		iCaretBlinkPeriod = -1; // system default, 0 for noblink
+int 	iMarkOccurrencesColor;
+int 	iMarkOccurrencesAlpha;
 static int	iDefaultLexer;
 static BOOL bAutoSelect;
-static int	cxStyleSelectDlg;
-static int	cyStyleSelectDlg;
-static int	cyStyleCustomizeDlg;
-static int	cxStyleCustomizeDlg;
+int		cxStyleSelectDlg;
+int		cyStyleSelectDlg;
+int		cxStyleCustomizeDlg;
+int		cyStyleCustomizeDlg;
 
 #define ALL_FILE_EXTENSIONS_BYTE_SIZE	((NUMLEXERS * MAX_EDITLEXER_EXT_SIZE) * sizeof(WCHAR))
 static LPWSTR g_AllFileExtensions = NULL;
@@ -318,8 +320,15 @@ enum DefaultStyleIndex {
 	Style_LongLineMarker,	// standalone style. `fore`: edge line color, `back`: edge background color
 	Style_ExtraLineSpacing,	// standalone style. descent = `size`/2, ascent = `size` - descent
 	Style_FoldingMarker,	// standalone style. `fore`: folder line color, `back`: folder box fill color
+	Style_MarkOccurrences,	// standalone style. `fore`, `alpha`
 	Style_MaxDefaultStyle,	// 2nd global default code style.
 };
+
+// folding marker
+#define FoldingMarkerLineColorDefault	RGB(0x80, 0x80, 0xFF)
+#define FoldingMarkerFillColorDefault	RGB(0x80, 0x80, 0x80)
+#define FoldingMarkerLineColorDark		RGB(0xAD, 0xD8, 0xE6)
+#define FoldingMarkerFillColorDark		RGB(0x60, 0x60, 0x60)
 
 // style UI controls on Customize Schemes dialog
 enum {
@@ -365,6 +374,7 @@ static inline UINT GetDefaultStyleControlMask(int index) {
 	case Style_Selection:
 		return StyleControl_Fore | StyleControl_Back | StyleControl_EOLFilled;
 	case Style_Caret:
+	case Style_MarkOccurrences:
 		return StyleControl_Fore;
 	case Style_ExtraLineSpacing:
 		return StyleControl_None;
@@ -475,12 +485,6 @@ void Style_Load(void) {
 	// auto select
 	bAutoSelect = IniSectionGetBool(pIniSection, L"AutoSelect", 1);
 
-	// scheme select dlg dimensions
-	cxStyleSelectDlg = IniSectionGetInt(pIniSection, L"SelectDlgSizeX", 0);
-	cyStyleSelectDlg = IniSectionGetInt(pIniSection, L"SelectDlgSizeY", 0);
-	cyStyleCustomizeDlg = IniSectionGetInt(pIniSection, L"CustomizeDlgSizeY", 0);
-	cxStyleCustomizeDlg = IniSectionGetInt(pIniSection, L"CustomizeDlgSizeX", 0);
-
 	LoadIniSection(INI_SECTION_NAME_FILE_EXTENSIONS, pIniSectionBuf, cchIniSection);
 	IniSectionParse(pIniSection, pIniSectionBuf);
 	for (UINT iLexer = 0; iLexer < NUMLEXERS; iLexer++) {
@@ -565,7 +569,7 @@ static void Style_LoadAll(void) {
 void Style_Save(void) {
 	IniSectionOnSave section;
 	WCHAR *pIniSectionBuf = (WCHAR *)NP2HeapAlloc(sizeof(WCHAR) * MAX_INI_SECTION_SIZE_STYLES);
-	const int cchIniSection = (int)(NP2HeapSize(pIniSectionBuf) / sizeof(WCHAR));
+	const SIZE_T cbIniSection = NP2HeapSize(pIniSectionBuf);
 	IniSectionOnSave *pIniSection = &section;
 	pIniSection->next = pIniSectionBuf;
 
@@ -583,7 +587,7 @@ void Style_Save(void) {
 		}
 
 		SaveIniSection(INI_SECTION_NAME_CUSTOM_COLORS, pIniSectionBuf);
-		ZeroMemory(pIniSectionBuf, cchIniSection);
+		ZeroMemory(pIniSectionBuf, cbIniSection);
 		pIniSection->next = pIniSectionBuf;
 	}
 
@@ -597,16 +601,10 @@ void Style_Save(void) {
 	// auto select
 	IniSectionSetBoolEx(pIniSection, L"AutoSelect", bAutoSelect, 1);
 
-	// scheme select dlg dimensions
-	IniSectionSetInt(pIniSection, L"SelectDlgSizeX", cxStyleSelectDlg);
-	IniSectionSetInt(pIniSection, L"SelectDlgSizeY", cyStyleSelectDlg);
-	IniSectionSetInt(pIniSection, L"CustomizeDlgSizeY", cyStyleCustomizeDlg);
-	IniSectionSetInt(pIniSection, L"CustomizeDlgSizeX", cxStyleCustomizeDlg);
-
 	SaveIniSection(INI_SECTION_NAME_STYLES, pIniSectionBuf);
 
 	if (fStylesModified & STYLESMODIFIED_FILE_EXT) {
-		ZeroMemory(pIniSectionBuf, cchIniSection);
+		ZeroMemory(pIniSectionBuf, cbIniSection);
 		pIniSection->next = pIniSectionBuf;
 		for (UINT iLexer = 0; iLexer < NUMLEXERS; iLexer++) {
 			const LPCEDITLEXER pLex = pLexArray[iLexer];
@@ -622,7 +620,7 @@ void Style_Save(void) {
 				continue;
 			}
 
-			ZeroMemory(pIniSectionBuf, cchIniSection);
+			ZeroMemory(pIniSectionBuf, cbIniSection);
 			pIniSection->next = pIniSectionBuf;
 			const UINT iStyleCount = pLex->iStyleCount;
 			for (UINT i = 0; i < iStyleCount; i++) {
@@ -801,8 +799,8 @@ void Style_UpdateCaret(HWND hwnd) {
 }
 
 void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
+	ZeroMemory(currentLexKeywordAttr, sizeof(currentLexKeywordAttr));
 	UINT8 *attr = currentLexKeywordAttr;
-	memset(currentLexKeywordAttr, 0, sizeof(currentLexKeywordAttr));
 
 	// Code Snippet
 	attr[NUMKEYWORD - 1] = KeywordAttr_NoLexer;
@@ -1077,7 +1075,7 @@ void Style_SetLexer(HWND hwnd, PEDITLEXER pLexNew) {
 	}
 	// always set background color
 	if (!Style_StrGetColor(FALSE, szValue, &iValue)) {
-		iValue = RGB(0xC0, 0xC0, 0xC0);
+		iValue = GetSysColor(COLOR_HIGHLIGHT);
 	}
 	SendMessage(hwnd, SCI_SETSELBACK, TRUE, iValue);
 	SendMessage(hwnd, SCI_SETADDITIONALSELBACK, iValue, 0);
@@ -1163,12 +1161,12 @@ void Style_SetLexer(HWND hwnd, PEDITLEXER pLexNew) {
 		if (Style_StrGetColor(TRUE, szValue, &iValue)) {
 			clrFore = iValue;
 		} else {
-			clrFore = iIdx ? RGB(0x80, 0x80, 0xFF) : RGB(0x80, 0x80, 0x80);
+			clrFore = iIdx ? FoldingMarkerLineColorDefault : FoldingMarkerLineColorDark;
 		}
 		if (Style_StrGetColor(FALSE, szValue, &iValue)) {
 			clrFill = iValue;
 		} else {
-			clrFill = iIdx ? RGB(0xAD, 0xD8, 0xE6) : RGB(0xD3, 0xD3, 0xD3);
+			clrFill = iIdx ? FoldingMarkerFillColorDefault : FoldingMarkerLineColorDark;
 		}
 
 		SciCall_SetFoldMarginColour(TRUE, clrBack);
@@ -1198,6 +1196,15 @@ void Style_SetLexer(HWND hwnd, PEDITLEXER pLexNew) {
 
 	if (SendMessage(hwnd, SCI_GETINDENTATIONGUIDES, 0, 0) != SC_IV_NONE) {
 		Style_SetIndentGuides(hwnd, TRUE);
+	}
+
+	// Mark Occurrence
+	szValue = lexDefault.Styles[Style_Caret + iIdx].szValue;
+	if (!Style_StrGetColor(TRUE, szValue, &iMarkOccurrencesColor)) {
+		iMarkOccurrencesColor = GetSysColor(COLOR_HIGHLIGHT);
+	}
+	if (!Style_StrGetAlpha(szValue, &iMarkOccurrencesAlpha)) {
+		iMarkOccurrencesAlpha = 100;
 	}
 
 	if (rid != NP2LEX_DEFAULT) {
@@ -2359,12 +2366,16 @@ void Style_ToggleUse2ndDefaultStyle(HWND hwnd) {
 
 void Style_ToggleUseDefaultCodeStyle(HWND hwnd, int menu) {
 	int mask = 0;
+	BOOL changed = FALSE;
+	const int rid = pLexCurrent->rid;
 	switch (menu) {
 	case IDM_VIEW_USECODESTYLE_CODEFILE:
 		mask = UseDefaultCodeStyle_CodeFile;
+		changed = rid != NP2LEX_DEFAULT;
 		break;
 	case IDM_VIEW_USECODESTYLE_TEXTFILE:
 		mask = UseDefaultCodeStyle_TextFile;
+		changed = rid == NP2LEX_DEFAULT;
 		break;
 	}
 
@@ -2373,7 +2384,9 @@ void Style_ToggleUseDefaultCodeStyle(HWND hwnd, int menu) {
 	} else {
 		fUseDefaultCodeStyle |= mask;
 	}
-	Style_SetLexer(hwnd, pLexCurrent);
+	if (changed) {
+		Style_SetLexer(hwnd, pLexCurrent);
+	}
 }
 
 //=============================================================================
@@ -3362,6 +3375,11 @@ static INT_PTR CALLBACK Style_ConfigDlgProc(HWND hwnd, UINT umsg, WPARAM wParam,
 					SetDlgItemText(hwnd, IDC_STYLEVALUE_DEFAULT, L"");
 				}
 
+				const BOOL changed = pCurrentStyle != NULL && (
+					((enableMask & StyleControl_Fore) && !IsWindowEnabled(GetDlgItem(hwnd, IDC_STYLEFORE)))
+					|| ((enableMask & StyleControl_Back) && !IsWindowEnabled(GetDlgItem(hwnd, IDC_STYLEBACK)))
+				);
+
 				EnableWindow(GetDlgItem(hwnd, IDC_STYLEFONT), (enableMask & StyleControl_Font) != 0);
 				//if (enableMask & StyleControl_Font) {
 				//	EnableWindow(GetDlgItem(hwnd, IDC_STYLEFONT), TRUE);
@@ -3389,6 +3407,9 @@ static INT_PTR CALLBACK Style_ConfigDlgProc(HWND hwnd, UINT umsg, WPARAM wParam,
 				//	EnableWindow(GetDlgItem(hwnd, IDC_STYLEEOLFILLED), FALSE);
 				//	CheckDlgButton(hwnd, IDC_STYLEEOLFILLED, BST_UNCHECKED);
 				//}
+				if (changed) {
+					NotifyEditTextChanged(hwnd, IDC_STYLEEDIT);
+				}
 			}
 			break;
 
@@ -3699,7 +3720,6 @@ void Style_ConfigDlg(HWND hwnd) {
 			CopyMemory(pLex->szStyleBuf, styleBackup[iLexer], EDITSTYLE_BufferSize(pLex->iStyleCount));
 		}
 	} else {
-		apply = TRUE;
 		if (!(fStylesModified & STYLESMODIFIED_FILE_EXT)) {
 			if (memcmp(extBackup, g_AllFileExtensions, ALL_FILE_EXTENSIONS_BYTE_SIZE) != 0) {
 				fStylesModified |= STYLESMODIFIED_FILE_EXT;
@@ -3721,6 +3741,8 @@ void Style_ConfigDlg(HWND hwnd) {
 			}
 			fStylesModified |= (count == 0) ? STYLESMODIFIED_NONE : ((count == NUMLEXERS) ? STYLESMODIFIED_ALL_STYLE : STYLESMODIFIED_SOME_STYLE);
 		}
+
+		apply = pLexCurrent->bStyleChanged || lexDefault.bStyleChanged;
 		if ((fStylesModified & STYLESMODIFIED_WARN_MASK) && StrIsEmpty(szIniFile) && !fWarnedNoIniFile) {
 			MsgBox(MBWARN, IDS_SETTINGSNOTSAVED);
 			fWarnedNoIniFile = TRUE;

@@ -86,10 +86,14 @@ extern WCHAR szIniFile[MAX_PATH];
 	GetPrivateProfileInt(lpSection, lpName, nDefault, szIniFile)
 #define IniSetString(lpSection, lpName, lpString) \
 	WritePrivateProfileString(lpSection, lpName, lpString, szIniFile)
-#define IniDeleteSection(lpSection) \
-	WritePrivateProfileSection(lpSection, NULL, szIniFile)
-#define IniClearSection(lpSection) \
-	WritePrivateProfileSection(lpSection, L"", szIniFile)
+
+void IniClearSectionEx(LPCWSTR lpSection, LPCWSTR lpszIniFile, BOOL bDelete);
+#define IniClearSection(lpSection)			IniClearSectionEx((lpSection), szIniFile, FALSE)
+#define IniDeleteSection(lpSection) 		IniClearSectionEx((lpSection), szIniFile, TRUE)
+
+void IniClearAllSectionEx(LPCWSTR lpszPrefix, LPCWSTR lpszIniFile, BOOL bDelete);
+#define IniClearAllSection(lpszPrefix)		IniClearAllSectionEx((lpszPrefix), szIniFile, FALSE)
+#define IniDeleteAllSection(lpszPrefix)		IniClearAllSectionEx((lpszPrefix), szIniFile, TRUE)
 
 NP2_inline void IniSetInt(LPCWSTR lpSection, LPCWSTR lpName, int i) {
 	WCHAR tch[16];
