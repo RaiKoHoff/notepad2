@@ -3,10 +3,13 @@ import sys
 import os
 import struct
 import math
+from enum import IntEnum
 from PIL import Image
 
+__all__ = ['Bitmap']
+
 # https://en.wikipedia.org/wiki/BMP_file_format
-class BitmapHeader(object):
+class BitmapFileHeader(object):
 	StructureSize = 14
 
 	def __init__(self):
@@ -30,7 +33,7 @@ class BitmapHeader(object):
 		fd.write(struct.pack('<I', self.offset))
 
 	def __str__(self):
-		return f'''BitmapHeader {{
+		return f'''BitmapFileHeader {{
 	size: {self.size :08X} {self.size}
 	reserved: {self.reserved1 :04X} {self.reserved2 :04X}
 	offset: {self.offset :08X} {self.offset}
@@ -39,20 +42,27 @@ class BitmapHeader(object):
 _InchesPerMetre = 0.0254
 _TransparentColor = (0, 0, 0, 0)
 
+class CompressionMethod(IntEnum):
+	BI_RGB = 0
+	BI_RLE8 = 1
+	BI_RLE4 = 2
+	BI_BITFIELDS = 3
+	BI_JPEG = 4
+	BI_PNG = 5
+	BI_ALPHABITFIELDS = 6
+	BI_CMYK = 11
+	BI_CMYKRLE8 = 12
+	BI_CMYKRLE4 = 13
+
+	@staticmethod
+	def getName(value):
+		try:
+			return CompressionMethod(value).name
+		except ValueError:
+			return f'Unknown-{value}'
+
 class BitmapInfoHeader(object):
 	StructureSize = 40
-	CompressionMethodMap = {
-		0: 'BI_RGB',
-		1: 'BI_RLE8',
-		2: 'BI_RLE4',
-		3: 'BI_BITFIELDS',
-		4: 'BI_JPEG',
-		5: 'BI_PNG',
-		6: 'BI_ALPHABITFIELDS',
-		11: 'BI_CMYK',
-		12: 'BI_CMYKRLE8',
-		13: 'BI_CMYKRLE4'
-	}
 
 	def __init__(self):
 		self.width = 0
@@ -83,6 +93,10 @@ class BitmapInfoHeader(object):
 		fd.write(struct.pack('<II', self.colorUsed, self.colorImportant))
 
 	@property
+	def size(self):
+		return (self.width, self.height)
+
+	@property
 	def resolutionX(self):
 		return round(self._resolutionX * _InchesPerMetre)
 
@@ -98,23 +112,32 @@ class BitmapInfoHeader(object):
 	def resolutionY(self, value):
 		self._resolutionY = round(value / _InchesPerMetre)
 
+	@property
+	def resolution(self):
+		return (self.resolutionX, self.resolutionY)
+
+	@resolution.setter
+	def resolution(self, value):
+		self.resolutionX = value[0]
+		self.resolutionY = value[1]
+
 	def __str__(self):
 		return f'''BitmapInfoHeader {{
 	width: {self.width :08X} {self.width}
 	height: {self.height :08X} {self.height}
 	planes: {self.planes :04X} {self.planes}
 	bitsPerPixel: {self.bitsPerPixel :04X} {self.bitsPerPixel}
-	compression: {self.compression :08X} {self.compression} {BitmapInfoHeader.CompressionMethodMap[self.compression]}
+	compression: {self.compression :08X} {self.compression} {CompressionMethod.getName(self.compression)}
 	sizeImage: {self.sizeImage :08X} {self.sizeImage}
-	resolutionX: {self.resolutionX :08X} {self._resolutionX} {self.resolutionX} DPI
-	resolutionY: {self.resolutionY :08X} {self._resolutionY} {self.resolutionY} DPI
+	resolutionX: {self._resolutionX :08X} {self._resolutionX} {self.resolutionX} DPI
+	resolutionY: {self._resolutionY :08X} {self._resolutionY} {self.resolutionY} DPI
 	colorUsed: {self.colorUsed :08X} {self.colorUsed}
 	colorImportant: {self.colorImportant :08X} {self.colorImportant}
 }}'''
 
 class Bitmap(object):
 	def __init__(self, width=None, height=None, bitsPerPixel=32):
-		self.fileHeader = BitmapHeader()
+		self.fileHeader = BitmapFileHeader()
 		self.infoHeader = BitmapInfoHeader()
 		self.rows = [] # RGBA tuple
 		self.data = None
@@ -128,10 +151,15 @@ class Bitmap(object):
 			self.infoHeader.height = height
 
 	def read(self, fd):
+		start = fd.tell()
 		self.fileHeader.read(fd)
 		self.infoHeader.read(fd)
 
-		fd.seek(self.fileHeader.offset)
+		curret = fd.tell()
+		# enable reading from stream
+		offset = self.fileHeader.offset - (curret - start)
+		if offset != 0:
+			fd.seek(offset, os.SEEK_CUR)
 		# TODO: sizeImage maybe zero
 		self.data = fd.read()
 		self.decode()
@@ -168,11 +196,10 @@ class Bitmap(object):
 		self.data = bytes(buf)
 		size = len(buf)
 		self.infoHeader.sizeImage = size
-		self.fileHeader.size = size + BitmapHeader.StructureSize + BitmapInfoHeader.StructureSize
+		self.fileHeader.size = size + BitmapFileHeader.StructureSize + BitmapInfoHeader.StructureSize
 
 	def _decode_32bit(self):
-		width = self.width
-		height = self.height
+		width, height = self.size
 		self.rows.clear()
 
 		offset = 0
@@ -191,12 +218,11 @@ class Bitmap(object):
 		self.rows.extend(reversed(rows))
 
 	def _encode_32bit(self):
-		width = self.width
-		height = self.height
+		width, height = self.size
 
 		buf = []
-		for y in range(height):
-			row = self.rows[height - y - 1]
+		for y in range(height - 1, -1, -1):
+			row = self.rows[y]
 			for x in range(width):
 				red, green, blue, alpha = row[x]
 				buf.append(blue)
@@ -206,8 +232,7 @@ class Bitmap(object):
 		self._set_data(buf)
 
 	def _decode_24bit(self):
-		width = self.width
-		height = self.height
+		width, height = self.size
 		self.rows.clear()
 
 		offset = 0
@@ -228,14 +253,13 @@ class Bitmap(object):
 		self.rows.extend(reversed(rows))
 
 	def _encode_24bit(self):
-		width = self.width
-		height = self.height
+		width, height = self.size
 
 		padding = math.ceil(24*width/32)*4 - width*3
 		paddingBytes = [0] * padding
 		buf = []
-		for y in range(height):
-			row = self.rows[height - y - 1]
+		for y in range(height - 1, -1, -1):
+			row = self.rows[y]
 			for x in range(width):
 				red, green, blue, alpha = row[x]
 				buf.append(blue)
@@ -255,7 +279,7 @@ class Bitmap(object):
 
 	@property
 	def size(self):
-		return (self.infoHeader.width, self.infoHeader.height)
+		return self.infoHeader.size
 
 	@property
 	def resolutionX(self):
@@ -272,6 +296,14 @@ class Bitmap(object):
 	@resolutionX.setter
 	def resolutionY(self, value):
 		self.infoHeader.resolutionY = value
+
+	@property
+	def resolution(self):
+		return self.infoHeader.resolution
+
+	@resolution.setter
+	def resolution(self, value):
+		self.infoHeader.resolution = value
 
 	@property
 	def bitsPerPixel(self):
@@ -402,7 +434,7 @@ class Bitmap(object):
 		else:
 			used = []
 			total = 0
-			for w in used:
+			for w in dims:
 				total += w
 				if total > width:
 					total -= w
@@ -440,7 +472,8 @@ class Bitmap(object):
 		rows = out_bmp.rows
 		rows.clear()
 		for bmp in bmps:
-			rows.extend(bmp.rows)
+			for row in bmp.rows:
+				rows.append(row[:])
 
 		return out_bmp
 
@@ -454,7 +487,7 @@ class Bitmap(object):
 		else:
 			used = []
 			total = 0
-			for h in used:
+			for h in dims:
 				total += h
 				if total > height:
 					total -= h
@@ -470,7 +503,26 @@ class Bitmap(object):
 		for h in dims:
 			bmp = Bitmap(width, h)
 			bmp.rows.clear()
-			bmp.rows.extend(self.rows[total:total + h])
+			for row in self.rows[total:total + h]:
+				bmp.rows.append(row[:])
 			total += h
 			bmps.append(bmp)
 		return bmps
+
+	def flipHorizontal(self):
+		width, height = self.size
+		bmp = Bitmap(width, height)
+		bmp.rows.clear()
+		for row in self.rows:
+			copy = row[:]
+			copy.reverse()
+			bmp.rows.append(copy)
+		return bmp
+
+	def flipVertical(self):
+		width, height = self.size
+		bmp = Bitmap(width, height)
+		bmp.rows.clear()
+		for row in reversed(self.rows):
+			bmp.rows.append(row[:])
+		return bmp
