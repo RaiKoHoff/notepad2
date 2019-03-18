@@ -41,6 +41,7 @@
 #endif
 
 #include "Platform.h"
+#include "Scintilla.h"
 #include "XPM.h"
 #include "UniConversion.h"
 #include "CharClassify.h"
@@ -310,6 +311,7 @@ void SetLogFont(LOGFONTW &lf, const char *faceName, int characterSet, float size
 	UTF16FromUTF8(faceName, lf.lfFaceName, LF_FACESIZE);
 }
 
+#if defined(USE_D2D)
 void GetDWriteFontMetrics(const LOGFONTW &lf, const FontParameters &fp, WCHAR wszFace[], int faceSize,
 	DWRITE_FONT_WEIGHT &weight, DWRITE_FONT_STYLE &style, DWRITE_FONT_STRETCH &stretch) {
 	if (gdiInterop) {
@@ -360,6 +362,7 @@ void GetDWriteFontMetrics(const LOGFONTW &lf, const FontParameters &fp, WCHAR ws
 	}
 	UTF16FromUTF8(fp.faceName, wszFace, faceSize);
 }
+#endif
 
 FontID CreateFontFromParameters(const FontParameters &fp) {
 	LOGFONTW lf;
@@ -378,8 +381,11 @@ FontID CreateFontFromParameters(const FontParameters &fp) {
 		DWRITE_FONT_STYLE style = fp.italic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL;
 		DWRITE_FONT_STRETCH stretch = DWRITE_FONT_STRETCH_NORMAL;
 		GetDWriteFontMetrics(lf, fp, wszFace, faceSize, weight, style, stretch);
+		const int localeSize = 200;
+		WCHAR wszLocale[localeSize] = L"";
+		UTF16FromUTF8(fp.localeName, wszLocale, std::size(wszLocale));
 		HRESULT hr = pIDWriteFactory->CreateTextFormat(wszFace, nullptr,
-			weight, style, stretch, fHeight, L"", &pTextFormat);
+			weight, style, stretch, fHeight, wszLocale, &pTextFormat);
 		if (SUCCEEDED(hr)) {
 			pTextFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
 
@@ -1734,11 +1740,11 @@ void ScreenLineLayout::FillTextLayoutFormats(const IScreenLine *screenLine, IDWr
 		textLayout->SetFontWeight(pfm->pTextFormat->GetFontWeight(), textRange);
 		textLayout->SetFontStyle(pfm->pTextFormat->GetFontStyle(), textRange);
 
-		const unsigned int localNameSize = pfm->pTextFormat->GetLocaleNameLength();
-		std::vector<WCHAR> localName(localNameSize + 1);
+		const unsigned int localeNameSize = pfm->pTextFormat->GetLocaleNameLength();
+		std::vector<WCHAR> localeName(localeNameSize + 1);
 
-		pfm->pTextFormat->GetLocaleName(localName.data(), localNameSize);
-		textLayout->SetLocaleName(localName.data(), textRange);
+		pfm->pTextFormat->GetLocaleName(localeName.data(), localeNameSize);
+		textLayout->SetLocaleName(localeName.data(), textRange);
 
 		textLayout->SetFontStretch(pfm->pTextFormat->GetFontStretch(), textRange);
 

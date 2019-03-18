@@ -20,6 +20,7 @@ class CharClassify(IntEnum):
 
 	OnlyWord = 1 << ccWord
 	OnlyWordPunctuation = (1 << ccWord) | (1 << ccPunctuation)
+	RLEValueBit = 3
 
 CharClassifyOrder = [CharClassify.ccCJKWord, CharClassify.ccWord, CharClassify.ccPunctuation, CharClassify.ccNewLine]
 def prefCharClassify(values):
@@ -162,8 +163,9 @@ def updateCharacterCategory(filename):
 	categories = findCategories("../lexlib/CharacterCategory.h")
 	values = ["// Created with Python %s,  Unicode %s" % (
 		platform.python_version(), unicodedata.unidata_version)]
-	category = unicodedata.category(chr(0))
+
 	startRange = 0
+	category = unicodedata.category(chr(startRange))
 	for ch in range(sys.maxunicode):
 		uch = chr(ch)
 		current = unicodedata.category(uch)
@@ -174,8 +176,8 @@ def updateCharacterCategory(filename):
 			startRange = ch
 	value = startRange * 32 + categories.index(category)
 	values.append("%d," % value)
-	print('catRanges:', len(values), 4*len(values)/1024, math.ceil(math.log2(len(values))))
 
+	print('catRanges:', len(values), 4*len(values)/1024, math.ceil(math.log2(len(values))))
 	Regenerate(filename, "//", values)
 
 def getCharClassify(decode, ch):
@@ -311,7 +313,8 @@ def compressIndexTable(head, indexTable, args):
 	# one table
 	if sizeA == sizeC == sizeD:
 		output = []
-		output.append("const %s %s[] = {" % (typemap[sizeA], prefix))
+		name = args.get('table_var', prefix)
+		output.append("const %s %s[] = {" % (typemap[sizeA], name))
 		output.append(', '.join(str(i) for i in indexA) + ',')
 		output.append(', '.join(str(i) for i in indexC) + ',')
 		output.append(', '.join(str(i) for i in indexD) + ',')
@@ -364,10 +367,48 @@ def compressIndexTable(head, indexTable, args):
 }}""".format(**args)
 	return table, function
 
-def updateCharClassifyTable(filename):
-	maxUnicode = sys.maxunicode + 1
-	indexTable = [0] * maxUnicode
-	for ch in range(maxUnicode):
+def runLengthEncode(head, indexTable, valueBit, totalBit=16):
+	assert max(indexTable) < 2**valueBit
+	maxLength = 2**(totalBit - valueBit) - 1
+
+	values = []
+	prevValue = indexTable[0]
+	prevIndex = 0;
+	for index, value in enumerate(indexTable):
+		if value != prevValue:
+			values.append((prevValue, index - prevIndex))
+			prevValue = value
+			prevIndex = index
+	values.append((prevValue, len(indexTable) - prevIndex))
+
+	output = []
+	for value, count in values:
+		if count > maxLength:
+			output.extend([(maxLength << valueBit) | value] * (count // maxLength))
+			count = count % maxLength
+			if count == 0:
+				continue
+		output.append((count << valueBit) | value)
+
+	total = getsize(output)*len(output)/1024
+	print(f'{head} RLE size: {len(output)} {total}')
+
+	result = []
+	mask = 2**valueBit - 1
+	for ch in output:
+		value = ch & mask
+		count = ch >> valueBit
+		result.extend([value] * count)
+
+	assert result == indexTable
+	return output
+
+def updateCharClassifyTable(filename, headfile):
+	UnicodeCharacterCount = sys.maxunicode + 1
+	BMPCharacterCharacterCount = 0xffff + 1
+
+	indexTable = [0] * UnicodeCharacterCount
+	for ch in range(UnicodeCharacterCount):
 		uch = chr(ch)
 		category = unicodedata.category(uch)
 		value = ClassifyMap[category]
@@ -375,14 +416,25 @@ def updateCharClassifyTable(filename):
 			value = CharClassify.ccCJKWord
 		indexTable[ch] = int(value)
 
-	output = ["""// Created with Python %s,  Unicode %s
-namespace {
-constexpr unsigned int maxUnicode = 0x10ffff;
-""" % (platform.python_version(), unicodedata.unidata_version)]
+	output = ["// Created with Python %s,  Unicode %s" % (
+		platform.python_version(), unicodedata.unidata_version)]
+	head_output = output[:]
+
+	data = runLengthEncode('CharClassify Unicode BMP', indexTable[:BMPCharacterCharacterCount], int(CharClassify.RLEValueBit))
+	output.append(f'const unsigned short CharClassifyRLE_BMP[] = {{')
+	output.append(', '.join(map(str, data)))
+	output.append("};")
+	output.append("")
+	output.append("}") # namespace
+	output.append("")
 
 	args = {
+		'table_var': 'CharClassify::CharClassifyTable',
 		'table': 'CharClassifyTable',
-		'function': """CharClassify::cc CharClassify::ClassifyCharacter(unsigned int ch) noexcept {
+		'function': """static cc ClassifyCharacter(unsigned int ch) noexcept {
+	if (ch < sizeof(classifyMap)) {
+		return static_cast<cc>(classifyMap[ch]);
+	}
 	if (ch > maxUnicode) {
 		// Cn
 		return ccSpace;
@@ -391,12 +443,15 @@ constexpr unsigned int maxUnicode = 0x10ffff;
 	}
 
 	table, function = compressIndexTable('CharClassify Unicode', indexTable, args)
-	output.append(table)
-	output.append('')
-	output.append("}\n") # namespace
-	output.append(function)
+	for line in table.splitlines():
+		output.append(line)
+
+	lines = function.splitlines()
+	for line in function.splitlines():
+		head_output.append('\t' + line)
 
 	Regenerate(filename, "//", output)
+	Regenerate(headfile, "//", head_output)
 
 def updateCharacterCategoryTable(filename):
 	categories = findCategories("../lexlib/CharacterCategory.h")
@@ -454,38 +509,51 @@ def getDBCSCharClassify(decode, ch, isReservedOrUDC=None):
 	return int(cc)
 
 def makeDBCSCharClassifyTable(output, encodingList, isReservedOrUDC=None):
-	maxDBCSCharacter = 0xffff + 1
+	DBCSCharacterCount = 0xffff + 1
 	result = {}
 
 	for cp in encodingList:
 		decode = codecs.getdecoder(cp)
-		for ch in range(maxDBCSCharacter):
+		for ch in range(DBCSCharacterCount):
 			cc = getDBCSCharClassify(decode, ch, isReservedOrUDC)
 			if ch in result:
 				result[ch].append(cc)
 			else:
 				result[ch] = [cc]
 
-	indexTable = [0] * maxDBCSCharacter
-	for ch in range(maxDBCSCharacter):
+	indexTable = [0] * DBCSCharacterCount
+	for ch in range(DBCSCharacterCount):
 		indexTable[ch] = int(prefCharClassify(result[ch]))
 
 	suffix = '_' + encodingList[0].upper()
-	args = {
-		'table': 'CharClassifyTable' + suffix,
-		'function': """CharClassify::cc ClassifyCharacter%s(unsigned int ch) noexcept {
+	head = 'CharClassify' + suffix
+
+	if True:
+		data = runLengthEncode(head, indexTable, int(CharClassify.RLEValueBit))
+		output.append(f'const unsigned short CharClassifyRLE{suffix}[] = {{')
+		output.append(', '.join(map(str, data)))
+		output.append("};")
+		output.append("")
+
+	if False:
+		args = {
+			'table': 'CharClassifyTable' + suffix,
+			'function': """CharClassify::cc ClassifyCharacter%s(unsigned int ch) noexcept {
 	if (ch > maxDBCSCharacter) {
 		// Cn
 		return CharClassify::ccSpace;
 	}""" % suffix,
-		'returnType': 'CharClassify::cc'
-	}
+			'returnType': 'CharClassify::cc'
+		}
 
-	table, function = compressIndexTable('CharClassify' + suffix, indexTable, args)
-	output.append(table)
-	output.append('')
-	output.append(function)
-	output.append('')
+		table, function = compressIndexTable(head, indexTable, args)
+		for line in table.splitlines():
+			output.append(line)
+		output.append('')
+
+		for line in function.splitlines():
+			output.append(line)
+		output.append('')
 
 # https://en.wikipedia.org/wiki/GBK_(character_encoding)
 def isReservedOrUDC_GBK(ch, buf):
@@ -525,7 +593,7 @@ def updateDBCSCharClassifyTable(filename):
 
 if __name__ == '__main__':
 	buildANSICharClassifyTable('../../src/EditEncoding.c')
-	updateCharClassifyTable("../src/CharClassify.cxx")
+	updateCharClassifyTable("../src/CharClassify.cxx", "../src/CharClassify.h")
 	updateDBCSCharClassifyTable("../src/CharClassify.cxx")
 	#updateCharacterCategoryTable("../lexlib/CharacterCategory.cxx")
 	#updateCharacterCategory("../lexlib/CharacterCategory.cxx")

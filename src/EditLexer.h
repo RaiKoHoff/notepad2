@@ -21,6 +21,7 @@
 #ifndef _INC_WINDOWS
 typedef wchar_t * LPWSTR;
 typedef const wchar_t * LPCWSTR;
+typedef unsigned char BYTE;
 #endif
 
 typedef struct _editstyle {
@@ -54,7 +55,9 @@ typedef struct _editlexer {
 	const int iLexer;
 	const int rid;
 	struct {
-		int bStyleChanged;
+		BYTE bStyleChanged;
+		BYTE bUseDefaultCodeStyle;
+		const BYTE bUseDefaultCodeStyle_Default;
 		const unsigned int iStyleCount;
 		const int iNameLen;
 		LPCWSTR const pszName;
@@ -68,10 +71,11 @@ typedef struct _editlexer {
 
 typedef const EDITLEXER *LPCEDITLEXER;
 
-#define EDITLEXER_HOLE(name, style)	{ 0, COUNTOF(style), CSTRLEN(name), (name), NULL, NULL }
+#define EDITLEXER_HOLE(name, style)	{ 0, 1, 1, COUNTOF(style), CSTRLEN(name), (name), NULL, NULL }
+#define EDITLEXER_TEXT(name, style)	{ 0, 0, 0, COUNTOF(style), CSTRLEN(name), (name), NULL, NULL }
 
 // NP2LEX_, rid for EDITLEXER
-#define NP2LEX_DEFAULT	63000	// SCLEX_NULL		Default Text
+#define NP2LEX_TEXTFILE	63000	// SCLEX_NULL		Text File
 #define NP2LEX_CPP		63001	// SCLEX_CPP		C/C++
 #define NP2LEX_JAVA		63002	// SCLEX_CPP		Java
 #define NP2LEX_CSHARP	63003	// SCLEX_CPP		C#
@@ -132,7 +136,10 @@ typedef const EDITLEXER *LPCEDITLEXER;
 #define NP2LEX_OCTAVE	63061	// SCLEX_MATLAB		Octave
 #define NP2LEX_SCILAB	63062	// SCLEX_MATLAB		SciLab
 #define NP2LEX_JULIA	63066	// SCLEX_MATLAB		Julia
-#define NP2LEX_ANSI		63099	// SCLEX_NULL		ANSI
+#define NP2LEX_2NDTEXTFILE	63097	// SCLEX_NULL		2nd Text File
+#define NP2LEX_2NDGLOBAL	63098	// SCLEX_NULL		2nd Global Styles
+#define NP2LEX_ANSI			63099	// SCLEX_NULL		ANSI
+#define NP2LEX_GLOBAL		63100	// SCLEX_NULL		Global Styles
 
 #endif // NOTEPAD2_EDITLEXER_H_
 

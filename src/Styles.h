@@ -23,7 +23,7 @@
 
 #include "EditLexer.h"
 // Number of Lexers in pLexArray
-#define NUMLEXERS 57
+#define NUMLEXERS 58
 
 // all schemes with "All Files (*.*)"
 #define MAX_OPEN_SAVE_FILE_DIALOG_FILTER_SIZE	((NUMLEXERS + 1) * 128)
@@ -41,16 +41,9 @@
 #define EditLexer_HTML		1
 #define EditLexer_XML		2
 
-enum UseDefaultCodeStyle {
-	UseDefaultCodeStyle_CodeFile = 1,
-	UseDefaultCodeStyle_TextFile = 2,
-
-	UseDefaultCodeStyle_Default = UseDefaultCodeStyle_CodeFile,
-};
-
 extern PEDITLEXER pLexCurrent;
 extern int np2LexLangIndex;
-extern BOOL bUse2ndDefaultStyle;
+extern BOOL bUse2ndGlobalStyle;
 extern int fUseDefaultCodeStyle;
 extern BOOL bCurrentLexerHasLineComment;
 extern BOOL bCurrentLexerHasBlockComment;
@@ -85,12 +78,13 @@ void	Style_SetIndentGuides(HWND hwnd, BOOL bShow);
 void	Style_UpdateCaret(HWND hwnd);
 void	Style_SetLongLineColors(HWND hwnd);
 void	Style_HighlightCurrentLine(HWND hwnd);
-void	Style_ToggleUse2ndDefaultStyle(HWND hwnd);
-void	Style_ToggleUseDefaultCodeStyle(HWND hwnd, int menu);
+void	Style_ToggleUse2ndGlobalStyle(HWND hwnd);
+void	Style_ToggleUseDefaultCodeStyle(HWND hwnd);
 BOOL	Style_GetOpenDlgFilterStr(LPWSTR lpszFilter, int cchFilter);
 
 BOOL	Style_StrGetFontEx(LPCWSTR lpszStyle, LPWSTR lpszFont, int cchFont, BOOL bDefaultStyle);
 BOOL	Style_StrGetCharSet(LPCWSTR lpszStyle, int *i);
+BOOL	Style_StrGetLocale(LPCWSTR lpszStyle, LPWSTR lpszLocale, int cchLocale);
 BOOL	Style_StrGetFontSize(LPCWSTR lpszStyle, int *i);
 BOOL	Style_StrGetRawSize(LPCWSTR lpszStyle, int *i);
 BOOL	Style_StrGetFontWeight(LPCWSTR lpszStyle, int *i);
