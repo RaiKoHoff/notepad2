@@ -68,7 +68,8 @@ void FontRealised::Realise(Surface &surface, int zoomLevel, int technology, cons
 	PLATFORM_ASSERT(fs.fontName);
 	sizeZoomed = GetFontSizeZoomed(fs.size, zoomLevel);
 	const float deviceHeight = static_cast<float>(surface.DeviceHeightFont(sizeZoomed));
-	const FontParameters fp(fs.fontName, deviceHeight / SC_FONT_SIZE_MULTIPLIER, fs.weight, fs.italic, fs.extraFontFlag, technology, fs.characterSet, localeName);
+	const FontParameters fp(fs.fontName, deviceHeight / SC_FONT_SIZE_MULTIPLIER, fs.weight,
+		fs.italic, fs.extraFontFlag, technology, fs.characterSet, localeName);
 	font.Create(fp);
 
 	ascent = static_cast<unsigned int>(surface.Ascent(font));
@@ -541,6 +542,9 @@ bool ViewStyle::SetWrapState(int wrapState_) noexcept {
 		break;
 	case SC_WRAP_WHITESPACE:
 		wrapStateWanted = eWrapWhitespace;
+		break;
+	case SC_WRAP_AUTO:
+		wrapStateWanted = eWrapAuto;
 		break;
 	default:
 		wrapStateWanted = eWrapNone;
