@@ -40,6 +40,8 @@ static void ColouriseJSONDoc(Sci_PositionU startPos, Sci_Position length, int in
 	int levelNext = levelCurrent;
 	char buf[MAX_WORD_LENGTH + 1] = "";
 	int wordLen = 0;
+	// last non-escaped character before new line
+	int chBefore = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
 		int ch = chNext;
@@ -94,15 +96,24 @@ static void ColouriseJSONDoc(Sci_PositionU startPos, Sci_Position length, int in
 				buf[wordLen++] = static_cast<char>(ch);
 			}
 			break;
-		case SCE_C_STRING:
+		case SCE_C_STRINGEOL:
 			if (atLineStart) {
 				styler.ColourTo(i - 1, state);
 				state = SCE_C_DEFAULT;
-			} else if (ch == '\\' && (chNext == '\\' || chNext == '\"')) {
+			}
+			break;
+		case SCE_C_STRING:
+		case SCE_C_CHARACTER:
+			if (atEOL) {
+				if (chBefore != '\\') {
+					state = SCE_C_STRINGEOL;
+				}
+			} else if (ch == '\\' && (chNext == '\\' || chNext == '\"' || chNext == '\'')) {
 				i++;
 				ch = chNext;
 				chNext = styler.SafeGetCharAt(i + 1);
-			} else if (ch == '\"') {
+				chBefore = 0;
+			} else if ((state == SCE_C_STRING && ch == '\"') || (state == SCE_C_CHARACTER && ch == '\'')) {
 				Sci_PositionU pos = i + 1;
 				while (IsASpace(styler.SafeGetCharAt(pos++)));
 				if (styler[pos - 1] == ':') {
@@ -112,6 +123,8 @@ static void ColouriseJSONDoc(Sci_PositionU startPos, Sci_Position length, int in
 				}
 				state = SCE_C_DEFAULT;
 				continue;
+			} else if (ch != '\r') {
+				chBefore = ch;
 			}
 			break;
 		case SCE_C_COMMENTLINE:
@@ -145,6 +158,9 @@ static void ColouriseJSONDoc(Sci_PositionU startPos, Sci_Position length, int in
 			} else if (ch == '\"') {
 				styler.ColourTo(i - 1, state);
 				state = SCE_C_STRING;
+			} else if (ch == '\'') {
+				styler.ColourTo(i - 1, state);
+				state = SCE_C_CHARACTER;
 			} else if (IsADigit(ch) || (ch == '.' && IsADigit(chNext))) {
 				styler.ColourTo(i - 1, state);
 				state = SCE_C_NUMBER;

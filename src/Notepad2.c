@@ -145,8 +145,10 @@ static int iMarkOccurrences;
 static BOOL bMarkOccurrencesMatchCase;
 static BOOL bMarkOccurrencesMatchWords;
 struct EditAutoCompletionConfig autoCompletionConfig;
+#define	ShowCodeFolding_Default		(1 | (1 << 2)) // show + ellipsis
 static BOOL bShowCodeFolding;
 static BOOL bShowFoldingLine;
+static BOOL bFoldDisplayText;
 #if NP2_ENABLE_SHOW_CALL_TIPS
 static BOOL bShowCallTips = FALSE;
 static int iCallTipsWaitTime = 500; // 500 ms
@@ -1683,6 +1685,9 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 #else
 	SciCall_SetFoldFlags(SC_FOLDFLAG_LEVELNUMBERS);
 #endif
+	SciCall_FoldDisplayTextSetStyle((bFoldDisplayText ? SC_FOLDDISPLAYTEXT_BOXED : SC_FOLDDISPLAYTEXT_HIDDEN));
+	const char *text = GetFoldDisplayEllipsis(SC_CP_UTF8, 0); // internal default encoding
+	EditSetDefaultFoldDisplayText(text);
 	// highlight for current folding block
 	SciCall_MarkerEnableHighlight(TRUE);
 #if NP2_ENABLE_SHOW_CALL_TIPS
@@ -1980,6 +1985,10 @@ void MsgThemeChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	GetClientRect(hwnd, &rc);
 	SendMessage(hwnd, WM_SIZE, SIZE_RESTORED, MAKELPARAM(rc.right, rc.bottom));
 	UpdateStatusbar();
+}
+
+static void OnStyleThemeChanged(int theme) {
+	Style_OnStyleThemeChanged(hwndEdit, theme);
 }
 
 //=============================================================================
@@ -2335,9 +2344,12 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	//EnableCmd(hmenu, IDM_VIEW_FOLD_LEVEL10, i && bShowCodeFolding);
 	CheckCmd(hmenu, IDM_VIEW_SHOW_FOLDING, bShowCodeFolding);
 	CheckCmd(hmenu, IDM_VIEW_SHOW_FOLDING_LINE, bShowFoldingLine);
+	CheckCmd(hmenu, IDM_VIEW_FOLD_DISPALY_TEXT, bFoldDisplayText);
 
 	CheckCmd(hmenu, IDM_VIEW_USE2NDGLOBALSTYLE, bUse2ndGlobalStyle);
 	CheckCmd(hmenu, IDM_VIEW_USEDEFAULT_CODESTYLE, pLexCurrent->bUseDefaultCodeStyle);
+	i = IDM_VIEW_STYLE_THEME_DEFAULT + np2StyleTheme;
+	CheckMenuRadioItem(hmenu, IDM_VIEW_STYLE_THEME_DEFAULT, IDM_VIEW_STYLE_THEME_DARK, i, MF_BYCOMMAND);
 
 	CheckCmd(hmenu, IDM_VIEW_WORDWRAP, fWordWrap);
 	i = IDM_VIEW_FONTQUALITY_DEFAULT + iFontQuality;
@@ -3747,6 +3759,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		Style_ToggleUseDefaultCodeStyle(hwndEdit);
 		break;
 
+	case IDM_VIEW_STYLE_THEME_DEFAULT:
+	case IDM_VIEW_STYLE_THEME_DARK:
+		OnStyleThemeChanged(LOWORD(wParam) - IDM_VIEW_STYLE_THEME_DEFAULT);
+		break;
+
 	case IDM_VIEW_SCHEMECONFIG:
 		Style_ConfigDlg(hwndEdit);
 		break;
@@ -3892,6 +3909,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_VIEW_SHOW_FOLDING_LINE:
 		bShowFoldingLine = !bShowFoldingLine;
 		SciCall_SetFoldFlags(bShowFoldingLine ? SC_FOLDFLAG_LINEAFTER_CONTRACTED : 0);
+		break;
+
+	case IDM_VIEW_FOLD_DISPALY_TEXT:
+		bFoldDisplayText = !bFoldDisplayText;
+		SciCall_FoldDisplayTextSetStyle((bFoldDisplayText ? SC_FOLDDISPLAYTEXT_BOXED : SC_FOLDDISPLAYTEXT_HIDDEN));
 		break;
 
 	case IDM_VIEW_TOGGLEFOLDS:
@@ -5239,9 +5261,10 @@ void LoadSettings(void) {
 
 	bShowSelectionMargin = IniSectionGetBool(pIniSection, L"ShowSelectionMargin", 0);
 	bShowLineNumbers = IniSectionGetBool(pIniSection, L"ShowLineNumbers", 1);
-	iValue = IniSectionGetInt(pIniSection, L"ShowCodeFolding", 1);
+	iValue = IniSectionGetInt(pIniSection, L"ShowCodeFolding", ShowCodeFolding_Default);
 	bShowCodeFolding = iValue & 1;
 	bShowFoldingLine = (iValue >> 1) & 1;
+	bFoldDisplayText = (iValue >> 2) & 1;
 
 	iValue = IniSectionGetInt(pIniSection, L"MarkOccurrences", 3);
 	iMarkOccurrences = clamp_i(iValue, 0, 4);
@@ -5455,11 +5478,9 @@ void LoadSettings(void) {
 //
 //
 void SaveSettings(BOOL bSaveSettingsNow) {
-	if (StrIsEmpty(szIniFile)) {
+	if (!CreateIniFile()) {
 		return;
 	}
-
-	CreateIniFile();
 
 	if (!bSaveSettings && !bSaveSettingsNow) {
 		IniSetBool(INI_SECTION_NAME_SETTINGS, L"SaveSettings", bSaveSettings);
@@ -5533,7 +5554,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetIntEx(pIniSection, L"LongLineMode", iLongLineMode, EDGE_LINE);
 	IniSectionSetBoolEx(pIniSection, L"ShowSelectionMargin", bShowSelectionMargin, 0);
 	IniSectionSetBoolEx(pIniSection, L"ShowLineNumbers", bShowLineNumbers, 1);
-	IniSectionSetIntEx(pIniSection, L"ShowCodeFolding", bShowCodeFolding | (bShowFoldingLine << 1), 1);
+	IniSectionSetIntEx(pIniSection, L"ShowCodeFolding", bShowCodeFolding | (bShowFoldingLine << 1) | (bFoldDisplayText << 2), ShowCodeFolding_Default);
 	IniSectionSetIntEx(pIniSection, L"MarkOccurrences", iMarkOccurrences, 3);
 	IniSectionSetBoolEx(pIniSection, L"MarkOccurrencesMatchCase", bMarkOccurrencesMatchCase, 1);
 	IniSectionSetBoolEx(pIniSection, L"MarkOccurrencesMatchWholeWords", bMarkOccurrencesMatchWords, 0);
@@ -6440,9 +6461,9 @@ BOOL CheckIniFile(LPWSTR lpszFile, LPCWSTR lpszModule) {
 	return FALSE;
 }
 
-BOOL CheckIniFileRedirect(LPWSTR lpszFile, LPCWSTR lpszModule) {
+BOOL CheckIniFileRedirect(LPWSTR lpszFile, LPCWSTR lpszModule, LPCWSTR redirectKey) {
 	WCHAR tch[MAX_PATH];
-	if (GetPrivateProfileString(INI_SECTION_NAME_NOTEPAD2, L"Notepad2.ini", L"", tch, COUNTOF(tch), lpszFile)) {
+	if (GetPrivateProfileString(INI_SECTION_NAME_NOTEPAD2, redirectKey, L"", tch, COUNTOF(tch), lpszFile)) {
 		if (CheckIniFile(tch, lpszModule)) {
 			lstrcpy(lpszFile, tch);
 		} else {
@@ -6492,8 +6513,8 @@ BOOL FindIniFile(void) {
 
 	if (bFound) {
 		// allow two redirections: administrator -> user -> custom
-		if (CheckIniFileRedirect(tchTest, tchModule)) {
-			CheckIniFileRedirect(tchTest, tchModule);
+		if (CheckIniFileRedirect(tchTest, tchModule, L"Notepad2.ini")) {
+			CheckIniFileRedirect(tchTest, tchModule, L"Notepad2.ini");
 		}
 		lstrcpy(szIniFile, tchTest);
 	} else {
@@ -6532,6 +6553,47 @@ BOOL TestIniFile(void) {
 	}
 
 	return TRUE;
+}
+
+void FindExtraIniFile(LPWSTR lpszIniFile, LPCWSTR defaultName, LPCWSTR redirectKey) {
+	WCHAR tchTest[MAX_PATH];
+	WCHAR tchModule[MAX_PATH];
+	GetModuleFileName(NULL, tchModule, COUNTOF(tchModule));
+	// replace exe name with default ini file name
+	PathRemoveFileSpec(tchModule);
+	PathAppend(tchModule, defaultName);
+
+	if (StrNotEmpty(lpszIniFile)) {
+		if (!CheckIniFile(lpszIniFile, tchModule)) {
+			ExpandEnvironmentStringsEx(lpszIniFile, MAX_PATH);
+			if (PathIsRelative(lpszIniFile)) {
+				lstrcpy(tchTest, tchModule);
+				PathRemoveFileSpec(tchTest);
+				PathAppend(tchTest, lpszIniFile);
+				lstrcpy(lpszIniFile, tchTest);
+			}
+		}
+		return;
+	}
+
+	lstrcpy(tchTest, tchModule);
+	BOOL bFound = CheckIniFile(tchTest, tchModule);
+
+	if (!bFound) {
+		lstrcpy(tchTest, defaultName);
+		bFound = CheckIniFile(tchTest, tchModule);
+	}
+
+	if (bFound) {
+		// allow two redirections: administrator -> user -> custom
+		if (CheckIniFileRedirect(tchTest, tchModule, redirectKey)) {
+			CheckIniFileRedirect(tchTest, tchModule, redirectKey);
+		}
+		lstrcpy(lpszIniFile, tchTest);
+	} else {
+		lstrcpy(lpszIniFile, tchModule);
+		PathRenameExtension(lpszIniFile, L".ini");
+	}
 }
 
 BOOL CreateIniFile(void) {

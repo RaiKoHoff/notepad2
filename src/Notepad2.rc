@@ -121,8 +121,8 @@ BEGIN
 		POPUP "Line Endin&gs"
 		BEGIN
 			MENUITEM "&Windows (CR+LF)",			IDM_LINEENDINGS_CRLF
-			MENUITEM "&Unix/Mac (LF)",				IDM_LINEENDINGS_LF
-			MENUITEM "Old &Mac (CR)",				IDM_LINEENDINGS_CR
+			MENUITEM "&Unix/macOS (LF)",			IDM_LINEENDINGS_LF
+			MENUITEM "Classic &Mac OS (CR)",		IDM_LINEENDINGS_CR
 			MENUITEM SEPARATOR
 			MENUITEM "&Default...",					IDM_LINEENDINGS_SETDEFAULT
 		END
@@ -423,6 +423,7 @@ BEGIN
 		BEGIN
 			MENUITEM "Show Code &Folding\tCtrl+Shift+Alt+F",IDM_VIEW_SHOW_FOLDING
 			MENUITEM "Show Folding &Line",			IDM_VIEW_SHOW_FOLDING_LINE
+			MENUITEM "Show Fold &Ellipsis",			IDM_VIEW_FOLD_DISPALY_TEXT
 		END
 		POPUP "&Toggle Folds"
 		BEGIN
@@ -456,6 +457,11 @@ BEGIN
 		MENUITEM "&Customize Schemes...\tCtrl+F12",	IDM_VIEW_SCHEMECONFIG
 		MENUITEM "Use &2nd Global Styles\tShift+F12",IDM_VIEW_USE2NDGLOBALSTYLE
 		MENUITEM "&Use Default Code Style",			IDM_VIEW_USEDEFAULT_CODESTYLE
+		POPUP "St&yle Theme"
+		BEGIN
+			MENUITEM "&Default",					IDM_VIEW_STYLE_THEME_DEFAULT
+			MENUITEM "Dar&k",						IDM_VIEW_STYLE_THEME_DARK
+		END
 		MENUITEM SEPARATOR
 		POPUP "&Text File"
 		BEGIN
@@ -491,7 +497,7 @@ BEGIN
 			MENUITEM "&C Shell",					IDM_LANG_CSHELL
 			MENUITEM "&M4 Macro",					IDM_LANG_M4
 		END
-		// "S&QL Dialect"
+		//POPUP "S&QL Dialect"
 		POPUP "&XML Document"
 		BEGIN
 			MENUITEM "&XML Document",				IDM_LANG_XML
@@ -1934,8 +1940,8 @@ END
 STRINGTABLE
 BEGIN
     IDS_EOLMODENAME_CRLF    "Windows (CR+LF)"
-    IDS_EOLMODENAME_LF      "Unix/Mac (LF)"
-    IDS_EOLMODENAME_CR      "Old Mac (CR)"
+    IDS_EOLMODENAME_LF      "Unix/macOS (LF)"
+    IDS_EOLMODENAME_CR      "Classic Mac OS (CR)"
 END
 
 
