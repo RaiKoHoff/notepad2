@@ -5,6 +5,7 @@
 #include <commctrl.h>
 #include <commdlg.h>
 #include <limits.h>
+#include <stdio.h>
 #include "Edit.h"
 #include "Styles.h"
 #include "Helpers.h"
@@ -353,7 +354,7 @@ void AutoC_AddDocWord(struct WordList *pWList, BOOL bIgnoreCase, char prefix) {
 	struct Sci_TextToFind ft = { { 0, 0 }, NULL, { 0, 0 } };
 	struct Sci_TextRange tr = { { 0, 0 }, NULL };
 	const Sci_Position iCurrentPos = SciCall_GetCurrentPos() - iRootLen - (prefix ? 1 : 0);
-	const int iDocLen = SciCall_GetLength();
+	const Sci_Position iDocLen = SciCall_GetLength();
 	const int findFlag = SCFIND_REGEXP | SCFIND_POSIX | (bIgnoreCase ? 0 : SCFIND_MATCHCASE);
 
 	// optimization for small string
@@ -387,7 +388,7 @@ void AutoC_AddDocWord(struct WordList *pWList, BOOL bIgnoreCase, char prefix) {
 	}
 
 	ft.lpstrText = pFind;
-	ft.chrg.cpMax = iDocLen;
+	ft.chrg.cpMax = (Sci_PositionCR)iDocLen;
 	Sci_Position iPosFind = SciCall_FindText(findFlag, &ft);
 
 	while (iPosFind >= 0 && iPosFind < iDocLen) {
@@ -1292,9 +1293,9 @@ void EditAutoIndent(HWND hwnd) {
 							  (int)SendMessage(hwnd, SCI_POSITIONFROMLINE, iCurLine - 1, 0);
 		if (iPrevLineLength == 0) {
 			const int bitmask = (int)SendMessage(hwnd, SCI_MARKERGET, iCurLine - 1, 0);
-			if (bitmask & 1) {
-				SendMessage(hwnd, SCI_MARKERDELETE, iCurLine - 1, 0);
-				SendMessage(hwnd, SCI_MARKERADD, iCurLine, 0);
+			if (bitmask & MarkerBitmask_Bookmark) {
+				SendMessage(hwnd, SCI_MARKERDELETE, iCurLine - 1, MarkerNumber_Bookmark);
+				SendMessage(hwnd, SCI_MARKERADD, iCurLine, MarkerNumber_Bookmark);
 			}
 		}
 	}
@@ -1791,7 +1792,7 @@ void EditShowCallTips(HWND hwnd, Sci_Position position) {
 	char *pLine = (char *)NP2HeapAlloc(iDocLen + 1);
 	SciCall_GetLine(iLine, pLine);
 	char *text = (char *)NP2HeapAlloc(iDocLen + 1 + 128);
-	wsprintfA(text, "ShowCallTips(%d, %d, %d)\n%s", iLine + 1, (int)position, iDocLen, pLine);
+	sprintf(text, "ShowCallTips(%d, %d, %d)\n%s", iLine + 1, (int)position, iDocLen, pLine);
 	SendMessage(hwnd, SCI_CALLTIPSHOW, position, (LPARAM)text);
 	NP2HeapFree(pLine);
 	NP2HeapFree(text);

@@ -188,9 +188,15 @@ void	EditPrintSetup(HWND hwnd);
 }
 #endif
 
-#define MarkOccurrencesIndicatorNumber	1 // INDIC_DIAGONAL
-void	EditMarkAll(HWND hwnd, int iMarkOccurrences,
-					BOOL bMarkOccurrencesMatchCase, BOOL bMarkOccurrencesMatchWords);
+enum {
+	MarkerNumber_Bookmark = 0,
+	IndicatorNumber_MarkOccurrences = 1,
+
+	MarkerBitmask_Bookmark  = 1 << MarkerNumber_Bookmark,
+};
+
+void	EditMarkAll_Clear(void);
+void	EditMarkAll(BOOL bChanged, BOOL bMarkOccurrencesMatchCase, BOOL bMarkOccurrencesMatchWords);
 
 // auto completion fill-up characters
 #define MAX_AUTO_COMPLETION_FILLUP_LENGTH	32		// Only 32 ASCII punctuation

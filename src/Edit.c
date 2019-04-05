@@ -76,11 +76,20 @@ static DString wchAppendSelection;
 static DString wchPrefixLines;
 static DString wchAppendLines;
 
+static struct EditMarkAllStatus {
+	int findFlag;
+	int iSelCount;
+	LPSTR pszText;
+} editMarkAllStatus;
+
 void Edit_ReleaseResources(void) {
 	DString_Free(&wchPrefixSelection);
 	DString_Free(&wchAppendSelection);
 	DString_Free(&wchPrefixLines);
 	DString_Free(&wchAppendLines);
+	if (editMarkAllStatus.pszText) {
+		NP2HeapFree(editMarkAllStatus.pszText);
+	}
 }
 
 //=============================================================================
@@ -99,6 +108,7 @@ HWND EditCreate(HWND hwndParent) {
 						  NULL);
 
 	InitScintillaHandle(hwnd);
+	Style_InitDefaultColor(hwnd);
 	SendMessage(hwnd, SCI_SETBUFFEREDDRAW, (iRenderingTechnology == SC_TECHNOLOGY_DEFAULT), 0);
 	SendMessage(hwnd, SCI_SETTECHNOLOGY, iRenderingTechnology, 0);
 	SendMessage(hwnd, SCI_SETBIDIRECTIONAL, iBidirectional, 0);
@@ -5058,42 +5068,45 @@ BOOL EditReplace(HWND hwnd, LPEDITFINDREPLACE lpefr) {
 //
 
 extern int iMatchesCount;
-extern int iMarkOccurrencesColor;
-extern int iMarkOccurrencesAlpha;
 
-void EditMarkAll(HWND hwnd, int iMarkOccurrences, BOOL bMarkOccurrencesMatchCase, BOOL bMarkOccurrencesMatchWords) {
-	iMatchesCount = 0;
-	// feature is off
-	if (!iMarkOccurrences) {
+void EditMarkAll_Clear(void) {
+	if (iMatchesCount == 0) {
 		return;
 	}
 
-	const int iTextLen = (int)SendMessage(hwnd, SCI_GETLENGTH, 0, 0);
-
-	// get current selection
-	int iSelStart = (int)SendMessage(hwnd, SCI_GETSELECTIONSTART, 0, 0);
-	const int iSelEnd = (int)SendMessage(hwnd, SCI_GETSELECTIONEND, 0, 0);
-	int iSelCount = iSelEnd - iSelStart;
-
+	iMatchesCount = 0;
 	// clear existing indicator
-	SendMessage(hwnd, SCI_SETINDICATORCURRENT, MarkOccurrencesIndicatorNumber, 0);
-	SendMessage(hwnd, SCI_INDICATORCLEARRANGE, 0, iTextLen);
+	SciCall_SetIndicatorCurrent(IndicatorNumber_MarkOccurrences);
+	SciCall_IndicatorClearRange(0, SciCall_GetLength());
+
+	if (editMarkAllStatus.pszText) {
+		NP2HeapFree(editMarkAllStatus.pszText);
+	}
+	editMarkAllStatus.findFlag = 0;
+	editMarkAllStatus.iSelCount= 0;
+	editMarkAllStatus.pszText = NULL;
+}
+
+void EditMarkAll(BOOL bChanged, BOOL bMarkOccurrencesMatchCase, BOOL bMarkOccurrencesMatchWords) {
+	// get current selection
+	Sci_Position iSelStart = SciCall_GetSelectionStart();
+	const Sci_Position iSelEnd = SciCall_GetSelectionEnd();
+	int iSelCount = (int)(iSelEnd - iSelStart);
 
 	// if nothing selected or multiple lines are selected exit
-	if (iSelCount == 0 ||
-			(int)SendMessage(hwnd, SCI_LINEFROMPOSITION, iSelStart, 0) !=
-			(int)SendMessage(hwnd, SCI_LINEFROMPOSITION, iSelEnd, 0)) {
+	if (iSelCount == 0 || SciCall_LineFromPosition(iSelStart) != SciCall_LineFromPosition(iSelEnd)) {
+		EditMarkAll_Clear();
 		return;
 	}
 
 	// scintilla/src/Editor.h SelectionText.LengthWithTerminator()
-	iSelCount = (int)SendMessage(hwnd, SCI_GETSELTEXT, 0, 0) - 1;
+	iSelCount = SciCall_GetSelTextLength() - 1;
 	char *pszText = (char *)NP2HeapAlloc(iSelCount + 1);
-	SendMessage(hwnd, SCI_GETSELTEXT, 0, (LPARAM)pszText);
+	SciCall_GetSelText(pszText);
 
 	// exit if selection is not a word and Match whole words only is enabled
 	if (bMarkOccurrencesMatchWords) {
-		const UINT cpEdit = (UINT)SendMessage(hwnd, SCI_GETCODEPAGE, 0, 0);
+		const UINT cpEdit = SciCall_GetCodePage();
 		const BOOL dbcs = !(cpEdit == CP_UTF8 || cpEdit == 0);
 		// CharClassify::SetDefaultCharClasses()
 		for (iSelStart = 0; iSelStart < iSelCount; ++iSelStart) {
@@ -5102,36 +5115,47 @@ void EditMarkAll(HWND hwnd, int iMarkOccurrences, BOOL bMarkOccurrencesMatchCase
 				++iSelStart;
 			} else if (!(ch >= 0x80 || IsDocWordChar(ch))) {
 				NP2HeapFree(pszText);
+				EditMarkAll_Clear();
 				return;
 			}
+		}
+	}
+
+	const int findFlag = (bMarkOccurrencesMatchCase ? SCFIND_MATCHCASE : 0) | (bMarkOccurrencesMatchWords ? SCFIND_WHOLEWORD : 0);
+	if (!bChanged && findFlag == editMarkAllStatus.findFlag && editMarkAllStatus.iSelCount == iSelCount) {
+		// _stricmp() is not safe for DBCS string.
+		if (memcmp(pszText, editMarkAllStatus.pszText, iSelCount) == 0) {
+			return;
 		}
 	}
 
 	struct Sci_TextToFind ttf;
 	ZeroMemory(&ttf, sizeof(ttf));
 	ttf.chrg.cpMin = 0;
-	ttf.chrg.cpMax = iTextLen;
+	ttf.chrg.cpMax = (Sci_PositionCR)SciCall_GetLength();
 	ttf.lpstrText = pszText;
 
-	// set style
-	const COLORREF fore = (iMarkOccurrences == 4) ? iMarkOccurrencesColor : (0xff << ((iMarkOccurrences - 1) << 3));
-	SendMessage(hwnd, SCI_INDICSETALPHA, MarkOccurrencesIndicatorNumber, iMarkOccurrencesAlpha);
-	SendMessage(hwnd, SCI_INDICSETFORE, MarkOccurrencesIndicatorNumber, fore);
-	SendMessage(hwnd, SCI_INDICSETSTYLE, MarkOccurrencesIndicatorNumber, INDIC_ROUNDBOX);
+	EditMarkAll_Clear();
+	SciCall_SetIndicatorCurrent(IndicatorNumber_MarkOccurrences);
 
-	const int findFlag = (bMarkOccurrencesMatchCase ? SCFIND_MATCHCASE : 0) | (bMarkOccurrencesMatchWords ? SCFIND_WHOLEWORD : 0);
-	int iPos;
-	while ((iPos = (int)SendMessage(hwnd, SCI_FINDTEXT, findFlag, (LPARAM)&ttf)) != -1) {
+	Sci_Position iPos;
+	while ((iPos = SciCall_FindText(findFlag, &ttf)) != -1) {
 		// mark this match
 		++iMatchesCount;
-		SendMessage(hwnd, SCI_INDICATORFILLRANGE, iPos, iSelCount);
+		SciCall_IndicatorFillRange(iPos, iSelCount);
 		ttf.chrg.cpMin = ttf.chrgText.cpMin + iSelCount;
 		if (ttf.chrg.cpMin == ttf.chrg.cpMax) {
 			break;
 		}
 	}
 
-	NP2HeapFree(pszText);
+	if (iMatchesCount > 1) {
+		editMarkAllStatus.findFlag = findFlag;
+		editMarkAllStatus.iSelCount = iSelCount;
+		editMarkAllStatus.pszText = pszText;
+	} else {
+		NP2HeapFree(pszText);
+	}
 }
 
 //=============================================================================

@@ -1070,11 +1070,11 @@ void MakeColorPickButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, COLORREF cr
 
 	HBITMAP hBmp = CreateMappedBitmap(hInstance, IDB_PICK, 0, colormap, 2);
 
-	bi.himl = ImageList_Create(10, 10, ILC_COLORDDB | ILC_MASK, 1, 0);
+	bi.himl = ImageList_Create(16, 16, ILC_COLORDDB | ILC_MASK, 1, 0);
 	ImageList_AddMasked(bi.himl, hBmp, RGB(0xFF, 0xFF, 0xFF));
 	DeleteObject(hBmp);
 
-	SetRect(&bi.margin, 0, 0, 4, 0);
+	SetRect(&bi.margin, 0, 0, 2, 0);
 	bi.uAlign = BUTTON_IMAGELIST_ALIGN_RIGHT;
 
 	SendMessage(hwndCtl, BCM_SETIMAGELIST, 0, (LPARAM)&bi);
@@ -2156,7 +2156,7 @@ BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
 					lf.lfHeight = -lf.lfHeight;
 				}
 				*wSize = (WORD)MulDiv(lf.lfHeight, 72, iLogPixelsY);
-				if (*wSize == 0) {
+				if (*wSize < 8) {
 					*wSize = 8;
 				}
 				lstrcpyn(lpFaceName, lf.lfFaceName, LF_FACESIZE);
@@ -2166,19 +2166,32 @@ BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
 		}
 	}
 
-	/*
 	if (!bSucceed) {
 		NONCLIENTMETRICS ncm;
+		ZeroMemory(&ncm, sizeof(ncm));
 		ncm.cbSize = sizeof(NONCLIENTMETRICS);
-		SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(NONCLIENTMETRICS), &ncm, 0);
-		if (ncm.lfMessageFont.lfHeight < 0)
-			ncm.lfMessageFont.lfHeight = -ncm.lfMessageFont.lfHeight;
-		*wSize = (WORD)MulDiv(ncm.lfMessageFont.lfHeight, 72, iLogPixelsY);
-		if (*wSize == 0)
-			*wSize = 8;
-		lstrcpyn(lpFaceName, ncm.lfMessageFont.lfFaceName, LF_FACESIZE);
-	}*/
+#if (WINVER >= _WIN32_WINNT_VISTA)
+		if (!IsVistaAndAbove()) {
+			ncm.cbSize -= sizeof(ncm.iPaddedBorderWidth);
+		}
+#endif
+		if (SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(NONCLIENTMETRICS), &ncm, 0)) {
+			if (ncm.lfMessageFont.lfHeight < 0) {
+				ncm.lfMessageFont.lfHeight = -ncm.lfMessageFont.lfHeight;
+			}
+			*wSize = (WORD)MulDiv(ncm.lfMessageFont.lfHeight, 72, iLogPixelsY);
+			if (*wSize < 8) {
+				*wSize = 8;
+			}
+			lstrcpyn(lpFaceName, ncm.lfMessageFont.lfFaceName, LF_FACESIZE);
+			bSucceed = TRUE;
+		}
+	}
 
+	if (bSucceed && !IsVistaAndAbove()) {
+		// Windows 2000, XP, 2003
+		lstrcpy(lpFaceName, L"Tahoma");
+	}
 	return bSucceed;
 }
 

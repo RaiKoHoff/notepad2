@@ -62,7 +62,7 @@ static HWND hwndNextCBChain = NULL;
 HWND	hDlgFindReplace = NULL;
 
 #define MARGIN_LINE_NUMBER	0	// line number
-#define MARGIN_SELECTION	1	// selection margin
+#define MARGIN_SELECTION	1	// bookmark and selection margin
 #define MARGIN_FOLD_INDEX	2	// folding index
 
 #define TOOLBAR_COMMAND_BASE	IDT_FILE_NEW
@@ -139,9 +139,9 @@ int		iLongLinesLimit;
 int		iLongLinesLimitG;
 int		iLongLineMode;
 int		iWrapCol = 0;
-static BOOL bShowSelectionMargin;
+BOOL	bShowSelectionMargin;
 static BOOL bShowLineNumbers;
-static int iMarkOccurrences;
+static BOOL bMarkOccurrences;
 static BOOL bMarkOccurrencesMatchCase;
 static BOOL bMarkOccurrencesMatchWords;
 struct EditAutoCompletionConfig autoCompletionConfig;
@@ -335,70 +335,6 @@ UINT		g_uDefaultDPI = USER_DEFAULT_SCREEN_DPI;
 static WCHAR g_wchAppUserModelID[38] = L"";
 static WCHAR g_wchWorkingDirectory[MAX_PATH] = L"";
 
-#define	NP2_BookmarkLineForeColor	(0xff << 8)
-#define NP2_BookmarkLineColorAlpha	40
-
-//Graphics for bookmark indicator
-/* XPM */
-static const char* const bookmark_pixmap[] = {
-	"11 11 44 1",
-	" 	c #EBE9ED",
-	".	c #E5E3E7",
-	"+	c #767C6D",
-	"@	c #2A3120",
-	"#	c #1B2312",
-	"$	c #333B28",
-	"%	c #E3E1E5",
-	"&	c #D8D6DA",
-	"*	c #444D38",
-	"=	c #3F5C19",
-	"-	c #63AD00",
-	";	c #73C900",
-	">	c #64AF00",
-	", 	c #3D5718",
-	"'	c #3E4634",
-	")	c #7B8172",
-	"!	c #42601A",
-	"~	c #74CB00",
-	"{	c #71C600",
-	"]	c #3A5317",
-	"^	c #707668",
-	"/	c #3F4931",
-	"(	c #262C1D",
-	"_	c #2F3A1E",
-	":	c #72C700",
-	"<	c #74CA00",
-	"[	c #0E1109",
-	"}	c #3C462F",
-	"|	c #62AC00",
-	"1	c #21271A",
-	"2	c #7A8071",
-	"3	c #405D19",
-	"4	c #3D5A18",
-	"5	c #D9D7DB",
-	"6	c #4E5841",
-	"7	c #72C800",
-	"8	c #63AC00",
-	"9	c #3F5B19",
-	"0	c #3D4533",
-	"a	c #DFDDE0",
-	"b	c #353E29",
-	"c	c #29331B",
-	"d	c #7B8272",
-	"e	c #DDDBDF",
-	"           ",
-	"  .+@#$+%  ",
-	" &*=-;>, '  ",
-	")!~~~~{]^ ",
-	" /-~~~~~>(",
-	" _:~~~~~<[ ",
-	" }|~~~~~|1 ",
-	" 23~~~~;4+ ",
-	" 56=|7890  ",
-	"  a2bc}de  ",
-	"           "
-};
-
 //=============================================================================
 //
 // Flags
@@ -457,7 +393,7 @@ static inline void ToggleFullScreenModeConfig(int config) {
 }
 
 static inline void UpdateStatusBarCache_OVRMode(BOOL force) {
-	const BOOL overType = (BOOL)SendMessage(hwndEdit, SCI_GETOVERTYPE, 0, 0);
+	const BOOL overType = SciCall_GetOvertype();
 	if (force || overType != cachedStatusItem.overType) {
 		cachedStatusItem.overType = overType;
 		cachedStatusItem.pszOvrMode = overType ? L"OVR" : L"INS";
@@ -1489,7 +1425,8 @@ static inline void UpdateDocumentModificationStatus(void) {
 
 void UpdateSelectionMarginWidth(void) {
 	// fixed width to put arrow cursor.
-	const int width = bShowSelectionMargin ? (GetSystemMetrics(SM_CXCURSOR) / 2) : 0;
+	// 16px for bookmark indicator.
+	const int width = bShowSelectionMargin ? max_i(GetSystemMetricsEx(SM_CXCURSOR) / 2, 16) : 0;
 	SciCall_SetMarginWidth(MARGIN_SELECTION, width);
 }
 
@@ -1620,6 +1557,7 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	HINSTANCE hInstance = ((LPCREATESTRUCT)lParam)->hInstance;
 	g_uCurrentDPI = GetCurrentDPI(hwnd);
 	g_uDefaultDPI = GetDefaultDPI(hwnd);
+	Style_DetectBaseFontSize(hwnd);
 
 	// Setup edit control
 	hwndEdit = EditCreate(hwnd);
@@ -1657,6 +1595,7 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	// Long Lines
 	if (bMarkLongLines) {
 		SendMessage(hwndEdit, SCI_SETEDGEMODE, (iLongLineMode == EDGE_LINE) ? EDGE_LINE : EDGE_BACKGROUND, 0);
+		Style_SetLongLineColors(hwndEdit);
 	} else {
 		SendMessage(hwndEdit, SCI_SETEDGEMODE, EDGE_NONE, 0);
 	}
@@ -1664,8 +1603,6 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	// Margins
 	UpdateSelectionMarginWidth();
-
-	// Margins
 	SciCall_SetMarginType(MARGIN_FOLD_INDEX, SC_MARGIN_SYMBOL);
 	SciCall_SetMarginMask(MARGIN_FOLD_INDEX, SC_MASK_FOLDERS);
 	SciCall_SetMarginSensitive(MARGIN_FOLD_INDEX, TRUE);
@@ -1941,21 +1878,21 @@ void MsgDPIChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	sprintf(buf, "WM_DPICHANGED: dpi=%u, %u\n", g_uCurrentDPI, g_uDefaultDPI);
 	SendMessage(hwndEdit, SCI_INSERTTEXT, 0, (LPARAM)buf);
 #endif
-
-	Style_OnDPIChanged(hwndEdit);
-	UpdateSelectionMarginWidth();
-	SciCall_GotoPos(pos);
-
 	// recreate toolbar and statusbar
 	Toolbar_GetButtons(hwndToolbar, TOOLBAR_COMMAND_BASE, tchToolbarButtons, COUNTOF(tchToolbarButtons));
-
 	DestroyWindow(hwndToolbar);
 	DestroyWindow(hwndReBar);
 	DestroyWindow(hwndStatus);
 	CreateBars(hwnd, g_hInstance);
-	UpdateToolbar();
 	SetWindowPos(hwnd, NULL, rc->left, rc->top, rc->right - rc->left, rc->bottom - rc->top, SWP_NOZORDER | SWP_NOACTIVATE);
-	UpdateStatusbar();
+
+	cachedStatusItem.updateMask = UINT_MAX;
+	Style_DetectBaseFontSize(hwnd);
+	UpdateSelectionMarginWidth();
+	UpdateStatusBarWidth();
+	Style_OnDPIChanged(hwndEdit);
+	SciCall_GotoPos(pos);
+	UpdateToolbar();
 }
 
 //=============================================================================
@@ -2085,7 +2022,7 @@ void UpdateStatusBarWidth(void) {
 	RECT rc;
 	GetClientRect(hwndMain, &rc);
 	const int cx = rc.right - rc.left;
-	const int iBytes = SciCall_GetLength();
+	const Sci_Position iBytes = SciCall_GetLength();
 
 	aWidth[1] = StatusCalcPaneWidth(hwndStatus, cachedStatusItem.pszLexerName) + 4;
 	aWidth[2] = StatusCalcPaneWidth(hwndStatus, mEncoding[iEncoding].wchLabel) + 4;
@@ -2195,12 +2132,12 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	EnableCmd(hmenu, IDM_FILE_RECENT, (MRU_GetCount(pFileMRU) > 0));
 
-	EnableCmd(hmenu, IDM_EDIT_UNDO, SendMessage(hwndEdit, SCI_CANUNDO, 0, 0) /*&& !bReadOnly*/);
-	EnableCmd(hmenu, IDM_EDIT_REDO, SendMessage(hwndEdit, SCI_CANREDO, 0, 0) /*&& !bReadOnly*/);
+	EnableCmd(hmenu, IDM_EDIT_UNDO, SciCall_CanUndo() /*&& !bReadOnly*/);
+	EnableCmd(hmenu, IDM_EDIT_REDO, SciCall_CanRedo() /*&& !bReadOnly*/);
 
 	i  = !EditIsEmptySelection();
-	const BOOL canPaste = (BOOL)SendMessage(hwndEdit, SCI_CANPASTE, 0, 0);
-	const BOOL nonEmpty = SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0) != 0;
+	const BOOL canPaste = SciCall_CanPaste();
+	const BOOL nonEmpty = SciCall_GetLength() != 0;
 
 	EnableCmd(hmenu, IDM_EDIT_CUT, i /*&& !bReadOnly*/);
 	EnableCmd(hmenu, IDM_EDIT_CUT_BINARY, i /*&& !bReadOnly*/);
@@ -2248,11 +2185,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	//EnableCmd(hmenu, IDM_EDIT_MERGEBLANKLINES, !bReadOnly);
 	//EnableCmd(hmenu, IDM_EDIT_REMOVEBLANKLINES, !bReadOnly);
 
-	EnableCmd(hmenu, IDM_EDIT_SORTLINES,
-			  SendMessage(hwndEdit, SCI_LINEFROMPOSITION,
-						  (WPARAM)SendMessage(hwndEdit, SCI_GETSELECTIONEND, 0, 0), 0) -
-			  SendMessage(hwndEdit, SCI_LINEFROMPOSITION,
-						  (WPARAM)SendMessage(hwndEdit, SCI_GETSELECTIONSTART, 0, 0), 0) >= 1);
+	EnableCmd(hmenu, IDM_EDIT_SORTLINES, EditGetSelectedLineCount() > 1);
 
 	EnableCmd(hmenu, IDM_EDIT_COLUMNWRAP, i /*&& IsWindowsNT()*/);
 	EnableCmd(hmenu, IDM_EDIT_SPLITLINES, i /*&& !bReadOnly*/);
@@ -2365,12 +2298,11 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	CheckCmd(hmenu, IDM_VIEW_MARGIN, bShowSelectionMargin);
 	EnableCmd(hmenu, IDM_EDIT_COMPLETEWORD, i);
 
-	i = IDM_VIEW_MARKOCCURRENCES_OFF + iMarkOccurrences;
-	CheckMenuRadioItem(hmenu, IDM_VIEW_MARKOCCURRENCES_OFF, IDM_VIEW_MARKOCCURRENCES_CUSTOM, i, MF_BYCOMMAND);
+	CheckCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_OFF, !bMarkOccurrences);
 	CheckCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_CASE, bMarkOccurrencesMatchCase);
 	CheckCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_WORD, bMarkOccurrencesMatchWords);
-	EnableCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_CASE, iMarkOccurrences != 0);
-	EnableCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_WORD, iMarkOccurrences != 0);
+	EnableCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_CASE, bMarkOccurrences);
+	EnableCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_WORD, bMarkOccurrences);
 
 	CheckCmd(hmenu, IDM_VIEW_SHOWWHITESPACE, bViewWhiteSpace);
 	CheckCmd(hmenu, IDM_VIEW_SHOWEOLS, bViewEOLs);
@@ -3277,7 +3209,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				const Sci_Position iCurrentLinePos = iCurrentPos - SciCall_PositionFromLine(iCurLine);
 				if (iCurLine < 2 && iCurrentLinePos == 0) {
 					char cmsz[128];
-					wsprintfA(cmsz, "#-*- coding: %s -*-", msz);
+					sprintf(cmsz, "#-*- coding: %s -*-", msz);
 					SendMessage(hwndEdit, SCI_REPLACESEL, 0, (LPARAM)cmsz);
 					done = TRUE;
 				}
@@ -3583,10 +3515,9 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		const int iPos = (int)SendMessage(hwndEdit, SCI_GETCURRENTPOS, 0, 0);
 		const int iLine = (int)SendMessage(hwndEdit, SCI_LINEFROMPOSITION, iPos, 0);
 
-		const int bitmask = 1;
-		int iNextLine = (int)SendMessage(hwndEdit, SCI_MARKERNEXT, iLine + 1, bitmask);
+		int iNextLine = (int)SendMessage(hwndEdit, SCI_MARKERNEXT, iLine + 1, MarkerBitmask_Bookmark);
 		if (iNextLine == -1) {
-			iNextLine = (int)SendMessage(hwndEdit, SCI_MARKERNEXT, 0, bitmask);
+			iNextLine = (int)SendMessage(hwndEdit, SCI_MARKERNEXT, 0, MarkerBitmask_Bookmark);
 		}
 
 		if (iNextLine != -1) {
@@ -3603,11 +3534,10 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		const int iPos = (int)SendMessage(hwndEdit, SCI_GETCURRENTPOS, 0, 0);
 		const int iLine = (int)SendMessage(hwndEdit, SCI_LINEFROMPOSITION, iPos, 0);
 
-		const int bitmask = 1;
-		int iNextLine = (int)SendMessage(hwndEdit, SCI_MARKERPREVIOUS, iLine - 1, bitmask);
+		int iNextLine = (int)SendMessage(hwndEdit, SCI_MARKERPREVIOUS, iLine - 1, MarkerBitmask_Bookmark);
 		if (iNextLine == -1) {
 			const int nLines = (int)SendMessage(hwndEdit, SCI_GETLINECOUNT, 0, 0);
-			iNextLine = (int)SendMessage(hwndEdit, SCI_MARKERPREVIOUS, nLines, bitmask);
+			iNextLine = (int)SendMessage(hwndEdit, SCI_MARKERPREVIOUS, nLines, MarkerBitmask_Bookmark);
 		}
 
 		if (iNextLine != -1) {
@@ -3625,26 +3555,19 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		const int iLine = (int)SendMessage(hwndEdit, SCI_LINEFROMPOSITION, iPos, 0);
 
 		const int bitmask = (int)SendMessage(hwndEdit, SCI_MARKERGET, iLine, 0);
-		if (bitmask & 1) {
+		if (bitmask & MarkerBitmask_Bookmark) {
 			// unset
-			SendMessage(hwndEdit, SCI_MARKERDELETE, iLine, 0);
+			SendMessage(hwndEdit, SCI_MARKERDELETE, iLine, MarkerNumber_Bookmark);
 		} else {
-			if (bShowSelectionMargin) {
-				SendMessage(hwndEdit, SCI_MARKERDEFINEPIXMAP, 0, (LPARAM)bookmark_pixmap);
-			} else {
-				SendMessage(hwndEdit, SCI_MARKERSETBACK, 0, NP2_BookmarkLineForeColor);
-				SendMessage(hwndEdit, SCI_MARKERSETALPHA, 0, NP2_BookmarkLineColorAlpha);
-				SendMessage(hwndEdit, SCI_MARKERDEFINE, 0, SC_MARK_BACKGROUND);
-			}
-
+			Style_SetBookmark(hwndEdit);
 			// set
-			SendMessage(hwndEdit, SCI_MARKERADD, iLine, 0);
+			SendMessage(hwndEdit, SCI_MARKERADD, iLine, MarkerNumber_Bookmark);
 		}
 	}
 	break;
 
 	case BME_EDIT_BOOKMARKCLEAR:
-		SendMessage(hwndEdit, SCI_MARKERDELETEALL, (WPARAM)(-1), 0);
+		SendMessage(hwndEdit, SCI_MARKERDELETEALL, MarkerNumber_Bookmark, 0);
 		break;
 
 	case IDM_EDIT_FINDNEXT:
@@ -3850,15 +3773,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_VIEW_MARGIN:
 		bShowSelectionMargin = !bShowSelectionMargin;
 		UpdateSelectionMarginWidth();
-
-		//Depending on if the margin is visible or not, choose different bookmark indication
-		if (bShowSelectionMargin) {
-			SendMessage(hwndEdit, SCI_MARKERDEFINEPIXMAP, 0, (LPARAM)bookmark_pixmap);
-		} else {
-			SendMessage(hwndEdit, SCI_MARKERSETBACK, 0, NP2_BookmarkLineForeColor);
-			SendMessage(hwndEdit, SCI_MARKERSETALPHA, 0, NP2_BookmarkLineColorAlpha);
-			SendMessage(hwndEdit, SCI_MARKERDEFINE, 0, SC_MARK_BACKGROUND);
-		}
+		Style_SetBookmark(hwndEdit);
 		break;
 
 	case IDM_VIEW_AUTOCOMPLETEWORDS:
@@ -3871,29 +3786,24 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_VIEW_MARKOCCURRENCES_OFF:
-		iMarkOccurrences = 0;
-		// clear all marks
-		SendMessage(hwndEdit, SCI_SETINDICATORCURRENT, MarkOccurrencesIndicatorNumber, 0);
-		SendMessage(hwndEdit, SCI_INDICATORCLEARRANGE, 0, SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0));
-		break;
-
-	case IDM_VIEW_MARKOCCURRENCES_RED:
-	case IDM_VIEW_MARKOCCURRENCES_GREEN:
-	case IDM_VIEW_MARKOCCURRENCES_BLUE:
-	case IDM_VIEW_MARKOCCURRENCES_CUSTOM:
-		iMarkOccurrences = LOWORD(wParam) - IDM_VIEW_MARKOCCURRENCES_OFF;
-		EditMarkAll(hwndEdit, iMarkOccurrences, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
+		bMarkOccurrences = !bMarkOccurrences;
+		if (bMarkOccurrences) {
+			EditMarkAll(FALSE, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
+		} else {
+			EditMarkAll_Clear();
+		}
 		UpdateStatusbar();
 		break;
 
 	case IDM_VIEW_MARKOCCURRENCES_CASE:
 		bMarkOccurrencesMatchCase = !bMarkOccurrencesMatchCase;
-		EditMarkAll(hwndEdit, iMarkOccurrences, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
+		EditMarkAll(FALSE, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
+		UpdateStatusbar();
 		break;
 
 	case IDM_VIEW_MARKOCCURRENCES_WORD:
 		bMarkOccurrencesMatchWords = !bMarkOccurrencesMatchWords;
-		EditMarkAll(hwndEdit, iMarkOccurrences, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
+		EditMarkAll(FALSE, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
 		UpdateStatusbar();
 		break;
 
@@ -4807,7 +4717,9 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 				if (scn->updated & (SC_UPDATE_SELECTION)) {
 					// mark occurrences of text currently selected
-					EditMarkAll(hwndEdit, iMarkOccurrences, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
+					if (bMarkOccurrences) {
+						EditMarkAll((scn->updated & SC_UPDATE_CONTENT), bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
+					}
 					UpdateStatusBarCache_OVRMode(FALSE);
 				}
 				UpdateStatusbar();
@@ -5177,7 +5089,7 @@ void LoadSettings(void) {
 	fWordWrap = IniSectionGetBool(pIniSection, L"WordWrap", 1);
 	fWordWrapG = fWordWrap;
 
-	iValue = IniSectionGetInt(pIniSection, L"WordWrapMode", SC_WRAP_WORD);
+	iValue = IniSectionGetInt(pIniSection, L"WordWrapMode", SC_WRAP_AUTO);
 	iWordWrapMode = clamp_i(iValue, SC_WRAP_WORD, SC_WRAP_AUTO);
 
 	iValue = IniSectionGetInt(pIniSection, L"WordWrapIndent", EditWrapIndentDefaultValue);
@@ -5266,9 +5178,8 @@ void LoadSettings(void) {
 	bShowFoldingLine = (iValue >> 1) & 1;
 	bFoldDisplayText = (iValue >> 2) & 1;
 
-	iValue = IniSectionGetInt(pIniSection, L"MarkOccurrences", 3);
-	iMarkOccurrences = clamp_i(iValue, 0, 4);
-	bMarkOccurrencesMatchCase = IniSectionGetBool(pIniSection, L"MarkOccurrencesMatchCase", 1);
+	bMarkOccurrences = IniSectionGetBool(pIniSection, L"MarkOccurrences", 1);
+	bMarkOccurrencesMatchCase = IniSectionGetBool(pIniSection, L"MarkOccurrencesMatchCase", 0);
 	bMarkOccurrencesMatchWords = IniSectionGetBool(pIniSection, L"MarkOccurrencesMatchWholeWords", 0);
 
 	bViewWhiteSpace = IniSectionGetBool(pIniSection, L"ViewWhiteSpace", 0);
@@ -5494,7 +5405,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	pIniSection->next = pIniSectionBuf;
 
 	IniSectionSetInt(pIniSection, L"SettingsVersion", NP2SettingsVersion_Current);
-	IniSectionSetBool(pIniSection, L"SaveSettings", bSaveSettings);
+	IniSectionSetBoolEx(pIniSection, L"SaveSettings", bSaveSettings, 1);
 	IniSectionSetBoolEx(pIniSection, L"SaveRecentFiles", bSaveRecentFiles, 0);
 	IniSectionSetBoolEx(pIniSection, L"SaveFindReplace", bSaveFindReplace, 0);
 
@@ -5517,7 +5428,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetIntEx(pIniSection, L"PathNameFormat", iPathNameFormat, 1);
 
 	IniSectionSetBoolEx(pIniSection, L"WordWrap", fWordWrapG, 1);
-	IniSectionSetIntEx(pIniSection, L"WordWrapMode", iWordWrapMode, SC_WRAP_WORD);
+	IniSectionSetIntEx(pIniSection, L"WordWrapMode", iWordWrapMode, SC_WRAP_AUTO);
 	IniSectionSetIntEx(pIniSection, L"WordWrapIndent", iWordWrapIndent, EditWrapIndentNone);
 	IniSectionSetIntEx(pIniSection, L"WordWrapSymbols", iWordWrapSymbols, EditWrapSymbolDefaultValue);
 	IniSectionSetBoolEx(pIniSection, L"ShowWordWrapSymbols", bShowWordWrapSymbols, 0);
@@ -5555,8 +5466,8 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBoolEx(pIniSection, L"ShowSelectionMargin", bShowSelectionMargin, 0);
 	IniSectionSetBoolEx(pIniSection, L"ShowLineNumbers", bShowLineNumbers, 1);
 	IniSectionSetIntEx(pIniSection, L"ShowCodeFolding", bShowCodeFolding | (bShowFoldingLine << 1) | (bFoldDisplayText << 2), ShowCodeFolding_Default);
-	IniSectionSetIntEx(pIniSection, L"MarkOccurrences", iMarkOccurrences, 3);
-	IniSectionSetBoolEx(pIniSection, L"MarkOccurrencesMatchCase", bMarkOccurrencesMatchCase, 1);
+	IniSectionSetBoolEx(pIniSection, L"MarkOccurrences", bMarkOccurrences, 1);
+	IniSectionSetBoolEx(pIniSection, L"MarkOccurrencesMatchCase", bMarkOccurrencesMatchCase, 0);
 	IniSectionSetBoolEx(pIniSection, L"MarkOccurrencesMatchWholeWords", bMarkOccurrencesMatchWords, 0);
 	IniSectionSetBoolEx(pIniSection, L"ViewWhiteSpace", bViewWhiteSpace, 0);
 	IniSectionSetBoolEx(pIniSection, L"ViewEOLs", bViewEOLs, 0);
@@ -6642,15 +6553,15 @@ void UpdateToolbar(void) {
 	EnableTool(IDT_FILE_ADDTOFAV, StrNotEmpty(szCurFile));
 
 	EnableTool(IDT_FILE_SAVE, IsDocumentModified());
-	EnableTool(IDT_EDIT_UNDO, SendMessage(hwndEdit, SCI_CANUNDO, 0, 0) /*&& !bReadOnly*/);
-	EnableTool(IDT_EDIT_REDO, SendMessage(hwndEdit, SCI_CANREDO, 0, 0) /*&& !bReadOnly*/);
+	EnableTool(IDT_EDIT_UNDO, SciCall_CanUndo() /*&& !bReadOnly*/);
+	EnableTool(IDT_EDIT_REDO, SciCall_CanRedo() /*&& !bReadOnly*/);
 
 	int i = !EditIsEmptySelection();
 	EnableTool(IDT_EDIT_CUT, i /*&& !bReadOnly*/);
 	EnableTool(IDT_EDIT_COPY, i);
-	EnableTool(IDT_EDIT_PASTE, SendMessage(hwndEdit, SCI_CANPASTE, 0, 0) /*&& !bReadOnly*/);
+	EnableTool(IDT_EDIT_PASTE, SciCall_CanPaste() /*&& !bReadOnly*/);
 
-	i = (int)SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0);
+	i = SciCall_GetLength() != 0;
 	EnableTool(IDT_EDIT_FIND, i);
 	//EnableTool(IDT_EDIT_FINDNEXT, i);
 	//EnableTool(IDT_EDIT_FINDPREV, i && StrNotEmptyA(efrData.szFind));
@@ -6751,7 +6662,7 @@ void UpdateStatusbar(void) {
 	wsprintf(tchDocPos, cachedStatusItem.tchDocPosFmt, tchLn, tchLines,
 				 tchCol, tchCols, tchCh, tchChs, tchSelCh, tchSel, tchLinesSelected, tchMatchesCount);
 
-	const int iBytes = SciCall_GetLength();
+	const int iBytes = (int)SciCall_GetLength();
 	StrFormatByteSize(iBytes, tchDocSize, COUNTOF(tchDocSize));
 
 	StatusSetText(hwndStatus, STATUS_DOCPOS, tchDocPos);
@@ -6787,7 +6698,7 @@ void UpdateLineNumberWidth(void) {
 		char tchLines[32];
 
 		const int iLines = SciCall_GetLineCount();
-		wsprintfA(tchLines, "_%i_", iLines);
+		sprintf(tchLines, "_%i_", iLines);
 
 		const int iLineMarginWidthNow = SciCall_GetMarginWidth(MARGIN_LINE_NUMBER);
 		const int iLineMarginWidthFit = SciCall_TextWidth(STYLE_LINENUMBER, tchLines);

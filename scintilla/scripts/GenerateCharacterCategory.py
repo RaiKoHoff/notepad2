@@ -115,6 +115,7 @@ CJKBlockList = [
 
 	(0x2E80, 0x2EFF), # U+2E80..U+2EFF CJK Radicals Supplement
 	(0x2F00, 0x2FDF), # U+2F00..U+2FDF Kangxi Radicals
+	(0x2FF0, 0x2FFF), # U+2FF0..U+2FFF Ideographic Description Characters
 	(0x3000, 0x303F), # U+3000..U+303F CJK Symbols and Punctuation
 	#(0x3100, 0x312F), # U+3100..U+312F Bopomofo
 	#(0x31A0, 0x31BF), # U+31A0..U+31BF Bopomofo Extended
@@ -131,6 +132,7 @@ CJKBlockList = [
 	(0xFF65, 0xFF9F), # U+FF65..U+FF9F Halfwidth Katakana
 	(0x1B000, 0x1B0FF), # U+1B000..U+1B0FF Kana Supplement
 	(0x1B100, 0x1B12F), # U+1B100..U+1B12F Kana Extended-A
+	(0x1B130, 0x1B16F), # U+1B130..U+1B16F Small Kana Extension
 	# Korean
 	(0xAC00, 0xD7AF), # U+AC00..U+D7AF Hangul Syllables
 	(0x1100, 0x11FF), # U+1100..U+11FF Hangul Jamo
@@ -141,6 +143,7 @@ CJKBlockList = [
 	# Other Chinese characters
 	(0xA000, 0xA48F), # U+A000..U+A48F Yi Syllables
 	(0xA490, 0xA4CF), # U+A490..U+A4CF Yi Radicals
+	(0x16FE0, 0x16FFF), # U+16FE0..U+16FFF Ideographic Symbols and Punctuation
 	(0x17000, 0x187FF), # U+17000..U+187FF Tangut
 	(0x18800, 0x18AFF), # U+18800..U+18AFF Tangut Components
 	(0x1B170, 0x1B2FF), # U+1B170..U+1B2FF Nushu
@@ -162,6 +165,17 @@ def isCJKLetter(category, ch):
 			return True
 
 	return False
+
+def dumpArray(items, step, fmt='%d'):
+	lines = []
+	if step:
+		for i in range(0, len(items), step):
+			line = ", ".join(fmt % value for value in items[i:i+step]) + ","
+			lines.append(line)
+	else:
+		line = ", ".join(fmt % value for value in items)
+		lines.append(line)
+	return lines
 
 def updateCharacterCategory(filename):
 	categories = findCategories("../lexlib/CharacterCategory.h")
@@ -189,6 +203,7 @@ def updateCharacterCategory(filename):
 
 	print('catRanges:', len(values), 4*len(values)/1024, math.ceil(math.log2(len(values))))
 	values.extend(["%d," % value for value in table])
+
 	Regenerate(filename, "//", values)
 
 def bytesToHex(b):
@@ -357,9 +372,7 @@ def buildANSICharClassifyTable(filename):
 		for page in item['codepage']:
 			output.append('// ' + page[1])
 		data = item['data']
-		output.append(', '.join('0x%02X' % ch for ch in data[:16]) + ',')
-		if len(data) > 16:
-			output.append(', '.join('0x%02X' % ch for ch in data[16:]) + ',')
+		output.extend(dumpArray(data, 16, '0x%02X'))
 	output.append("};")
 	output.append("")
 
@@ -421,9 +434,12 @@ def compressIndexTable(head, indexTable, args):
 		output = []
 		name = args.get('table_var', prefix)
 		output.append("const %s %s[] = {" % (typemap[sizeA], name))
-		output.append(', '.join(str(i) for i in indexA) + ',')
-		output.append(', '.join(str(i) for i in indexC) + ',')
-		output.append(', '.join(str(i) for i in indexD) + ',')
+		output.append("// %s1" % prefix)
+		output.extend(dumpArray(indexA, 20))
+		output.append("// %s2" % prefix)
+		output.extend(dumpArray(indexC, 20))
+		output.append("// %s" % prefix)
+		output.extend(dumpArray(indexD, 20))
 		output.append("};")
 		table = '\n'.join(output)
 
@@ -447,13 +463,13 @@ def compressIndexTable(head, indexTable, args):
 	else:
 		output = []
 		output.append("const %s %s1[] = {" % (typemap[sizeA], prefix))
-		output.append(', '.join(str(i) for i in indexA) + ',')
+		output.extend(dumpArray(indexA, 20))
 		output.append("};")
 		output.append("const %s %s2[] = {" % (typemap[sizeC], prefix))
-		output.append(', '.join(str(i) for i in indexC) + ',')
+		output.extend(dumpArray(indexC, 20))
 		output.append("};")
 		output.append("const %s %s[] = {" % (typemap[sizeD], prefix))
-		output.append(', '.join(str(i) for i in indexC) + ',')
+		output.extend(dumpArray(indexD, 20))
 		output.append("};")
 		table = '\n'.join(output)
 
@@ -525,7 +541,7 @@ def updateCharClassifyTable(filename, headfile):
 
 	data = runLengthEncode('CharClassify Unicode BMP', indexTable[:BMPCharacterCharacterCount], int(CharClassify.RLEValueBit))
 	output.append(f'const unsigned short CharClassifyRLE_BMP[] = {{')
-	output.append(', '.join(map(str, data)))
+	output.extend(dumpArray(data, 20))
 	output.append("};")
 	output.append("")
 	output.append("}") # namespace
@@ -549,7 +565,6 @@ def updateCharClassifyTable(filename, headfile):
 	for line in table.splitlines():
 		output.append(line)
 
-	lines = function.splitlines()
 	for line in function.splitlines():
 		head_output.append('\t' + line)
 
@@ -632,7 +647,7 @@ def makeDBCSCharClassifyTable(output, encodingList, isReservedOrUDC=None):
 	if True:
 		data = runLengthEncode(head, indexTable, int(CharClassify.RLEValueBit))
 		output.append(f'const unsigned short CharClassifyRLE{suffix}[] = {{')
-		output.append(', '.join(map(str, data)))
+		output.extend(dumpArray(data, 20))
 		output.append("};")
 		output.append("")
 
