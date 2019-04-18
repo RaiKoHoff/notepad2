@@ -1425,7 +1425,7 @@ static inline void UpdateDocumentModificationStatus(void) {
 
 void UpdateSelectionMarginWidth(void) {
 	// fixed width to put arrow cursor.
-	// 16px for bookmark indicator.
+	// 16px for bookmark symbol.
 	const int width = bShowSelectionMargin ? max_i(GetSystemMetricsEx(SM_CXCURSOR) / 2, 16) : 0;
 	SciCall_SetMarginWidth(MARGIN_SELECTION, width);
 }
@@ -1624,7 +1624,7 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 #endif
 	SciCall_FoldDisplayTextSetStyle((bFoldDisplayText ? SC_FOLDDISPLAYTEXT_BOXED : SC_FOLDDISPLAYTEXT_HIDDEN));
 	const char *text = GetFoldDisplayEllipsis(SC_CP_UTF8, 0); // internal default encoding
-	EditSetDefaultFoldDisplayText(text);
+	SciCall_SetDefaultFoldDisplayText(text);
 	// highlight for current folding block
 	SciCall_MarkerEnableHighlight(TRUE);
 #if NP2_ENABLE_SHOW_CALL_TIPS
@@ -1925,6 +1925,9 @@ void MsgThemeChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 }
 
 static void OnStyleThemeChanged(int theme) {
+	if (theme == np2StyleTheme) {
+		return;
+	}
 	Style_OnStyleThemeChanged(hwndEdit, theme);
 }
 
@@ -3895,7 +3898,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			scn.nmhdr.hwndFrom = hwndEdit;
 			scn.nmhdr.idFrom = IDC_EDIT;
 			scn.nmhdr.code = SCN_UPDATEUI;
-			scn.updated = SC_UPDATE_CONTENT;
+			scn.updated = NP2_CUSTOM_UPDATE;
 			SendMessage(hwnd, WM_NOTIFY, IDC_EDIT, (LPARAM)&scn);
 		} else {
 			SendMessage(hwndEdit, SCI_BRACEHIGHLIGHT, (WPARAM)(-1), -1);
@@ -4105,42 +4108,9 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		bSaveSettings = !bSaveSettings;
 		break;
 
-	case IDM_VIEW_SAVESETTINGSNOW: {
-		BOOL bCreateFailure = FALSE;
-
-		if (StrIsEmpty(szIniFile)) {
-			if (StrNotEmpty(szIniFile2)) {
-				if (CreateIniFileEx(szIniFile2)) {
-					lstrcpy(szIniFile, szIniFile2);
-					lstrcpy(szIniFile2, L"");
-				} else {
-					bCreateFailure = TRUE;
-				}
-			} else {
-				break;
-			}
-		}
-
-		if (!bCreateFailure) {
-			if (WritePrivateProfileString(INI_SECTION_NAME_SETTINGS, L"WriteTest", L"ok", szIniFile)) {
-				BeginWaitCursor();
-				StatusSetTextID(hwndStatus, STATUS_HELP, IDS_SAVINGSETTINGS);
-				StatusSetSimple(hwndStatus, TRUE);
-				InvalidateRect(hwndStatus, NULL, TRUE);
-				UpdateWindow(hwndStatus);
-				SaveSettings(TRUE);
-				StatusSetSimple(hwndStatus, FALSE);
-				EndWaitCursor();
-				MsgBox(MBINFO, IDS_SAVEDSETTINGS);
-			} else {
-				dwLastIOError = GetLastError();
-				MsgBox(MBWARN, IDS_WRITEINI_FAIL);
-			}
-		} else {
-			MsgBox(MBWARN, IDS_CREATEINI_FAIL);
-		}
-	}
-	break;
+	case IDM_VIEW_SAVESETTINGSNOW:
+		SaveSettingsNow(FALSE, FALSE);
+		break;
 
 	case IDM_HELP_ABOUT:
 		ThemedDialogBox(g_hInstance, MAKEINTRESOURCE(IDD_ABOUT), hwnd, AboutDlgProc);
@@ -4721,6 +4691,10 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 						EditMarkAll((scn->updated & SC_UPDATE_CONTENT), bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
 					}
 					UpdateStatusBarCache_OVRMode(FALSE);
+				} else if (scn->updated & (SC_UPDATE_CONTENT)) {
+					if (iMatchesCount) {
+						EditMarkAll_Clear();
+					}
 				}
 				UpdateStatusbar();
 
@@ -5381,6 +5355,54 @@ void LoadSettings(void) {
 
 	// Scintilla Styles
 	Style_Load();
+}
+
+void SaveSettingsNow(BOOL bOnlySaveStyle, BOOL bQuiet) {
+	BOOL bCreateFailure = FALSE;
+
+	if (StrIsEmpty(szIniFile)) {
+		if (StrNotEmpty(szIniFile2)) {
+			if (CreateIniFileEx(szIniFile2)) {
+				lstrcpy(szIniFile, szIniFile2);
+				lstrcpy(szIniFile2, L"");
+			} else {
+				bCreateFailure = TRUE;
+			}
+		} else {
+			return;
+		}
+	}
+
+	if (!bCreateFailure) {
+		LPCWSTR section = bOnlySaveStyle ? INI_SECTION_NAME_STYLES : INI_SECTION_NAME_SETTINGS;
+		if (WritePrivateProfileString(section, L"WriteTest", L"ok", szIniFile)) {
+			BeginWaitCursor();
+			StatusSetTextID(hwndStatus, STATUS_HELP, IDS_SAVINGSETTINGS);
+			StatusSetSimple(hwndStatus, TRUE);
+			InvalidateRect(hwndStatus, NULL, TRUE);
+			UpdateWindow(hwndStatus);
+			if (CreateIniFile()) {
+				if (bOnlySaveStyle) {
+					Style_Save();
+				} else {
+					SaveSettings(TRUE);
+				}
+			} else {
+				bCreateFailure = TRUE;
+			}
+			StatusSetSimple(hwndStatus, FALSE);
+			EndWaitCursor();
+			if (!bCreateFailure && !bQuiet) {
+				MsgBox(MBINFO, IDS_SAVEDSETTINGS);
+			}
+		} else {
+			dwLastIOError = GetLastError();
+			MsgBox(MBWARN, IDS_WRITEINI_FAIL);
+		}
+	}
+	if (bCreateFailure) {
+		MsgBox(MBWARN, IDS_CREATEINI_FAIL);
+	}
 }
 
 //=============================================================================

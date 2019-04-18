@@ -112,8 +112,8 @@ BEGIN
 			MENUITEM "&ANSI",						IDM_ENCODING_ANSI
 			MENUITEM "UTF-&8",						IDM_ENCODING_UTF8
 			MENUITEM "UTF-8 B&OM",					IDM_ENCODING_UTF8SIGN
-			MENUITEM "UTF-16 &LE BOM",				IDM_ENCODING_UNICODE
-			MENUITEM "UTF-16 &BE BOM",				IDM_ENCODING_UNICODEREV
+			MENUITEM "UTF-16&LE BOM",				IDM_ENCODING_UNICODE
+			MENUITEM "UTF-16&BE BOM",				IDM_ENCODING_UNICODEREV
 			MENUITEM "&More...\tF9",				IDM_ENCODING_SELECT
 			MENUITEM SEPARATOR
 			MENUITEM "&Default...",					IDM_ENCODING_SETDEFAULT
@@ -1199,7 +1199,7 @@ BEGIN
     LTEXT           "No wrap|Wrap text between words|Wrap text between any characters|Wrap text on whitespace|Automatic word wrap",IDC_WRAP_MODE_OPTIONS,0,0,187,8,NOT WS_VISIBLE
     GROUPBOX        "For wrapped line",IDC_STATIC,7,74,235,38
     CONTROL         "Only select subline when selecting line from left margin.",IDC_WRAP_SELECT_SUBLINE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,84,220,10
-    CONTROL         "Only highligh subline when highlighting current line.",IDC_WRAP_HIGHLIGHT_SUBLINE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,96,220,10
+    CONTROL         "Only highlight subline when highlighting current line.",IDC_WRAP_HIGHLIGHT_SUBLINE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,96,220,10
 END
 
 IDD_PAGESETUP DIALOGEX 5, 5, 356, 260
@@ -1860,10 +1860,10 @@ STRINGTABLE
 BEGIN
     61000                   "A0;ANSI;ANSI"
     61001                   "A1;OEM;OEM"
-    61002                   "A2;Unicode (UTF-16 LE BOM);UTF-16 LE BOM"
-    61003                   "A3;Unicode (UTF-16 BE BOM);UTF-16 BE BOM"
-    61004                   "A4;Unicode (UTF-16 LE);UTF-16 LE"
-    61005                   "A5;Unicode (UTF-16 BE);UTF-16 BE"
+    61002                   "A2;Unicode (UTF-16LE BOM);UTF-16LE BOM"
+    61003                   "A3;Unicode (UTF-16BE BOM);UTF-16BE BOM"
+    61004                   "A4;Unicode (UTF-16LE);UTF-16LE"
+    61005                   "A5;Unicode (UTF-16BE);UTF-16BE"
     61006                   "A6;UTF-8;UTF-8"
     61007                   "A7;UTF-8 BOM;UTF-8 BOM"
     61008                   "A8;UTF-7;UTF-7"

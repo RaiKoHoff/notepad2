@@ -26,40 +26,41 @@
 
 using namespace Scintilla;
 
-LineMarker::~LineMarker() = default;
-
-LineMarker::LineMarker() noexcept {
-	markType = SC_MARK_CIRCLE;
-	fore = ColourDesired(0, 0, 0);
-	back = ColourDesired(0xff, 0xff, 0xff);
-	backSelected = ColourDesired(0xff, 0x00, 0x00);
-	alpha = SC_ALPHA_NOALPHA;
-	customDraw = nullptr;
-}
-
-LineMarker::LineMarker(const LineMarker &) noexcept {
+LineMarker::LineMarker(const LineMarker &other) {
 	// Defined to avoid pxpm and image being blindly copied, not as a complete copy constructor.
-	markType = SC_MARK_CIRCLE;
-	fore = ColourDesired(0, 0, 0);
-	back = ColourDesired(0xff, 0xff, 0xff);
-	backSelected = ColourDesired(0xff, 0x00, 0x00);
-	alpha = SC_ALPHA_NOALPHA;
-	pxpm.reset();
-	image.reset();
-	customDraw = nullptr;
+	markType = other.markType;
+	fore = other.fore;
+	back = other.back;
+	backSelected = other.backSelected;
+	alpha = other.alpha;
+	if (other.pxpm)
+		pxpm = std::make_unique<XPM>(*other.pxpm);
+	else
+		pxpm = nullptr;
+	if (other.image)
+		image = std::make_unique<RGBAImage>(*other.image);
+	else
+		image = nullptr;
+	customDraw = other.customDraw;
 }
 
-LineMarker &LineMarker::operator=(const LineMarker &other) noexcept {
+LineMarker &LineMarker::operator=(const LineMarker &other) {
 	// Defined to avoid pxpm and image being blindly copied, not as a complete assignment operator.
 	if (this != &other) {
-		markType = SC_MARK_CIRCLE;
-		fore = ColourDesired(0, 0, 0);
-		back = ColourDesired(0xff, 0xff, 0xff);
-		backSelected = ColourDesired(0xff, 0x00, 0x00);
-		alpha = SC_ALPHA_NOALPHA;
-		pxpm.reset();
-		image.reset();
-		customDraw = nullptr;
+		markType = other.markType;
+		fore = other.fore;
+		back = other.back;
+		backSelected = other.backSelected;
+		alpha = other.alpha;
+		if (other.pxpm)
+			pxpm = std::make_unique<XPM>(*other.pxpm);
+		else
+			pxpm = nullptr;
+		if (other.image)
+			image = std::make_unique<RGBAImage>(*other.image);
+		else
+			image = nullptr;
+		customDraw = other.customDraw;
 	}
 	return *this;
 }
@@ -420,7 +421,6 @@ void LineMarker::Draw(Surface *surface, PRectangle rcWhole, const Font &fontForC
 		rcLeft.right = rcLeft.left + 4;
 		surface->FillRectangle(rcLeft, back);
 	} else if (markType == SC_MARK_BOOKMARK) {
-#if 0	// horizontal
 		const int halfHeight = minDim / 3;
 		Point pts[] = {
 			Point::FromInts(ircWhole.left, centreY - halfHeight),
@@ -429,7 +429,8 @@ void LineMarker::Draw(Surface *surface, PRectangle rcWhole, const Font &fontForC
 			Point::FromInts(ircWhole.right - 3, centreY + halfHeight),
 			Point::FromInts(ircWhole.left, centreY + halfHeight),
 		};
-#else	// vertical
+		surface->Polygon(pts, std::size(pts), fore, back);
+	} else if (markType == SC_MARK_VERTICALBOOKMARK) {
 		const int halfWidth = minDim / 3;
 		Point pts[] = {
 			Point::FromInts(centreX - halfWidth, centreY - dimOn2),
@@ -438,7 +439,6 @@ void LineMarker::Draw(Surface *surface, PRectangle rcWhole, const Font &fontForC
 			Point::FromInts(centreX, centreY + dimOn2 - halfWidth),
 			Point::FromInts(centreX - halfWidth, centreY + dimOn2),
 		};
-#endif
 		surface->Polygon(pts, std::size(pts), fore, back);
 	} else { // SC_MARK_FULLRECT
 		surface->FillRectangle(rcWhole, back);
