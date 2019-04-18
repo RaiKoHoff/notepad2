@@ -108,11 +108,29 @@ static void ColouriseJSONDoc(Sci_PositionU startPos, Sci_Position length, int in
 				if (chBefore != '\\') {
 					state = SCE_C_STRINGEOL;
 				}
-			} else if (ch == '\\' && (chNext == '\\' || chNext == '\"' || chNext == '\'')) {
-				i++;
-				ch = chNext;
-				chNext = styler.SafeGetCharAt(i + 1);
-				chBefore = 0;
+			} else if (ch == '\\') {
+				if (chNext == '\n' || chNext == '\r') {
+					chBefore = ch;
+				} else {
+					styler.ColourTo(i - 1, state);
+					++i;
+					if (chNext == 'u' || chNext == 'x') {
+						int count = (chNext == 'u') ? 4 : 2;
+						do {
+							chNext = styler.SafeGetCharAt(i + 1);
+							if (!IsHexDigit(chNext)) {
+								break;
+							}
+							--count;
+							++i;
+						} while (count);
+					}
+
+					ch = chNext;
+					chNext = styler.SafeGetCharAt(i + 1);
+					styler.ColourTo(i, SCE_C_ESCAPECHAR);
+					chBefore = 0;
+				}
 			} else if ((state == SCE_C_STRING && ch == '\"') || (state == SCE_C_CHARACTER && ch == '\'')) {
 				Sci_PositionU pos = i + 1;
 				while (IsASpace(styler.SafeGetCharAt(pos++)));
