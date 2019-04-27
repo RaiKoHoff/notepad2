@@ -2031,8 +2031,8 @@ void UpdateStatusBarWidth(void) {
 	aWidth[2] = StatusCalcPaneWidth(hwndStatus, mEncoding[iEncoding].wchLabel) + 4;
 	aWidth[3] = StatusCalcPaneWidth(hwndStatus, L"CR+LF");
 	aWidth[4] = StatusCalcPaneWidth(hwndStatus, L"OVR");
-	aWidth[5] = StatusCalcPaneWidth(hwndStatus, ((iBytes < 1024)? L"1,023 Bytes" : L"99.9 MiB"));
-	aWidth[6] = StatusCalcPaneWidth(hwndStatus, L"500%") + GetSystemMetricsEx(SM_CXHTHUMB);
+	aWidth[5] = StatusCalcPaneWidth(hwndStatus, L"500%");
+	aWidth[6] = StatusCalcPaneWidth(hwndStatus, ((iBytes < 1024)? L"1,023 Bytes" : L"99.9 MiB")) + GetSystemMetricsEx(SM_CXHTHUMB);
 
 	aWidth[0] = max_i(120, cx - (aWidth[1] + aWidth[2] + aWidth[3] + aWidth[4] + aWidth[5] + aWidth[6]));
 	aWidth[1] += aWidth[0];
@@ -2138,7 +2138,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	EnableCmd(hmenu, IDM_EDIT_UNDO, SciCall_CanUndo() /*&& !bReadOnly*/);
 	EnableCmd(hmenu, IDM_EDIT_REDO, SciCall_CanRedo() /*&& !bReadOnly*/);
 
-	i  = !EditIsEmptySelection();
+	i  = !SciCall_IsSelectionEmpty();
 	const BOOL canPaste = SciCall_CanPaste();
 	const BOOL nonEmpty = SciCall_GetLength() != 0;
 
@@ -4376,7 +4376,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		WideCharToMultiByte(cpEdit, 0, wchFind, -1, efrTS.szFind, COUNTOF(efrTS.szFind), NULL, NULL);
 		WideCharToMultiByte(cpEdit, 0, wchReplace, -1, efrTS.szReplace, COUNTOF(efrTS.szReplace), NULL, NULL);
 
-		if (!EditIsEmptySelection()) {
+		if (!SciCall_IsSelectionEmpty()) {
 			EditReplaceAllInSelection(hwndEdit, &efrTS, TRUE);
 		} else {
 			EditReplaceAll(hwndEdit, &efrTS, TRUE);
@@ -5135,7 +5135,7 @@ void LoadSettings(void) {
 	iIndentWidth = iValue;
 	iIndentWidthG = iValue;
 
-	bMarkLongLines = IniSectionGetBool(pIniSection, L"MarkLongLines", 1);
+	bMarkLongLines = IniSectionGetBool(pIniSection, L"MarkLongLines", 0);
 
 	iValue = IniSectionGetInt(pIniSection, L"LongLinesLimit", 80);
 	iValue = clamp_i(iValue, 0, NP2_LONG_LINE_LIMIT);
@@ -5482,7 +5482,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetIntEx(pIniSection, L"ZoomLevel", iZoomLevel, 100);
 	IniSectionSetIntEx(pIniSection, L"TabWidth", iTabWidthG, 4);
 	IniSectionSetIntEx(pIniSection, L"IndentWidth", iIndentWidthG, 4);
-	IniSectionSetBoolEx(pIniSection, L"MarkLongLines", bMarkLongLines, 1);
+	IniSectionSetBoolEx(pIniSection, L"MarkLongLines", bMarkLongLines, 0);
 	IniSectionSetIntEx(pIniSection, L"LongLinesLimit", iLongLinesLimitG, 80);
 	IniSectionSetIntEx(pIniSection, L"LongLineMode", iLongLineMode, EDGE_LINE);
 	IniSectionSetBoolEx(pIniSection, L"ShowSelectionMargin", bShowSelectionMargin, 0);
@@ -6578,7 +6578,7 @@ void UpdateToolbar(void) {
 	EnableTool(IDT_EDIT_UNDO, SciCall_CanUndo() /*&& !bReadOnly*/);
 	EnableTool(IDT_EDIT_REDO, SciCall_CanRedo() /*&& !bReadOnly*/);
 
-	int i = !EditIsEmptySelection();
+	int i = !SciCall_IsSelectionEmpty();
 	EnableTool(IDT_EDIT_CUT, i /*&& !bReadOnly*/);
 	EnableTool(IDT_EDIT_COPY, i);
 	EnableTool(IDT_EDIT_PASTE, SciCall_CanPaste() /*&& !bReadOnly*/);
@@ -6701,10 +6701,10 @@ void UpdateStatusbar(void) {
 	if (updateMask & STATUS_BAR_UPDATE_MASK_OVRMODE) {
 		StatusSetText(hwndStatus, STATUS_OVRMODE, cachedStatusItem.pszOvrMode);
 	}
-	StatusSetText(hwndStatus, STATUS_DOCSIZE, tchDocSize);
 	if (updateMask & STATUS_BAR_UPDATE_MASK_DOCZOOM) {
 		StatusSetText(hwndStatus, STATUS_DOCZOOM, cachedStatusItem.tchZoom);
 	}
+	StatusSetText(hwndStatus, STATUS_DOCSIZE, tchDocSize);
 	if (updateMask != 0) {
 		cachedStatusItem.updateMask = 0;
 	}
