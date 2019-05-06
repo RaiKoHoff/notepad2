@@ -288,7 +288,7 @@ extern BOOL	bShowSelectionMargin;
 #define STYLE_MASK_FORE_COLOR	(1 << 2)
 #define STYLE_MASK_BACK_COLOR	(1 << 3)
 #define STYLE_MASK_FONT_WEIGHT	(1 << 4)
-#define STYLE_MASK_UPPER_LOWER	(1 << 5)
+#define STYLE_MASK_FORCE_CASE	(1 << 5)
 #define STYLE_MASK_CHARSET		(1 << 6)
 
 #ifndef LOCALE_NAME_MAX_LENGTH
@@ -311,7 +311,7 @@ struct DetailStyle {
 	BOOL underline;
 	BOOL strike;
 	BOOL eolFilled;
-	int upperLower;
+	int forceCase;
 	int charset;
 	WCHAR fontWide[LF_FACESIZE];
 	char fontFace[LF_FACESIZE * kMaxMultiByteCount];
@@ -1595,7 +1595,7 @@ PEDITLEXER Style_SniffShebang(char *pchText) {
 int Style_GetDocTypeLanguage(void) {
 	char *p;
 	char tchText[4096] = ""; // maybe contains header comments
-	SendMessage(hwndEdit, SCI_GETTEXT, COUNTOF(tchText) - 1, (LPARAM)tchText);
+	SendMessage(hwndEdit, SCI_GETTEXT, COUNTOF(tchText), (LPARAM)tchText);
 
 	// check DOCTYPE
 	if ((p = strstr(tchText, "!DOCTYPE")) != NULL) {
@@ -1798,7 +1798,7 @@ BOOL MatchCPPKeyword(const char *p, int index) {
 
 PEDITLEXER Style_DetectObjCAndMatlab(void) {
 	char tchText[4096] = ""; // maybe contains header comments
-	SendMessage(hwndEdit, SCI_GETTEXT, COUNTOF(tchText) - 2, (LPARAM)tchText);
+	SendMessage(hwndEdit, SCI_GETTEXT, COUNTOF(tchText), (LPARAM)tchText);
 
 	char *p = tchText;
 	np2LexLangIndex = 0;
@@ -1862,7 +1862,7 @@ PEDITLEXER Style_DetectObjCAndMatlab(void) {
 
 PEDITLEXER Style_AutoDetect(PEDITLEXER pLexNew, BOOL bDotFile) {
 	char tchText[4096] = ""; // maybe contains header comments
-	SendMessage(hwndEdit, SCI_GETTEXT, COUNTOF(tchText) - 2, (LPARAM)tchText);
+	SendMessage(hwndEdit, SCI_GETTEXT, COUNTOF(tchText), (LPARAM)tchText);
 
 	char *p = tchText;
 	const BOOL shebang = *p == '#' && p[1] == '!';
@@ -2199,8 +2199,8 @@ static PEDITLEXER Style_GetLexerFromFile(HWND hwnd, LPCWSTR lpszFile, BOOL bCGIG
 		}
 
 		if (!bFound && bCGIGuess && (StrCaseEqual(lpszExt, L"cgi") || StrCaseEqual(lpszExt, L"fcgi"))) {
-			char tchText[256];
-			SendMessage(hwnd, SCI_GETTEXT, COUNTOF(tchText) - 1, (LPARAM)tchText);
+			char tchText[256] = "";
+			SendMessage(hwnd, SCI_GETTEXT, COUNTOF(tchText), (LPARAM)tchText);
 			StrTrimA(tchText, " \t\n\r");
 			pLexNew = Style_SniffShebang(tchText);
 			bFound = pLexNew != NULL;
@@ -2328,8 +2328,8 @@ void Style_SetLexerFromFile(HWND hwnd, LPCWSTR lpszFile) {
 
 	// xml/html
 	if ((!bFound && bAutoSelect && (!fNoHTMLGuess || !fNoCGIGuess)) || (bFound && pLexNew->rid == NP2LEX_PHP)) {
-		char tchText[256];
-		SendMessage(hwnd, SCI_GETTEXT, COUNTOF(tchText) - 1, (LPARAM)tchText);
+		char tchText[256] = "";
+		SendMessage(hwnd, SCI_GETTEXT, COUNTOF(tchText), (LPARAM)tchText);
 		StrTrimA(tchText, " \t\n\r");
 		if (pLexNew->rid == NP2LEX_PHP) {
 			if (strncmp(tchText, "<?php", 5) != 0) {
@@ -2356,8 +2356,8 @@ void Style_SetLexerFromFile(HWND hwnd, LPCWSTR lpszFile) {
 		MultiByteToWideChar(cpEdit, 0, fvCurFile.tchMode, -1, wchMode, COUNTOF(wchMode));
 
 		if (!fNoCGIGuess && (StrCaseEqual(wchMode, L"cgi") || StrCaseEqual(wchMode, L"fcgi"))) {
-			char tchText[256];
-			SendMessage(hwnd, SCI_GETTEXT, COUNTOF(tchText) - 1, (LPARAM)tchText);
+			char tchText[256] = "";
+			SendMessage(hwnd, SCI_GETTEXT, COUNTOF(tchText), (LPARAM)tchText);
 			StrTrimA(tchText, " \t\n\r");
 			if ((pLexSniffed = Style_SniffShebang(tchText)) != NULL) {
 				if (iEncoding != g_DOSEncoding || pLexSniffed != &lexTextFile
@@ -2948,6 +2948,14 @@ BOOL Style_StrGetCase(LPCWSTR lpszStyle, int *i) {
 		case L'L':
 			*i = SC_CASE_LOWER;
 			return TRUE;
+		case L'c':
+		case L'C':
+			*i = SC_CASE_CAMEL;
+			return TRUE;
+		//case L'm':
+		//case L'M':
+		//	*i = SC_CASE_MIXED; // normal case
+		//	return TRUE;
 		}
 	}
 	return FALSE;
@@ -3271,8 +3279,8 @@ static void Style_Parse(struct DetailStyle *style, LPCWSTR lpszStyle) {
 
 	// Case
 	if (Style_StrGetCase(lpszStyle, &iValue)) {
-		style->upperLower = iValue;
-		mask |= STYLE_MASK_UPPER_LOWER;
+		style->forceCase = iValue;
+		mask |= STYLE_MASK_FORCE_CASE;
 	}
 
 	// Character Set
@@ -3330,8 +3338,8 @@ static void Style_SetParsed(HWND hwnd, const struct DetailStyle *style, int iSty
 	}
 
 	// Case
-	if (mask & STYLE_MASK_UPPER_LOWER) {
-		SendMessage(hwnd, SCI_STYLESETCASE, iStyle, style->upperLower);
+	if (mask & STYLE_MASK_FORCE_CASE) {
+		SendMessage(hwnd, SCI_STYLESETCASE, iStyle, style->forceCase);
 	}
 
 	// Character Set

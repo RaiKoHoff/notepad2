@@ -2,9 +2,18 @@
 // scintilla/src/AutoComplete.h AutoComplete::maxItemLen
 #define NP2_AUTOC_MAX_WORD_LENGTH	(1024 - 3 - 1 - 16)	// SP + '(' + ')' + '\0'
 #define NP2_AUTOC_INIT_BUF_SIZE		(4096)
-#define NP2_AUTOC_MAX_BUF_COUNT		12
-#define NP2_AUTOC_INIT_CACHE_SIZE	128
-#define NP2_AUTOC_MAX_CACHE_COUNT	12
+#define NP2_AUTOC_MAX_BUF_COUNT		16
+#define NP2_AUTOC_INIT_CACHE_BYTES	(4096)
+#define NP2_AUTOC_MAX_CACHE_COUNT	16
+/*
+word buffer:
+(2**16 - 1)*4096 => 256 MiB
+
+node cache:
+a = [4096*2**i for i in range(16)] => 256 MiB
+x64: sum(i//40 for i in a) => 6710776 nodes
+x86: sum(i//24 for i in a) => 11184632 nodes
+*/
 
 // required for SSE2
 #define DefaultAlignment		16
@@ -48,28 +57,47 @@ struct WordList {
 	int cacheCount;
 	int cacheIndex;
 	int cacheCapacity;
+	int cacheBytes;
 };
+
+// TODO: replace _stricmp() and _strnicmp() with other functions
+// which correctly case insensitively compares UTF-8 string and ANSI string.
 
 #if NP2_AUTOC_USE_STRING_ORDER
 #define NP2_AUTOC_ORDER_LENGTH	4
 #define NP2_AUTOC_MAX_ORDER_LENGTH	4
 
 UINT WordList_Order(const void *pWord, unsigned int len) {
+#if 0
+	unsigned int high = 0;
+	const unsigned char *ptr = (const unsigned char *)pWord;
+	len = min_u(len, 4);
+	while (len) {
+		high = (high << 8) | *ptr++;
+		--len;
+	}
+#else
 	unsigned int high = *((const unsigned int *)pWord);
 	if (len < NP2_AUTOC_ORDER_LENGTH) {
 		high &= ((1U << len * 8) - 1);
 	}
 	high = bswap32(high);
+#endif
 	return high;
 }
 
 UINT WordList_OrderCase(const void *pWord, unsigned int len) {
-	unsigned int high = *((const unsigned int *)pWord);
-	high |= 0x20202020; /// TODO: fix tolower()
-	if (len < NP2_AUTOC_ORDER_LENGTH) {
-		high &= ((1U << len * 8) - 1);
+	unsigned int high = 0;
+	const unsigned char *ptr = (const unsigned char *)pWord;
+	len = min_u(len, 4);
+	while (len) {
+		unsigned char ch = *ptr++;
+		if (ch >= 'A' && ch <= 'Z') {
+			ch = ch + 'a' - 'A';
+		}
+		high = (high << 8) | ch;
+		--len;
 	}
-	high = bswap32(high);
 	return high;
 }
 #endif
@@ -122,6 +150,15 @@ static inline void WordList_AddBuffer(struct WordList *pWList) {
 	pWList->offset = (int)(align - buffer);
 }
 
+static inline void WordList_AddCache(struct WordList *pWList) {
+	struct WordNode *node = (struct WordNode *)NP2HeapAlloc(pWList->cacheBytes);
+	pWList->nodeCacheList[pWList->cacheCount] = node;
+	pWList->nodeCache = node;
+	pWList->cacheCount++;
+	pWList->cacheIndex = 0;
+	pWList->cacheCapacity = pWList->cacheBytes / ((int)sizeof(struct WordNode));
+}
+
 void WordList_AddWord(struct WordList *pWList, LPCSTR pWord, int len) {
 	struct WordNode *root = pWList->pListHead;
 #if NP2_AUTOC_USE_STRING_ORDER
@@ -167,19 +204,15 @@ void WordList_AddWord(struct WordList *pWList, LPCSTR pWord, int len) {
 		}
 
 		if (pWList->cacheIndex + 1 > pWList->cacheCapacity) {
-			pWList->cacheCapacity <<= 1;
-			pWList->cacheIndex = 0;
-			pWList->nodeCache = (struct WordNode *)NP2HeapAlloc(pWList->cacheCapacity * sizeof(struct WordNode));
-			pWList->nodeCacheList[pWList->cacheCount] = pWList->nodeCache;
-			pWList->cacheCount++;
+			pWList->cacheBytes <<= 1;
+			WordList_AddCache(pWList);
 		}
-
-		struct WordNode *node = pWList->nodeCache + pWList->cacheIndex++;
-
 		if (pWList->capacity < pWList->offset + len + 1) {
 			pWList->capacity <<= 1;
 			WordList_AddBuffer(pWList);
 		}
+
+		struct WordNode *node = pWList->nodeCache + pWList->cacheIndex++;
 		node->word = pWList->buffer + pWList->offset;
 
 		CopyMemory(node->word, pWord, len);
@@ -259,10 +292,6 @@ struct WordList *WordList_Alloc(LPCSTR pRoot, int iRootLen, BOOL bIgnoreCase) {
 	pWList->iStartLen = iRootLen;
 	pWList->iMaxLength = iRootLen;
 
-	pWList->capacity = NP2_AUTOC_INIT_BUF_SIZE;
-	pWList->bufferCount = 0;
-	WordList_AddBuffer(pWList);
-
 	if (bIgnoreCase) {
 		pWList->WL_strcmp = _stricmp;
 		pWList->WL_strncmp = _strnicmp;
@@ -280,11 +309,10 @@ struct WordList *WordList_Alloc(LPCSTR pRoot, int iRootLen, BOOL bIgnoreCase) {
 	pWList->orderStart = pWList->WL_OrderFunc(pRoot, iRootLen);
 #endif
 
-	pWList->cacheCapacity = NP2_AUTOC_INIT_CACHE_SIZE;
-	pWList->cacheCount = 1;
-	pWList->nodeCache = (struct WordNode *)NP2HeapAlloc(pWList->cacheCapacity * sizeof(struct WordNode));
-	pWList->nodeCacheList[0] = pWList->nodeCache;
-
+	pWList->capacity = NP2_AUTOC_INIT_BUF_SIZE;
+	WordList_AddBuffer(pWList);
+	pWList->cacheBytes = NP2_AUTOC_INIT_CACHE_BYTES;
+	WordList_AddCache(pWList);
 	return pWList;
 }
 

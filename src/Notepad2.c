@@ -927,6 +927,15 @@ void OnDropOneFile(HWND hwnd, LPCWSTR szBuf) {
 	}
 }
 
+#if NP2_ENABLE_DOT_LOG_FEATURE
+static inline BOOL IsFileStartsWithDotLog(HWND hwnd) {
+	char tch[5] = "";
+	const int len = (int)SendMessage(hwnd, SCI_GETTEXT, COUNTOF(tch), (LPARAM)tch);
+	// upper case
+	return len >= 4 && strncmp(tch, ".LOG", 4) == 0;
+}
+#endif
+
 //=============================================================================
 //
 // MainWndProc()
@@ -1303,17 +1312,13 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 						EditEnsureSelectionVisible(hwndEdit);
 					}
 #if NP2_ENABLE_DOT_LOG_FEATURE
-					 else if (SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0) >= 4) {
-						char tch[5] = "";
-						SendMessage(hwndEdit, SCI_GETTEXT, 5, (LPARAM)tch);
-						if (StrEqual(tch, ".LOG")) {
-							int iNewTopLine;
-							SendMessage(hwndEdit, SCI_SETSEL, iAnchorPos, iCurPos);
-							SendMessage(hwndEdit, SCI_ENSUREVISIBLE, iDocTopLine, 0);
-							iNewTopLine = (int)SendMessage(hwndEdit, SCI_GETFIRSTVISIBLELINE, 0, 0);
-							SendMessage(hwndEdit, SCI_LINESCROLL, 0, iVisTopLine - iNewTopLine);
-							SendMessage(hwndEdit, SCI_SETXOFFSET, iXOffset, 0);
-						}
+					 else if (IsFileStartsWithDotLog(hwndEdit)) {
+						int iNewTopLine;
+						SendMessage(hwndEdit, SCI_SETSEL, iAnchorPos, iCurPos);
+						SendMessage(hwndEdit, SCI_ENSUREVISIBLE, iDocTopLine, 0);
+						iNewTopLine = (int)SendMessage(hwndEdit, SCI_GETFIRSTVISIBLELINE, 0, 0);
+						SendMessage(hwndEdit, SCI_LINESCROLL, 0, iVisTopLine - iNewTopLine);
+						SendMessage(hwndEdit, SCI_SETXOFFSET, iXOffset, 0);
 					}
 #endif
 				}
@@ -1786,7 +1791,7 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 #if NP2_ENABLE_CUSTOMIZE_TOOLBAR_LABELS
 	// Load toolbar labels
 	IniSection section;
-	WCHAR *pIniSectionBuf = NP2HeapAlloc(sizeof(WCHAR) * MAX_INI_SECTION_size_tOOLBAR_LABELS);
+	WCHAR *pIniSectionBuf = (WCHAR *)NP2HeapAlloc(sizeof(WCHAR) * MAX_INI_SECTION_SIZE_TOOLBAR_LABELS);
 	const int cchIniSection = (int)(NP2HeapSize(pIniSectionBuf) / sizeof(WCHAR));
 	IniSection *pIniSection = &section;
 
@@ -2300,6 +2305,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	CheckCmd(hmenu, IDM_VIEW_LINENUMBERS, bShowLineNumbers);
 	CheckCmd(hmenu, IDM_VIEW_MARGIN, bShowSelectionMargin);
 	EnableCmd(hmenu, IDM_EDIT_COMPLETEWORD, i);
+	CheckCmd(hmenu, IDM_VIEW_AUTOCOMPLETION_IGNORECASE, autoCompletionConfig.bIgnoreCase);
 
 	CheckCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_OFF, !bMarkOccurrences);
 	CheckCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_CASE, bMarkOccurrencesMatchCase);
@@ -2442,16 +2448,12 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			iWeakSrcEncoding = iEncoding;
 			if (FileLoad(TRUE, FALSE, TRUE, FALSE, szCurFile)) {
 #if NP2_ENABLE_DOT_LOG_FEATURE
-				if (SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0) >= 4) {
-					char tch[5] = "";
-					SendMessage(hwndEdit, SCI_GETTEXT, 5, (LPARAM)tch);
-					if (StrEqual(tch, ".LOG")) {
-						SendMessage(hwndEdit, SCI_SETSEL, iAnchorPos, iCurPos);
-						SendMessage(hwndEdit, SCI_ENSUREVISIBLE, iDocTopLine, 0);
-						const int iNewTopLine = (int)SendMessage(hwndEdit, SCI_GETFIRSTVISIBLELINE, 0, 0);
-						SendMessage(hwndEdit, SCI_LINESCROLL, 0, iVisTopLine - iNewTopLine);
-						SendMessage(hwndEdit, SCI_SETXOFFSET, iXOffset, 0);
-					}
+				if (IsFileStartsWithDotLog(hwndEdit)) {
+					SendMessage(hwndEdit, SCI_SETSEL, iAnchorPos, iCurPos);
+					SendMessage(hwndEdit, SCI_ENSUREVISIBLE, iDocTopLine, 0);
+					const int iNewTopLine = (int)SendMessage(hwndEdit, SCI_GETFIRSTVISIBLELINE, 0, 0);
+					SendMessage(hwndEdit, SCI_LINESCROLL, 0, iVisTopLine - iNewTopLine);
+					SendMessage(hwndEdit, SCI_SETXOFFSET, iXOffset, 0);
 				}
 #endif
 			}
@@ -3779,13 +3781,17 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		Style_SetBookmark(hwndEdit);
 		break;
 
-	case IDM_VIEW_AUTOCOMPLETEWORDS:
+	case IDM_VIEW_AUTOCOMPLETION_SETTINGS:
 		if (AutoCompletionSettingsDlg(hwnd)) {
 			if (!autoCompletionConfig.bCompleteWord) {
 				// close the autocompletion list
 				SendMessage(hwndEdit, SCI_AUTOCCANCEL, 0, 0);
 			}
 		}
+		break;
+
+	case IDM_VIEW_AUTOCOMPLETION_IGNORECASE:
+		autoCompletionConfig.bIgnoreCase = !autoCompletionConfig.bIgnoreCase;
 		break;
 
 	case IDM_VIEW_MARKOCCURRENCES_OFF:
@@ -5089,6 +5095,7 @@ void LoadSettings(void) {
 	autoCompletionConfig.bCompleteWord = IniSectionGetBool(pIniSection, L"AutoCompleteWords", 1);
 	autoCompletionConfig.bScanWordsInDocument = IniSectionGetBool(pIniSection, L"AutoCScanWordsInDocument", 1);
 	autoCompletionConfig.bEnglistIMEModeOnly = IniSectionGetBool(pIniSection, L"AutoCEnglishIMEModeOnly", 0);
+	autoCompletionConfig.bIgnoreCase = IniSectionGetBool(pIniSection, L"AutoCIgnoreCase", 0);
 	iValue = IniSectionGetInt(pIniSection, L"AutoCVisibleItemCount", 16);
 	autoCompletionConfig.iVisibleItemCount = max_i(iValue, MIN_AUTO_COMPLETION_VISIBLE_ITEM_COUNT);
 	iValue = IniSectionGetInt(pIniSection, L"AutoCMinWordLength", 1);
@@ -5465,6 +5472,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBoolEx(pIniSection, L"AutoCompleteWords", autoCompletionConfig.bCompleteWord, 1);
 	IniSectionSetBoolEx(pIniSection, L"AutoCScanWordsInDocument", autoCompletionConfig.bScanWordsInDocument, 1);
 	IniSectionSetBoolEx(pIniSection, L"AutoCEnglishIMEModeOnly", autoCompletionConfig.bEnglistIMEModeOnly, 0);
+	IniSectionSetBoolEx(pIniSection, L"AutoCIgnoreCase", autoCompletionConfig.bIgnoreCase, 0);
 	IniSectionSetIntEx(pIniSection, L"AutoCVisibleItemCount", autoCompletionConfig.iVisibleItemCount, 16);
 	IniSectionSetIntEx(pIniSection, L"AutoCMinWordLength", autoCompletionConfig.iMinWordLength, 1);
 	IniSectionSetIntEx(pIniSection, L"AutoCMinNumberLength", autoCompletionConfig.iMinNumberLength, 3);
@@ -7006,21 +7014,16 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 			EditEnsureSelectionVisible(hwndEdit);
 		}
 #if NP2_ENABLE_DOT_LOG_FEATURE
-		// the .LOG feature ...
-		if (SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0) >= 4) {
-			char tchLog[5] = "";
-			SendMessage(hwndEdit, SCI_GETTEXT, 5, (LPARAM)tchLog);
-			if (StrEqual(tchLog, ".LOG")) {
-				EditJumpTo(hwndEdit, -1, 0);
-				SendMessage(hwndEdit, SCI_BEGINUNDOACTION, 0, 0);
-				SendMessage(hwndEdit, SCI_NEWLINE, 0, 0);
-				SendWMCommand(hwndMain, IDM_EDIT_INSERT_SHORTDATE);
-				EditJumpTo(hwndEdit, -1, 0);
-				SendMessage(hwndEdit, SCI_NEWLINE, 0, 0);
-				SendMessage(hwndEdit, SCI_ENDUNDOACTION, 0, 0);
-				EditJumpTo(hwndEdit, -1, 0);
-				EditEnsureSelectionVisible(hwndEdit);
-			}
+		if (IsFileStartsWithDotLog(hwndEdit)) {
+			EditJumpTo(hwndEdit, -1, 0);
+			SendMessage(hwndEdit, SCI_BEGINUNDOACTION, 0, 0);
+			SendMessage(hwndEdit, SCI_NEWLINE, 0, 0);
+			SendWMCommand(hwndMain, IDM_EDIT_INSERT_SHORTDATE);
+			EditJumpTo(hwndEdit, -1, 0);
+			SendMessage(hwndEdit, SCI_NEWLINE, 0, 0);
+			SendMessage(hwndEdit, SCI_ENDUNDOACTION, 0, 0);
+			EditJumpTo(hwndEdit, -1, 0);
+			EditEnsureSelectionVisible(hwndEdit);
 		}
 #endif
 
@@ -7060,9 +7063,9 @@ BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy) {
 		const int cchText = (int)SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0);
 		if (cchText == 0) {
 			bIsEmptyNewFile = TRUE;
-		} else if (cchText < 2047) {
-			char tchText[2048];
-			SendMessage(hwndEdit, SCI_GETTEXT, 2047, (LPARAM)tchText);
+		} else if (cchText < 2048) {
+			char tchText[2048] = "";
+			SendMessage(hwndEdit, SCI_GETTEXT, COUNTOF(tchText), (LPARAM)tchText);
 			StrTrimA(tchText, " \t\n\r");
 			if (StrIsEmptyA(tchText)) {
 				bIsEmptyNewFile = TRUE;

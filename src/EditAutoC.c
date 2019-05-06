@@ -785,8 +785,14 @@ void EditCompleteWord(HWND hwnd, BOOL autoInsert) {
 	SciCall_GetTextRange(&tr);
 	iRootLen = lstrlenA(pRoot);
 
-	BOOL bIgnore = iRootLen != 0 && (pRoot[0] >= '0' && pRoot[0] <= '9');
-	struct WordList *pWList = WordList_Alloc(pRoot, iRootLen, bIgnore);
+#if 0
+	StopWatch watch;
+	StopWatch_Start(watch);
+#endif
+
+	BOOL bIgnore = iRootLen != 0 && (pRoot[0] >= '0' && pRoot[0] <= '9'); // number
+	const BOOL bIgnoreCase = bIgnore || autoCompletionConfig.bIgnoreCase;
+	struct WordList *pWList = WordList_Alloc(pRoot, iRootLen, bIgnoreCase);
 	BOOL bIgnoreDoc = FALSE;
 	char prefix = '\0';
 
@@ -814,11 +820,11 @@ void EditCompleteWord(HWND hwnd, BOOL autoInsert) {
 		}
 		if (bScanWordsInDocument) {
 			if (!bIgnoreDoc || pWList->nWordCount == 0) {
-				AutoC_AddDocWord(pWList, bIgnore, prefix);
+				AutoC_AddDocWord(pWList, bIgnoreCase, prefix);
 			}
 			if (prefix && pWList->nWordCount == 0) {
 				prefix = '\0';
-				AutoC_AddDocWord(pWList, bIgnore, prefix);
+				AutoC_AddDocWord(pWList, bIgnoreCase, prefix);
 			}
 		}
 
@@ -841,17 +847,27 @@ void EditCompleteWord(HWND hwnd, BOOL autoInsert) {
 		}
 	} while (retry);
 
+#if 0
+	StopWatch_Stop(watch);
+	const double elapsed = StopWatch_Get(&watch);
+	sprintf(pRoot, "Notepad2 AddDocWord(%d, %d): %.6f\n", pWList->nWordCount, pWList->nTotalLen, elapsed);
+	OutputDebugStringA(pRoot);
+#endif
+
 	autoCompletionConfig.iPreviousItemCount = pWList->nWordCount;
 	if (pWList->nWordCount > 0 && !(pWList->nWordCount == 1 && pWList->iMaxLength == iRootLen)) {
 		char *pList = NULL;
 		WordList_GetList(pWList, &pList);
 		//DLog(pList);
 		SendMessage(hwnd, SCI_AUTOCSETORDER, SC_ORDER_PRESORTED, 0); // pre-sorted
-		SendMessage(hwnd, SCI_AUTOCSETIGNORECASE, 1, 0); // case insensitive
+		SendMessage(hwnd, SCI_AUTOCSETIGNORECASE, bIgnoreCase, 0); // case sensitivity
+		//if (bIgnoreCase) {
+		//	SendMessage(hwnd, SCI_AUTOCSETCASEINSENSITIVEBEHAVIOUR, SC_CASEINSENSITIVEBEHAVIOUR_IGNORECASE, 0);
+		//}
 		SendMessage(hwnd, SCI_AUTOCSETSEPARATOR, '\n', 0);
 		SendMessage(hwnd, SCI_AUTOCSETFILLUPS, 0, (LPARAM)autoCompletionConfig.szAutoCompleteFillUp);
-		SendMessage(hwnd, SCI_AUTOCSETCHOOSESINGLE, 0, 0);
-		//SendMessage(hwnd, SCI_AUTOCSETDROPRESTOFWORD, 1, 0); // delete orginal text: pRoot
+		SendMessage(hwnd, SCI_AUTOCSETCHOOSESINGLE, FALSE, 0);
+		//SendMessage(hwnd, SCI_AUTOCSETDROPRESTOFWORD, TRUE, 0); // delete orginal text: pRoot
 		SendMessage(hwnd, SCI_AUTOCSETMAXWIDTH, (pWList->iMaxLength << 1), 0); // width columns, default auto
 		SendMessage(hwnd, SCI_AUTOCSETMAXHEIGHT, min_i(pWList->nWordCount, autoCompletionConfig.iVisibleItemCount), 0); // height rows, default 5
 		SendMessage(hwnd, SCI_AUTOCSETCHOOSESINGLE, autoInsert, 0);
