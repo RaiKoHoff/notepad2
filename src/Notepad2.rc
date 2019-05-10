@@ -89,7 +89,7 @@ BEGIN
 			MENUITEM "As &ANSI\tCtrl+Shift+A",		CMD_RELOADANSI
 			MENUITEM "As &OEM\tCtrl+Shift+O",		CMD_RELOADOEM
 			MENUITEM SEPARATOR
-			MENUITEM "&No FileVars\tAlt+F8",		CMD_RELOADNOFILEVARS
+			MENUITEM "&No File Variables\tAlt+F8",	CMD_RELOADNOFILEVARS
 			MENUITEM "&Default\tCtrl+Alt+F",		CMD_RECODEDEFAULT
 			MENUITEM SEPARATOR
 			MENUITEM "&With Encoding...\tF8",		IDM_RECODE_SELECT
@@ -167,10 +167,10 @@ BEGIN
 			MENUITEM "Copy &All\tAlt+A",				IDM_EDIT_COPYALL
 			MENUITEM "Copy A&dd\tCtrl+E",				IDM_EDIT_COPYADD
 			MENUITEM "Copy As &RTF",					IDM_EDIT_COPYRTF
-			MENUITEM SEPARATOR
-			MENUITEM "&Copy As Binary",					IDM_EDIT_COPY_BINARY
-			MENUITEM "Cu&t As Binary",					IDM_EDIT_CUT_BINARY
-			MENUITEM "&Paste As Binary",				IDM_EDIT_PASTE_BINARY
+			//MENUITEM SEPARATOR
+			//MENUITEM "&Copy As Binary",					IDM_EDIT_COPY_BINARY
+			//MENUITEM "Cu&t As Binary",					IDM_EDIT_CUT_BINARY
+			//MENUITEM "&Paste As Binary",				IDM_EDIT_PASTE_BINARY
 			MENUITEM SEPARATOR
 			MENUITEM "&Window Position\tCtrl+Shift+K",	CMD_COPYWINPOS
 		END
@@ -344,10 +344,10 @@ BEGIN
 			//MENUITEM "Select &Word\tCtrl+SP",						IDM_EDIT_SELECTWORD
 			//MENUITEM "Select &Line\tCtrl+Shift+SP",				IDM_EDIT_SELECTLINE
 			MENUITEM SEPARATOR
-			MENUITEM "Select to En&d",								IDM_EDIT_SELTOEND
-			MENUITEM "Select to Be&gin",							IDM_EDIT_SELTOBEGIN
+			MENUITEM "Select to Document Star&t",					IDM_EDIT_SELTODOCSTART
+			MENUITEM "Select to Document En&d",						IDM_EDIT_SELTODOCEND
 			MENUITEM "Select to Ne&xt\tCtrl+Alt+F2",				IDM_EDIT_SELTONEXT
-			MENUITEM "Select to Pre&vious\tCtrl+Alt+Shift+F2",		IDM_EDIT_SELTOPREV
+			MENUITEM "Select to Previou&s\tCtrl+Alt+Shift+F2",		IDM_EDIT_SELTOPREV
 			MENUITEM "&Jump to Selection Start\tAlt+,",				CMD_JUMP2SELSTART
 			MENUITEM "J&ump to Selection End\tAlt+.",				CMD_JUMP2SELEND
 		END
