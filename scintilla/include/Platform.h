@@ -171,6 +171,18 @@ public:
 		right += xDelta;
 		bottom += yDelta;
 	}
+	constexpr PRectangle Inflate(XYPOSITION xDelta, XYPOSITION yDelta) const noexcept {
+		return PRectangle(left - xDelta, top - yDelta, right + xDelta, bottom + yDelta);
+	}
+	constexpr PRectangle Inflate(int xDelta, int yDelta) const noexcept {
+		return PRectangle(left - xDelta, top - yDelta, right + xDelta, bottom + yDelta);
+	}
+	constexpr PRectangle Deflate(XYPOSITION xDelta, XYPOSITION yDelta) const noexcept {
+		return Inflate(-xDelta, -yDelta);
+	}
+	constexpr PRectangle Deflate(int xDelta, int yDelta) const noexcept {
+		return Inflate(-xDelta, -yDelta);
+	}
 	XYPOSITION Width() const noexcept {
 		return right - left;
 	}
@@ -490,7 +502,7 @@ public:
 	static ListBox *Allocate();
 
 	void SetFont(const Font &font) noexcept override = 0;
-	virtual void SetColor(ColourDesired fore, ColourDesired back) noexcept = 0;
+	virtual void SetColour(ColourDesired fore, ColourDesired back) noexcept = 0;
 	virtual void Create(Window &parent, int ctrlID, Point location, int lineHeight_, bool unicodeMode_, int technology_) noexcept = 0;
 	virtual void SetAverageCharWidth(int width) noexcept = 0;
 	virtual void SetVisibleRows(int rows) noexcept = 0;
