@@ -20,6 +20,7 @@
 
 #ifndef NOTEPAD2_HELPERS_H_
 #define NOTEPAD2_HELPERS_H_
+#include <stdint.h>
 #include "compiler.h"
 
 NP2_inline int min_i(int x, int y) {
@@ -52,6 +53,25 @@ NP2_inline int clamp_i(int x, int lower, int upper) {
 
 NP2_inline int validate_i(int x, int lower, int upper, int defaultValue) {
 	return (x < lower || x > upper) ? defaultValue : x;
+}
+
+// required for SSE2
+#define NP2DefaultPointerAlignment		16
+
+NP2_inline unsigned int align_up(unsigned int value) {
+	return (value + NP2DefaultPointerAlignment - 1) & (~(NP2DefaultPointerAlignment - 1));
+}
+
+NP2_inline void* align_ptr_ex(const void *ptr, size_t align) {
+	return (void *)(((uintptr_t)(ptr) + align - 1) & (~(align - 1)));
+}
+
+NP2_inline void* align_ptr(const void *ptr) {
+	return align_ptr_ex(ptr, NP2DefaultPointerAlignment);
+}
+
+NP2_inline unsigned int bswap32(unsigned int x) {
+	return (x << 24) | ((x << 8) & 0xff0000) | ((x >> 8) & 0xff00) | (x >> 24);
 }
 
 NP2_inline BOOL StrIsEmptyA(LPCSTR s) {
@@ -397,18 +417,6 @@ NP2_inline void DString_GetDlgItemText(DString *s, HWND hwndDlg, int nCtlId) {
 
 NP2_inline BOOL KeyboardIsKeyDown(int key) {
 	return (GetKeyState(key) & 0x8000) != 0;
-}
-
-extern HWND hwndEdit;
-NP2_inline void BeginWaitCursor(void) {
-	SendMessage(hwndEdit, SCI_SETCURSOR, (WPARAM)SC_CURSORWAIT, 0);
-}
-
-NP2_inline void EndWaitCursor(void) {
-	POINT pt;
-	SendMessage(hwndEdit, SCI_SETCURSOR, (WPARAM)SC_CURSORNORMAL, 0);
-	GetCursorPos(&pt);
-	SetCursorPos(pt.x, pt.y);
 }
 
 UINT GetDefaultDPI(HWND hwnd);

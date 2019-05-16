@@ -28,12 +28,11 @@
 #include <uxtheme.h>
 #include <stdio.h>
 #include <time.h>
-#include <stdint.h>
 #include <inttypes.h>
+#include "Helpers.h"
 #include "Notepad2.h"
 #include "Edit.h"
 #include "Styles.h"
-#include "Helpers.h"
 #include "Dialogs.h"
 #include "SciCall.h"
 #include "resource.h"
@@ -400,13 +399,6 @@ static inline void UpdateStatusBarCache_OVRMode(BOOL force) {
 		cachedStatusItem.updateMask |= STATUS_BAR_UPDATE_MASK_OVRMODE;
 	}
 }
-
-//==============================================================================
-//
-// Folding Functions
-//
-//
-#include "Edit_Fold.c"
 
 //=============================================================================
 //
@@ -2165,7 +2157,6 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	EnableCmd(hmenu, IDM_EDIT_CLEARCLIPBOARD, CountClipboardFormats());
 	CloseClipboard();
 
-	EnableCmd(hmenu, IDM_VIEW_FOLD_CURRENT, nonEmpty);
 	EnableCmd(hmenu, CMD_OPEN_PATH_OR_LINK, nonEmpty);
 	EnableCmd(hmenu, CMD_OPEN_CONTAINING_FOLDER, nonEmpty);
 	EnableCmd(hmenu, CMD_ONLINE_SEARCH_GOOGLE, i);
@@ -2271,8 +2262,10 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	EnableCmd(hmenu, CMD_CTRLBACK, i);
 	EnableCmd(hmenu, CMD_CTRLDEL, i);
 	EnableCmd(hmenu, CMD_TIMESTAMPS, i);
-	//EnableCmd(hmenu, IDM_VIEW_TOGGLEFOLDS, i && bShowCodeFolding);
+	//EnableCmd(hmenu, IDM_VIEW_FOLD_DEFAULT, i && bShowCodeFolding);
+	//EnableCmd(hmenu, IDM_VIEW_FOLD_CURRENT_BLOCK, i && bShowCodeFolding);
 	//EnableCmd(hmenu, IDM_VIEW_FOLD_ALL, i && bShowCodeFolding);
+	//EnableCmd(hmenu, IDM_VIEW_FOLD_CURRENT_LEVEL, i && bShowCodeFolding);
 	//EnableCmd(hmenu, IDM_VIEW_FOLD_LEVEL1, i && bShowCodeFolding);
 	//EnableCmd(hmenu, IDM_VIEW_FOLD_LEVEL2, i && bShowCodeFolding);
 	//EnableCmd(hmenu, IDM_VIEW_FOLD_LEVEL3, i && bShowCodeFolding);
@@ -3835,7 +3828,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		SciCall_FoldDisplayTextSetStyle((bFoldDisplayText ? SC_FOLDDISPLAYTEXT_BOXED : SC_FOLDDISPLAYTEXT_HIDDEN));
 		break;
 
-	case IDM_VIEW_TOGGLEFOLDS:
+	case IDM_VIEW_FOLD_DEFAULT:
 		if (bShowCodeFolding) {
 			FoldToggleDefault(FOLD_ACTION_SNIFF);
 		}
@@ -3847,9 +3840,15 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		}
 		break;
 
-	case IDM_VIEW_FOLD_CURRENT:
+	case IDM_VIEW_FOLD_CURRENT_BLOCK:
 		if (bShowCodeFolding) {
-			FoldToggleCurrent(FOLD_ACTION_SNIFF);
+			FoldToggleCurrentBlock(FOLD_ACTION_SNIFF);
+		}
+		break;
+
+	case IDM_VIEW_FOLD_CURRENT_LEVEL:
+		if (bShowCodeFolding) {
+			FoldToggleCurrentLevel(FOLD_ACTION_SNIFF);
 		}
 		break;
 
@@ -4660,10 +4659,6 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		SendWMCommandOrBeep(hwnd, IDM_FILE_ADDTOFAV);
 		break;
 
-	case IDT_VIEW_TOGGLEFOLDS:
-		SendWMCommandOrBeep(hwnd, IDM_VIEW_TOGGLEFOLDS);
-		break;
-
 	case IDT_FILE_LAUNCH:
 		SendWMCommandOrBeep(hwnd, IDM_FILE_LAUNCH);
 		break;
@@ -4855,8 +4850,10 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			break;
 
 		case SCN_KEY:
-			// Also see the corresponding patch in scintilla\src\Editor.cxx
-			FoldAltArrow(scn->ch, scn->modifiers);
+			// Also see the corresponding patch??? in scintilla\src\Editor.cxx
+			if (bShowCodeFolding) {
+				FoldAltArrow(scn->ch, scn->modifiers);
+			}
 			break;
 
 		case SCN_SAVEPOINTLEFT:

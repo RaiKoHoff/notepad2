@@ -21,7 +21,7 @@
 #ifndef NOTEPAD2_EDIT_H_
 #define NOTEPAD2_EDIT_H_
 
-#include "Sci_Position.h"
+#include "Scintilla.h"
 
 // WideCharToMultiByte, UTF8 encoding of U+0800 to U+FFFF
 #define kMaxMultiByteCount	3
@@ -98,6 +98,18 @@ enum {
 	EditWrapSymbolMaxValue = EditWrapSymbolBeforeMaxValue + 10 * EditWrapSymbolAfterMaxValue,
 	EditWrapSymbolDefaultValue = EditWrapSymbolBeforeNearBorder,
 };
+
+extern HWND hwndEdit;
+NP2_inline void BeginWaitCursor(void) {
+	SendMessage(hwndEdit, SCI_SETCURSOR, (WPARAM)SC_CURSORWAIT, 0);
+}
+
+NP2_inline void EndWaitCursor(void) {
+	POINT pt;
+	SendMessage(hwndEdit, SCI_SETCURSOR, (WPARAM)SC_CURSORNORMAL, 0);
+	GetCursorPos(&pt);
+	SetCursorPos(pt.x, pt.y);
+}
 
 void	Edit_ReleaseResources(void);
 HWND	EditCreate(HWND hwndParent);
@@ -365,6 +377,20 @@ BOOL	FileVars_IsUTF8(LPCFILEVARS lpfv);
 BOOL	FileVars_IsNonUTF8(LPCFILEVARS lpfv);
 BOOL	FileVars_IsValidEncoding(LPCFILEVARS lpfv);
 int 	FileVars_GetEncoding(LPCFILEVARS lpfv);
+
+typedef enum {
+	FOLD_ACTION_FOLD	= 0, // SC_FOLDACTION_CONTRACT
+	FOLD_ACTION_EXPAND	= 1, // SC_FOLDACTION_EXPAND
+	FOLD_ACTION_SNIFF	= 2, // SC_FOLDACTION_TOGGLE
+} FOLD_ACTION;
+
+void FoldToggleAll(FOLD_ACTION action);
+void FoldToggleLevel(int lev, FOLD_ACTION action);
+void FoldToggleCurrentBlock(FOLD_ACTION action);
+void FoldToggleCurrentLevel(FOLD_ACTION action);
+void FoldToggleDefault(FOLD_ACTION action);
+void FoldClick(int ln, int mode);
+void FoldAltArrow(int key, int mode);
 
 #endif //NOTEPAD2_EDIT_H_
 

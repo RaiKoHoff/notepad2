@@ -26,10 +26,10 @@
 #include <commdlg.h>
 #include <stdio.h>
 #include <math.h>
+#include "Helpers.h"
 #include "Notepad2.h"
 #include "Edit.h"
 #include "Styles.h"
-#include "Helpers.h"
 #include "Dialogs.h"
 #include "SciCall.h"
 #include "resource.h"
@@ -215,7 +215,7 @@ static WCHAR darkStyleThemeFilePath[MAX_PATH];
 static PEDITLEXER pLexGlobal = &lexGlobal;
 PEDITLEXER pLexCurrent = &lexTextFile;
 int np2LexLangIndex = 0;
-UINT8 currentLexKeywordAttr[NUMKEYWORD] = {0};
+uint8_t currentLexKeywordAttr[NUMKEYWORD] = {0};
 
 #define STYLESMODIFIED_NONE			0
 #define STYLESMODIFIED_SOME_STYLE	1
@@ -966,7 +966,7 @@ void Style_UpdateCaret(HWND hwnd) {
 
 void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 	ZeroMemory(currentLexKeywordAttr, sizeof(currentLexKeywordAttr));
-	UINT8 *attr = currentLexKeywordAttr;
+	uint8_t *attr = currentLexKeywordAttr;
 
 	// Code Snippet
 	attr[NUMKEYWORD - 1] = KeywordAttr_NoLexer;
@@ -2438,16 +2438,21 @@ BOOL Style_MaybeBinaryFile(HWND hwnd, LPCWSTR lpszFile) {
 	const UINT magic2 = (buf[0] << 8) | buf[1];
 	if (magic2 == 0x4D5A ||		// PE: MZ
 		magic2 == 0x504B ||		// ZIP: PK
-		magic2 == 0x377A ||		// 7z
-		magic2 == 0x424D		// BMP: BM
+		magic2 == 0x377A ||		// 7z: 7z
+		magic2 == 0x424D ||		// BMP: BM
+		magic2 == 0xFFD8		// JPEG
 		) {
 		return TRUE;
 	}
 
 	const UINT magic = (magic2 << 16) | (buf[2] << 8) | buf[3];
-	if (magic == 0x89504E47 ||	// PNG
+	if (magic == 0x89504E47 ||	// PNG: 0x89+PNG
 		magic == 0x47494638 ||	// GIF: GIF89a
-		magic == 0x25504446 ||	// PDF
+		magic == 0x25504446 ||	// PDF: %PDF-{version}
+		magic == 0x52617221 ||	// RAR: Rar!
+		magic == 0x7F454C46	||	// ELF: 0x7F+ELF
+		magic == 0x213C6172 ||	// .lib, .a: !<arch>\n
+		magic == 0xFD377A58 ||	// xz: 0xFD+7zXZ
 		magic == 0xCAFEBABE		// Java class
 		) {
 		return TRUE;
@@ -2457,22 +2462,29 @@ BOOL Style_MaybeBinaryFile(HWND hwnd, LPCWSTR lpszFile) {
 	if (StrNotEmpty(lpszExt)) {
 		++lpszExt;
 		const int len = lstrlen(lpszExt);
-		if (len < 3 || len > 4) {
+		if (len < 3 || len > 5) {
 			return FALSE;
 		}
+		// full match
+		WCHAR wch[8] = L"";
+		wch[0] = L' ';
+		lstrcpy(wch + 1, lpszExt);
+		wch[len + 1] = L' ';
 		LPCWSTR lpszMatch = StrStrI(
 			L" cur"
 			L" ico"
-			L" jpeg"
-			L" jpg"
-			L" lib"
+
 			L" obj"
 			L" pdb"
-			L" ", lpszExt);
-		// full match
-		if (lpszMatch != NULL && lpszMatch[-1] == L' ' && lpszMatch[len] == L' ') {
-			return TRUE;
-		}
+			L" bin"
+			L" pak"
+
+			L" dmg"
+			L" img"
+			L" iso"
+			L" tar"
+			L" ", wch);
+		return lpszMatch != NULL;
 	}
 #endif
 	return FALSE;
