@@ -79,9 +79,10 @@ BEGIN
 		MENUITEM "&Open...\tCtrl+O",				IDM_FILE_OPEN
 		MENUITEM "&Save\tCtrl+S",					IDM_FILE_SAVE
 		MENUITEM "Save &As...\tF6",					IDM_FILE_SAVEAS
-		MENUITEM "Save &Copy...\tCtrl+F6",			IDM_FILE_SAVECOPY
+		MENUITEM "Save Cop&y...\tCtrl+F6",			IDM_FILE_SAVECOPY
 		MENUITEM SEPARATOR
 		MENUITEM "&Read Only",						IDM_FILE_READONLY
+		MENUITEM "Lo&ck For Editing",				IDM_FILE_LOCK_EDITING
 		MENUITEM "Re&vert\tF5",						IDM_FILE_REVERT
 		POPUP "Reloa&d"
 		BEGIN
@@ -393,7 +394,7 @@ BEGIN
 		MENUITEM "Show Line &Endings\tCtrl+Shift+9",		IDM_VIEW_SHOWEOLS
 		MENUITEM "Show Wrap S&ymbols\tCtrl+Shift+0",		IDM_VIEW_WORDWRAPSYMBOLS
 		MENUITEM "Un&icode Control Character",				IDM_VIEW_UNICODE_CONTROL_CHAR
-		//MENUITEM "S&how Call Tips",						IDM_VIEW_SHOWCALLTIPS
+		//MENUITEM "S&how CallTips",						IDM_VIEW_SHOWCALLTIPS
 		MENUITEM SEPARATOR
 		MENUITEM "&Visual Brace Matching\tCtrl+Shift+V",	IDM_VIEW_MATCHBRACES
 		POPUP "Highlight C&urrent Line"
@@ -1748,6 +1749,7 @@ BEGIN
     IDS_UNTITLED            "Untitled"
     IDS_TITLEEXCERPT        """%s"""
     IDS_READONLY            "(Read Only)"
+	IDS_LOCKED				"(Locked For Editing)"
     IDS_DOCPOS              "Ln %s / %s  Col %s / %s  Ch %s / %s  Sel %s / %s  SelLn %s  Fnd %s"
     IDS_LOADFILE            "Loading ""%s""..."
     IDS_SAVEFILE            "Saving ""%s""..."
@@ -1819,6 +1821,7 @@ BEGIN
     IDS_ASK_ENCODING2       "You are about to change the encoding of an empty file from ANSI to non-ANSI. Note that this will clear the undo history, as it can't be synchronized with the new encoding. Continue?"
     IDS_ERR_ENCODINGNA      "Code page conversion tables for the selected encoding are not available on your system."
     IDS_ERR_UNICODE         "Error converting this Unicode file.\nData will be lost if the file is saved!"
+	IDS_BINARY_FILE_LOCKED	"This is most likely not a text file, so it is locked for editing\nto prevent accidental editing cause file corruption."
 END
 
 STRINGTABLE

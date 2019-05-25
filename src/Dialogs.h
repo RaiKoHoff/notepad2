@@ -20,7 +20,6 @@
 
 #ifndef NOTEPAD2_DIALOGS_H_
 #define NOTEPAD2_DIALOGS_H_
-#include "compiler.h"
 
 #define MBINFO			0
 #define MBWARN			1
@@ -67,7 +66,7 @@ void	InitZoomLevelComboBox(HWND hwnd, int nCtlId, int zoomLevel);
 BOOL	GetZoomLevelComboBoxValue(HWND hwnd, int nCtrId, int *zoomLevel);
 void	ZoomLevelDlg(HWND hwnd, BOOL bBottom);
 BOOL	AutoCompletionSettingsDlg(HWND hwnd);
-INT_PTR InfoBox(int iType, LPCWSTR lpstrSetting, int uidMessage, ...);
+INT_PTR InfoBox(int iType, LPCWSTR lpstrSetting, UINT uidMessage, ...);
 
 #endif // NOTEPAD2_DIALOGS_H_
 

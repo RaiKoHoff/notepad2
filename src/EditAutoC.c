@@ -6,10 +6,10 @@
 #include <commdlg.h>
 #include <limits.h>
 #include <stdio.h>
+#include "SciCall.h"
 #include "Helpers.h"
 #include "Edit.h"
 #include "Styles.h"
-#include "SciCall.h"
 #include "resource.h"
 #include "EditAutoC_Data0.c"
 
@@ -709,11 +709,10 @@ static inline BOOL NeedSpaceAfterKeyword(const char *word, Sci_Position length) 
 #define HTML_TEXT_BLOCK_PHP		5
 #define HTML_TEXT_BLOCK_CSS		6
 
-static int GetCurrentHtmlTextBlock(HWND hwnd) {
-	UNREFERENCED_PARAMETER(hwnd);
-
+static int GetCurrentHtmlTextBlock(void) {
 	const Sci_Position iCurrentPos = SciCall_GetCurrentPos();
 	const int iCurrentStyle = SciCall_GetStyleAt(iCurrentPos);
+
 	if (iCurrentStyle == SCE_H_CDATA) {
 		return HTML_TEXT_BLOCK_CDATA;
 	}
@@ -851,7 +850,6 @@ void AutoC_AddDocWord(struct WordList *pWList, BOOL bIgnoreCase, char prefix) {
 				tr.lpstrText = pWord;
 				tr.chrg.cpMin = (Sci_PositionCR)iPosFind;
 				tr.chrg.cpMax = (Sci_PositionCR)((wordLength > NP2_AUTOC_MAX_WORD_LENGTH)? iPosFind + NP2_AUTOC_MAX_WORD_LENGTH : wordEnd);
-
 				SciCall_GetTextRange(&tr);
 
 				Sci_Position before = SciCall_PositionBefore(iPosFind);
@@ -1065,13 +1063,11 @@ void EditCompleteUpdateConfig(void) {
 	autoCompletionConfig.wszAutoCompleteFillUp[k] = L'\0';
 }
 
-void EditCompleteWord(HWND hwnd, BOOL autoInsert) {
+static BOOL EditCompleteWordCore(int iCondition, BOOL autoInsert) {
 	const Sci_Position iCurrentPos = SciCall_GetCurrentPos();
 	const int iCurrentStyle = SciCall_GetStyleAt(iCurrentPos);
 	const Sci_Line iLine = SciCall_LineFromPosition(iCurrentPos);
 	const Sci_Position iLineStartPos = SciCall_PositionFromLine(iLine);
-
-	autoCompletionConfig.iPreviousItemCount = 0; // recreate list
 
 	// word before current position
 	Sci_Position iStartWordPos = iCurrentPos;
@@ -1101,7 +1097,7 @@ void EditCompleteWord(HWND hwnd, BOOL autoInsert) {
 		}
 	} while (iStartWordPos > iLineStartPos);
 	if (iStartWordPos == iCurrentPos) {
-		return;
+		return FALSE;
 	}
 
 	// beginning of word
@@ -1130,7 +1126,7 @@ void EditCompleteWord(HWND hwnd, BOOL autoInsert) {
 	int iRootLen = autoCompletionConfig.iMinWordLength;
 	if (ch >= '0' && ch <= '9') {
 		if (autoCompletionConfig.iMinNumberLength <= 0) { // ignore number
-			return;
+			return FALSE;
 		}
 
 		iRootLen = autoCompletionConfig.iMinNumberLength;
@@ -1144,7 +1140,7 @@ void EditCompleteWord(HWND hwnd, BOOL autoInsert) {
 	}
 
 	if (iCurrentPos - iStartWordPos < iRootLen) {
-		return;
+		return FALSE;
 	}
 
 	// preprocessor like: # space preprocessor
@@ -1259,28 +1255,33 @@ void EditCompleteWord(HWND hwnd, BOOL autoInsert) {
 #if 0
 	StopWatch_Stop(watch);
 	const double elapsed = StopWatch_Get(&watch);
-	sprintf(pRoot, "Notepad2 AddDocWord(%d, %d): %.6f\n", pWList->nWordCount, pWList->nTotalLen, elapsed);
-	OutputDebugStringA(pRoot);
+	DebugPrintf("Notepad2 AddDocWord(%d, %d): %.6f\n", pWList->nWordCount, pWList->nTotalLen, elapsed);
 #endif
 
-	autoCompletionConfig.iPreviousItemCount = pWList->nWordCount;
-	if (pWList->nWordCount > 0 && !(pWList->nWordCount == 1 && pWList->iMaxLength == iRootLen)) {
+	const BOOL bShow = pWList->nWordCount > 0 && !(pWList->nWordCount == 1 && pWList->iMaxLength == iRootLen);
+	const BOOL bUpdated = (autoCompletionConfig.iPreviousItemCount == 0)
+		// deleted some words. leave some words that no longer matches current input at the top.
+		|| (iCondition == AutoCompleteCondition_OnCharAdded && autoCompletionConfig.iPreviousItemCount - pWList->nWordCount > autoCompletionConfig.iVisibleItemCount)
+		// added some words. TODO: check top matched items before updating, if top items not changed, delay the update.
+		|| (iCondition == AutoCompleteCondition_OnCharDeleted && autoCompletionConfig.iPreviousItemCount < pWList->nWordCount);
+
+	if (bShow && bUpdated) {
+		autoCompletionConfig.iPreviousItemCount = pWList->nWordCount;
 		char *pList = NULL;
 		WordList_GetList(pWList, &pList);
-		//DLog(pList);
-		SendMessage(hwnd, SCI_AUTOCSETORDER, SC_ORDER_PRESORTED, 0); // pre-sorted
-		SendMessage(hwnd, SCI_AUTOCSETIGNORECASE, bIgnoreCase, 0); // case sensitivity
+		SciCall_AutoCSetOrder(SC_ORDER_PRESORTED); // pre-sorted
+		SciCall_AutoCSetIgnoreCase(bIgnoreCase); // case sensitivity
 		//if (bIgnoreCase) {
-		//	SendMessage(hwnd, SCI_AUTOCSETCASEINSENSITIVEBEHAVIOUR, SC_CASEINSENSITIVEBEHAVIOUR_IGNORECASE, 0);
+		//	SciCall_AutoCSetCaseInsensitiveBehaviour(SC_CASEINSENSITIVEBEHAVIOUR_IGNORECASE);
 		//}
-		SendMessage(hwnd, SCI_AUTOCSETSEPARATOR, '\n', 0);
-		SendMessage(hwnd, SCI_AUTOCSETFILLUPS, 0, (LPARAM)autoCompletionConfig.szAutoCompleteFillUp);
-		SendMessage(hwnd, SCI_AUTOCSETCHOOSESINGLE, FALSE, 0);
-		//SendMessage(hwnd, SCI_AUTOCSETDROPRESTOFWORD, TRUE, 0); // delete orginal text: pRoot
-		SendMessage(hwnd, SCI_AUTOCSETMAXWIDTH, (pWList->iMaxLength << 1), 0); // width columns, default auto
-		SendMessage(hwnd, SCI_AUTOCSETMAXHEIGHT, min_i(pWList->nWordCount, autoCompletionConfig.iVisibleItemCount), 0); // height rows, default 5
-		SendMessage(hwnd, SCI_AUTOCSETCHOOSESINGLE, autoInsert, 0);
-		SendMessage(hwnd, SCI_AUTOCSHOW, pWList->iStartLen, (LPARAM)(pList));
+		SciCall_AutoCSetSeparator('\n');
+		SciCall_AutoCSetFillUps(autoCompletionConfig.szAutoCompleteFillUp);
+		//SciCall_AutoCSetDropRestOfWord(TRUE); // delete orginal text: pRoot
+		SciCall_AutoCSetMaxWidth(pWList->iMaxLength << 1); // width columns, default auto
+		SciCall_AutoCSetMaxHeight(min_i(pWList->nWordCount, autoCompletionConfig.iVisibleItemCount)); // visible rows
+		SciCall_AutoCSetCancelAtStart(FALSE); // don't cancel the list when deleting character
+		SciCall_AutoCSetChooseSingle(autoInsert);
+		SciCall_AutoCShow(pWList->iStartLen, pList);
 		NP2HeapFree(pList);
 	}
 
@@ -1289,6 +1290,28 @@ void EditCompleteWord(HWND hwnd, BOOL autoInsert) {
 	}
 	WordList_Free(pWList);
 	NP2HeapFree(pWList);
+	return bShow;
+}
+
+void EditCompleteWord(int iCondition, BOOL autoInsert) {
+	if (iCondition == AutoCompleteCondition_OnCharAdded) {
+		if (autoCompletionConfig.iPreviousItemCount <= 2*autoCompletionConfig.iVisibleItemCount) {
+			return;
+		}
+		// too many words in auto-completion list, recreate it.
+	}
+
+	if (iCondition == AutoCompleteCondition_Normal) {
+		autoCompletionConfig.iPreviousItemCount = 0; // recreate list
+	}
+
+	BOOL bShow = EditCompleteWordCore(iCondition, autoInsert);
+	if (!bShow) {
+		autoCompletionConfig.iPreviousItemCount = 0;
+		if (iCondition != AutoCompleteCondition_Normal) {
+			SciCall_AutoCCancel();
+		}
+	}
 }
 
 static BOOL CanAutoCloseSingleQuote(int chPrev, int iCurrentStyle) {
@@ -1332,7 +1355,7 @@ static BOOL CanAutoCloseSingleQuote(int chPrev, int iCurrentStyle) {
 	return TRUE;
 }
 
-void EditAutoCloseBraceQuote(HWND hwnd, int ch) {
+void EditAutoCloseBraceQuote(int ch) {
 	const Sci_Position iCurPos = SciCall_GetCurrentPos();
 	const int chPrev = SciCall_GetCharAt(iCurPos - 2);
 	const int chNext = SciCall_GetCharAt(iCurPos);
@@ -1413,11 +1436,11 @@ void EditAutoCloseBraceQuote(HWND hwnd, int ch) {
 		break;
 	}
 	if (tchIns[0]) {
-		SendMessage(hwnd, SCI_BEGINUNDOACTION, 0, 0);
-		SendMessage(hwnd, SCI_REPLACESEL, 0, (LPARAM)tchIns);
+		SciCall_BeginUndoAction();
+		SciCall_ReplaceSel(tchIns);
 		const Sci_Position iCurrentPos = (ch == ',') ? iCurPos + 1 : iCurPos;
-		SendMessage(hwnd, SCI_SETSEL, iCurrentPos, iCurrentPos);
-		SendMessage(hwnd, SCI_ENDUNDOACTION, 0, 0);
+		SciCall_SetSel(iCurrentPos, iCurrentPos);
+		SciCall_EndUndoAction();
 	}
 }
 
@@ -1430,7 +1453,7 @@ static inline BOOL IsHtmlVoidTag(const char *word, int length) {
 	return p != NULL && p[-1] == ' ' && p[length] == ' ';
 }
 
-void EditAutoCloseXMLTag(HWND hwnd) {
+void EditAutoCloseXMLTag(void) {
 	char tchBuf[512];
 	const Sci_Position iCurPos = SciCall_GetCurrentPos();
 	const Sci_Position iStartPos = max_pos(0, iCurPos - (COUNTOF(tchBuf) - 1));
@@ -1460,7 +1483,7 @@ void EditAutoCloseXMLTag(HWND hwnd) {
 		tr.chrg.cpMin = (Sci_PositionCR)iStartPos;
 		tr.chrg.cpMax = (Sci_PositionCR)iCurPos;
 		tr.lpstrText = tchBuf;
-		SendMessage(hwnd, SCI_GETTEXTRANGE, 0, (LPARAM)&tr);
+		SciCall_GetTextRange(&tr);
 
 		if (tchBuf[iSize - 2] != '/') {
 			char tchIns[516] = "</";
@@ -1491,17 +1514,17 @@ void EditAutoCloseXMLTag(HWND hwnd) {
 			if (shouldAutoClose) {
 				tchIns[cchIns - 1] = '>';
 				autoClosed = TRUE;
-				SendMessage(hwnd, SCI_BEGINUNDOACTION, 0, 0);
-				SendMessage(hwnd, SCI_REPLACESEL, 0, (LPARAM)tchIns);
-				SendMessage(hwnd, SCI_SETSEL, iCurPos, iCurPos);
-				SendMessage(hwnd, SCI_ENDUNDOACTION, 0, 0);
+				SciCall_BeginUndoAction();
+				SciCall_ReplaceSel(tchIns);
+				SciCall_SetSel(iCurPos, iCurPos);
+				SciCall_EndUndoAction();
 			}
 		}
 	}
 	if (!autoClosed && autoCompletionConfig.bCompleteWord) {
 		const Sci_Position iPos = SciCall_GetCurrentPos();
 		if (SciCall_GetCharAt(iPos - 2) == '-') {
-			EditCompleteWord(hwnd, FALSE); // obj->field, obj->method
+			EditCompleteWord(AutoCompleteCondition_Normal, FALSE); // obj->field, obj->method
 		}
 	}
 }
@@ -1705,28 +1728,27 @@ extern BOOL	bTabIndents;
 extern int	iTabWidth;
 extern int	iIndentWidth;
 
-void EditAutoIndent(HWND hwnd) {
-	int iCurPos = (int)SendMessage(hwnd, SCI_GETCURRENTPOS, 0, 0);
-	//const int iAnchorPos = (int)SendMessage(hwnd, SCI_GETANCHOR, 0, 0);
-	const int iCurLine = (int)SendMessage(hwnd, SCI_LINEFROMPOSITION, iCurPos, 0);
-	//const int iLineLength = (int)SendMessage(hwnd, SCI_LINELENGTH, iCurLine, 0);
-	//const int iIndentBefore = (int)SendMessage(hwnd, SCI_GETLINEINDENTATION, iCurLine - 1, 0);
+void EditAutoIndent(void) {
+	Sci_Position iCurPos = SciCall_GetCurrentPos();
+	//const Sci_Position iAnchorPos = SciCall_GetAnchor();
+	const Sci_Line iCurLine = SciCall_LineFromPosition(iCurPos);
+	//const Sci_Position iLineLength = SciCall_GetLineLength(iCurLine);
+	//const Sci_Position iIndentBefore = SciCall_GetLineIndentation(iCurLine - 1);
 
 	// Move bookmark along with line if inserting lines (pressing return at beginning of line) because Scintilla does not do this for us
 	if (iCurLine > 0) {
-		const int iPrevLineLength = (int)SendMessage(hwnd, SCI_GETLINEENDPOSITION, iCurLine - 1, 0) -
-							  (int)SendMessage(hwnd, SCI_POSITIONFROMLINE, iCurLine - 1, 0);
+		const Sci_Position iPrevLineLength = SciCall_GetLineEndPosition(iCurLine - 1) - SciCall_PositionFromLine(iCurLine - 1);
 		if (iPrevLineLength == 0) {
-			const int bitmask = (int)SendMessage(hwnd, SCI_MARKERGET, iCurLine - 1, 0);
+			const int bitmask = SciCall_MarkerGet(iCurLine - 1);
 			if (bitmask & MarkerBitmask_Bookmark) {
-				SendMessage(hwnd, SCI_MARKERDELETE, iCurLine - 1, MarkerNumber_Bookmark);
-				SendMessage(hwnd, SCI_MARKERADD, iCurLine, MarkerNumber_Bookmark);
+				SciCall_MarkerDelete(iCurLine - 1, MarkerNumber_Bookmark);
+				SciCall_MarkerAdd(iCurLine, MarkerNumber_Bookmark);
 			}
 		}
 	}
 
 	if (iCurLine > 0/* && iLineLength <= 2*/) {
-		const int iPrevLineLength = (int)SendMessage(hwnd, SCI_LINELENGTH, iCurLine - 1, 0);
+		const Sci_Position iPrevLineLength = SciCall_GetLineLength(iCurLine - 1);
 		if (iPrevLineLength < 2) {
 			return;
 		}
@@ -1735,9 +1757,9 @@ void EditAutoIndent(HWND hwnd) {
 			return;
 		}
 
-		const int iEOLMode = (int)SendMessage(hwnd, SCI_GETEOLMODE, 0, 0);
+		const int iEOLMode = SciCall_GetEOLMode();
 		int indent = 0;
-		int	iIndentLen = 0;
+		Sci_Position iIndentLen = 0;
 		int commentStyle = 0;
 		SciCall_GetLine(iCurLine - 1, pLineBuf);
 		pLineBuf[iPrevLineLength] = '\0';
@@ -1785,7 +1807,7 @@ void EditAutoIndent(HWND hwnd) {
 			iIndentLen += 1;
 		}
 
-		int iIndentPos = iCurPos;
+		Sci_Position iIndentPos = iCurPos;
 		if (indent) {
 			int pad = iIndentWidth;
 			iIndentPos += iIndentLen;
@@ -1816,11 +1838,11 @@ void EditAutoIndent(HWND hwnd) {
 				*pPos++ = '\n';
 			}
 			if (indent == 2) {
-				lstrcpynA(pPos, pLineBuf, iIndentLen + 1);
+				strncpy(pPos, pLineBuf, iIndentLen + 1);
 				pPos += iIndentLen;
 				if (endPart) {
-					iIndentLen = lstrlenA(endPart);
-					lstrcpynA(pPos, endPart, iIndentLen + 1);
+					iIndentLen = strlen(endPart);
+					strcat(pPos, endPart);
 					pPos += iIndentLen;
 				}
 			}
@@ -1828,33 +1850,32 @@ void EditAutoIndent(HWND hwnd) {
 		}
 
 		if (*pLineBuf) {
-			SendMessage(hwnd, SCI_BEGINUNDOACTION, 0, 0);
-			SendMessage(hwnd, SCI_ADDTEXT, strlen(pLineBuf), (LPARAM)pLineBuf);
+			SciCall_BeginUndoAction();
+			SciCall_AddText(strlen(pLineBuf), pLineBuf);
 			if (indent) {
 				if (indent == 1) {// remove new line
 					iCurPos = iIndentPos + ((iEOLMode == SC_EOL_CRLF) ? 2 : 1);
-					SendMessage(hwnd, SCI_SETSEL, iIndentPos, iCurPos);
-					SendMessage(hwnd, SCI_REPLACESEL, 0, (LPARAM)"");
+					SciCall_SetSel(iIndentPos, iCurPos);
+					SciCall_ReplaceSel("");
 				}
-				SendMessage(hwndEdit, SCI_SETSEL, iIndentPos, iIndentPos);
+				SciCall_SetSel(iIndentPos, iIndentPos);
 			}
-			SendMessage(hwnd, SCI_ENDUNDOACTION, 0, 0);
+			SciCall_EndUndoAction();
 
 			//const Sci_Position iPrevLineStartPos = SciCall_PositionFromLine(iCurLine - 1);
 			//const Sci_Position iPrevLineEndPos = SciCall_GetLineEndPosition(iCurLine - 1);
 			//const Sci_Position iPrevLineIndentPos = SciCall_GetLineIndentPosition(iCurLine - 1);
 
 			//if (iPrevLineEndPos == iPrevLineIndentPos) {
-			//	SendMessage(hwnd, SCI_BEGINUNDOACTION, 0, 0);
-			//	SendMessage(hwnd, SCI_SETTARGETSTART, iPrevLineStartPos, 0);
-			//	SendMessage(hwnd, SCI_SETTARGETEND, iPrevLineEndPos, 0);
-			//	SendMessage(hwnd, SCI_REPLACETARGET, 0, (LPARAM)"");
-			//	SendMessage(hwnd, SCI_ENDUNDOACTION, 0, 0);
+			//	SciCall_BeginUndoAction();
+			//	SciCall_SetTargetRange(iPrevLineStartPos, iPrevLineEndPos);
+			//	SciCall_ReplaceTarget(0, "");
+			//	SciCall_EndUndoAction();
 			//}
 		}
 
 		NP2HeapFree(pLineBuf);
-		//const int iIndent = SciCall_GetLineIndentation(iCurLine);
+		//const Sci_Position iIndent = SciCall_GetLineIndentation(iCurLine);
 		//SciCall_SetLineIndentation(iCurLine, iIndentBefore);
 		//iIndentLen = SciCall_GetLineIndentation(iCurLine);
 		//if (iIndentLen > 0)
@@ -1862,7 +1883,7 @@ void EditAutoIndent(HWND hwnd) {
 	}
 }
 
-void EditToggleCommentLine(HWND hwnd) {
+void EditToggleCommentLine(void) {
 	switch (pLexCurrent->iLexer) {
 	case SCLEX_ASM: {
 		LPCWSTR ch;
@@ -1881,7 +1902,7 @@ void EditToggleCommentLine(HWND hwnd) {
 			ch = L"@ ";
 			break;
 		}
-		EditToggleLineComments(hwnd, ch, FALSE);
+		EditToggleLineComments(ch, FALSE);
 	} break;
 
 	case SCLEX_AU3:
@@ -1889,15 +1910,15 @@ void EditToggleCommentLine(HWND hwnd) {
 	case SCLEX_LISP:
 	case SCLEX_LLVM:
 	case SCLEX_PROPERTIES:
-		EditToggleLineComments(hwnd, L";", FALSE);
+		EditToggleLineComments(L";", FALSE);
 		break;
 
 	case SCLEX_BASH:
-		EditToggleLineComments(hwnd, ((np2LexLangIndex == IDM_LANG_M4)? L"dnl " : L"#"), FALSE);
+		EditToggleLineComments(((np2LexLangIndex == IDM_LANG_M4)? L"dnl " : L"#"), FALSE);
 		break;
 
 	case SCLEX_BATCH:
-		EditToggleLineComments(hwnd, L"@rem ", TRUE);
+		EditToggleLineComments(L"@rem ", TRUE);
 		break;
 
 	case SCLEX_CIL:
@@ -1907,7 +1928,7 @@ void EditToggleCommentLine(HWND hwnd) {
 	case SCLEX_JSON:
 	case SCLEX_PASCAL:
 	case SCLEX_VERILOG:
-		EditToggleLineComments(hwnd, L"//", FALSE);
+		EditToggleLineComments(L"//", FALSE);
 		break;
 
 	case SCLEX_CMAKE:
@@ -1915,53 +1936,53 @@ void EditToggleCommentLine(HWND hwnd) {
 	case SCLEX_PERL:
 	case SCLEX_POWERSHELL:
 	case SCLEX_TCL:
-		EditToggleLineComments(hwnd, L"#", FALSE);
+		EditToggleLineComments(L"#", FALSE);
 		break;
 
 	case SCLEX_CPP:
 		switch (pLexCurrent->rid) {
 		case NP2LEX_AWK:
 		case NP2LEX_JAM:
-			EditToggleLineComments(hwnd, L"#", FALSE);
+			EditToggleLineComments(L"#", FALSE);
 			break;
 		default:
-			EditToggleLineComments(hwnd, L"//", FALSE);
+			EditToggleLineComments(L"//", FALSE);
 			break;
 		}
 		break;
 
 	case SCLEX_FORTRAN:
-		EditToggleLineComments(hwnd, L"!", FALSE);
+		EditToggleLineComments(L"!", FALSE);
 		break;
 
 	case SCLEX_HTML:
 	case SCLEX_XML: {
-		const int block = GetCurrentHtmlTextBlock(hwnd);
+		const int block = GetCurrentHtmlTextBlock();
 		switch (block) {
 		case HTML_TEXT_BLOCK_VBS:
-			EditToggleLineComments(hwnd, L"'", FALSE);
+			EditToggleLineComments(L"'", FALSE);
 			break;
 
 		case HTML_TEXT_BLOCK_PYTHON:
-			EditToggleLineComments(hwnd, L"#", FALSE);
+			EditToggleLineComments(L"#", FALSE);
 			break;
 
 		case HTML_TEXT_BLOCK_CDATA:
 		case HTML_TEXT_BLOCK_JS:
 		case HTML_TEXT_BLOCK_PHP:
 		case HTML_TEXT_BLOCK_CSS:
-			EditToggleLineComments(hwnd, L"//", FALSE);
+			EditToggleLineComments(L"//", FALSE);
 			break;
 		}
 	} break;
 
 	case SCLEX_LATEX:
-		EditToggleLineComments(hwnd, L"%", FALSE);
+		EditToggleLineComments(L"%", FALSE);
 		break;
 
 	case SCLEX_LUA:
 	case SCLEX_VHDL:
-		EditToggleLineComments(hwnd, L"--", FALSE);
+		EditToggleLineComments(L"--", FALSE);
 		break;
 
 	case SCLEX_MAKEFILE:
@@ -1969,42 +1990,42 @@ void EditToggleCommentLine(HWND hwnd) {
 	case SCLEX_PYTHON:
 	case SCLEX_RUBY:
 	case SCLEX_SMALI:
-		EditToggleLineComments(hwnd, L"#", FALSE);
+		EditToggleLineComments(L"#", FALSE);
 		break;
 
 	case SCLEX_MATLAB:
 		if (pLexCurrent->rid == NP2LEX_JULIA) {
-			EditToggleLineComments(hwnd, L"#", FALSE);
+			EditToggleLineComments(L"#", FALSE);
 		} else if (pLexCurrent->rid == NP2LEX_SCILAB || np2LexLangIndex == IDM_LANG_SCILAB) {
-			EditToggleLineComments(hwnd, L"//", FALSE);
+			EditToggleLineComments(L"//", FALSE);
 		} else {
-			EditToggleLineComments(hwnd, L"%", FALSE);
+			EditToggleLineComments(L"%", FALSE);
 		}
 		break;
 
 	case SCLEX_SQL:
-		EditToggleLineComments(hwnd, L"-- ", FALSE); // extra space
+		EditToggleLineComments(L"-- ", FALSE); // extra space
 		break;
 
 	case SCLEX_TEXINFO:
-		EditToggleLineComments(hwnd, L"@c ", FALSE);
+		EditToggleLineComments(L"@c ", FALSE);
 		break;
 
 	case SCLEX_VB:
 	case SCLEX_VBSCRIPT:
-		EditToggleLineComments(hwnd, L"'", FALSE);
+		EditToggleLineComments(L"'", FALSE);
 		break;
 
 	case SCLEX_VIM:
-		EditToggleLineComments(hwnd, L"\"", FALSE);
+		EditToggleLineComments(L"\"", FALSE);
 		break;
 	}
 }
 
-void EditEncloseSelectionNewLine(HWND hwnd, LPCWSTR pwszOpen, LPCWSTR pwszClose) {
+void EditEncloseSelectionNewLine(LPCWSTR pwszOpen, LPCWSTR pwszClose) {
 	WCHAR start[64] = L"";
 	WCHAR end[64] = L"";
-	const int iEOLMode = (int)SendMessage(hwnd, SCI_GETEOLMODE, 0, 0);
+	const int iEOLMode = SciCall_GetEOLMode();
 	LPCWSTR lineEnd = (iEOLMode == SC_EOL_LF) ? L"\n" : ((iEOLMode == SC_EOL_CR) ? L"\r" : L"\r\n");
 
 	Sci_Position pos = SciCall_GetSelectionStart();
@@ -2022,10 +2043,10 @@ void EditEncloseSelectionNewLine(HWND hwnd, LPCWSTR pwszOpen, LPCWSTR pwszClose)
 	}
 	lstrcat(end, pwszClose);
 	lstrcat(end, lineEnd);
-	EditEncloseSelection(hwnd, start, end);
+	EditEncloseSelection(start, end);
 }
 
-void EditToggleCommentBlock(HWND hwnd) {
+void EditToggleCommentBlock(void) {
 	switch (pLexCurrent->iLexer) {
 	case SCLEX_ASM:
 	case SCLEX_CIL:
@@ -2036,15 +2057,15 @@ void EditToggleCommentBlock(HWND hwnd) {
 	case SCLEX_SQL:
 	case SCLEX_VERILOG:
 	case SCLEX_VHDL:
-		EditEncloseSelection(hwnd, L"/*", L"*/");
+		EditEncloseSelection(L"/*", L"*/");
 		break;
 
 	case SCLEX_AU3:
-		EditEncloseSelectionNewLine(hwnd, L"#cs", L"#ce");
+		EditEncloseSelectionNewLine(L"#cs", L"#ce");
 		break;
 
 	case SCLEX_CMAKE:
-		EditEncloseSelection(hwnd, L"#[[", L"]]");
+		EditEncloseSelection(L"#[[", L"]]");
 		break;
 
 	case SCLEX_CPP:
@@ -2054,25 +2075,25 @@ void EditToggleCommentBlock(HWND hwnd) {
 			break;
 
 		default:
-			EditEncloseSelection(hwnd, L"/*", L"*/");
+			EditEncloseSelection(L"/*", L"*/");
 			break;
 		}
 		break;
 
 	case SCLEX_FORTRAN:
-		EditEncloseSelectionNewLine(hwnd, L"#if 0", L"#endif");
+		EditEncloseSelectionNewLine(L"#if 0", L"#endif");
 		break;
 
 	case SCLEX_FSHARP:
-		EditEncloseSelection(hwnd, L"(*", L"*)");
+		EditEncloseSelection(L"(*", L"*)");
 		break;
 
 	case SCLEX_HTML:
 	case SCLEX_XML: {
-		const int block = GetCurrentHtmlTextBlock(hwnd);
+		const int block = GetCurrentHtmlTextBlock();
 		switch (block) {
 		case HTML_TEXT_BLOCK_TAG:
-			EditEncloseSelection(hwnd, L"<!--", L"-->");
+			EditEncloseSelection(L"<!--", L"-->");
 			break;
 
 		case HTML_TEXT_BLOCK_VBS:
@@ -2083,50 +2104,50 @@ void EditToggleCommentBlock(HWND hwnd) {
 		case HTML_TEXT_BLOCK_JS:
 		case HTML_TEXT_BLOCK_PHP:
 		case HTML_TEXT_BLOCK_CSS:
-			EditEncloseSelection(hwnd, L"/*", L"*/");
+			EditEncloseSelection(L"/*", L"*/");
 			break;
 		}
 	} break;
 
 	case SCLEX_INNOSETUP:
 	case SCLEX_PASCAL:
-		EditEncloseSelection(hwnd, L"{", L"}");
+		EditEncloseSelection(L"{", L"}");
 		break;
 
 	case SCLEX_LATEX:
-		EditEncloseSelectionNewLine(hwnd, L"\\begin{comment}", L"\\end{comment}");
+		EditEncloseSelectionNewLine(L"\\begin{comment}", L"\\end{comment}");
 		break;
 
 	case SCLEX_LISP:
-		EditEncloseSelection(hwnd, L"#|", L"|#");
+		EditEncloseSelection(L"#|", L"|#");
 		break;
 
 	case SCLEX_LUA:
-		EditEncloseSelection(hwnd, L"--[[", L"--]]");
+		EditEncloseSelection(L"--[[", L"--]]");
 		break;
 
 	case SCLEX_MATLAB:
 		if (pLexCurrent->rid == NP2LEX_JULIA) {
-			EditEncloseSelectionNewLine(hwnd, L"#=", L"=#");
+			EditEncloseSelectionNewLine(L"#=", L"=#");
 		} else if (pLexCurrent->rid == NP2LEX_SCILAB || np2LexLangIndex == IDM_LANG_SCILAB) {
-			EditEncloseSelection(hwnd, L"/*", L"*/");
+			EditEncloseSelection(L"/*", L"*/");
 		} else {
-			EditEncloseSelectionNewLine(hwnd, L"%{", L"%}");
+			EditEncloseSelectionNewLine(L"%{", L"%}");
 		}
 		break;
 
 	case SCLEX_POWERSHELL:
-		EditEncloseSelection(hwnd, L"<#", L"#>");
+		EditEncloseSelection(L"<#", L"#>");
 		break;
 
 	case SCLEX_TCL:
-		EditEncloseSelectionNewLine(hwnd, L"if (0) {", L"}");
+		EditEncloseSelectionNewLine(L"if (0) {", L"}");
 		break;
 	}
 }
 
 // see Style_SniffShebang() in Styles.c
-void EditInsertScriptShebangLine(HWND hwnd) {
+void EditInsertScriptShebangLine(void) {
 	const char *prefix = "#!/usr/bin/env ";
 	const char *name = NULL;
 
@@ -2204,21 +2225,22 @@ void EditInsertScriptShebangLine(HWND hwnd) {
 
 	const Sci_Position iCurrentPos = SciCall_GetCurrentPos();
 	if (iCurrentPos == 0 && (name != NULL || pLexCurrent->iLexer == SCLEX_BASH)) {
-		const int iEOLMode = (int)SendMessage(hwnd, SCI_GETEOLMODE, 0, 0);
+		const int iEOLMode = SciCall_GetEOLMode();
 		LPCSTR lineEnd = (iEOLMode == SC_EOL_LF) ? "\n" : ((iEOLMode == SC_EOL_CR) ? "\r" : "\r\n");
 		strcat(line, lineEnd);
 	}
-	SendMessage(hwnd, SCI_REPLACESEL, 0, (LPARAM)line);
+	SciCall_ReplaceSel(line);
 }
 
-void EditShowCallTips(HWND hwnd, Sci_Position position) {
+void EditShowCallTips(Sci_Position position) {
 	const Sci_Line iLine = SciCall_LineFromPosition(position);
 	const Sci_Position iDocLen = SciCall_GetLineLength(iLine);
 	char *pLine = (char *)NP2HeapAlloc(iDocLen + 1);
 	SciCall_GetLine(iLine, pLine);
+	StrTrimA(pLine, " \t\r\n");
 	char *text = (char *)NP2HeapAlloc(iDocLen + 1 + 128);
-	sprintf(text, "ShowCallTips(%d, %d, %d)\n%s", (int)(iLine + 1), (int)position, (int)iDocLen, pLine);
-	SendMessage(hwnd, SCI_CALLTIPSHOW, position, (LPARAM)text);
+	sprintf(text, "ShowCallTips(%d, %d, %d)\n\n\002%s", (int)(iLine + 1), (int)position, (int)iDocLen, pLine);
+	SciCall_CallTipShow(position, text);
 	NP2HeapFree(pLine);
 	NP2HeapFree(text);
 }

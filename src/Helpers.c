@@ -41,19 +41,17 @@ void StopWatch_ShowLog(const StopWatch *watch, LPCSTR msg) {
 	const double elapsed = StopWatch_Get(watch);
 	char buf[256];
 	snprintf(buf, COUNTOF(buf), "%s %s: %.6f\n", "Notepad2", msg, elapsed);
-	OutputDebugStringA(buf);
+	DebugPrint(buf);
 }
 
-#ifndef NDEBUG
-void DLogf(const char *fmt, ...) {
+void DebugPrintf(const char *fmt, ...) {
 	char buf[1024] = "";
 	va_list va;
 	va_start(va, fmt);
 	wvsprintfA(buf, fmt, va);
 	va_end(va);
-	OutputDebugStringA(buf);
+	DebugPrint(buf);
 }
-#endif
 
 void IniClearSectionEx(LPCWSTR lpSection, LPCWSTR lpszIniFile, BOOL bDelete) {
 	if (StrIsEmpty(lpszIniFile)) {
@@ -571,7 +569,9 @@ BOOL bFreezeAppTitle = FALSE;
 
 BOOL SetWindowTitle(HWND hwnd, UINT uIDAppName, BOOL bIsElevated, UINT uIDUntitled,
 					LPCWSTR lpszFile, int iFormat, BOOL bModified,
-					UINT uIDReadOnly, BOOL bReadOnly, LPCWSTR lpszExcerpt) {
+					UINT uIDReadOnly, BOOL bReadOnly,
+					UINT uIDLocked, BOOL bLocked,
+					LPCWSTR lpszExcerpt) {
 
 	static WCHAR szCachedFile[MAX_PATH] = L"";
 	static WCHAR szCachedDisplayName[MAX_PATH] = L"";
@@ -636,6 +636,12 @@ BOOL SetWindowTitle(HWND hwnd, UINT uIDAppName, BOOL bIsElevated, UINT uIDUntitl
 		GetString(uIDReadOnly, szReadOnly, COUNTOF(szReadOnly));
 		lstrcat(szTitle, L" ");
 		lstrcat(szTitle, szReadOnly);
+	}
+	if (bLocked) {
+		WCHAR szLocked[32];
+		GetString(uIDLocked, szLocked, COUNTOF(szLocked));
+		lstrcat(szTitle, L" ");
+		lstrcat(szTitle, szLocked);
 	}
 
 	lstrcat(szTitle, pszSep);
@@ -2656,7 +2662,7 @@ static VOID GetTrayWndRect(LPRECT lpTrayRect) {
 }
 
 // Check to see if the animation has been disabled
-/*static */BOOL GetDoAnimateMinimize(VOID) {
+/*static */BOOL GetDoAnimateMinimize(void) {
 	ANIMATIONINFO ai;
 
 	ai.cbSize = sizeof(ai);
@@ -2665,7 +2671,7 @@ static VOID GetTrayWndRect(LPRECT lpTrayRect) {
 	return ai.iMinAnimate != 0;
 }
 
-VOID MinimizeWndToTray(HWND hwnd) {
+void MinimizeWndToTray(HWND hwnd) {
 	if (GetDoAnimateMinimize()) {
 		RECT rcFrom;
 		RECT rcTo;
@@ -2687,7 +2693,7 @@ VOID MinimizeWndToTray(HWND hwnd) {
 	ShowWindow(hwnd, SW_HIDE);
 }
 
-VOID RestoreWndFromTray(HWND hwnd) {
+void RestoreWndFromTray(HWND hwnd) {
 	if (GetDoAnimateMinimize()) {
 		// Get the rect of the tray and the window. Note that the window rect
 		// is still valid even though the window is hidden

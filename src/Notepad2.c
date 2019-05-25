@@ -29,20 +29,20 @@
 #include <stdio.h>
 #include <time.h>
 #include <inttypes.h>
+#include "SciCall.h"
 #include "Helpers.h"
 #include "Notepad2.h"
 #include "Edit.h"
 #include "Styles.h"
 #include "Dialogs.h"
-#include "SciCall.h"
 #include "resource.h"
 
 // show fold level
 #define NP2_DEBUG_FOLD_LEVEL	0
 // enable the .LOG feature
 #define NP2_ENABLE_DOT_LOG_FEATURE	0
-// enable call tips (currently not yet implemented)
-#define NP2_ENABLE_SHOW_CALL_TIPS	0
+// enable CallTips (currently not yet implemented)
+#define NP2_ENABLE_SHOW_CALLTIPS	0
 // enable customize toolbar labels
 #define NP2_ENABLE_CUSTOMIZE_TOOLBAR_LABELS		0
 
@@ -54,7 +54,7 @@
 HWND	hwndStatus;
 static HWND hwndToolbar;
 static HWND hwndReBar;
-HWND	hwndEdit;
+static HWND hwndEdit;
 static HWND hwndEditFrame;
 HWND	hwndMain;
 static HWND hwndNextCBChain = NULL;
@@ -148,8 +148,8 @@ struct EditAutoCompletionConfig autoCompletionConfig;
 static BOOL bShowCodeFolding;
 static BOOL bShowFoldingLine;
 static BOOL bFoldDisplayText;
-#if NP2_ENABLE_SHOW_CALL_TIPS
-static BOOL bShowCallTips = FALSE;
+#if NP2_ENABLE_SHOW_CALLTIPS
+static BOOL bShowCallTips = TRUE;
 static int iCallTipsWaitTime = 500; // 500 ms
 #endif
 static BOOL bViewWhiteSpace;
@@ -252,6 +252,7 @@ WCHAR	szCurFile[MAX_PATH + 40];
 FILEVARS	fvCurFile;
 static BOOL bModified;
 static BOOL bReadOnly = FALSE;
+BOOL bLockedForEditing = FALSE; // save call to SciCall_GetReadOnly()
 static int iOriginalEncoding;
 static int iEOLMode;
 
@@ -398,6 +399,11 @@ static inline void UpdateStatusBarCache_OVRMode(BOOL force) {
 		cachedStatusItem.pszOvrMode = overType ? L"OVR" : L"INS";
 		cachedStatusItem.updateMask |= STATUS_BAR_UPDATE_MASK_OVRMODE;
 	}
+}
+
+// temporary fix for issue #77: force InvalidateStyleRedraw().
+static inline void InvalidateStyleRedraw(void) {
+	SciCall_SetViewEOL(bViewEOLs);
 }
 
 //=============================================================================
@@ -787,13 +793,13 @@ HWND InitInstance(HINSTANCE hInstance, int nCmdShow) {
 			const BOOL back = autoCompletionConfig.bIndentText;
 			autoCompletionConfig.bIndentText = FALSE;
 			SciCall_DocumentEnd();
-			SendMessage(hwndEdit, SCI_BEGINUNDOACTION, 0, 0);
-			if (SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0) > 0) {
-				SendMessage(hwndEdit, SCI_NEWLINE, 0, 0);
+			SciCall_BeginUndoAction();
+			if (SciCall_GetLength() > 0) {
+				SciCall_NewLine();
 			}
 			SciCall_Paste(FALSE);
-			SendMessage(hwndEdit, SCI_NEWLINE, 0, 0);
-			SendMessage(hwndEdit, SCI_ENDUNDOACTION, 0, 0);
+			SciCall_NewLine();
+			SciCall_EndUndoAction();
 			autoCompletionConfig.bIndentText = back;
 			if (flagJumpTo) {
 				EditJumpTo(iInitialLine, iInitialColumn);
@@ -832,13 +838,13 @@ HWND InitInstance(HINSTANCE hInstance, int nCmdShow) {
 				if (!flagJumpTo) {
 					SciCall_DocumentEnd();
 				}
-				EditFindPrev(hwndEdit, &efrData, FALSE);
+				EditFindPrev(&efrData, FALSE);
 				EditEnsureSelectionVisible();
 			} else {
 				if (!flagJumpTo) {
 					SciCall_DocumentStart();
 				}
-				EditFindNext(hwndEdit, &efrData, FALSE);
+				EditFindNext(&efrData, FALSE);
 				EditEnsureSelectionVisible();
 			}
 		}
@@ -859,10 +865,10 @@ HWND InitInstance(HINSTANCE hInstance, int nCmdShow) {
 	// check if a lexer was specified from the command line
 	if (flagLexerSpecified) {
 		if (lpSchemeArg) {
-			Style_SetLexerFromName(hwndEdit, szCurFile, lpSchemeArg);
+			Style_SetLexerFromName(szCurFile, lpSchemeArg);
 			LocalFree(lpSchemeArg);
 		} else if (iInitialLexer >= 0 && iInitialLexer < NUMLEXERS) {
-			Style_SetLexerFromID(hwndEdit, iInitialLexer);
+			Style_SetLexerFromID(iInitialLexer);
 		}
 		flagLexerSpecified = 0;
 	}
@@ -917,9 +923,9 @@ void OnDropOneFile(HWND hwnd, LPCWSTR szBuf) {
 }
 
 #if NP2_ENABLE_DOT_LOG_FEATURE
-static inline BOOL IsFileStartsWithDotLog(HWND hwnd) {
+static inline BOOL IsFileStartsWithDotLog(void) {
 	char tch[5] = "";
-	const int len = (int)SendMessage(hwnd, SCI_GETTEXT, COUNTOF(tch), (LPARAM)tch);
+	const Sci_Position len = SciCall_GetText(COUNTOF(tch), tch);
 	// upper case
 	return len >= 4 && strncmp(tch, ".LOG", 4) == 0;
 }
@@ -1047,7 +1053,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 
 	// update Scintilla colors
 	case WM_SYSCOLORCHANGE: {
-		Style_SetLexer(hwndEdit, pLexCurrent);
+		Style_SetLexer(pLexCurrent);
 		return DefWindowProc(hwnd, umsg, wParam, lParam);
 	}
 
@@ -1162,9 +1168,9 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 						if (params->iInitialLexer < 0) {
 							WCHAR wchExt[32] = L".";
 							lstrcpyn(CharNext(wchExt), StrEnd(&params->wchData) + 1, 30);
-							Style_SetLexerFromName(hwndEdit, &params->wchData, wchExt);
+							Style_SetLexerFromName(&params->wchData, wchExt);
 						} else if (params->iInitialLexer >= 0 && params->iInitialLexer < NUMLEXERS) {
-							Style_SetLexerFromID(hwndEdit, params->iInitialLexer);
+							Style_SetLexerFromID(params->iInitialLexer);
 						}
 					}
 
@@ -1215,14 +1221,14 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 			if (SciCall_IsSelectionEmpty() && pt.x != -1 && pt.y != -1) {
 				POINT ptc = pt;
 				ScreenToClient(hwndEdit, &ptc);
-				const int iNewPos = (int)SendMessage(hwndEdit, SCI_POSITIONFROMPOINT, ptc.x, ptc.y);
+				const Sci_Position iNewPos = SciCall_PositionFromPoint(ptc.x, ptc.y);
 				SciCall_GotoPos(iNewPos);
 			}
 
 			if (pt.x == -1 && pt.y == -1) {
 				const Sci_Position iCurrentPos = SciCall_GetCurrentPos();
-				pt.x = (int)SendMessage(hwndEdit, SCI_POINTXFROMPOSITION, 0, iCurrentPos);
-				pt.y = (int)SendMessage(hwndEdit, SCI_POINTYFROMPOSITION, 0, iCurrentPos);
+				pt.x = SciCall_PointXFromPosition(iCurrentPos);
+				pt.y = SciCall_PointYFromPosition(iCurrentPos);
 				ClientToScreen(hwndEdit, &pt);
 			}
 			imenu = IDP_POPUP_SUBMENU_EDIT;
@@ -1281,14 +1287,14 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 
 		if (PathFileExists(szCurFile)) {
 			if ((iFileWatchingMode == 2 && !IsDocumentModified()) || MsgBox(MBYESNO, IDS_FILECHANGENOTIFY) == IDYES) {
-				const int iCurPos = (int)SendMessage(hwndEdit, SCI_GETCURRENTPOS, 0, 0);
-				const int iAnchorPos = (int)SendMessage(hwndEdit, SCI_GETANCHOR, 0, 0);
+				const Sci_Position iCurPos = SciCall_GetCurrentPos();
+				const Sci_Position iAnchorPos = SciCall_GetAnchor();
 #if NP2_ENABLE_DOT_LOG_FEATURE
-				const int iVisTopLine = (int)SendMessage(hwndEdit, SCI_GETFIRSTVISIBLELINE, 0, 0);
-				const int iDocTopLine = (int)SendMessage(hwndEdit, SCI_DOCLINEFROMVISIBLE, iVisTopLine, 0);
-				const int iXOffset = (int)SendMessage(hwndEdit, SCI_GETXOFFSET, 0, 0);
+				const Sci_Line iVisTopLine = SciCall_GetFirstVisibleLine();
+				const Sci_Line iDocTopLine = SciCall_DocLineFromVisible(iVisTopLine);
+				const int iXOffset = SciCall_GetXOffset();
 #endif
-				const BOOL bIsTail = (iCurPos == iAnchorPos) && (iCurPos == SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0));
+				const BOOL bIsTail = (iCurPos == iAnchorPos) && (iCurPos == SciCall_GetLength());
 
 				iWeakSrcEncoding = iEncoding;
 				if (FileLoad(TRUE, FALSE, TRUE, FALSE, szCurFile)) {
@@ -1298,13 +1304,12 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 						EditEnsureSelectionVisible();
 					}
 #if NP2_ENABLE_DOT_LOG_FEATURE
-					 else if (IsFileStartsWithDotLog(hwndEdit)) {
-						int iNewTopLine;
-						SendMessage(hwndEdit, SCI_SETSEL, iAnchorPos, iCurPos);
+					 else if (IsFileStartsWithDotLog()) {
+						SciCall_SetSel(iAnchorPos, iCurPos);
 						SciCall_EnsureVisible(iDocTopLine);
-						iNewTopLine = (int)SendMessage(hwndEdit, SCI_GETFIRSTVISIBLELINE, 0, 0);
-						SendMessage(hwndEdit, SCI_LINESCROLL, 0, iVisTopLine - iNewTopLine);
-						SendMessage(hwndEdit, SCI_SETXOFFSET, iXOffset, 0);
+						const Sci_Line iNewTopLine = SciCall_GetFirstVisibleLine();
+						SciCall_LineScroll(0, iVisTopLine - iNewTopLine);
+						SciCall_SetXOffset(iXOffset);
 					}
 #endif
 				}
@@ -1406,7 +1411,9 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 void UpdateWindowTitle(void) {
 	SetWindowTitle(hwndMain, uidsAppTitle, fIsElevated, IDS_UNTITLED, szCurFile,
 				iPathNameFormat, IsDocumentModified(),
-				IDS_READONLY, bReadOnly, szTitleExcerpt);
+				IDS_READONLY, bReadOnly,
+				IDS_LOCKED, bLockedForEditing,
+				szTitleExcerpt);
 }
 
 static inline void UpdateDocumentModificationStatus(void) {
@@ -1434,41 +1441,43 @@ void UpdateFoldMarginWidth(void) {
 	}
 }
 
-#if NP2_ENABLE_SHOW_CALL_TIPS
-#define SetCallTipsWaitTime() \
-	SendMessage(hwndEdit, SCI_SETMOUSEDWELLTIME, bShowCallTips? iCallTipsWaitTime : SC_TIME_FOREVER, 0);
-#endif
-
 void SetWrapStartIndent(void) {
-	int i = 0;
+	int indent = 0;
 	switch (iWordWrapIndent) {
 	case EditWrapIndentOneCharacter:
-		i = 1;
+		indent = 1;
 		break;
 	case EditWrapIndentTwoCharacter:
-		i = 2;
+		indent = 2;
 		break;
 	case EditWrapIndentOneLevel:
-		i = (iIndentWidth) ? 1 * iIndentWidth : 1 * iTabWidth;
+		indent = (iIndentWidth) ? iIndentWidth : iTabWidth;
 		break;
 	case EditWrapIndentTwoLevel:
-		i = (iIndentWidth) ? 2 * iIndentWidth : 2 * iTabWidth;
+		indent = (iIndentWidth) ? 2 * iIndentWidth : 2 * iTabWidth;
 		break;
 	}
-	SendMessage(hwndEdit, SCI_SETWRAPSTARTINDENT, i, 0);
+	SciCall_SetWrapStartIndent(indent);
 }
 
 void SetWrapIndentMode(void) {
-	if (iWordWrapIndent == EditWrapIndentSameAsSubline) {
-		SendMessage(hwndEdit, SCI_SETWRAPINDENTMODE, SC_WRAPINDENT_SAME, 0);
-	} else if (iWordWrapIndent == EditWrapIndentOneLevelThanSubline) {
-		SendMessage(hwndEdit, SCI_SETWRAPINDENTMODE, SC_WRAPINDENT_INDENT, 0);
-	} else if (iWordWrapIndent == EditWrapIndentTwoLevelThanSubline) {
-		SendMessage(hwndEdit, SCI_SETWRAPINDENTMODE, SC_WRAPINDENT_DEEPINDENT, 0);
-	} else {
+	int indentMode;
+	switch (iWordWrapIndent) {
+	case EditWrapIndentSameAsSubline:
+		indentMode = SC_WRAPINDENT_SAME;
+		break;
+	case EditWrapIndentOneLevelThanSubline:
+		indentMode = SC_WRAPINDENT_INDENT;
+		break;
+	case EditWrapIndentTwoLevelThanSubline:
+		indentMode = SC_WRAPINDENT_DEEPINDENT;
+		break;
+	default:
+		indentMode = SC_WRAPINDENT_FIXED;
 		SetWrapStartIndent();
-		SendMessage(hwndEdit, SCI_SETWRAPINDENTMODE, SC_WRAPINDENT_FIXED, 0);
+		break;
 	}
+	SciCall_SetWrapIndentMode(indentMode);
 }
 
 void SetWrapVisualFlags(void) {
@@ -1503,14 +1512,14 @@ void SetWrapVisualFlags(void) {
 			}
 			break;
 		}
-		SendMessage(hwndEdit, SCI_SETWRAPVISUALFLAGSLOCATION, wrapVisualFlagsLocation, 0);
-		SendMessage(hwndEdit, SCI_SETWRAPVISUALFLAGS, wrapVisualFlags, 0);
+		SciCall_SetWrapVisualFlagsLocation(wrapVisualFlagsLocation);
+		SciCall_SetWrapVisualFlags(wrapVisualFlags);
 	} else {
-		SendMessage(hwndEdit, SCI_SETWRAPVISUALFLAGS, 0, 0);
+		SciCall_SetWrapVisualFlags(SC_WRAPVISUALFLAG_NONE);
 	}
 }
 
-static void EditFrameOnThemeChanged() {
+static void EditFrameOnThemeChanged(void) {
 	if (IsAppThemed()) {
 		SetWindowLongPtr(hwndEdit, GWL_EXSTYLE, GetWindowLongPtr(hwndEdit, GWL_EXSTYLE) & ~WS_EX_CLIENTEDGE);
 		SetWindowPos(hwndEdit, NULL, 0, 0, 0, 0, SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE);
@@ -1559,13 +1568,13 @@ HWND EditCreate(HWND hwndParent) {
 	SciCall_SetBidirectional(iBidirectional);
 	SciCall_SetIMEInteraction(bUseInlineIME);
 	SciCall_SetInlineIMEUseBlockCaret(bInlineIMEUseBlockCaret);
-	SendMessage(hwnd, SCI_SETPASTECONVERTENDINGS, 1, 0);
-	SendMessage(hwnd, SCI_SETMODEVENTMASK, /*SC_MODEVENTMASKALL*/SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT, 0);
-	SendMessage(hwnd, SCI_SETCOMMANDEVENTS, FALSE, 0);
-	SendMessage(hwnd, SCI_USEPOPUP, FALSE, 0);
-	SendMessage(hwnd, SCI_SETSCROLLWIDTH, 2048, 0);
-	SendMessage(hwnd, SCI_SETSCROLLWIDTHTRACKING, TRUE, 0);
-	SendMessage(hwnd, SCI_SETENDATLASTLINE, TRUE, 0);
+	SciCall_SetPasteConvertEndings(TRUE);
+	SciCall_SetModEventMask(/*SC_MODEVENTMASKALL*/SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT);
+	SciCall_SetCommandEvents(FALSE);
+	SciCall_UsePopUp(SC_POPUP_NEVER);
+	SciCall_SetScrollWidth(2048);
+	SciCall_SetScrollWidthTracking(TRUE);
+	SciCall_SetEndAtLastLine(TRUE);
 	SciCall_SetCaretSticky(SC_CARETSTICKY_OFF);
 	SciCall_SetXCaretPolicy(CARET_SLOP | CARET_EVEN, 50);
 	SciCall_SetYCaretPolicy(CARET_EVEN, 0);
@@ -1577,16 +1586,16 @@ HWND EditCreate(HWND hwndParent) {
 	// style both before and after the visible text in the background
 	SciCall_SetIdleStyling(SC_IDLESTYLING_ALL);
 	// cache layout for visible lines
-	SendMessage(hwnd, SCI_SETLAYOUTCACHE, SC_CACHE_PAGE, 0);
+	SciCall_SetLayoutCache(SC_CACHE_PAGE);
 
-	SendMessage(hwnd, SCI_ASSIGNCMDKEY, (SCK_NEXT + (SCMOD_CTRL << 16)), SCI_PARADOWN);
-	SendMessage(hwnd, SCI_ASSIGNCMDKEY, (SCK_PRIOR + (SCMOD_CTRL << 16)), SCI_PARAUP);
-	SendMessage(hwnd, SCI_ASSIGNCMDKEY, (SCK_NEXT + ((SCMOD_CTRL | SCMOD_SHIFT) << 16)), SCI_PARADOWNEXTEND);
-	SendMessage(hwnd, SCI_ASSIGNCMDKEY, (SCK_PRIOR + ((SCMOD_CTRL | SCMOD_SHIFT) << 16)), SCI_PARAUPEXTEND);
-	SendMessage(hwnd, SCI_ASSIGNCMDKEY, (SCK_HOME + (0 << 16)), SCI_VCHOMEWRAP);
-	SendMessage(hwnd, SCI_ASSIGNCMDKEY, (SCK_END + (0 << 16)), SCI_LINEENDWRAP);
-	SendMessage(hwnd, SCI_ASSIGNCMDKEY, (SCK_HOME + (SCMOD_SHIFT << 16)), SCI_VCHOMEWRAPEXTEND);
-	SendMessage(hwnd, SCI_ASSIGNCMDKEY, (SCK_END + (SCMOD_SHIFT << 16)), SCI_LINEENDWRAPEXTEND);
+	SciCall_AssignCmdKey((SCK_NEXT + (SCMOD_CTRL << 16)), SCI_PARADOWN);
+	SciCall_AssignCmdKey((SCK_PRIOR + (SCMOD_CTRL << 16)), SCI_PARAUP);
+	SciCall_AssignCmdKey((SCK_NEXT + ((SCMOD_CTRL | SCMOD_SHIFT) << 16)), SCI_PARADOWNEXTEND);
+	SciCall_AssignCmdKey((SCK_PRIOR + ((SCMOD_CTRL | SCMOD_SHIFT) << 16)), SCI_PARAUPEXTEND);
+	SciCall_AssignCmdKey((SCK_HOME + (0 << 16)), SCI_VCHOMEWRAP);
+	SciCall_AssignCmdKey((SCK_END + (0 << 16)), SCI_LINEENDWRAP);
+	SciCall_AssignCmdKey((SCK_HOME + (SCMOD_SHIFT << 16)), SCI_VCHOMEWRAPEXTEND);
+	SciCall_AssignCmdKey((SCK_END + (SCMOD_SHIFT << 16)), SCI_LINEENDWRAPEXTEND);
 
 	//SciInitThemes(hwnd);
 	if (bEditLayoutRTL) {
@@ -1605,15 +1614,15 @@ HWND EditCreate(HWND hwndParent) {
 	SciCall_SetIndent(iIndentWidth);
 
 	// Indent Guides
-	Style_SetIndentGuides(hwnd, bShowIndentGuides);
+	Style_SetIndentGuides(bShowIndentGuides);
 
 	// Word wrap
-	SendMessage(hwnd, SCI_SETWRAPMODE, (fWordWrap? iWordWrapMode : SC_WRAP_NONE), 0);
+	SciCall_SetWrapMode(fWordWrap? iWordWrapMode : SC_WRAP_NONE);
 	SetWrapIndentMode();
 	SetWrapVisualFlags();
 
 	if (bShowUnicodeControlCharacter) {
-		EditShowUnicodeControlCharacter(hwnd, TRUE);
+		EditShowUnicodeControlCharacter(TRUE);
 	}
 
 	// current line
@@ -1621,12 +1630,12 @@ HWND EditCreate(HWND hwndParent) {
 
 	// Long Lines
 	if (bMarkLongLines) {
-		SendMessage(hwnd, SCI_SETEDGEMODE, (iLongLineMode == EDGE_LINE) ? EDGE_LINE : EDGE_BACKGROUND, 0);
-		Style_SetLongLineColors(hwnd);
+		SciCall_SetEdgeMode((iLongLineMode == EDGE_LINE) ? EDGE_LINE : EDGE_BACKGROUND);
+		Style_SetLongLineColors();
 	} else {
-		SendMessage(hwnd, SCI_SETEDGEMODE, EDGE_NONE, 0);
+		SciCall_SetEdgeMode(EDGE_NONE);
 	}
-	SendMessage(hwnd, SCI_SETEDGECOLUMN, iLongLinesLimit, 0);
+	SciCall_SetEdgeColumn(iLongLinesLimit);
 
 	// Margins
 	UpdateSelectionMarginWidth();
@@ -1634,7 +1643,7 @@ HWND EditCreate(HWND hwndParent) {
 	SciCall_SetMarginMask(MARGIN_FOLD_INDEX, SC_MASK_FOLDERS);
 	SciCall_SetMarginSensitive(MARGIN_FOLD_INDEX, TRUE);
 	// only select sub line of wrapped line
-	SendMessage(hwnd, SCI_SETMARGINOPTIONS, (bWordWrapSelectSubLine ? SC_MARGINOPTION_SUBLINESELECT : SC_MARGINOPTION_NONE), 0);
+	SciCall_SetMarginOptions(bWordWrapSelectSubLine ? SC_MARGINOPTION_SUBLINESELECT : SC_MARGINOPTION_NONE);
 	// Code folding, Box tree
 	SciCall_MarkerDefine(SC_MARKNUM_FOLDEROPEN, SC_MARK_BOXMINUS);
 	SciCall_MarkerDefine(SC_MARKNUM_FOLDER, SC_MARK_BOXPLUS);
@@ -1654,14 +1663,16 @@ HWND EditCreate(HWND hwndParent) {
 	SciCall_SetDefaultFoldDisplayText(text);
 	// highlight for current folding block
 	SciCall_MarkerEnableHighlight(TRUE);
-#if NP2_ENABLE_SHOW_CALL_TIPS
+
 	// CallTips
-	SetCallTipsWaitTime();
+	SciCall_CallTipUseStyle(iTabWidth);
+#if NP2_ENABLE_SHOW_CALLTIPS
+	SciCall_SetMouseDwellTime(bShowCallTips? iCallTipsWaitTime : SC_TIME_FOREVER);
 #endif
 
 	// Nonprinting characters
-	SendMessage(hwnd, SCI_SETVIEWWS, (bViewWhiteSpace) ? SCWS_VISIBLEALWAYS : SCWS_INVISIBLE, 0);
-	SendMessage(hwnd, SCI_SETVIEWEOL, bViewEOLs, 0);
+	SciCall_SetViewWS((bViewWhiteSpace) ? SCWS_VISIBLEALWAYS : SCWS_INVISIBLE);
+	SciCall_SetViewEOL(bViewEOLs);
 
 	return hwnd;
 }
@@ -1681,6 +1692,7 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	// Setup edit control
 	hwndEdit = EditCreate(hwnd);
+	efrData.hwnd = hwndEdit;
 
 	hwndEditFrame = CreateWindowEx(
 						WS_EX_CLIENTEDGE,
@@ -1922,7 +1934,7 @@ void MsgDPIChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 #if 0
 	char buf[128];
 	sprintf(buf, "WM_DPICHANGED: dpi=%u, %u\n", g_uCurrentDPI, g_uDefaultDPI);
-	SendMessage(hwndEdit, SCI_INSERTTEXT, 0, (LPARAM)buf);
+	SciCall_InsertText(0, buf);
 #endif
 	// recreate toolbar and statusbar
 	Toolbar_GetButtons(hwndToolbar, TOOLBAR_COMMAND_BASE, tchToolbarButtons, COUNTOF(tchToolbarButtons));
@@ -1936,7 +1948,7 @@ void MsgDPIChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	Style_DetectBaseFontSize(hwnd);
 	UpdateSelectionMarginWidth();
 	UpdateStatusBarWidth();
-	Style_OnDPIChanged(hwndEdit);
+	Style_OnDPIChanged();
 	SciCall_GotoPos(pos);
 	UpdateToolbar();
 }
@@ -1974,7 +1986,7 @@ static void OnStyleThemeChanged(int theme) {
 	if (theme == np2StyleTheme) {
 		return;
 	}
-	Style_OnStyleThemeChanged(hwndEdit, theme);
+	Style_OnStyleThemeChanged(theme);
 }
 
 //=============================================================================
@@ -2110,6 +2122,12 @@ BOOL IsIMEInNativeMode(void) {
 void MsgNotifyZoom(void) {
 	iZoomLevel = SciCall_GetZoom();
 
+#if 0
+	char buf[64];
+	sprintf(buf, "Zoom: %d%%", iZoomLevel);
+	ShowNotificationA(SC_NOTIFICATIONPOSITION_CENTER, buf);
+#endif
+
 	UpdateStatusBarCache(STATUS_DOCZOOM);
 	UpdateLineNumberWidth();
 	UpdateFoldMarginWidth();
@@ -2143,6 +2161,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	EnableCmd(hmenu, IDM_FILE_OPEN_CONTAINING_FOLDER, i);
 	EnableCmd(hmenu, IDM_FILE_READONLY, i);
 	CheckCmd(hmenu, IDM_FILE_READONLY, bReadOnly);
+	CheckCmd(hmenu, IDM_FILE_LOCK_EDITING, bLockedForEditing);
 
 	//EnableCmd(hmenu, IDM_ENCODING_UNICODEREV, !bReadOnly);
 	//EnableCmd(hmenu, IDM_ENCODING_UNICODE, !bReadOnly);
@@ -2359,7 +2378,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	CheckCmd(hmenu, IDM_VIEW_SHOWEOLS, bViewEOLs);
 	CheckCmd(hmenu, IDM_VIEW_WORDWRAPSYMBOLS, bShowWordWrapSymbols);
 	CheckCmd(hmenu, IDM_VIEW_UNICODE_CONTROL_CHAR, bShowUnicodeControlCharacter);
-#if NP2_ENABLE_SHOW_CALL_TIPS
+#if NP2_ENABLE_SHOW_CALLTIPS
 	CheckCmd(hmenu, IDM_VIEW_SHOWCALLTIPS, bShowCallTips);
 #endif
 	CheckCmd(hmenu, IDM_VIEW_MATCHBRACES, bMatchBraces);
@@ -2448,8 +2467,8 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 static void ConvertLineEndings(int iNewEOLMode) {
 	iEOLMode = iNewEOLMode;
-	SendMessage(hwndEdit, SCI_SETEOLMODE, iNewEOLMode, 0);
-	SendMessage(hwndEdit, SCI_CONVERTEOLS, iNewEOLMode, 0);
+	SciCall_SetEOLMode(iNewEOLMode);
+	SciCall_ConvertEOLs(iNewEOLMode);
 	EditFixPositions();
 	UpdateStatusBarCache(STATUS_EOLMODE);
 	UpdateToolbar();
@@ -2481,21 +2500,21 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			}
 
 #if NP2_ENABLE_DOT_LOG_FEATURE
-			const int iCurPos = (int)SendMessage(hwndEdit, SCI_GETCURRENTPOS, 0, 0);
-			const int iAnchorPos = (int)SendMessage(hwndEdit, SCI_GETANCHOR, 0, 0);
-			const int iVisTopLine = (int)SendMessage(hwndEdit, SCI_GETFIRSTVISIBLELINE, 0, 0);
-			const int iDocTopLine = (int)SendMessage(hwndEdit, SCI_DOCLINEFROMVISIBLE, iVisTopLine, 0);
-			const int iXOffset = (int)SendMessage(hwndEdit, SCI_GETXOFFSET, 0, 0);
+			const Sci_Position iCurPos = SciCall_GetCurrentPos();
+			const Sci_Position iAnchorPos = SciCall_GetAnchor();
+			const Sci_Line iVisTopLine = SciCall_GetFirstVisibleLine();
+			const Sci_Line iDocTopLine = SciCall_DocLineFromVisible(iVisTopLine);
+			const int iXOffset = SciCall_GetXOffset();
 #endif
 			iWeakSrcEncoding = iEncoding;
 			if (FileLoad(TRUE, FALSE, TRUE, FALSE, szCurFile)) {
 #if NP2_ENABLE_DOT_LOG_FEATURE
-				if (IsFileStartsWithDotLog(hwndEdit)) {
-					SendMessage(hwndEdit, SCI_SETSEL, iAnchorPos, iCurPos);
+				if (IsFileStartsWithDotLog()) {
+					SciCall_SetSel(iAnchorPos, iCurPos);
 					SciCall_EnsureVisible(iDocTopLine);
-					const int iNewTopLine = (int)SendMessage(hwndEdit, SCI_GETFIRSTVISIBLELINE, 0, 0);
-					SendMessage(hwndEdit, SCI_LINESCROLL, 0, iVisTopLine - iNewTopLine);
-					SendMessage(hwndEdit, SCI_SETXOFFSET, iXOffset, 0);
+					const Sci_Line iNewTopLine = SciCall_GetFirstVisibleLine();
+					SciCall_LineScroll(0, iVisTopLine - iNewTopLine);
+					SciCall_SetXOffset(iXOffset);
 				}
 #endif
 			}
@@ -2516,9 +2535,6 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_FILE_READONLY:
-		//bReadOnly = !bReadOnly;
-		//SendMessage(hwndEdit, SCI_SETREADONLY, bReadOnly, 0);
-		//UpdateToolbar();
 		if (StrNotEmpty(szCurFile)) {
 			DWORD dwFileAttributes = GetFileAttributes(szCurFile);
 			if (dwFileAttributes != INVALID_FILE_ATTRIBUTES) {
@@ -2538,6 +2554,12 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			bReadOnly = (dwFileAttributes != INVALID_FILE_ATTRIBUTES) && (dwFileAttributes & FILE_ATTRIBUTE_READONLY);
 			UpdateWindowTitle();
 		}
+		break;
+
+	case IDM_FILE_LOCK_EDITING:
+		bLockedForEditing = !bLockedForEditing;
+		SciCall_SetReadOnly(bLockedForEditing);
+		UpdateWindowTitle();
 		break;
 
 	case IDM_FILE_BROWSE:
@@ -2782,8 +2804,8 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			break;
 		}
 
-		if (EditSetNewEncoding(hwndEdit, iEncoding, iNewEncoding, (flagSetEncoding), StrIsEmpty(szCurFile))) {
-			if (SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0) == 0) {
+		if (EditSetNewEncoding(iEncoding, iNewEncoding, (flagSetEncoding), StrIsEmpty(szCurFile))) {
+			if (SciCall_GetLength() == 0) {
 				iEncoding = iNewEncoding;
 				iOriginalEncoding = iNewEncoding;
 			} else {
@@ -2851,11 +2873,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_EDIT_UNDO:
-		SendMessage(hwndEdit, SCI_UNDO, 0, 0);
+		SciCall_Undo();
 		break;
 
 	case IDM_EDIT_REDO:
-		SendMessage(hwndEdit, SCI_REDO, 0, 0);
+		SciCall_Redo();
 		break;
 
 	case IDM_EDIT_CUT:
@@ -2879,7 +2901,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		if (flagPasteBoard) {
 			bLastCopyFromMe = TRUE;
 		}
-		SendMessage(hwndEdit, SCI_COPYRANGE, 0, SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0));
+		SciCall_CopyRange(0, SciCall_GetLength());
 		UpdateToolbar();
 		break;
 
@@ -2897,28 +2919,28 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_EDIT_SWAP:
-		if (SendMessage(hwndEdit, SCI_GETSELECTIONEND, 0, 0) == SendMessage(hwndEdit, SCI_GETSELECTIONSTART, 0, 0)) {
-			const int iPos = (int)SendMessage(hwndEdit, SCI_GETCURRENTPOS, 0, 0);
+		if (SciCall_IsSelectionEmpty()) {
+			const Sci_Position iPos = SciCall_GetCurrentPos();
 			SciCall_Paste(FALSE);
-			const int iNewPos = (int)SendMessage(hwndEdit, SCI_GETCURRENTPOS, 0, 0);
-			SendMessage(hwndEdit, SCI_SETSEL, iPos, iNewPos);
+			const Sci_Position iNewPos = SciCall_GetCurrentPos();
+			SciCall_SetSel(iPos, iNewPos);
 			SendWMCommand(hwnd, IDM_EDIT_CLEARCLIPBOARD);
 		} else {
-			const int iPos = (int)SendMessage(hwndEdit, SCI_GETCURRENTPOS, 0, 0);
-			const int iAnchor = (int)SendMessage(hwndEdit, SCI_GETANCHOR, 0, 0);
+			const Sci_Position iPos = SciCall_GetCurrentPos();
+			const Sci_Position iAnchor = SciCall_GetAnchor();
 			char *pClip = EditGetClipboardText(hwndEdit);
 			if (flagPasteBoard) {
 				bLastCopyFromMe = TRUE;
 			}
-			SendMessage(hwndEdit, SCI_BEGINUNDOACTION, 0, 0);
+			SciCall_BeginUndoAction();
 			SciCall_Cut(FALSE);
-			SendMessage(hwndEdit, SCI_REPLACESEL, 0, (LPARAM)pClip);
+			SciCall_ReplaceSel(pClip);
 			if (iPos > iAnchor) {
-				SendMessage(hwndEdit, SCI_SETSEL, iAnchor, iAnchor + strlen(pClip));
+				SciCall_SetSel(iAnchor, iAnchor + strlen(pClip));
 			} else {
-				SendMessage(hwndEdit, SCI_SETSEL, iPos + strlen(pClip), iPos);
+				SciCall_SetSel(iPos + strlen(pClip), iPos);
 			}
-			SendMessage(hwndEdit, SCI_ENDUNDOACTION, 0, 0);
+			SciCall_EndUndoAction();
 			LocalFree(pClip);
 		}
 		break;
@@ -2943,8 +2965,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_EDIT_SELECTALL:
-		SendMessage(hwndEdit, SCI_SELECTALL, 0, 0);
-		//SendMessage(hwndEdit, SCI_SETSEL, 0, -1);
+		SciCall_SelectAll();
 		break;
 
 	case IDM_EDIT_SELECTWORD:
@@ -2956,74 +2977,70 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_EDIT_MOVELINEUP:
-		EditMoveUp(hwndEdit);
+		EditMoveUp();
 		break;
 
 	case IDM_EDIT_MOVELINEDOWN:
-		EditMoveDown(hwndEdit);
+		EditMoveDown();
 		break;
 
 	case IDM_EDIT_LINETRANSPOSE:
-		SendMessage(hwndEdit, SCI_LINETRANSPOSE, 0, 0);
+		SciCall_LineTranspose();
 		break;
 
 	case IDM_EDIT_DUPLICATELINE:
-		SendMessage(hwndEdit, SCI_LINEDUPLICATE, 0, 0);
+		SciCall_LineDuplicate();
 		break;
 
 	case IDM_EDIT_CUTLINE:
 		if (flagPasteBoard) {
 			bLastCopyFromMe = TRUE;
 		}
-		SendMessage(hwndEdit, SCI_LINECUT, 0, 0);
+		SciCall_LineCut();
 		break;
 
 	case IDM_EDIT_COPYLINE:
 		if (flagPasteBoard) {
 			bLastCopyFromMe = TRUE;
 		}
-		SendMessage(hwndEdit, SCI_LINECOPY, 0, 0);
+		SciCall_LineCopy();
 		UpdateToolbar();
 		break;
 
 	case IDM_EDIT_DELETELINE:
-		SendMessage(hwndEdit, SCI_LINEDELETE, 0, 0);
+		SciCall_LineDelete();
 		break;
 
 	case IDM_EDIT_DELETELINELEFT:
-		SendMessage(hwndEdit, SCI_DELLINELEFT, 0, 0);
+		SciCall_DelLineLeft();
 		break;
 
 	case IDM_EDIT_DELETELINERIGHT:
-		SendMessage(hwndEdit, SCI_DELLINERIGHT, 0, 0);
+		SciCall_DelLineRight();
 		break;
 
 	case IDM_EDIT_INDENT: {
-		const int iLineSelStart = (int)SendMessage(hwndEdit, SCI_LINEFROMPOSITION, SendMessage(hwndEdit, SCI_GETSELECTIONSTART, 0, 0), 0);
-		const int iLineSelEnd = (int)SendMessage(hwndEdit, SCI_LINEFROMPOSITION, SendMessage(hwndEdit, SCI_GETSELECTIONEND, 0, 0), 0);
+		const Sci_Line iLineSelStart = SciCall_LineFromPosition(SciCall_GetSelectionStart());
+		const Sci_Line iLineSelEnd = SciCall_LineFromPosition(SciCall_GetSelectionEnd());
 
 		SciCall_SetTabIndents(TRUE);
 		if (iLineSelStart == iLineSelEnd) {
-			SendMessage(hwndEdit, SCI_VCHOME, 0, 0);
-			SendMessage(hwndEdit, SCI_TAB, 0, 0);
-		} else {
-			SendMessage(hwndEdit, SCI_TAB, 0, 0);
+			SciCall_VCHome();
 		}
+		SciCall_Tab();
 		SciCall_SetTabIndents(bTabIndents);
 	}
 	break;
 
 	case IDM_EDIT_UNINDENT: {
-		const int iLineSelStart	= (int)SendMessage(hwndEdit, SCI_LINEFROMPOSITION, SendMessage(hwndEdit, SCI_GETSELECTIONSTART, 0, 0), 0);
-		const int iLineSelEnd = (int)SendMessage(hwndEdit, SCI_LINEFROMPOSITION, SendMessage(hwndEdit, SCI_GETSELECTIONEND, 0, 0), 0);
+		const Sci_Line iLineSelStart = SciCall_LineFromPosition(SciCall_GetSelectionStart());
+		const Sci_Line iLineSelEnd = SciCall_LineFromPosition(SciCall_GetSelectionEnd());
 
 		SciCall_SetTabIndents(TRUE);
 		if (iLineSelStart == iLineSelEnd) {
-			SendMessage(hwndEdit, SCI_VCHOME, 0, 0);
-			SendMessage(hwndEdit, SCI_BACKTAB, 0, 0);
-		} else {
-			SendMessage(hwndEdit, SCI_BACKTAB, 0, 0);
+			SciCall_VCHome();
 		}
+		SciCall_BackTab();
 		SciCall_SetTabIndents(bTabIndents);
 	}
 	break;
@@ -3033,26 +3050,26 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_EDIT_SELECTIONDUPLICATE:
-		SendMessage(hwndEdit, SCI_BEGINUNDOACTION, 0, 0);
-		SendMessage(hwndEdit, SCI_SELECTIONDUPLICATE, 0, 0);
-		SendMessage(hwndEdit, SCI_ENDUNDOACTION, 0, 0);
+		SciCall_BeginUndoAction();
+		SciCall_SelectionDuplicate();
+		SciCall_EndUndoAction();
 		break;
 
 	case IDM_EDIT_PADWITHSPACES:
 		BeginWaitCursor();
-		EditPadWithSpaces(hwndEdit, FALSE, FALSE);
+		EditPadWithSpaces(FALSE, FALSE);
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_STRIP1STCHAR:
 		BeginWaitCursor();
-		EditStripFirstCharacter(hwndEdit);
+		EditStripFirstCharacter();
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_STRIPLASTCHAR:
 		BeginWaitCursor();
-		EditStripLastCharacter(hwndEdit);
+		EditStripLastCharacter();
 		EndWaitCursor();
 		break;
 
@@ -3070,19 +3087,19 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_EDIT_COMPRESSWS:
 		BeginWaitCursor();
-		EditCompressSpaces(hwndEdit);
+		EditCompressSpaces();
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_MERGEBLANKLINES:
 		BeginWaitCursor();
-		EditRemoveBlankLines(hwndEdit, TRUE);
+		EditRemoveBlankLines(TRUE);
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_REMOVEBLANKLINES:
 		BeginWaitCursor();
-		EditRemoveBlankLines(hwndEdit, FALSE);
+		EditRemoveBlankLines(FALSE);
 		EndWaitCursor();
 		break;
 
@@ -3093,7 +3110,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_EDIT_ALIGN:
 		if (EditAlignDlg(hwnd, &iAlignMode)) {
 			BeginWaitCursor();
-			EditAlignText(hwndEdit, iAlignMode);
+			EditAlignText(iAlignMode);
 			EndWaitCursor();
 		}
 		break;
@@ -3105,7 +3122,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			StatusSetSimple(hwndStatus, TRUE);
 			InvalidateRect(hwndStatus, NULL, TRUE);
 			UpdateWindow(hwndStatus);
-			EditSortLines(hwndEdit, iSortOptions);
+			EditSortLines(iSortOptions);
 			StatusSetSimple(hwndStatus, FALSE);
 			EndWaitCursor();
 		}
@@ -3119,7 +3136,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		if (ColumnWrapDlg(hwnd, &iWrapCol)) {
 			iWrapCol = clamp_i(iWrapCol, 1, 512);
 			BeginWaitCursor();
-			EditWrapToColumn(hwndEdit, iWrapCol);
+			EditWrapToColumn(iWrapCol);
 			EndWaitCursor();
 		}
 	}
@@ -3127,76 +3144,76 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_EDIT_SPLITLINES:
 		BeginWaitCursor();
-		SendMessage(hwndEdit, SCI_TARGETFROMSELECTION, 0, 0);
-		SendMessage(hwndEdit, SCI_LINESSPLIT, 0, 0);
+		SciCall_TargetFromSelection();
+		SciCall_LinesSplit(0);
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_JOINLINES:
 		BeginWaitCursor();
-		SendMessage(hwndEdit, SCI_TARGETFROMSELECTION, 0, 0);
-		SendMessage(hwndEdit, SCI_LINESJOIN, 0, 0);
-		EditJoinLinesEx(hwndEdit);
+		SciCall_TargetFromSelection();
+		SciCall_LinesJoin();
+		EditJoinLinesEx();
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_JOINLINESEX:
 		BeginWaitCursor();
-		EditJoinLinesEx(hwndEdit);
+		EditJoinLinesEx();
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_CONVERTUPPERCASE:
 		BeginWaitCursor();
-		SendMessage(hwndEdit, SCI_UPPERCASE, 0, 0);
+		SciCall_UpperCase();
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_CONVERTLOWERCASE:
 		BeginWaitCursor();
-		SendMessage(hwndEdit, SCI_LOWERCASE, 0, 0);
+		SciCall_LowerCase();
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_INVERTCASE:
 		BeginWaitCursor();
-		EditInvertCase(hwndEdit);
+		EditInvertCase();
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_TITLECASE:
 		BeginWaitCursor();
-		EditTitleCase(hwndEdit);
+		EditTitleCase();
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_SENTENCECASE:
 		BeginWaitCursor();
-		EditSentenceCase(hwndEdit);
+		EditSentenceCase();
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_CONVERTTABS:
 		BeginWaitCursor();
-		EditTabsToSpaces(hwndEdit, iTabWidth, FALSE);
+		EditTabsToSpaces(iTabWidth, FALSE);
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_CONVERTSPACES:
 		BeginWaitCursor();
-		EditSpacesToTabs(hwndEdit, iTabWidth, FALSE);
+		EditSpacesToTabs(iTabWidth, FALSE);
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_CONVERTTABS2:
 		BeginWaitCursor();
-		EditTabsToSpaces(hwndEdit, iTabWidth, TRUE);
+		EditTabsToSpaces(iTabWidth, TRUE);
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_CONVERTSPACES2:
 		BeginWaitCursor();
-		EditSpacesToTabs(hwndEdit, iTabWidth, TRUE);
+		EditSpacesToTabs(iTabWidth, TRUE);
 		EndWaitCursor();
 		break;
 
@@ -3214,7 +3231,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 					guid.Data4[2], guid.Data4[3], guid.Data4[4],
 					guid.Data4[5], guid.Data4[6], guid.Data4[7]
 				   );
-			SendMessage(hwndEdit, SCI_REPLACESEL, 0, (LPARAM)guidBuf);
+			SciCall_ReplaceSel(guidBuf);
 		}
 	}
 	break;
@@ -3238,7 +3255,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_INSERT_UNICODE_US:
 	case IDM_INSERT_UNICODE_LS:
 	case IDM_INSERT_UNICODE_PS:
-		EditInsertUnicodeControlCharacter(hwndEdit, LOWORD(wParam));
+		EditInsertUnicodeControlCharacter(LOWORD(wParam));
 		break;
 
 	case IDM_EDIT_INSERT_ENCODING: {
@@ -3257,19 +3274,19 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				if (iCurLine < 2 && iCurrentLinePos == 0) {
 					char cmsz[128];
 					sprintf(cmsz, "#-*- coding: %s -*-", msz);
-					SendMessage(hwndEdit, SCI_REPLACESEL, 0, (LPARAM)cmsz);
+					SciCall_ReplaceSel(cmsz);
 					done = TRUE;
 				}
 			}
 			if (!done) {
-				SendMessage(hwndEdit, SCI_REPLACESEL, 0, (LPARAM)msz);
+				SciCall_ReplaceSel(msz);
 			}
 		}
 	}
 	break;
 
 	case IDM_EDIT_INSERT_SHEBANG:
-		EditInsertScriptShebangLine(hwndEdit);
+		EditInsertScriptShebangLine();
 		break;
 
 	case IDM_EDIT_INSERT_SHORTDATE:
@@ -3308,9 +3325,9 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		const UINT cpEdit = SciCall_GetCodePage();
 		char mszBuf[256 * kMaxMultiByteCount];
 		WideCharToMultiByte(cpEdit, 0, tchDateTime, -1, mszBuf, COUNTOF(mszBuf), NULL, NULL);
-		//const int iSelStart = SendMessage(hwndEdit, SCI_GETSELECTIONSTART, 0, 0);
-		SendMessage(hwndEdit, SCI_REPLACESEL, 0, (LPARAM)mszBuf);
-		//SendMessage(hwndEdit, SCI_SETANCHOR, iSelStart, 0);
+		//const Sci_Position iSelStart = SciCall_GetSelectionStart();
+		SciCall_ReplaceSel(mszBuf);
+		//SciCall_SetAnchor(iSelStart);
 	}
 	break;
 
@@ -3325,7 +3342,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		} else {
 			sprintf(mszBuf, "%04d-%02d-%02d %02d:%02d:%02d", lt.wYear, lt.wMonth, lt.wDay, lt.wHour, lt.wMinute, lt.wSecond);
 		}
-		SendMessage(hwndEdit, SCI_REPLACESEL, 0, (LPARAM)mszBuf);
+		SciCall_ReplaceSel(mszBuf);
 	}
 	break;
 
@@ -3335,7 +3352,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		// UTC
 		GetSystemTime(&lt);
 		sprintf(mszBuf, "%04d-%02d-%02dT%02d:%02d:%02dZ", lt.wYear, lt.wMonth, lt.wDay, lt.wHour, lt.wMinute, lt.wSecond);
-		SendMessage(hwndEdit, SCI_REPLACESEL, 0, (LPARAM)mszBuf);
+		SciCall_ReplaceSel(mszBuf);
 	}
 	break;
 
@@ -3367,7 +3384,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			break;
 		}
 		sprintf(mszBuf, "%" PRIu64, timestamp);
-		SendMessage(hwndEdit, SCI_REPLACESEL, 0, (LPARAM)mszBuf);
+		SciCall_ReplaceSel(mszBuf);
 	}
 	break;
 
@@ -3404,30 +3421,30 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			char mszBuf[MAX_PATH * kMaxMultiByteCount];
 			const UINT cpEdit = SciCall_GetCodePage();
 			WideCharToMultiByte(cpEdit, 0, pszInsert, -1, mszBuf, COUNTOF(mszBuf), NULL, NULL);
-			//iSelStart = SendMessage(hwndEdit, SCI_GETSELECTIONSTART, 0, 0);
-			SendMessage(hwndEdit, SCI_REPLACESEL, 0, (LPARAM)mszBuf);
-			//SendMessage(hwndEdit, SCI_SETANCHOR, iSelStart, 0);
+			//const Sci_Position iSelStart = SciCall_GetSelectionStart();
+			SciCall_ReplaceSel(mszBuf);
+			//SciCall_SetAnchor(iSelStart);
 		}
 	}
 	break;
 
 	case IDM_EDIT_LINECOMMENT:
-		EditToggleCommentLine(hwndEdit);
+		EditToggleCommentLine();
 		break;
 
 	case IDM_EDIT_STREAMCOMMENT:
-		EditToggleCommentBlock(hwndEdit);
+		EditToggleCommentBlock();
 		break;
 
 	case IDM_EDIT_URLENCODE:
 		BeginWaitCursor();
-		EditURLEncode(hwndEdit);
+		EditURLEncode();
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_URLDECODE:
 		BeginWaitCursor();
-		EditURLDecode(hwndEdit);
+		EditURLDecode();
 		EndWaitCursor();
 		break;
 
@@ -3457,43 +3474,43 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_EDIT_CHAR2HEX:
 		BeginWaitCursor();
-		EditChar2Hex(hwndEdit);
+		EditChar2Hex();
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_HEX2CHAR:
 		BeginWaitCursor();
-		EditHex2Char(hwndEdit);
+		EditHex2Char();
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_SHOW_HEX:
 		BeginWaitCursor();
-		EditShowHex(hwndEdit);
+		EditShowHex();
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_NUM2HEX:
 		BeginWaitCursor();
-		EditConvertNumRadix(hwndEdit, 16);
+		EditConvertNumRadix(16);
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_NUM2DEC:
 		BeginWaitCursor();
-		EditConvertNumRadix(hwndEdit, 10);
+		EditConvertNumRadix(10);
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_NUM2BIN:
 		BeginWaitCursor();
-		EditConvertNumRadix(hwndEdit, 2);
+		EditConvertNumRadix(2);
 		EndWaitCursor();
 		break;
 
 	case IDM_EDIT_NUM2OCT:
 		BeginWaitCursor();
-		EditConvertNumRadix(hwndEdit, 8);
+		EditConvertNumRadix(8);
 		EndWaitCursor();
 		break;
 
@@ -3502,12 +3519,12 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		Sci_Position iPos = SciCall_GetCurrentPos();
 		int ch = SciCall_GetCharAt(iPos);
 		if (ch < 0x80 && strchr("()[]{}<>", ch)) {
-			iBrace2 = (Sci_Position)SendMessage(hwndEdit, SCI_BRACEMATCH, iPos, 0);
+			iBrace2 = SciCall_BraceMatch(iPos, 0);
 		} else { // Try one before
 			iPos = SciCall_PositionBefore(iPos);
 			ch = SciCall_GetCharAt(iPos);
 			if (ch < 0x80 && strchr("()[]{}<>", ch)) {
-				iBrace2 = (Sci_Position)SendMessage(hwndEdit, SCI_BRACEMATCH, iPos, 0);
+				iBrace2 = SciCall_BraceMatch(iPos, 0);
 			}
 		}
 		if (iBrace2 != -1) {
@@ -3521,12 +3538,12 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		Sci_Position iPos = SciCall_GetCurrentPos();
 		int ch = SciCall_GetCharAt(iPos);
 		if (ch < 0x80 && strchr("()[]{}<>", ch)) {
-			iBrace2 = (Sci_Position)SendMessage(hwndEdit, SCI_BRACEMATCH, iPos, 0);
+			iBrace2 = SciCall_BraceMatch(iPos, 0);
 		} else { // Try one before
 			iPos = SciCall_PositionBefore(iPos);
 			ch = SciCall_GetCharAt(iPos);
 			if (ch < 0x80 && strchr("()[]{}<>", ch)) {
-				iBrace2 = (Sci_Position)SendMessage(hwndEdit, SCI_BRACEMATCH, iPos, 0);
+				iBrace2 = SciCall_BraceMatch(iPos, 0);
 			}
 		}
 		if (iBrace2 != -1) {
@@ -3556,17 +3573,17 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	// Main Bookmark Functions
 	case BME_EDIT_BOOKMARKNEXT: {
-		const int iPos = (int)SendMessage(hwndEdit, SCI_GETCURRENTPOS, 0, 0);
-		const int iLine = (int)SendMessage(hwndEdit, SCI_LINEFROMPOSITION, iPos, 0);
+		const Sci_Position iPos = SciCall_GetCurrentPos();
+		const Sci_Line iLine = SciCall_LineFromPosition(iPos);
 
-		int iNextLine = (int)SendMessage(hwndEdit, SCI_MARKERNEXT, iLine + 1, MarkerBitmask_Bookmark);
+		Sci_Line iNextLine = SciCall_MarkerNext(iLine + 1, MarkerBitmask_Bookmark);
 		if (iNextLine == -1) {
-			iNextLine = (int)SendMessage(hwndEdit, SCI_MARKERNEXT, 0, MarkerBitmask_Bookmark);
+			iNextLine = SciCall_MarkerNext(0, MarkerBitmask_Bookmark);
 		}
 
 		if (iNextLine != -1) {
 			SciCall_EnsureVisible(iNextLine);
-			SendMessage(hwndEdit, SCI_GOTOLINE, iNextLine, 0);
+			SciCall_GotoLine(iNextLine);
 			SciCall_SetYCaretPolicy(CARET_SLOP | CARET_STRICT | CARET_EVEN, 10);
 			SciCall_ScrollCaret();
 			SciCall_SetYCaretPolicy(CARET_EVEN, 0);
@@ -3575,18 +3592,18 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	break;
 
 	case BME_EDIT_BOOKMARKPREV: {
-		const int iPos = (int)SendMessage(hwndEdit, SCI_GETCURRENTPOS, 0, 0);
-		const int iLine = (int)SendMessage(hwndEdit, SCI_LINEFROMPOSITION, iPos, 0);
+		const Sci_Position iPos = SciCall_GetCurrentPos();
+		const Sci_Line iLine = SciCall_LineFromPosition(iPos);
 
-		int iNextLine = (int)SendMessage(hwndEdit, SCI_MARKERPREVIOUS, iLine - 1, MarkerBitmask_Bookmark);
+		Sci_Line iNextLine = SciCall_MarkerPrevious(iLine - 1, MarkerBitmask_Bookmark);
 		if (iNextLine == -1) {
-			const int nLines = (int)SendMessage(hwndEdit, SCI_GETLINECOUNT, 0, 0);
-			iNextLine = (int)SendMessage(hwndEdit, SCI_MARKERPREVIOUS, nLines, MarkerBitmask_Bookmark);
+			const Sci_Line nLines = SciCall_GetLineCount();
+			iNextLine = SciCall_MarkerPrevious(nLines, MarkerBitmask_Bookmark);
 		}
 
 		if (iNextLine != -1) {
 			SciCall_EnsureVisible(iNextLine);
-			SendMessage(hwndEdit, SCI_GOTOLINE, iNextLine, 0);
+			SciCall_GotoLine(iNextLine);
 			SciCall_SetYCaretPolicy(CARET_SLOP | CARET_STRICT | CARET_EVEN, 10);
 			SciCall_ScrollCaret();
 			SciCall_SetYCaretPolicy(CARET_EVEN, 0);
@@ -3595,23 +3612,23 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	break;
 
 	case BME_EDIT_BOOKMARKTOGGLE: {
-		const int iPos = (int)SendMessage(hwndEdit, SCI_GETCURRENTPOS, 0, 0);
-		const int iLine = (int)SendMessage(hwndEdit, SCI_LINEFROMPOSITION, iPos, 0);
+		const Sci_Position iPos = SciCall_GetCurrentPos();
+		const Sci_Line iLine = SciCall_LineFromPosition(iPos);
 
-		const int bitmask = (int)SendMessage(hwndEdit, SCI_MARKERGET, iLine, 0);
+		const int bitmask = SciCall_MarkerGet(iLine);
 		if (bitmask & MarkerBitmask_Bookmark) {
 			// unset
-			SendMessage(hwndEdit, SCI_MARKERDELETE, iLine, MarkerNumber_Bookmark);
+			SciCall_MarkerDelete(iLine, MarkerNumber_Bookmark);
 		} else {
 			Style_SetBookmark();
 			// set
-			SendMessage(hwndEdit, SCI_MARKERADD, iLine, MarkerNumber_Bookmark);
+			SciCall_MarkerAdd(iLine, MarkerNumber_Bookmark);
 		}
 	}
 	break;
 
 	case BME_EDIT_BOOKMARKCLEAR:
-		SendMessage(hwndEdit, SCI_MARKERDELETEALL, MarkerNumber_Bookmark, 0);
+		SciCall_MarkerDeleteAll(MarkerNumber_Bookmark);
 		break;
 
 	case IDM_EDIT_FINDNEXT:
@@ -3619,7 +3636,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_EDIT_REPLACENEXT:
 	case IDM_EDIT_SELTONEXT:
 	case IDM_EDIT_SELTOPREV:
-		if (SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0) == 0) {
+		if (SciCall_GetLength() == 0) {
 			break;
 		}
 
@@ -3649,11 +3666,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			cpLastFind = cpEdit;
 			switch (LOWORD(wParam)) {
 			case IDM_EDIT_FINDNEXT:
-				EditFindNext(hwndEdit, &efrData, FALSE);
+				EditFindNext(&efrData, FALSE);
 				break;
 
 			case IDM_EDIT_FINDPREV:
-				EditFindPrev(hwndEdit, &efrData, FALSE);
+				EditFindPrev(&efrData, FALSE);
 				break;
 
 			case IDM_EDIT_REPLACENEXT:
@@ -3665,11 +3682,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				break;
 
 			case IDM_EDIT_SELTONEXT:
-				EditFindNext(hwndEdit, &efrData, TRUE);
+				EditFindNext(&efrData, TRUE);
 				break;
 
 			case IDM_EDIT_SELTOPREV:
-				EditFindPrev(hwndEdit, &efrData, TRUE);
+				EditFindPrev(&efrData, TRUE);
 				break;
 			}
 		}
@@ -3677,22 +3694,22 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_EDIT_SELTODOCEND:
 	case IDM_EDIT_SELTODOCSTART: {
-		int selStart;
-		int selEnd;
+		Sci_Position selStart;
+		Sci_Position selEnd;
 		if (LOWORD(wParam) == IDM_EDIT_SELTODOCEND) {
-			selStart = (int)SendMessage(hwndEdit, SCI_GETSELECTIONSTART, 0, 0);
-			selEnd = (int)SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0);
+			selStart = SciCall_GetSelectionStart();
+			selEnd = SciCall_GetLength();
 		} else {
 			selStart = 0;
-			selEnd = (int)SendMessage(hwndEdit, SCI_GETSELECTIONEND, 0, 0);
+			selEnd = SciCall_GetSelectionEnd();
 		}
-		SendMessage(hwndEdit, SCI_SETSELECTIONSTART, selStart, 0);
-		SendMessage(hwndEdit, SCI_SETSELECTIONEND, selEnd, 0);
+		SciCall_SetSelectionStart(selStart);
+		SciCall_SetSelectionEnd(selEnd);
 	}
 	break;
 
 	case IDM_EDIT_COMPLETEWORD:
-		EditCompleteWord(hwndEdit, TRUE);
+		EditCompleteWord(AutoCompleteCondition_Normal, TRUE);
 		break;
 
 	case IDM_EDIT_REPLACE:
@@ -3719,11 +3736,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_VIEW_USE2NDGLOBALSTYLE:
-		Style_ToggleUse2ndGlobalStyle(hwndEdit);
+		Style_ToggleUse2ndGlobalStyle();
 		break;
 
 	case IDM_VIEW_USEDEFAULT_CODESTYLE:
-		Style_ToggleUseDefaultCodeStyle(hwndEdit);
+		Style_ToggleUseDefaultCodeStyle();
 		break;
 
 	case IDM_VIEW_STYLE_THEME_DEFAULT:
@@ -3742,15 +3759,15 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_VIEW_WORDWRAP:
 		fWordWrap = !fWordWrap;
-		SendMessage(hwndEdit, SCI_SETWRAPMODE, (fWordWrap? iWordWrapMode : SC_WRAP_NONE), 0);
+		SciCall_SetWrapMode(fWordWrap? iWordWrapMode : SC_WRAP_NONE);
 		fWordWrapG = fWordWrap;
 		UpdateToolbar();
 		break;
 
 	case IDM_VIEW_WORDWRAPSETTINGS:
 		if (WordWrapSettingsDlg(hwnd, &iWordWrapIndent)) {
-			SendMessage(hwndEdit, SCI_SETWRAPMODE, (fWordWrap? iWordWrapMode : SC_WRAP_NONE), 0);
-			SendMessage(hwndEdit, SCI_SETMARGINOPTIONS, (bWordWrapSelectSubLine ? SC_MARGINOPTION_SUBLINESELECT : SC_MARGINOPTION_NONE), 0);
+			SciCall_SetWrapMode(fWordWrap? iWordWrapMode : SC_WRAP_NONE);
+			SciCall_SetMarginOptions(bWordWrapSelectSubLine ? SC_MARGINOPTION_SUBLINESELECT : SC_MARGINOPTION_NONE);
 			fWordWrapG = fWordWrap;
 			UpdateToolbar();
 			SetWrapIndentMode();
@@ -3761,20 +3778,20 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_VIEW_LONGLINEMARKER:
 		bMarkLongLines = !bMarkLongLines;
 		if (bMarkLongLines) {
-			SendMessage(hwndEdit, SCI_SETEDGEMODE, (iLongLineMode == EDGE_LINE) ? EDGE_LINE : EDGE_BACKGROUND, 0);
-			Style_SetLongLineColors(hwndEdit);
+			SciCall_SetEdgeMode((iLongLineMode == EDGE_LINE) ? EDGE_LINE : EDGE_BACKGROUND);
+			Style_SetLongLineColors();
 		} else {
-			SendMessage(hwndEdit, SCI_SETEDGEMODE, EDGE_NONE, 0);
+			SciCall_SetEdgeMode(EDGE_NONE);
 		}
 		break;
 
 	case IDM_VIEW_LONGLINESETTINGS:
 		if (LongLineSettingsDlg(hwnd, &iLongLinesLimit)) {
 			bMarkLongLines = TRUE;
-			SendMessage(hwndEdit, SCI_SETEDGEMODE, (iLongLineMode == EDGE_LINE) ? EDGE_LINE : EDGE_BACKGROUND, 0);
-			Style_SetLongLineColors(hwndEdit);
+			SciCall_SetEdgeMode((iLongLineMode == EDGE_LINE) ? EDGE_LINE : EDGE_BACKGROUND);
+			Style_SetLongLineColors();
 			iLongLinesLimit = clamp_i(iLongLinesLimit, 0, NP2_LONG_LINE_LIMIT);
-			SendMessage(hwndEdit, SCI_SETEDGECOLUMN, iLongLinesLimit, 0);
+			SciCall_SetEdgeColumn(iLongLinesLimit);
 			iLongLinesLimitG = iLongLinesLimit;
 		}
 		break;
@@ -3793,12 +3810,13 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			iTabWidth = clamp_i(iTabWidth, 1, 256);
 			iIndentWidth = clamp_i(iIndentWidth, 0, 256);
 			SciCall_SetTabWidth(iTabWidth);
+			SciCall_CallTipUseStyle(iTabWidth);
 			SciCall_SetIndent(iIndentWidth);
 			bTabsAsSpacesG = bTabsAsSpaces;
 			bTabIndentsG = bTabIndents;
 			iTabWidthG = iTabWidth;
 			iIndentWidthG = iIndentWidth;
-			if (SendMessage(hwndEdit, SCI_GETWRAPINDENTMODE, 0, 0) == SC_WRAPINDENT_FIXED) {
+			if (SciCall_GetWrapIndentMode() == SC_WRAPINDENT_FIXED) {
 				SetWrapStartIndent();
 			}
 		}
@@ -3806,7 +3824,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_VIEW_SHOWINDENTGUIDES:
 		bShowIndentGuides = !bShowIndentGuides;
-		Style_SetIndentGuides(hwndEdit, bShowIndentGuides);
+		Style_SetIndentGuides(bShowIndentGuides);
 		break;
 
 	case IDM_VIEW_LINENUMBERS:
@@ -3823,14 +3841,14 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_VIEW_AUTOCOMPLETION_SETTINGS:
 		if (AutoCompletionSettingsDlg(hwnd)) {
 			if (!autoCompletionConfig.bCompleteWord) {
-				// close the autocompletion list
-				SendMessage(hwndEdit, SCI_AUTOCCANCEL, 0, 0);
+				SciCall_AutoCCancel();
 			}
 		}
 		break;
 
 	case IDM_VIEW_AUTOCOMPLETION_IGNORECASE:
 		autoCompletionConfig.bIgnoreCase = !autoCompletionConfig.bIgnoreCase;
+		SciCall_AutoCCancel();
 		break;
 
 	case IDM_VIEW_MARKOCCURRENCES_OFF:
@@ -3915,12 +3933,12 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_VIEW_SHOWWHITESPACE:
 		bViewWhiteSpace = !bViewWhiteSpace;
-		SendMessage(hwndEdit, SCI_SETVIEWWS, (bViewWhiteSpace) ? SCWS_VISIBLEALWAYS : SCWS_INVISIBLE, 0);
+		SciCall_SetViewWS((bViewWhiteSpace) ? SCWS_VISIBLEALWAYS : SCWS_INVISIBLE);
 		break;
 
 	case IDM_VIEW_SHOWEOLS:
 		bViewEOLs = !bViewEOLs;
-		SendMessage(hwndEdit, SCI_SETVIEWEOL, bViewEOLs, 0);
+		SciCall_SetViewEOL(bViewEOLs);
 		break;
 
 	case IDM_VIEW_WORDWRAPSYMBOLS:
@@ -3930,15 +3948,14 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_VIEW_UNICODE_CONTROL_CHAR:
 		bShowUnicodeControlCharacter = !bShowUnicodeControlCharacter;
-		EditShowUnicodeControlCharacter(hwndEdit, bShowUnicodeControlCharacter);
-		// temporary fix for issue #77: force InvalidateStyleRedraw().
-		SendMessage(hwndEdit, SCI_SETVIEWEOL, bViewEOLs, 0);
+		EditShowUnicodeControlCharacter(bShowUnicodeControlCharacter);
+		InvalidateStyleRedraw();
 		break;
 
-#if NP2_ENABLE_SHOW_CALL_TIPS
+#if NP2_ENABLE_SHOW_CALLTIPS
 	case IDM_VIEW_SHOWCALLTIPS:
 		bShowCallTips = !bShowCallTips;
-		SetCallTipsWaitTime();
+		SciCall_SetMouseDwellTime(bShowCallTips? iCallTipsWaitTime : SC_TIME_FOREVER);
 		break;
 #endif
 
@@ -3952,7 +3969,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			scn.updated = NP2_CUSTOM_UPDATE;
 			SendMessage(hwnd, WM_NOTIFY, IDC_EDIT, (LPARAM)&scn);
 		} else {
-			SendMessage(hwndEdit, SCI_BRACEHIGHLIGHT, (WPARAM)(-1), -1);
+			SciCall_BraceHighlight(-1, -1);
 		}
 		break;
 
@@ -4058,8 +4075,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_SET_RTL_LAYOUT_EDIT:
 		bEditLayoutRTL = !bEditLayoutRTL;
 		SetWindowLayoutRTL(hwndEdit, bEditLayoutRTL);
-		// force InvalidateStyleRedraw().
-		SendMessage(hwndEdit, SCI_SETVIEWEOL, bViewEOLs, 0);
+		InvalidateStyleRedraw();
 		break;
 
 	case IDM_SET_RTL_LAYOUT_OTHER:
@@ -4117,7 +4133,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_VIEW_SHOWEXCERPT:
-		EditGetExcerpt(hwndEdit, szTitleExcerpt, COUNTOF(szTitleExcerpt));
+		EditGetExcerpt(szTitleExcerpt, COUNTOF(szTitleExcerpt));
 		UpdateWindowTitle();
 		break;
 
@@ -4198,9 +4214,10 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case CMD_ESCAPE:
-		if (SendMessage(hwndEdit, SCI_AUTOCACTIVE, 0, 0)) {
-			//close the AutoComplete box
-			SendMessage(hwndEdit, SCI_AUTOCCANCEL, 0, 0);
+		if (SciCall_AutoCActive()) {
+			SciCall_AutoCCancel();
+		} else if (SciCall_CallTipActive()) {
+			SciCall_CallTipCancel();
 		} else if (bInFullScreenMode) {
 			bInFullScreenMode = FALSE;
 			ToggleFullScreenMode();
@@ -4218,7 +4235,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	// Newline with toggled auto indent setting
 	case CMD_CTRLENTER:
 		autoCompletionConfig.bIndentText = !autoCompletionConfig.bIndentText;
-		SendMessage(hwndEdit, SCI_NEWLINE, 0, 0);
+		SciCall_NewLine();
 		autoCompletionConfig.bIndentText = !autoCompletionConfig.bIndentText;
 		break;
 
@@ -4233,11 +4250,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			const Sci_Position iStartPos = SciCall_PositionFromLine(iLine);
 			const Sci_Position iIndentPos = SciCall_GetLineIndentPosition(iLine);
 			if (iPos == iStartPos) {
-				SendMessage(hwndEdit, SCI_DELETEBACK, 0, 0);
+				SciCall_DeleteBack();
 			} else if (iPos <= iIndentPos) {
-				SendMessage(hwndEdit, SCI_DELLINELEFT, 0, 0);
+				SciCall_DelLineLeft();
 			} else {
-				SendMessage(hwndEdit, SCI_DELWORDLEFT, 0, 0);
+				SciCall_DelWordLeft();
 			}
 		}
 	}
@@ -4254,9 +4271,9 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			const Sci_Position iStartPos = SciCall_PositionFromLine(iLine);
 			const Sci_Position iEndPos = SciCall_GetLineEndPosition(iLine);
 			if (iStartPos != iEndPos) {
-				SendMessage(hwndEdit, SCI_DELWORDRIGHT, 0, 0);
-			} else { // iStartPos == iEndPos
-				SendMessage(hwndEdit, SCI_LINEDELETE, 0, 0);
+				SciCall_DelWordRight();
+			} else {
+				SciCall_LineDelete();
 			}
 		}
 	}
@@ -4265,7 +4282,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case CMD_CTRLTAB:
 		SciCall_SetTabIndents(FALSE);
 		SciCall_SetUseTabs(TRUE);
-		SendMessage(hwndEdit, SCI_TAB, 0, 0);
+		SciCall_Tab();
 		SciCall_SetUseTabs(!bTabsAsSpaces);
 		SciCall_SetTabIndents(bTabIndents);
 		break;
@@ -4377,7 +4394,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_LANG_SCSS:
 	case IDM_LANG_LESS:
 	case IDM_LANG_HSS:
-		Style_SetLexerByLangIndex(hwndEdit, LOWORD(wParam));
+		Style_SetLexerByLangIndex(LOWORD(wParam));
 		break;
 
 	case CMD_TIMESTAMPS: {
@@ -4436,10 +4453,10 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	break;
 
 	case CMD_OPEN_PATH_OR_LINK:
-		EditOpenSelection(hwndEdit, 0);
+		EditOpenSelection(0);
 		break;
 	case CMD_OPEN_CONTAINING_FOLDER:
-		EditOpenSelection(hwndEdit, 4);
+		EditOpenSelection(4);
 		break;
 
 	case CMD_ONLINE_SEARCH_GOOGLE:
@@ -4447,25 +4464,22 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case CMD_ONLINE_SEARCH_WIKI:
 	case CMD_CUSTOM_ACTION1:
 	case CMD_CUSTOM_ACTION2:
-		EditSelectionAction(hwndEdit, LOWORD(wParam));
+		EditSelectionAction(LOWORD(wParam));
 		break;
 
 	case CMD_FINDNEXTSEL:
 	case CMD_FINDPREVSEL:
 	case IDM_EDIT_SAVEFIND: {
-		int cchSelection = (int)SendMessage(hwndEdit, SCI_GETSELECTIONEND, 0, 0) -
-						   (int)SendMessage(hwndEdit, SCI_GETSELECTIONSTART, 0, 0);
-
+		Sci_Position cchSelection = SciCall_GetSelTextLength() - 1;
 		if (cchSelection == 0) {
 			SendWMCommand(hwnd, IDM_EDIT_SELECTWORD);
-			cchSelection = (int)SendMessage(hwndEdit, SCI_GETSELECTIONEND, 0, 0) -
-						   (int)SendMessage(hwndEdit, SCI_GETSELECTIONSTART, 0, 0);
+			cchSelection = SciCall_GetSelTextLength() - 1;
 		}
 
-		if (cchSelection > 0 && cchSelection < NP2_FIND_REPLACE_LIMIT && SendMessage(hwndEdit, SCI_GETSELTEXT, 0, 0) < NP2_FIND_REPLACE_LIMIT) {
+		if (cchSelection > 0 && cchSelection < NP2_FIND_REPLACE_LIMIT) {
 			char mszSelection[NP2_FIND_REPLACE_LIMIT];
 
-			SendMessage(hwndEdit, SCI_GETSELTEXT, 0, (LPARAM)mszSelection);
+			SciCall_GetSelText(mszSelection);
 			mszSelection[cchSelection] = 0; // zero terminate
 
 			// Check lpszSelection and truncate newlines
@@ -4493,11 +4507,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				break;
 
 			case CMD_FINDNEXTSEL:
-				EditFindNext(hwndEdit, &efrData, FALSE);
+				EditFindNext(&efrData, FALSE);
 				break;
 
 			case CMD_FINDPREVSEL:
-				EditFindPrev(hwndEdit, &efrData, FALSE);
+				EditFindPrev(&efrData, FALSE);
 				break;
 			}
 		}
@@ -4515,65 +4529,65 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				iLongLinesLimit--;
 			}
 			iLongLinesLimit = clamp_i(iLongLinesLimit, 0, NP2_LONG_LINE_LIMIT);
-			SendMessage(hwndEdit, SCI_SETEDGECOLUMN, iLongLinesLimit, 0);
+			SciCall_SetEdgeColumn(iLongLinesLimit);
 			UpdateStatusbar();
 			iLongLinesLimitG = iLongLinesLimit;
 		}
 		break;
 
 	case CMD_EMBRACKETR:	// Ctrl+4
-		EditEncloseSelection(hwndEdit, L"(", L")");
+		EditEncloseSelection(L"(", L")");
 		break;
 	case CMD_EMBRACKETC:	// Ctrl+5
-		EditEncloseSelection(hwndEdit, L"{", L"}");
+		EditEncloseSelection(L"{", L"}");
 		break;
 	case CMD_EMBRACKETA:	// Ctrl+6
-		EditEncloseSelection(hwndEdit, L"<", L">");
+		EditEncloseSelection(L"<", L">");
 		break;
 	case CMD_EMBRACKETS:	// Ctrl+7
-		EditEncloseSelection(hwndEdit, L"[", L"]");
+		EditEncloseSelection(L"[", L"]");
 		break;
 	case CMD_STRINGIFYS:	// Ctrl+1
-		EditEncloseSelection(hwndEdit, L"'", L"'");
+		EditEncloseSelection(L"'", L"'");
 		break;
 	case CMD_STRINGIFYD:	// Ctrl+2
-		EditEncloseSelection(hwndEdit, L"\"", L"\"");
+		EditEncloseSelection(L"\"", L"\"");
 		break;
 	case CMD_STRINGIFYT2:	// Ctrl+3
-		EditEncloseSelection(hwndEdit, L"\"\"\"", L"\"\"\"");
+		EditEncloseSelection(L"\"\"\"", L"\"\"\"");
 		break;
 	case CMD_STRINGIFYT1:	// Ctrl+9
-		EditEncloseSelection(hwndEdit, L"'''", L"'''");
+		EditEncloseSelection(L"'''", L"'''");
 		break;
 	case CMD_STRINGIFYB:	// Ctrl+8
-		EditEncloseSelection(hwndEdit, L"`", L"`");
+		EditEncloseSelection(L"`", L"`");
 		break;
 
 	case CMD_INCREASENUM:	// Ctrl++
-		EditModifyNumber(hwndEdit, TRUE);
+		EditModifyNumber(TRUE);
 		break;
 
 	case CMD_DECREASENUM:	// Ctrl+-
-		EditModifyNumber(hwndEdit, FALSE);
+		EditModifyNumber(FALSE);
 		break;
 
 	case CMD_JUMP2SELSTART:	// Ctrl+'
-		if (SC_SEL_RECTANGLE != SendMessage(hwnd, SCI_GETSELECTIONMODE, 0, 0)) {
-			const int iAnchorPos = (int)SendMessage(hwndEdit, SCI_GETANCHOR, 0, 0);
-			const int iCursorPos = (int)SendMessage(hwndEdit, SCI_GETCURRENTPOS, 0, 0);
+		if (!SciCall_IsRectangleSelection()) {
+			const Sci_Position iAnchorPos = SciCall_GetAnchor();
+			const Sci_Position iCursorPos = SciCall_GetCurrentPos();
 			if (iCursorPos > iAnchorPos) {
-				SendMessage(hwndEdit, SCI_SETSEL, iCursorPos, iAnchorPos);
+				SciCall_SetSel(iCursorPos, iAnchorPos);
 				SciCall_ChooseCaretX();
 			}
 		}
 		break;
 
 	case CMD_JUMP2SELEND:	// Ctrl+.
-		if (SC_SEL_RECTANGLE != SendMessage(hwnd, SCI_GETSELECTIONMODE, 0, 0)) {
-			const int iAnchorPos = (int)SendMessage(hwndEdit, SCI_GETANCHOR, 0, 0);
-			const int iCursorPos = (int)SendMessage(hwndEdit, SCI_GETCURRENTPOS, 0, 0);
+		if (!SciCall_IsRectangleSelection()) {
+			const Sci_Position iAnchorPos = SciCall_GetAnchor();
+			const Sci_Position iCursorPos = SciCall_GetCurrentPos();
 			if (iCursorPos < iAnchorPos) {
-				SendMessage(hwndEdit, SCI_SETSEL, iCursorPos, iAnchorPos);
+				SciCall_SetSel(iCursorPos, iAnchorPos);
 				SciCall_ChooseCaretX();
 			}
 		}
@@ -4735,7 +4749,13 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				if (scn->updated & (SC_UPDATE_SELECTION)) {
 					// mark occurrences of text currently selected
 					if (bMarkOccurrences) {
-						EditMarkAll((scn->updated & SC_UPDATE_CONTENT), bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
+						if (SciCall_IsSelectionEmpty()) {
+							if (iMatchesCount) {
+								EditMarkAll_Clear();
+							}
+						} else {
+							EditMarkAll((scn->updated & SC_UPDATE_CONTENT), bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
+						}
 					}
 					UpdateStatusBarCache_OVRMode(FALSE);
 				} else if (scn->updated & (SC_UPDATE_CONTENT)) {
@@ -4751,39 +4771,39 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 					if (iEndStyled < SciCall_GetLength()) {
 						const Sci_Line iLine = SciCall_LineFromPosition(iEndStyled);
 						iEndStyled = SciCall_PositionFromLine(iLine);
-						SciCall_Colourise(iEndStyled, -1);
+						SciCall_ColouriseToEnd(iEndStyled);
 					}
 
 					Sci_Position iPos = SciCall_GetCurrentPos();
 					int ch = SciCall_GetCharAt(iPos);
 					if (ch < 0x80 && strchr("()[]{}<>", ch)) {
-						const int iBrace2 = (int)SendMessage(hwndEdit, SCI_BRACEMATCH, iPos, 0);
+						const Sci_Position iBrace2 = SciCall_BraceMatch(iPos, 0);
 						if (iBrace2 != -1) {
 							const Sci_Position col1 = SciCall_GetColumn(iPos);
 							const Sci_Position col2 = SciCall_GetColumn(iBrace2);
-							SendMessage(hwndEdit, SCI_BRACEHIGHLIGHT, iPos, iBrace2);
-							SendMessage(hwndEdit, SCI_SETHIGHLIGHTGUIDE, min_pos(col1, col2), 0);
+							SciCall_BraceHighlight(iPos, iBrace2);
+							SciCall_SetHighlightGuide(min_pos(col1, col2));
 						} else {
-							SendMessage(hwndEdit, SCI_BRACEBADLIGHT, iPos, 0);
-							SendMessage(hwndEdit, SCI_SETHIGHLIGHTGUIDE, 0, 0);
+							SciCall_BraceBadLight(iPos);
+							SciCall_SetHighlightGuide(0);
 						}
 					} else { // Try one before
 						iPos = SciCall_PositionBefore(iPos);
 						ch = SciCall_GetCharAt(iPos);
 						if (ch < 0x80 && strchr("()[]{}<>", ch)) {
-							const int iBrace2 = (int)SendMessage(hwndEdit, SCI_BRACEMATCH, iPos, 0);
+							const Sci_Position iBrace2 = SciCall_BraceMatch(iPos, 0);
 							if (iBrace2 != -1) {
 								const Sci_Position col1 = SciCall_GetColumn(iPos);
 								const Sci_Position col2 = SciCall_GetColumn(iBrace2);
-								SendMessage(hwndEdit, SCI_BRACEHIGHLIGHT, iPos, iBrace2);
-								SendMessage(hwndEdit, SCI_SETHIGHLIGHTGUIDE, min_pos(col1, col2), 0);
+								SciCall_BraceHighlight(iPos, iBrace2);
+								SciCall_SetHighlightGuide(min_pos(col1, col2));
 							} else {
-								SendMessage(hwndEdit, SCI_BRACEBADLIGHT, iPos, 0);
-								SendMessage(hwndEdit, SCI_SETHIGHLIGHTGUIDE, 0, 0);
+								SciCall_BraceBadLight(iPos);
+								SciCall_SetHighlightGuide(0);
 							}
 						} else {
-							SendMessage(hwndEdit, SCI_BRACEHIGHLIGHT, (WPARAM)(-1), -1);
-							SendMessage(hwndEdit, SCI_SETHIGHLIGHTGUIDE, 0, 0);
+							SciCall_BraceHighlight(-1, -1);
+							SciCall_SetHighlightGuide(0);
 						}
 					}
 				}
@@ -4797,21 +4817,21 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				if (ch == '\r' || ch == '\n') {
 					// in CRLF mode handle LF only...
 					if (autoCompletionConfig.bIndentText && ((SC_EOL_CRLF == iEOLMode && ch != '\n') || SC_EOL_CRLF != iEOLMode)) {
-						EditAutoIndent(hwndEdit);
+						EditAutoIndent();
 					}
 					return 0;
 				}
 				// Auto close tags
 				if (ch == '>') {
 					if (autoCompletionConfig.bCloseTags || autoCompletionConfig.bCompleteWord) {
-						EditAutoCloseXMLTag(hwndEdit);
+						EditAutoCloseXMLTag();
 					}
 					return 0;
 				}
 				// Auto close braces/quotes
 				if (strchr("([{<\"\'`,", ch)) {
 					if (autoCompletionConfig.fAutoInsertMask) {
-						EditAutoCloseBraceQuote(hwndEdit, ch);
+						EditAutoCloseBraceQuote(ch);
 					}
 					return 0;
 				}
@@ -4825,14 +4845,9 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			) {
 				return 0;
 			}
-			if (SendMessage(hwndEdit, SCI_AUTOCACTIVE, 0, 0)) {
-				// many items in auto-completion list (> autoCompletionConfig.iVisibleItemCount), recreate it
-				if (autoCompletionConfig.iPreviousItemCount < autoCompletionConfig.iVisibleItemCount) {
-					return 0;
-				}
-				SendMessage(hwnd, SCI_AUTOCCANCEL, 0, 0);
-			}
-			EditCompleteWord(hwndEdit, FALSE);
+
+			const int iCondition = SciCall_AutoCActive() ? AutoCompleteCondition_OnCharAdded : AutoCompleteCondition_Normal;
+			EditCompleteWord(iCondition, FALSE);
 		}
 		break;
 
@@ -4846,33 +4861,42 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			if (braces != NULL && *braces == ch) {
 				*braces = L'\0'; // unsafe
 			}
-			const Sci_Position iNewPos = scn->position + ((braces == NULL) ? ((Sci_Position)strlen(text)) : (braces - text + 1));
+			const Sci_Position iNewPos = scn->position + ((braces == NULL) ? (Sci_Position)strlen(text) : (braces - text + 1));
 
-			SendMessage(hwndEdit, SCI_BEGINUNDOACTION, 0, 0);
-			SendMessage(hwndEdit, SCI_SETSEL, scn->position, iCurPos);
-			SendMessage(hwndEdit, SCI_REPLACESEL, 0, (LPARAM)text);
-			SendMessage(hwndEdit, SCI_SETSEL, iNewPos, iNewPos);
-			SendMessage(hwndEdit, SCI_ENDUNDOACTION, 0, 0);
-			SendMessage(hwndEdit, SCI_AUTOCCANCEL, 0, 0);
+			SciCall_BeginUndoAction();
+			SciCall_SetSel(scn->position, iCurPos);
+			SciCall_ReplaceSel(text);
+			SciCall_SetSel(iNewPos, iNewPos);
+			SciCall_EndUndoAction();
+			SciCall_AutoCCancel();
 		}
 		break;
 
 		case SCN_AUTOCCHARDELETED:
-			EditCompleteWord(hwndEdit, FALSE);
+			EditCompleteWord(AutoCompleteCondition_OnCharDeleted, FALSE);
 			break;
 
-#if NP2_ENABLE_SHOW_CALL_TIPS
-		// CallTips
+		case SCN_AUTOCCOMPLETED:
+		case SCN_AUTOCCANCELLED:
+			autoCompletionConfig.iPreviousItemCount = 0;
+			break;
+
+#if NP2_ENABLE_SHOW_CALLTIPS
 		case SCN_DWELLSTART:
 			if (bShowCallTips && scn->position >= 0) {
-				EditShowCallTips(hwndEdit, scn->position);
+				EditShowCallTips(scn->position);
 			}
 			break;
 
 		case SCN_DWELLEND:
-			SendMessage(hwndEdit, SCI_CALLTIPCANCEL, 0, 0);
+			// if calltip source changed
+			SciCall_CallTipCancel();
 			break;
 #endif
+
+		case SCN_CALLTIPCLICK:
+			SciCall_CallTipCancel();
+			break;
 
 		case SCN_MODIFIED:
 			if (scn->linesAdded) {
@@ -4915,7 +4939,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		} break;
 
 		case SCN_CODEPAGECHANGED:
-			EditOnCodePageChanged(hwndEdit, scn->ch);
+			EditOnCodePageChanged(scn->modifiers);
 			break;
 		}
 		break;
@@ -4970,7 +4994,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			LPNMMOUSE pnmm = (LPNMMOUSE)lParam;
 			switch (pnmm->dwItemSpec) {
 			case STATUS_EOLMODE:
-				EditEnsureConsistentLineEndings(hwndEdit);
+				EditEnsureConsistentLineEndings();
 				return TRUE;
 
 			case STATUS_DOCZOOM:
@@ -5005,7 +5029,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				return TRUE;
 
 			case STATUS_OVRMODE:
-				SendMessage(hwndEdit, SCI_EDITTOGGLEOVERTYPE, 0, 0);
+				SciCall_EditToggleOvertype();
 				return TRUE;
 
 			default:
@@ -5157,8 +5181,8 @@ void LoadSettings(void) {
 	}
 	EditCompleteUpdateConfig();
 
-#if NP2_ENABLE_SHOW_CALL_TIPS
-	bShowCallTips = IniSectionGetBool(pIniSection, L"ShowCallTips", 0);
+#if NP2_ENABLE_SHOW_CALLTIPS
+	bShowCallTips = IniSectionGetBool(pIniSection, L"ShowCallTips", TRUE);
 	iValue = IniSectionGetInt(pIniSection, L"CallTipsWaitTime", 500);
 	iCallTipsWaitTime = max_i(iValue, 100);
 #endif
@@ -5523,8 +5547,8 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetIntEx(pIniSection, L"AutoInsertMask", autoCompletionConfig.fAutoInsertMask, AutoInsertDefaultMask);
 	IniSectionSetIntEx(pIniSection, L"AsmLineCommentChar", autoCompletionConfig.iAsmLineCommentChar, AsmLineCommentCharSemicolon);
 	IniSectionSetStringEx(pIniSection, L"AutoCFillUpPunctuation", autoCompletionConfig.wszAutoCompleteFillUp, AUTO_COMPLETION_FILLUP_DEFAULT);
-#if NP2_ENABLE_SHOW_CALL_TIPS
-	IniSectionSetBoolEx(pIniSection, L"ShowCallTips", bShowCallTips, 1);
+#if NP2_ENABLE_SHOW_CALLTIPS
+	IniSectionSetBoolEx(pIniSection, L"ShowCallTips", bShowCallTips, TRUE);
 	IniSectionSetIntEx(pIniSection, L"CallTipsWaitTime", iCallTipsWaitTime, 500);
 #endif
 	IniSectionSetBoolEx(pIniSection, L"TabsAsSpaces", bTabsAsSpacesG, 0);
@@ -6702,8 +6726,8 @@ void UpdateStatusbar(void) {
 	if (iSelStart == iSelEnd) {
 		lstrcpy(tchSel, L"0");
 		lstrcpy(tchSelCh, L"0");
-	} else if (SC_SEL_RECTANGLE != SciCall_GetSelectionMode()) {
-		Sci_Position iSel = SciCall_GetSelText(NULL) - 1;
+	} else if (!SciCall_IsRectangleSelection()) {
+		Sci_Position iSel = SciCall_GetSelTextLength() - 1;
 		wsprintf(tchSel, L"%i", (int)iSel);
 		FormatNumberStr(tchSel);
 		iSel = SciCall_CountCharacters(iSelStart, iSelEnd);
@@ -6878,7 +6902,7 @@ BOOL FileIO(BOOL fLoad, LPWSTR pszFile, BOOL bFlag, EditFileIOStatus *status) {
 	InvalidateRect(hwndStatus, NULL, TRUE);
 	UpdateWindow(hwndStatus);
 
-	const BOOL fSuccess = fLoad ? EditLoadFile(hwndEdit, pszFile, bFlag, status) : EditSaveFile(hwndEdit, pszFile, bFlag, status);
+	const BOOL fSuccess = fLoad ? EditLoadFile(pszFile, bFlag, status) : EditSaveFile(hwndEdit, pszFile, bFlag, status);
 	const DWORD dwFileAttributes = GetFileAttributes(pszFile);
 	bReadOnly = (dwFileAttributes != INVALID_FILE_ATTRIBUTES) && (dwFileAttributes & FILE_ATTRIBUTE_READONLY);
 
@@ -6926,12 +6950,12 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 			lstrcpy(szTitleExcerpt, L"");
 		}
 		FileVars_Init(NULL, 0, &fvCurFile);
-		EditSetNewText(hwndEdit, "", 0);
-		Style_SetLexer(hwndEdit, NULL);
+		EditSetEmptyText();
+		Style_SetLexer(NULL);
 		bModified = FALSE;
 		bReadOnly = FALSE;
 		iEOLMode = iLineEndings[iDefaultEOLMode];
-		SendMessage(hwndEdit, SCI_SETEOLMODE, iLineEndings[iDefaultEOLMode], 0);
+		SciCall_SetEOLMode(iLineEndings[iDefaultEOLMode]);
 		iEncoding = iDefaultEncoding;
 		iOriginalEncoding = iDefaultEncoding;
 		SciCall_SetCodePage((iDefaultEncoding == CPI_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
@@ -6993,10 +7017,10 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 				fSuccess = TRUE;
 				CloseHandle(hFile);
 				FileVars_Init(NULL, 0, &fvCurFile);
-				EditSetNewText(hwndEdit, "", 0);
-				Style_SetLexer(hwndEdit, NULL);
+				EditSetEmptyText();
+				Style_SetLexer(NULL);
 				iEOLMode = iLineEndings[iDefaultEOLMode];
-				SendMessage(hwndEdit, SCI_SETEOLMODE, iLineEndings[iDefaultEOLMode], 0);
+				SciCall_SetEOLMode(iLineEndings[iDefaultEOLMode]);
 				if (iSrcEncoding != -1) {
 					iEncoding = iSrcEncoding;
 					iOriginalEncoding = iSrcEncoding;
@@ -7035,13 +7059,12 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 		BOOL bUnknownFile = FALSE;
 		if (!lexerSpecified) { // flagLexerSpecified will be cleared
 			np2LexLangIndex = 0;
-			bUnknownFile = !Style_SetLexerFromFile(hwndEdit, szCurFile);
+			bUnknownFile = !Style_SetLexerFromFile(szCurFile);
 		}
 		if (!lexerSpecified) {
 			UpdateLineNumberWidth();
 		}
-		//bReadOnly = FALSE;
-		SendMessage(hwndEdit, SCI_SETEOLMODE, iEOLMode, 0);
+		SciCall_SetEOLMode(iEOLMode);
 		MRU_AddFile(pFileMRU, szFileName, flagRelativeFileMRU, flagPortableMyDocs);
 		if (flagUseSystemMRU == 2) {
 			SHAddToRecentDocs(SHARD_PATHW, szFileName);
@@ -7053,23 +7076,31 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 		}
 		InstallFileWatching(szCurFile);
 
-		if (line > 1 || col > 1) {
-			EditJumpTo(line, col);
-			EditEnsureSelectionVisible();
-		}
+		// check for binary file (file with unknown encoding: ANSI)
+		const BOOL binary = (iEncoding == CPI_DEFAULT) && Style_MaybeBinaryFile(szCurFile);
+		// lock binary file for editing
+		if (binary) {
+			bLockedForEditing = TRUE;
+			SciCall_SetReadOnly(TRUE);
+		} else {
+			if (line > 1 || col > 1) {
+				EditJumpTo(line, col);
+				EditEnsureSelectionVisible();
+			}
 #if NP2_ENABLE_DOT_LOG_FEATURE
-		if (IsFileStartsWithDotLog(hwndEdit)) {
-			SciCall_DocumentEnd();
-			SendMessage(hwndEdit, SCI_BEGINUNDOACTION, 0, 0);
-			SendMessage(hwndEdit, SCI_NEWLINE, 0, 0);
-			SendWMCommand(hwndMain, IDM_EDIT_INSERT_SHORTDATE);
-			SciCall_DocumentEnd();
-			SendMessage(hwndEdit, SCI_NEWLINE, 0, 0);
-			SendMessage(hwndEdit, SCI_ENDUNDOACTION, 0, 0);
-			SciCall_DocumentEnd();
-			EditEnsureSelectionVisible();
-		}
+			if (IsFileStartsWithDotLog()) {
+				SciCall_DocumentEnd();
+				SciCall_BeginUndoAction();
+				SciCall_NewLine();
+				SendWMCommand(hwndMain, IDM_EDIT_INSERT_SHORTDATE);
+				SciCall_DocumentEnd();
+				SciCall_NewLine();
+				SciCall_EndUndoAction();
+				SciCall_DocumentEnd();
+				EditEnsureSelectionVisible();
+			}
 #endif
+		}
 
 		UpdateStatusbar();
 		UpdateDocumentModificationStatus();
@@ -7077,14 +7108,15 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 		if (status.bUnicodeErr) {
 			MsgBox(MBWARN, IDS_ERR_UNICODE);
 		}
+		// notify binary file been locked for editing
+		if (binary) {
+			ShowNotificationMessage(SC_NOTIFICATIONPOSITION_BOTTOMRIGHT, IDS_BINARY_FILE_LOCKED);
+			return fSuccess;
+		}
 		// Show inconsistent line endings warning
 		if (status.bInconsistent && bWarnLineEndings) {
 			// file with unknown lexer and unknown encoding
 			bUnknownFile = bUnknownFile && (iEncoding == CPI_DEFAULT);
-			// Hide warning for binary file
-			if (bUnknownFile && Style_MaybeBinaryFile(hwndEdit, szCurFile)) {
-				return fSuccess;
-			}
 			// Set default button to "No" for diff/patch and unknown file.
 			// diff/patch file may contains content from files with different line endings.
 			status.bLineEndingsDefaultNo = bUnknownFile || pLexCurrent->iLexer == SCLEX_DIFF;
@@ -7110,12 +7142,12 @@ BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy) {
 	BOOL bIsEmptyNewFile = FALSE;
 
 	if (Untitled) {
-		const int cchText = (int)SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0);
+		const Sci_Position cchText = SciCall_GetLength();
 		if (cchText == 0) {
 			bIsEmptyNewFile = TRUE;
 		} else if (cchText < 2048) {
 			char tchText[2048] = "";
-			SendMessage(hwndEdit, SCI_GETTEXT, COUNTOF(tchText), (LPARAM)tchText);
+			SciCall_GetText(COUNTOF(tchText), tchText);
 			StrTrimA(tchText, " \t\n\r");
 			if (StrIsEmptyA(tchText)) {
 				bIsEmptyNewFile = TRUE;
@@ -7196,7 +7228,7 @@ BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy) {
 					if (!fKeepTitleExcerpt) {
 						lstrcpy(szTitleExcerpt, L"");
 					}
-					Style_SetLexerFromFile(hwndEdit, szCurFile);
+					Style_SetLexerFromFile(szCurFile);
 				} else {
 					lstrcpy(tchLastSaveCopyDir, tchFile);
 					PathRemoveFileSpec(tchLastSaveCopyDir);
@@ -7914,6 +7946,33 @@ void SetNotifyIconTitle(HWND hwnd) {
 	Shell_NotifyIcon(NIM_MODIFY, &nid);
 }
 
+void ShowNotificationA(int notifyPos, LPCSTR lpszText) {
+	SciCall_ShowNotification(notifyPos, lpszText);
+}
+
+void ShowNotificationW(int notifyPos, LPCWSTR lpszText) {
+	const int cpEdit = SciCall_GetCodePage();
+	const int wchLen = lstrlen(lpszText);
+	const int cchLen = wchLen*kMaxMultiByteCount + 1;
+	char *cchText = (char *)NP2HeapAlloc(cchLen);
+	WideCharToMultiByte(cpEdit, 0, lpszText, -1, cchText, cchLen, NULL, NULL);
+	ShowNotificationA(notifyPos, cchText);
+	NP2HeapFree(cchText);
+}
+
+void ShowNotificationMessage(int notifyPos, UINT uidMessage, ...)  {
+	WCHAR wchFormat[1024] = L"";
+	WCHAR wchMessage[2048] = L"";
+	GetString(uidMessage, wchFormat, COUNTOF(wchFormat));
+
+	va_list va;
+	va_start(va, uidMessage);
+	wvsprintf(wchMessage, wchFormat, va);
+	va_end(va);
+
+	ShowNotificationW(notifyPos, wchMessage);
+}
+
 //=============================================================================
 //
 // InstallFileWatching()
@@ -8043,13 +8102,13 @@ void CALLBACK PasteBoardTimer(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTi
 			const BOOL back = autoCompletionConfig.bIndentText;
 			autoCompletionConfig.bIndentText = FALSE;
 			SciCall_DocumentEnd();
-			SendMessage(hwndEdit, SCI_BEGINUNDOACTION, 0, 0);
-			if (SendMessage(hwndEdit, SCI_GETLENGTH, 0, 0) > 0) {
-				SendMessage(hwndEdit, SCI_NEWLINE, 0, 0);
+			SciCall_BeginUndoAction();
+			if (SciCall_GetLength() > 0) {
+				SciCall_NewLine();
 			}
 			SciCall_Paste(FALSE);
-			SendMessage(hwndEdit, SCI_NEWLINE, 0, 0);
-			SendMessage(hwndEdit, SCI_ENDUNDOACTION, 0, 0);
+			SciCall_NewLine();
+			SciCall_EndUndoAction();
 			EditEnsureSelectionVisible();
 			autoCompletionConfig.bIndentText = back;
 		}

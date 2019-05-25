@@ -2500,7 +2500,7 @@ void Editor::NotifyNeedShown(Sci::Position pos, Sci::Position len) noexcept {
 void Editor::NotifyCodePageChanged(int oldCodePage) noexcept {
 	SCNotification scn = {};
 	scn.nmhdr.code = SCN_CODEPAGECHANGED;
-	scn.ch = oldCodePage;
+	scn.modifiers = oldCodePage;
 	NotifyParent(scn);
 }
 
@@ -5917,7 +5917,7 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 			}
 			char *ptr = CharPtrFromSPtr(lParam);
 			pdoc->GetCharRange(ptr, lineStart, len);
-			ptr[len] = '\0';
+			ptr[len] = '\0'; //! overwriting
 			return len;
 		}
 
@@ -6392,8 +6392,8 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 			if (lParam == 0)
 				return 0;
 			Sci_TextRange *tr = static_cast<Sci_TextRange *>(PtrFromSPtr(lParam));
-			int iPlace = 0;
-			for (long iChar = tr->chrg.cpMin; iChar < tr->chrg.cpMax; iChar++) {
+			Sci::Position iPlace = 0;
+			for (Sci::Position iChar = tr->chrg.cpMin; iChar < tr->chrg.cpMax; iChar++) {
 				tr->lpstrText[iPlace++] = pdoc->CharAt(iChar);
 				tr->lpstrText[iPlace++] = pdoc->StyleAt(iChar);
 			}

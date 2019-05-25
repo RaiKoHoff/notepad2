@@ -161,13 +161,8 @@ NP2_inline double StopWatch_Get(const StopWatch *watch) {
 void StopWatch_Show(const StopWatch *watch, LPCWSTR msg);
 void StopWatch_ShowLog(const StopWatch *watch, LPCSTR msg);
 
-#ifdef NDEBUG
-#define DLog(msg)
-#define DLogf(fmt, ...)
-#else
-#define DLog(msg)	OutputDebugStringA(msg)
-void DLogf(const char *fmt, ...);
-#endif
+#define DebugPrint(msg)	OutputDebugStringA(msg)
+void DebugPrintf(const char *fmt, ...);
 
 extern HINSTANCE g_hInstance;
 extern HANDLE g_hDefaultHeap;
@@ -440,7 +435,9 @@ BOOL IsFontAvailable(LPCWSTR lpszFontName);
 void SetClipData(HWND hwnd, LPCWSTR pszData);
 BOOL SetWindowTitle(HWND hwnd, UINT uIDAppName, BOOL bIsElevated, UINT uIDUntitled,
 					LPCWSTR lpszFile, int iFormat, BOOL bModified,
-					UINT uIDReadOnly, BOOL bReadOnly, LPCWSTR lpszExcerpt);
+					UINT uIDReadOnly, BOOL bReadOnly,
+					UINT uIDLocked, BOOL bLocked,
+					LPCWSTR lpszExcerpt);
 void SetWindowTransparentMode(HWND hwnd, BOOL bTransparentMode, int iOpacityLevel);
 void SetWindowLayoutRTL(HWND hwnd, BOOL bRTL);
 
@@ -643,9 +640,9 @@ void TransformBackslashes(char *pszInput, BOOL bRegEx, UINT cpEdit);
 BOOL AddBackslash(char *pszOut, const char *pszInput);
 
 //==== MinimizeToTray Functions - see comments in Helpers.c ===================
-BOOL GetDoAnimateMinimize(VOID);
-VOID MinimizeWndToTray(HWND hwnd);
-VOID RestoreWndFromTray(HWND hwnd);
+BOOL GetDoAnimateMinimize(void);
+void MinimizeWndToTray(HWND hwnd);
+void RestoreWndFromTray(HWND hwnd);
 
 #endif // NOTEPAD2_HELPERS_H_
 
