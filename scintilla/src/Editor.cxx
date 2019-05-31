@@ -99,10 +99,10 @@ Timer::Timer() noexcept :
 Idler::Idler() noexcept :
 		state(false), idlerID(nullptr) {}
 
-static constexpr bool IsAllSpacesOrTabs(const char *s, unsigned int len) noexcept {
-	for (unsigned int i = 0; i < len; i++) {
+static constexpr bool IsAllSpacesOrTabs(std::string_view sv) noexcept {
+	for (char ch : sv) {
 		// This is safe because IsSpaceOrTab() will return false for null terminators
-		if (!IsSpaceOrTab(s[i]))
+		if (!IsSpaceOrTab(ch))
 			return false;
 	}
 	return true;
@@ -341,7 +341,7 @@ PRectangle Editor::GetTextRectangle() const noexcept {
 Sci::Line Editor::LinesOnScreen() const noexcept {
 	const PRectangle rcClient = GetClientRectangle();
 	const int htClient = static_cast<int>(rcClient.bottom - rcClient.top);
-	//Platform::DebugPrintf("lines on screen = %d\n", htClient / lineHeight + 1);
+	//Platform::DebugPrintf("lines on screen = %d\n", htClient / vs.lineHeight + 1);
 	return htClient / vs.lineHeight;
 }
 
@@ -355,7 +355,7 @@ Sci::Line Editor::LinesToScroll() const noexcept {
 
 Sci::Line Editor::MaxScrollPos() const noexcept {
 	//Platform::DebugPrintf("Lines %d screen = %d maxScroll = %d\n",
-	//LinesTotal(), LinesOnScreen(), LinesTotal() - LinesOnScreen() + 1);
+	//pdoc->LinesTotal(), LinesOnScreen(), pdoc->LinesTotal() - LinesOnScreen() + 1);
 	Sci::Line retVal = pcs->LinesDisplayed();
 	if (endAtLastLine) {
 		retVal -= LinesOnScreen();
@@ -433,7 +433,7 @@ SelectionPosition Editor::SPositionFromLineX(Sci::Line lineDoc, int x) {
 	RefreshStyleData();
 	if (lineDoc >= pdoc->LinesTotal())
 		return SelectionPosition(pdoc->Length());
-	//Platform::DebugPrintf("Position of (%d,%d) line = %d top=%d\n", pt.x, pt.y, line, topLine);
+	//Platform::DebugPrintf("Position of (%d) line = %d top=%d\n", x, lineDoc, topLine);
 	AutoSurface surface(this);
 	return view.SPositionFromLineX(surface, *this, lineDoc, x, vs);
 }
@@ -466,7 +466,7 @@ bool Editor::AbandonPaint() noexcept {
 }
 
 void Editor::RedrawRect(PRectangle rc) noexcept {
-	//Platform::DebugPrintf("Redraw %0d,%0d - %0d,%0d\n", rc.left, rc.top, rc.right, rc.bottom);
+	//Platform::DebugPrintf("Redraw %.0f,%.0f - %.0f,%.0f\n", rc.left, rc.top, rc.right, rc.bottom);
 
 	// Clip the redraw rectangle into the client area
 	const PRectangle rcClient = GetClientRectangle();
@@ -1722,7 +1722,7 @@ void Editor::RefreshPixMaps(Surface *surfaceWindow) {
 }
 
 void Editor::Paint(Surface *surfaceWindow, PRectangle rcArea) {
-	//Platform::DebugPrintf("Paint:%1d (%3d,%3d) ... (%3d,%3d)\n",
+	//Platform::DebugPrintf("Paint:%1d (%.0f,%.0f) ... (%.0f,%.0f)\n",
 	//	paintingAllText, rcArea.left, rcArea.top, rcArea.right, rcArea.bottom);
 	AllocateGraphics();
 
@@ -1736,7 +1736,7 @@ void Editor::Paint(Surface *surfaceWindow, PRectangle rcArea) {
 	StyleAreaBounded(rcArea, false);
 
 	const PRectangle rcClient = GetClientRectangle();
-	//Platform::DebugPrintf("Client: (%3d,%3d) ... (%3d,%3d)   %d\n",
+	//Platform::DebugPrintf("Client: (%.0f,%.0f) ... (%.0f,%.0f)\n",
 	//	rcClient.left, rcClient.top, rcClient.right, rcClient.bottom);
 
 	if (NotifyUpdateUI()) {
@@ -1894,7 +1894,7 @@ void Editor::AddChar(char ch) {
 	char s[2];
 	s[0] = ch;
 	s[1] = '\0';
-	AddCharUTF(s, 1);
+	InsertCharacter(std::string_view(s, 1));
 }
 
 void Editor::FilterSelections() {
@@ -1904,9 +1904,9 @@ void Editor::FilterSelections() {
 	}
 }
 
-// AddCharUTF inserts an array of bytes which may or may not be in UTF-8.
-void Editor::AddCharUTF(const char *s, unsigned int len) {
-	if (len == 0) {
+// InsertCharacter inserts a character encoded in document code page.
+void Editor::InsertCharacter(std::string_view sv, CharacterSource charSource) {
+	if (sv.empty()) {
 		return;
 	}
 	FilterSelections();
@@ -1946,7 +1946,7 @@ void Editor::AddCharUTF(const char *s, unsigned int len) {
 					}
 				}
 				positionInsert = RealizeVirtualSpace(positionInsert, currentSel->caret.VirtualSpace());
-				const Sci::Position lengthInserted = pdoc->InsertString(positionInsert, s, len);
+				const Sci::Position lengthInserted = pdoc->InsertString(positionInsert, sv.data(), sv.length());
 				if (lengthInserted > 0) {
 					currentSel->caret.SetPosition(positionInsert + lengthInserted);
 					currentSel->anchor.SetPosition(positionInsert + lengthInserted);
@@ -1975,35 +1975,36 @@ void Editor::AddCharUTF(const char *s, unsigned int len) {
 	// Avoid blinking during rapid typing:
 	ShowCaretAtCurrentPosition();
 	if ((caretSticky == SC_CARETSTICKY_OFF) ||
-		((caretSticky == SC_CARETSTICKY_WHITESPACE) && !IsAllSpacesOrTabs(s, len))) {
+		((caretSticky == SC_CARETSTICKY_WHITESPACE) && !IsAllSpacesOrTabs(sv))) {
 		SetLastXChosen();
 	}
 
 	// We don't handle inline IME tentative characters
-	if (charAddedSource != SC_CHARADDED_TENTATIVE) {
-		int ch = static_cast<unsigned char>(s[0]);
+	if (charSource != CharacterSource::charSourceTentative) {
+		int ch = static_cast<unsigned char>(sv[0]);
 		if (pdoc->dbcsCodePage != SC_CP_UTF8) {
-			if (len > 1) {
+			if (sv.length() > 1) {
 				// DBCS code page or DBCS font character set.
-				ch = (ch << 8) | static_cast<unsigned char>(s[1]);
+				ch = (ch << 8) | static_cast<unsigned char>(sv[1]);
 			}
 		} else {
-			if ((ch < 0xC2) || (1 == len)) {
+			if ((ch < 0xC2) || (1 == sv.length())) {
 				// Handles UTF-8 characters between 0x01 and 0x7F and single byte
 				// characters when not in UTF-8 mode.
 				// Also treats \0 and naked trail bytes 0x80 to 0xBF as valid
 				// characters representing themselves.
 			} else {
 				unsigned int utf32[1] = { 0 };
-				UTF32FromUTF8(std::string_view(s, len), utf32, std::size(utf32));
+				UTF32FromUTF8(sv, utf32, std::size(utf32));
 				ch = utf32[0];
 			}
 		}
-		NotifyChar(ch);
+		NotifyChar(ch, charSource);
 	}
 
 	if (recordingMacro) {
-		NotifyMacroRecord(SCI_REPLACESEL, 0, reinterpret_cast<sptr_t>(s));
+		std::string copy(sv); // ensure NUL-terminated
+		NotifyMacroRecord(SCI_REPLACESEL, 0, reinterpret_cast<sptr_t>(copy.data()));
 	}
 }
 
@@ -2348,11 +2349,11 @@ void Editor::NotifyErrorOccurred(Document *, void *, int status) noexcept {
 	errorStatus = status;
 }
 
-void Editor::NotifyChar(int ch) noexcept {
+void Editor::NotifyChar(int ch, CharacterSource charSource) noexcept {
 	SCNotification scn = {};
 	scn.nmhdr.code = SCN_CHARADDED;
 	scn.ch = ch;
-	scn.modifiers = charAddedSource;
+	scn.characterSource = static_cast<int>(charSource);
 	NotifyParent(scn);
 }
 
@@ -2500,7 +2501,7 @@ void Editor::NotifyNeedShown(Sci::Position pos, Sci::Position len) noexcept {
 void Editor::NotifyCodePageChanged(int oldCodePage) noexcept {
 	SCNotification scn = {};
 	scn.nmhdr.code = SCN_CODEPAGECHANGED;
-	scn.modifiers = oldCodePage;
+	scn.oldCodePage = oldCodePage;
 	NotifyParent(scn);
 }
 
@@ -2865,7 +2866,7 @@ void Editor::NotifyMacroRecord(unsigned int iMessage, uptr_t wParam, sptr_t lPar
 		// with char insert messages.
 	case SCI_NEWLINE:
 	default:
-		//		printf("Filtered out %ld of macro recording\n", iMessage);
+		//Platform::DebugPrintf("Filtered out %u of macro recording\n", iMessage);
 		return;
 	}
 
@@ -4512,7 +4513,7 @@ static constexpr bool AllowVirtualSpace(int virtualSpaceOptions, bool rectangula
 
 void Editor::ButtonDownWithModifiers(Point pt, unsigned int curTime, int modifiers) {
 	SetHoverIndicatorPoint(pt);
-	//Platform::DebugPrintf("ButtonDown %d %d = %d alt=%d %d\n", curTime, lastClickTime, curTime - lastClickTime, alt, inDragDrop);
+	//Platform::DebugPrintf("ButtonDown %d %d = %d modifiers=%d %d\n", curTime, lastClickTime, curTime - lastClickTime, modifiers, inDragDrop);
 	ptMouseLast = pt;
 	const bool ctrl = (modifiers & SCI_CTRL) != 0;
 	const bool shift = (modifiers & SCI_SHIFT) != 0;
@@ -4792,7 +4793,7 @@ void Editor::ButtonMoveWithModifiers(Point pt, unsigned int, int modifiers) {
 	if ((dwellDelay < SC_TIME_FOREVER) && rcClient.Contains(pt)) {
 		FineTickerStart(tickDwell, dwellDelay, dwellDelay / 10);
 	}
-	//Platform::DebugPrintf("Move %d %d\n", pt.x, pt.y);
+	//Platform::DebugPrintf("Move %.0f %.0f\n", pt.x, pt.y);
 	if (HaveMouseCapture()) {
 
 		// Slow down autoscrolling/selection
@@ -5247,7 +5248,7 @@ void Editor::SetAnnotationHeights(Sci::Line start, Sci::Line end) {
 }
 
 void Editor::SetDocPointer(Document *document) {
-	//Platform::DebugPrintf("** %x setdoc to %x\n", pdoc, document);
+	//Platform::DebugPrintf("** %p setdoc to %p\n", pdoc, document);
 	pdoc->RemoveWatcher(this, nullptr);
 	pdoc->Release();
 	if (document == nullptr) {
@@ -5805,7 +5806,7 @@ sptr_t Editor::BytesResult(sptr_t lParam, const unsigned char *val, size_t len) 
 }
 
 sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
-	//Platform::DebugPrintf("S start wnd proc %d %d %d\n", iMessage, wParam, lParam);
+	//Platform::DebugPrintf("S start wnd proc %u %d %d\n", iMessage, wParam, lParam);
 
 	// Optional macro recording hook
 	if (recordingMacro)

@@ -424,7 +424,7 @@ class ScintillaWin :
 	void SelectionToHangul();
 	void EscapeHanja();
 	void ToggleHanja();
-	void AddWString(std::wstring_view wsv);
+	void AddWString(std::wstring_view wsv, CharacterSource charSource = CharacterSource::charSourceNormal);
 
 	UINT CodePageOfDocument() const;
 	bool ValidCodePage(int codePage) const noexcept override;
@@ -675,7 +675,7 @@ void ScintillaWin::EnsureRenderTarget(HDC hdc) {
 			if (SUCCEEDED(hr)) {
 				pRenderTarget = pDCRT;
 			} else {
-				Platform::DebugPrintf("Failed CreateDCRenderTarget 0x%x\n", hr);
+				//Platform::DebugPrintf("Failed CreateDCRenderTarget 0x%lx\n", hr);
 				pRenderTarget = nullptr;
 			}
 
@@ -691,7 +691,7 @@ void ScintillaWin::EnsureRenderTarget(HDC hdc) {
 			if (SUCCEEDED(hr)) {
 				pRenderTarget = pHwndRenderTarget;
 			} else {
-				Platform::DebugPrintf("Failed CreateHwndRenderTarget 0x%x\n", hr);
+				//Platform::DebugPrintf("Failed CreateHwndRenderTarget 0x%lx\n", hr);
 				pRenderTarget = nullptr;
 			}
 		}
@@ -714,7 +714,7 @@ void ScintillaWin::EnsureRenderTarget(HDC hdc) {
 		GetClientRect(MainHWND(), &rcWindow);
 		const HRESULT hr = static_cast<ID2D1DCRenderTarget*>(pRenderTarget)->BindDC(hdc, &rcWindow);
 		if (FAILED(hr)) {
-			Platform::DebugPrintf("BindDC failed 0x%x\n", hr);
+			//Platform::DebugPrintf("BindDC failed 0x%lx\n", hr);
 			DropRenderTarget();
 		}
 	}
@@ -747,12 +747,12 @@ void ScintillaWin::StartDrag() {
 	dropWentOutside = true;
 	IDataObject *pDataObject = reinterpret_cast<IDataObject *>(&dob);
 	IDropSource *pDropSource = reinterpret_cast<IDropSource *>(&ds);
-	//Platform::DebugPrintf("About to DoDragDrop %x %x\n", pDataObject, pDropSource);
+	//Platform::DebugPrintf("About to DoDragDrop %p %p\n", pDataObject, pDropSource);
 	const HRESULT hr = ::DoDragDrop(
 		pDataObject,
 		pDropSource,
 		DROPEFFECT_COPY | DROPEFFECT_MOVE, &dwEffect);
-	//Platform::DebugPrintf("DoDragDrop = %x\n", hr);
+	//Platform::DebugPrintf("DoDragDrop = %lx\n", hr);
 	if (SUCCEEDED(hr)) {
 		if ((hr == DRAGDROP_S_DROP) && (dwEffect == DROPEFFECT_MOVE) && dropWentOutside) {
 			// Remove dragged out text
@@ -999,9 +999,7 @@ sptr_t ScintillaWin::HandleCompositionWindowed(uptr_t wParam, sptr_t lParam) {
 	if (lParam & GCS_RESULTSTR) {
 		IMContext imc(MainHWND());
 		if (imc.hIMC) {
-			charAddedSource = SC_CHARADDED_IME;
-			AddWString(imc.GetCompositionString(GCS_RESULTSTR));
-			charAddedSource = SC_CHARADDED_NORMAL;
+			AddWString(imc.GetCompositionString(GCS_RESULTSTR), CharacterSource::charSourceIME);
 
 			// Set new position after converted
 			const Point pos = PointMainCaret();
@@ -1034,7 +1032,7 @@ void ScintillaWin::MoveImeCarets(Sci::Position offset) {
 void ScintillaWin::DrawImeIndicator(int indicator, int len) {
 	// Emulate the visual style of IME characters with indicators.
 	// Draw an indicator on the character before caret by the character bytes of len
-	// so it should be called after addCharUTF().
+	// so it should be called after InsertCharacter().
 	// It does not affect caret positions.
 	if (indicator < 8 || indicator > INDIC_MAX) {
 		return;
@@ -1158,7 +1156,7 @@ std::vector<int> MapImeIndicators(const std::vector<BYTE> &inputStyle) {
 
 }
 
-void ScintillaWin::AddWString(std::wstring_view wsv) {
+void ScintillaWin::AddWString(std::wstring_view wsv, CharacterSource charSource) {
 	if (wsv.empty())
 		return;
 
@@ -1169,7 +1167,7 @@ void ScintillaWin::AddWString(std::wstring_view wsv) {
 
 		const int size = MultiByteFromWideChar(codePage, wsv.substr(i, ucWidth), inBufferCP, sizeof(inBufferCP) - 1);
 		inBufferCP[size] = '\0';
-		AddCharUTF(inBufferCP, size);
+		InsertCharacter(std::string_view(inBufferCP, size), charSource);
 		i += ucWidth;
 	}
 }
@@ -1212,7 +1210,6 @@ sptr_t ScintillaWin::HandleCompositionInline(uptr_t, sptr_t lParam) {
 
 		const bool tmpRecordingMacro = recordingMacro;
 		recordingMacro = false;
-		charAddedSource = SC_CHARADDED_TENTATIVE;
 		const UINT codePage = CodePageOfDocument();
 		char inBufferCP[16];
 		const std::wstring_view wsv = wcs;
@@ -1220,12 +1217,11 @@ sptr_t ScintillaWin::HandleCompositionInline(uptr_t, sptr_t lParam) {
 			const size_t ucWidth = UTF16CharLength(wsv[i]);
 			const int size = MultiByteFromWideChar(codePage, wsv.substr(i, ucWidth), inBufferCP, sizeof(inBufferCP) - 1);
 			inBufferCP[size] = '\0';
-			AddCharUTF(inBufferCP, size);
+			InsertCharacter(std::string_view(inBufferCP, size), CharacterSource::charSourceTentative);
 
 			DrawImeIndicator(imeIndicator[i], size);
 			i += ucWidth;
 		}
-		charAddedSource = SC_CHARADDED_NORMAL;
 		recordingMacro = tmpRecordingMacro;
 
 		// Move IME caret from current last position to imeCaretPos.
@@ -1238,9 +1234,7 @@ sptr_t ScintillaWin::HandleCompositionInline(uptr_t, sptr_t lParam) {
 			view.imeCaretBlockOverride = true;
 		}
 	} else if (lParam & GCS_RESULTSTR) {
-		charAddedSource = SC_CHARADDED_IME;
-		AddWString(imc.GetCompositionString(GCS_RESULTSTR));
-		charAddedSource = SC_CHARADDED_NORMAL;
+		AddWString(imc.GetCompositionString(GCS_RESULTSTR), CharacterSource::charSourceIME);
 	}
 	EnsureCaretVisible();
 	SetCandidateWindowPos();
@@ -1623,7 +1617,7 @@ sptr_t ScintillaWin::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam
 
 		case WM_SYSKEYDOWN:
 		case WM_KEYDOWN: {
-			//Platform::DebugPrintf("S keydown %d %x %x %x %x\n", iMessage, wParam, lParam, ::IsKeyDown(VK_SHIFT), ::IsKeyDown(VK_CONTROL));
+			//Platform::DebugPrintf("S keydown %d %x %x %x %x\n", iMessage, wParam, lParam, KeyboardIsKeyDown(VK_SHIFT), KeyboardIsKeyDown(VK_CONTROL));
 			lastKeyDownConsumed = false;
 			const int ret = KeyDownWithModifiers(KeyTranslate(static_cast<int>(wParam)),
 				ModifierFlags(KeyboardIsKeyDown(VK_SHIFT),
@@ -2586,7 +2580,7 @@ DropSource::DropSource() noexcept {
 
 /// Implement IUnkown
 STDMETHODIMP DataObject::QueryInterface(REFIID riid, PVOID *ppv) noexcept {
-	//Platform::DebugPrintf("DO QI %x\n", this);
+	//Platform::DebugPrintf("DO QI %p\n", this);
 	return sci->QueryInterface(riid, ppv);
 }
 STDMETHODIMP_(ULONG)DataObject::AddRef() noexcept {
@@ -2652,7 +2646,7 @@ STDMETHODIMP DataObject::SetData(FORMATETC *, STGMEDIUM *, BOOL) noexcept {
 
 STDMETHODIMP DataObject::EnumFormatEtc(DWORD dwDirection, IEnumFORMATETC **ppEnum) {
 	try {
-		//Platform::DebugPrintf("DOB EnumFormatEtc %d\n", dwDirection);
+		//Platform::DebugPrintf("DOB EnumFormatEtc %lu\n", dwDirection);
 		if (dwDirection != DATADIR_GET) {
 			*ppEnum = nullptr;
 			return E_FAIL;
@@ -2696,7 +2690,7 @@ DataObject::DataObject() noexcept {
 
 /// Implement IUnknown
 STDMETHODIMP DropTarget::QueryInterface(REFIID riid, PVOID *ppv) noexcept {
-	//Platform::DebugPrintf("DT QI %x\n", this);
+	Platform::DebugPrintf("DT QI %p\n", this);
 	return sci->QueryInterface(riid, ppv);
 }
 STDMETHODIMP_(ULONG)DropTarget::AddRef() noexcept {
@@ -3196,7 +3190,7 @@ void ScintillaWin::EnumDataSourceFormat(const char *tag, LPDATAOBJECT pIDataSour
 				const char *fmtName = GetSourceFormatName(fmt, name, sizeof(name));
 				const int len = sprintf(buf, "%s: fmt[%lu]=%u, 0x%04X; tymed=%lu, %s; name=%s\n",
 					tag, i, fmt, fmt, tymed, typeName, fmtName);
-				AddCharUTF(buf, len);
+				InsertCharacter(std::string_view(buf, len));
 			}
 		}
 	}
@@ -3215,7 +3209,7 @@ void ScintillaWin::EnumAllClipboardFormat(const char *tag) {
 		const char *fmtName = GetSourceFormatName(fmt, name, sizeof(name));
 		const int len = sprintf(buf, "%s: fmt[%u]=%u, 0x%04X; name=%s\n",
 			tag, i, fmt, fmt, fmtName);
-		AddCharUTF(buf, len);
+		InsertCharacter(std::string_view(buf, len));
 		i++;
 	}
 }
@@ -3406,7 +3400,7 @@ STDMETHODIMP ScintillaWin::Drop(LPDATAOBJECT pIDataSource, DWORD grfKeyState, PO
 		}
 
 		if (!succeed) {
-			//Platform::DebugPrintf("Bad data format: 0x%x\n", hr);
+			//Platform::DebugPrintf("Bad data format: 0x%lx\n", hr);
 			return hr;
 		}
 
