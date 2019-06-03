@@ -563,9 +563,7 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 					if (fvCurFile.mask & FV_ENCODING) {
 						iEncoding = CPI_DEFAULT;
 					} else {
-						if (iWeakSrcEncoding == -1) {
-							iEncoding = _iDefaultEncoding;
-						} else if (mEncoding[iWeakSrcEncoding].uFlags & NCP_INTERNAL) {
+						if ((iWeakSrcEncoding != -1) && (mEncoding[iWeakSrcEncoding].uFlags & NCP_INTERNAL)) {
 							iEncoding = iDefaultEncoding;
 						} else {
 							iEncoding = _iDefaultEncoding;
@@ -2570,7 +2568,7 @@ void EditAlignText(int nMode) {
 						if ((nMode == ALIGN_JUSTIFY || nMode == ALIGN_JUSTIFY_EX) &&
 								iWords > 1 && iWordsLength >= 2 &&
 								((nMode != ALIGN_JUSTIFY_EX || !bNextLineIsBlank || iLineStart == iLineEnd) ||
-								 (bNextLineIsBlank && iWordsLength > (iMaxLength - iMinIndent) * 0.75))) {
+								 (bNextLineIsBlank && iWordsLength*4 > (iMaxLength - iMinIndent)*3))) {
 							const int iGaps = iWords - 1;
 							const Sci_Position iSpacesPerGap = (iMaxLength - iMinIndent - iWordsLength) / iGaps;
 							const Sci_Position iExtraSpaces = (iMaxLength - iMinIndent - iWordsLength) % iGaps;
@@ -2726,9 +2724,10 @@ void EditEncloseSelection(LPCWSTR pwszOpen, LPCWSTR pwszClose) {
 	}
 
 	SciCall_BeginUndoAction();
-	len = (int)strlen(mszOpen);
+	len = 0;
 
 	if (StrNotEmptyA(mszOpen)) {
+		len = (int)strlen(mszOpen);
 		SciCall_SetTargetRange(iSelStart, iSelStart);
 		SciCall_ReplaceTarget(len, mszOpen);
 	}
@@ -6312,11 +6311,9 @@ BOOL FileVars_Init(LPCSTR lpData, DWORD cbData, LPFILEVARS lpfv) {
 	}
 
 	if (!utf8Sig && !bNoEncodingTags && !bDisableFileVariables) {
-		if (FileVars_ParseStr(tch, "encoding", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding))) {
-			lpfv->mask |= FV_ENCODING;
-		} else if (FileVars_ParseStr(tch, "charset", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding))) {
-			lpfv->mask |= FV_ENCODING;
-		} else if (FileVars_ParseStr(tch, "coding", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding))) {
+		if (FileVars_ParseStr(tch, "encoding", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding)) ||
+			FileVars_ParseStr(tch, "charset", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding)) ||
+			FileVars_ParseStr(tch, "coding", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding))) {
 			lpfv->mask |= FV_ENCODING;
 		}
 	}
@@ -6328,7 +6325,7 @@ BOOL FileVars_Init(LPCSTR lpData, DWORD cbData, LPFILEVARS lpfv) {
 	}
 
 	if (lpfv->mask == 0 && cbData > COUNTOF(tch)) {
-		strncpy(tch, lpData + cbData - COUNTOF(tch) + 1, COUNTOF(tch));
+		strncpy(tch, lpData + cbData - COUNTOF(tch) + 1, COUNTOF(tch) - 1);
 		if (!fNoFileVariables) {
 			int i;
 			if (FileVars_ParseInt(tch, "enable-local-variables", &i) && (!i)) {
@@ -6369,11 +6366,9 @@ BOOL FileVars_Init(LPCSTR lpData, DWORD cbData, LPFILEVARS lpfv) {
 		}
 
 		if (!utf8Sig && !bNoEncodingTags && !bDisableFileVariables) {
-			if (FileVars_ParseStr(tch, "encoding", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding))) {
-				lpfv->mask |= FV_ENCODING;
-			} else if (FileVars_ParseStr(tch, "charset", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding))) {
-				lpfv->mask |= FV_ENCODING;
-			} else if (FileVars_ParseStr(tch, "coding", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding))) {
+			if (FileVars_ParseStr(tch, "encoding", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding)) ||
+				FileVars_ParseStr(tch, "charset", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding)) ||
+				FileVars_ParseStr(tch, "coding", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding))) {
 				lpfv->mask |= FV_ENCODING;
 			}
 		}
@@ -6536,7 +6531,7 @@ BOOL FileVars_ParseStr(LPCSTR pszData, LPCSTR pszName, char *pszValue, int cchVa
 		}
 
 		char tch[32];
-		strncpy(tch, pvStart, COUNTOF(tch));
+		strncpy(tch, pvStart, COUNTOF(tch) - 1);
 
 		char *pvEnd = tch;
 		while (*pvEnd && (isalnum((unsigned char)(*pvEnd)) || strchr("+-/_", *pvEnd) || (bQuoted && *pvEnd == ' '))) {
