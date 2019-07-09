@@ -146,6 +146,7 @@ static void ColouriseMatlabDoc(Sci_PositionU startPos, Sci_Position length, int 
 			}
 			break;
 		case SCE_MAT_IDENTIFIER:
+		case SCE_MAT_ATTRIBUTE:
 			if (!iswordstart(sc.ch)) {
 				char s[128];	// Matlab max indentifer length = 63, Octave unlimited
 				sc.GetCurrent(s, sizeof(s));
@@ -162,8 +163,13 @@ static void ColouriseMatlabDoc(Sci_PositionU startPos, Sci_Position length, int 
 					sc.ChangeState(SCE_MAT_FUNCTION1);
 				} else if (function2.InListAbbreviated(s, '(')) {
 					sc.ChangeState(SCE_MAT_FUNCTION2);
-				} else if (sc.GetNextNSChar() == '(') {
-					sc.ChangeState(SCE_MAT_FUNCTION);
+				} else {
+					const int chNext = sc.GetNextNSChar();
+					if (chNext == '(') {
+						sc.ChangeState(SCE_MAT_FUNCTION);
+					} else if (lexType == LEX_JULIA && sc.state == SCE_MAT_IDENTIFIER && (chNext == '{')) {
+						sc.ChangeState(SCE_MAT_ATTRIBUTE);
+					}
 				}
 				if (sc.ch == '@') {
 					sc.SetState(SCE_MAT_OPERATOR);
@@ -264,6 +270,10 @@ static void ColouriseMatlabDoc(Sci_PositionU startPos, Sci_Position length, int 
 			} else if (sc.Match("raw\"")) {
 				sc.SetState(SCE_MAT_RAW_STRING2);
 				sc.Forward(3);
+				if (sc.Match(R"(""")")) {
+					sc.ChangeState(SCE_MAT_TRIPLE_STRING2);
+					sc.Forward(2);
+				}
 			} else if (IsBlockCommentStart(lexType, sc, visibleChars)) {
 				if (IsMatlabOctave(lexType)) {
 					++commentLevel;
@@ -327,6 +337,16 @@ static void ColouriseMatlabDoc(Sci_PositionU startPos, Sci_Position length, int 
 					isTransposeOperator = true;
 				} else {
 					isTransposeOperator = false;
+				}
+
+				if (lexType == LEX_JULIA && (sc.ch == ':' || sc.ch == '<') && sc.chNext == ':') {
+					// var::Type, T <: Type
+					sc.Forward(2);
+					sc.SetState(SCE_MAT_DEFAULT);
+					while (IsSpaceOrTab(sc.ch)) {
+						sc.Forward();
+					}
+					sc.SetState(SCE_MAT_ATTRIBUTE);
 				}
 			} else {
 				isTransposeOperator = false;

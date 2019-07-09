@@ -58,9 +58,10 @@
 
 using namespace Scintilla;
 
-static constexpr bool IsControlCharacter(int ch) noexcept {
-	// iscntrl returns true for lots of chars > 127 which are displayable
-	return ch >= 0 && ch < ' ';
+static constexpr bool IsControlCharacter(unsigned char ch) noexcept {
+	// iscntrl returns true for lots of characters > 127 which are displayable
+	// currently only check C0 control characters in [00 .. 1F]
+	return ch < ' ';
 }
 
 PrintParameters::PrintParameters() noexcept {
@@ -1572,15 +1573,16 @@ void EditView::DrawCarets(Surface *surface, const EditModel &model, const ViewSt
 	Sci::Line lineDoc, int xStart, PRectangle rcLine, int subLine) const {
 	// When drag is active it is the only caret drawn
 	const bool drawDrag = model.posDrag.IsValid();
-	if ((hideSelection || !ll->containsCaret) && !drawDrag)
+	if ((hideSelection || (model.sel.Count() == 1 && !ll->containsCaret)) && !drawDrag) {
 		return;
+	}
 	const Sci::Position posLineStart = model.pdoc->LineStart(lineDoc);
 	// For each selection draw
 	for (size_t r = 0; (r < model.sel.Count()) || drawDrag; r++) {
 		const bool mainCaret = r == model.sel.Main();
 		SelectionPosition posCaret = (drawDrag ? model.posDrag : model.sel.Range(r).caret);
-		const ViewStyle::CaretShape caretShape = drawDrag ? ViewStyle::CaretShape::line : vsDraw.CaretShapeForMode(model.inOverstrike);
-		if (((caretShape == ViewStyle::CaretShape::block) || imeCaretBlockOverride) && !drawDrag && posCaret > model.sel.Range(r).anchor) {
+		if (vsDraw.DrawCaretInsideSelection(model.inOverstrike, imeCaretBlockOverride) &&
+			!drawDrag && posCaret > model.sel.Range(r).anchor) {
 			if (posCaret.VirtualSpace() > 0)
 				posCaret.SetVirtualSpace(posCaret.VirtualSpace() - 1);
 			else
@@ -1610,44 +1612,46 @@ void EditView::DrawCarets(Surface *surface, const EditModel &model, const ViewSt
 			}
 			const bool caretBlinkState = (model.caret.active && model.caret.on) || (!additionalCaretsBlink && !mainCaret);
 			const bool caretVisibleState = additionalCaretsVisible || mainCaret;
-			if ((xposCaret >= 0) && (vsDraw.caretWidth > 0) && (vsDraw.caretStyle != CARETSTYLE_INVISIBLE) &&
+			if ((xposCaret >= 0) && vsDraw.IsCaretVisible() &&
 				(drawDrag || (caretBlinkState && caretVisibleState))) {
 				bool caretAtEOF = false;
 				bool caretAtEOL = false;
 				bool drawBlockCaret = false;
-				XYPOSITION widthOverstrikeCaret;
+				bool invalidByte = false;
+				XYPOSITION widthOverstrikeCaret = 0;
 				XYPOSITION caretWidthOffset = 0;
 				PRectangle rcCaret = rcLine;
 
-				if (posCaret.Position() == model.pdoc->Length()) {   // At end of document
-					caretAtEOF = true;
-					widthOverstrikeCaret = vsDraw.aveCharWidth;
-				} else if ((posCaret.Position() - posLineStart) >= ll->numCharsInLine) {	// At end of line
-					caretAtEOL = true;
-					widthOverstrikeCaret = vsDraw.aveCharWidth;
-				} else {
-					const int widthChar = model.pdoc->LenChar(posCaret.Position());
-					widthOverstrikeCaret = ll->positions[offset + widthChar] - ll->positions[offset];
+				const ViewStyle::CaretShape caretShape = vsDraw.CaretShapeForMode(model.inOverstrike, drawDrag, drawOverstrikeCaret, imeCaretBlockOverride);
+				if (caretShape != ViewStyle::CaretShape::line) {
+					if (posCaret.Position() == model.pdoc->Length()) {   // At end of document
+						caretAtEOF = true;
+						widthOverstrikeCaret = vsDraw.aveCharWidth;
+					} else if ((posCaret.Position() - posLineStart) >= ll->numCharsInLine) {	// At end of line
+						caretAtEOL = true;
+						widthOverstrikeCaret = vsDraw.aveCharWidth;
+					} else {
+						const int widthChar = model.pdoc->LenChar(posCaret.Position(), &invalidByte);
+						widthOverstrikeCaret = ll->positions[offset + widthChar] - ll->positions[offset];
+					}
+					if (widthOverstrikeCaret < 3) {	// Make sure its visible
+						widthOverstrikeCaret = 3;
+					}
 				}
-				if (widthOverstrikeCaret < 3)	// Make sure its visible
-					widthOverstrikeCaret = 3;
 
-				if (xposCaret > 0)
+				if (xposCaret > 0) {
 					caretWidthOffset = 0.51f;	// Move back so overlaps both character cells.
+				}
 				xposCaret += xStart;
-				if (drawDrag) {
-					/* Dragging text, use a line caret */
-					rcCaret.left = std::round(xposCaret - caretWidthOffset);
-					rcCaret.right = rcCaret.left + vsDraw.caretWidth;
-				} else if ((caretShape == ViewStyle::CaretShape::bar) && drawOverstrikeCaret) {
-					/* Overstrike (insert mode), use a modified bar caret */
+				if (caretShape == ViewStyle::CaretShape::bar) {
+					/* Modified bar caret */
 					rcCaret.top = rcCaret.bottom - 2;
 					rcCaret.left = xposCaret + 1;
 					rcCaret.right = rcCaret.left + widthOverstrikeCaret - 1;
-				} else if ((caretShape == ViewStyle::CaretShape::block) || imeCaretBlockOverride) {
+				} else if (caretShape == ViewStyle::CaretShape::block) {
 					/* Block caret */
 					rcCaret.left = xposCaret;
-					if (!caretAtEOL && !caretAtEOF && (ll->chars[offset] != '\t') && !(IsControlCharacter(ll->chars[offset]))) {
+					if (!caretAtEOL && !caretAtEOF && !invalidByte && !IsControlCharacter(ll->chars[offset])) {
 						drawBlockCaret = true;
 						rcCaret.right = xposCaret + widthOverstrikeCaret;
 					} else {
@@ -1807,8 +1811,8 @@ static void DrawEdgeLine(Surface *surface, const ViewStyle &vsDraw, const LineLa
 // Draw underline mark as part of background if not transparent
 static void DrawMarkUnderline(Surface *surface, const EditModel &model, const ViewStyle &vsDraw,
 	Sci::Line line, PRectangle rcLine) {
-	int marks = model.pdoc->GetMark(line);
-	for (int markBit = 0; (markBit < 32) && marks; markBit++) {
+	MarkerMask marks = model.pdoc->GetMark(line);
+	for (int markBit = 0; (markBit < MarkerBitCount) && marks; markBit++) {
 		if ((marks & 1) && (vsDraw.markers[markBit].markType == SC_MARK_UNDERLINE) &&
 			(vsDraw.markers[markBit].alpha == SC_ALPHA_NOALPHA)) {
 			PRectangle rcUnderline = rcLine;
@@ -1895,9 +1899,9 @@ static void DrawTranslucentLineState(Surface *surface, const EditModel &model, c
 			SimpleAlphaRectangle(surface, rcLine, vsDraw.caretLineBackground, vsDraw.caretLineAlpha);
 		}
 	}
-	const int marksOfLine = model.pdoc->GetMark(line);
-	unsigned int marksDrawnInText = marksOfLine & vsDraw.maskDrawInText;
-	for (int markBit = 0; (markBit < 32) && marksDrawnInText; markBit++) {
+	const MarkerMask marksOfLine = model.pdoc->GetMark(line);
+	MarkerMask marksDrawnInText = marksOfLine & vsDraw.maskDrawInText;
+	for (int markBit = 0; (markBit < MarkerBitCount) && marksDrawnInText; markBit++) {
 		if (marksDrawnInText & 1) {
 			if (vsDraw.markers[markBit].markType == SC_MARK_BACKGROUND) {
 				SimpleAlphaRectangle(surface, rcLine, vsDraw.markers[markBit].back, vsDraw.markers[markBit].alpha);
@@ -1909,8 +1913,8 @@ static void DrawTranslucentLineState(Surface *surface, const EditModel &model, c
 		}
 		marksDrawnInText >>= 1;
 	}
-	unsigned int marksDrawnInLine = marksOfLine & vsDraw.maskInLine;
-	for (int markBit = 0; (markBit < 32) && marksDrawnInLine; markBit++) {
+	MarkerMask marksDrawnInLine = marksOfLine & vsDraw.maskInLine;
+	for (int markBit = 0; (markBit < MarkerBitCount) && marksDrawnInLine; markBit++) {
 		if (marksDrawnInLine & 1) {
 			SimpleAlphaRectangle(surface, rcLine, vsDraw.markers[markBit].back, vsDraw.markers[markBit].alpha);
 		}

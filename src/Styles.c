@@ -263,6 +263,7 @@ static int	iBaseFontSize = 11*SC_FONT_SIZE_MULTIPLIER; // 11 pt
 int		iFontQuality = SC_EFF_QUALITY_LCD_OPTIMIZED;
 int		iCaretStyle = 1; // width 1, 0 for block
 int		iOvrCaretStyle = 0; // 0 for bar, 1 for block
+BOOL bBlockCaretOutSelection = 0;
 int		iCaretBlinkPeriod = -1; // system default, 0 for noblink
 static BOOL bBookmarkColorUpdated;
 static int	iDefaultLexer;
@@ -355,10 +356,10 @@ enum DefaultStyleIndex {
 #define FoldingMarkerFillColorDark		RGB(0x60, 0x60, 0x60)
 
 // from ScintillaWin.cxx
-#define SC_INDICATOR_INPUT		INDIC_IME
-#define SC_INDICATOR_TARGET		(INDIC_IME + 1)
-#define SC_INDICATOR_CONVERTED	(INDIC_IME + 2)
-#define SC_INDICATOR_UNKNOWN	INDIC_IME_MAX
+#define SC_INDICATOR_INPUT		INDICATOR_IME
+#define SC_INDICATOR_TARGET		(INDICATOR_IME + 1)
+#define SC_INDICATOR_CONVERTED	(INDICATOR_IME + 2)
+#define SC_INDICATOR_UNKNOWN	INDICATOR_IME_MAX
 
 #define IMEIndicatorDefaultColor	RGB(0x10, 0x80, 0x10)
 #define MarkOccurrencesDefaultAlpha	100
@@ -955,7 +956,8 @@ void Style_OnStyleThemeChanged(int theme) {
 void Style_UpdateCaret(void) {
 	// caret style and width
 	const int style = (iCaretStyle ? CARETSTYLE_LINE : CARETSTYLE_BLOCK)
-		| (iOvrCaretStyle ? CARETSTYLE_OVERSTRIKE_BLOCK : CARETSTYLE_OVERSTRIKE_BAR);
+		| (iOvrCaretStyle ? CARETSTYLE_OVERSTRIKE_BLOCK : CARETSTYLE_OVERSTRIKE_BAR)
+		| (bBlockCaretOutSelection ? CARETSTYLE_BLOCK_AFTER : 0);
 	SciCall_SetCaretStyle(style);
 	if (iCaretStyle != 0) {
 		SciCall_SetCaretWidth(iCaretStyle);
@@ -1079,18 +1081,40 @@ static inline BOOL DidLexerHasBlockComment(int iLexer, int rid) {
 	);
 }
 
+static inline BOOL IsPythonLikeFolding(int iLexer) {
+	return iLexer == SCLEX_PYTHON
+		|| iLexer == SCLEX_NULL;
+}
+
 static void Style_Parse(struct DetailStyle *style, LPCWSTR lpszStyle);
 static void Style_SetParsed(const struct DetailStyle *style, int iStyle);
 static inline void Style_SetDefaultStyle(int index) {
 	Style_SetStyles(pLexGlobal->Styles[index].iStyle, pLexGlobal->Styles[index].szValue);
 }
 
-static inline BOOL Style_StrGetAttributeEx(LPCWSTR lpszStyle, LPCWSTR key, int keyLen) {
+// parse a style attribute separated by ';'
+// e.g.: 'bold', 'bold;', '; bold' and '; bold;'
+static BOOL Style_StrGetAttributeEx(LPCWSTR lpszStyle, LPCWSTR key, int keyLen) {
 	LPCWSTR p = StrStr(lpszStyle, key);
-	if (p != NULL) {
-		const WCHAR ch1 = (p == lpszStyle) ? L' ' : p[-1];
-		const WCHAR ch2 = p[keyLen];
-		return (ch1 == L' ' || ch1 == L';') && (ch2 == L'\0' || ch2 == L' ' || ch2 == L';');
+	while (p != NULL) {
+		WCHAR chPrev = (p == lpszStyle) ? L';' : p[-1];
+		if (chPrev == L' ') {
+			LPCWSTR t = p - 2;
+			while (t > lpszStyle && *t == L' ') {
+				--t;
+			}
+			chPrev = (t <= lpszStyle) ? L';' : *t;
+		}
+		p += keyLen;
+		if (chPrev == L';') {
+			while (*p == L' ') {
+				++p;
+			}
+			if (*p == L'\0' || *p == L';') {
+				return TRUE;
+			}
+		}
+		p = StrStr(p, key);
 	}
 	return FALSE;
 }
@@ -1482,8 +1506,12 @@ void Style_SetLexer(PEDITLEXER pLexNew) {
 	UpdateStatusbar();
 }
 
+static inline BOOL IsASpace(int ch) {
+	return (ch == ' ') || ((ch >= 0x09) && (ch <= 0x0d));
+}
+
 //=============================================================================
-// find lexer from script interpreter
+// find lexer from script interpreter, which must be first line of the file.
 // Style_SniffShebang()
 //
 PEDITLEXER Style_SniffShebang(char *pchText) {
@@ -1495,7 +1523,7 @@ PEDITLEXER Style_SniffShebang(char *pchText) {
 			pch++;
 		}
 		name = pch;
-		while (*pch && *pch != ' ' && *pch != '\t' && *pch != '\r' && *pch != '\n') {
+		while (*pch && !IsASpace(*pch)) {
 			len = *pch == '\\' || *pch == '/';
 			pch++;
 			name = len ? pch : name;
@@ -1505,7 +1533,7 @@ PEDITLEXER Style_SniffShebang(char *pchText) {
 				pch++;
 			}
 			name = pch;
-			while (*pch && *pch != ' ' && *pch != '\t' && *pch != '\r' && *pch != '\n') {
+			while (*pch && !IsASpace(*pch)) {
 				len = *pch == '\\' || *pch == '/';
 				pch++;
 				name = len ? pch : name;
@@ -1615,13 +1643,14 @@ int Style_GetDocTypeLanguage(void) {
 	SciCall_GetText(COUNTOF(tchText), tchText);
 
 	// check DOCTYPE
-	if ((p = strstr(tchText, "!DOCTYPE")) != NULL) {
+	if ((p = StrStrIA(tchText, "<!DOCTYPE")) != NULL) {
 		p += 9;
-		while (*p == ' ' || *p == '=' || *p == '\"') {
-			p++;
+		while (IsASpace(*p)) {
+			++p;
 		}
-		//if (!_strnicmp(p, "html", 4))
-		//	return IDM_LANG_WEB;
+		if (!_strnicmp(p, "html", 4)) {
+			return IDM_LANG_WEB;
+		}
 		if (!strncmp(p, "struts", 6) || !strncmp(p, "xwork", 5) || !strncmp(p, "validators", 10)) {
 			return IDM_LANG_STRUTS;
 		}
@@ -1635,8 +1664,9 @@ int Style_GetDocTypeLanguage(void) {
 			}
 			return IDM_LANG_HIB_CFG;
 		}
-		//if (!strncmp(p, "plist", 5))
+		//if (!strncmp(p, "plist", 5)) {
 		//	return IDM_LANG_PROPERTY_LIST;
+		//}
 		if (!strncmp(p, "schema", 6)) {
 			return IDM_LANG_XSD;
 		}
@@ -1786,10 +1816,6 @@ int Style_GetDocTypeLanguage(void) {
 	}
 
 	return 0;
-}
-
-static inline BOOL IsASpace(int ch) {
-	return (ch == ' ') || ((ch >= 0x09) && (ch <= 0x0d));
 }
 
 BOOL MatchCPPKeyword(const char *p, int index) {
@@ -1995,7 +2021,7 @@ LPCWSTR Style_GetCurrentLexerName(void) {
 	case IDM_LANG_PMD_RULESET:
 		return L"PMD Ruleset";
 	case IDM_LANG_CHECKSTYLE:
-		return L"Checkstyle";
+		return L"CheckStyle";
 
 	case IDM_LANG_APACHE:
 		return L"Apache Config";
@@ -2218,7 +2244,6 @@ static PEDITLEXER Style_GetLexerFromFile(LPCWSTR lpszFile, BOOL bCGIGuess, LPCWS
 		if (!bFound && bCGIGuess && (StrCaseEqual(lpszExt, L"cgi") || StrCaseEqual(lpszExt, L"fcgi"))) {
 			char tchText[256] = "";
 			SciCall_GetText(COUNTOF(tchText), tchText);
-			StrTrimA(tchText, " \t\n\r");
 			pLexNew = Style_SniffShebang(tchText);
 			bFound = pLexNew != NULL;
 		}
@@ -2248,6 +2273,8 @@ static PEDITLEXER Style_GetLexerFromFile(LPCWSTR lpszFile, BOOL bCGIGuess, LPCWS
 				np2LexLangIndex = IDM_LANG_IVY_SETTINGS;
 			} else if (StrCaseEqual(lpszName, L"pmd.xml")) {
 				np2LexLangIndex = IDM_LANG_PMD_RULESET;
+			} else {
+				np2LexLangIndex = Style_GetDocTypeLanguage();
 			}
 		}
 
@@ -2344,23 +2371,48 @@ BOOL Style_SetLexerFromFile(LPCWSTR lpszFile) {
 	}
 
 	// xml/html
-	if ((!bFound && bAutoSelect && (!fNoHTMLGuess || !fNoCGIGuess)) || (bFound && pLexNew->rid == NP2LEX_PHP)) {
+	if ((!bFound && bAutoSelect) || (bFound && (pLexNew->rid == NP2LEX_PHP || pLexNew->rid == NP2LEX_CONF))) {
 		char tchText[256] = "";
 		SciCall_GetText(COUNTOF(tchText), tchText);
-		StrTrimA(tchText, " \t\n\r");
-		if (pLexNew->rid == NP2LEX_PHP) {
-			if (strncmp(tchText, "<?php", 5) != 0) {
-				pLexNew = &lexHTML;
-			}
-		} else if (!fNoHTMLGuess && tchText[0] == '<') {
-			if (StrStrIA(tchText, "<html")) {
-				pLexNew = &lexHTML;
-			} else {
-				pLexNew = &lexXML;
-			}
-			np2LexLangIndex = Style_GetDocTypeLanguage();
+		const char *p = tchText;
+		while (IsASpace(*p)) {
+			++p;
+		}
+		const BOOL bPHP = strncmp(p, "<?php", 5) == 0;
+		if ((pLexNew->rid == NP2LEX_PHP) ^ bPHP) {
+			pLexNew = &lexHTML;
+			np2LexLangIndex = IDM_LANG_PHP;
 			bFound = TRUE;
-		} else if (!fNoCGIGuess && (pLexSniffed = Style_SniffShebang(tchText)) != NULL) {
+		} else if (*p == '<') {
+			if (strncmp(p, "<?xml", 5) == 0) {
+				// some conf/cfg file is xml
+				pLexNew = &lexXML;
+			} else if (!bFound) {
+				if (_strnicmp(p, "<!DOCTYPE", 9) == 0) {
+					p += 9;
+					while (IsASpace(*p)) {
+						++p;
+					}
+				}
+				if (_strnicmp(p, "<html", 5) == 0) {
+					pLexNew = &lexHTML;
+				} else if (!fNoHTMLGuess) {
+					if (StrStrIA(p, "<html")) {
+						pLexNew = &lexHTML;
+					} else {
+						pLexNew = &lexXML;
+					}
+				}
+			}
+			if (pLexNew->rid == NP2LEX_HTML || pLexNew->rid == NP2LEX_XML) {
+				bFound = TRUE;
+				np2LexLangIndex = Style_GetDocTypeLanguage();
+				if (pLexNew->rid == NP2LEX_XML && np2LexLangIndex == IDM_LANG_WEB) {
+					// xhtml: <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html>
+					pLexNew = &lexHTML;
+				}
+			}
+		} else if ((p == tchText) && !fNoCGIGuess && (pLexSniffed = Style_SniffShebang(tchText)) != NULL) {
 			pLexNew = pLexSniffed;
 			bFound = TRUE;
 		}
@@ -2375,7 +2427,6 @@ BOOL Style_SetLexerFromFile(LPCWSTR lpszFile) {
 		if (!fNoCGIGuess && (StrCaseEqual(wchMode, L"cgi") || StrCaseEqual(wchMode, L"fcgi"))) {
 			char tchText[256] = "";
 			SciCall_GetText(COUNTOF(tchText), tchText);
-			StrTrimA(tchText, " \t\n\r");
 			if ((pLexSniffed = Style_SniffShebang(tchText)) != NULL) {
 				if (iEncoding != g_DOSEncoding || pLexSniffed != &lexTextFile
 						|| !(StrCaseEqual(lpszExt, L"nfo") || StrCaseEqual(lpszExt, L"diz"))) {
@@ -2770,7 +2821,7 @@ void Style_SetIndentGuides(BOOL bShow) {
 	int iIndentView = SC_IV_NONE;
 	if (bShow) {
 		if (!flagSimpleIndentGuides) {
-			if (pLexCurrent->iLexer == SCLEX_PYTHON) {
+			if (IsPythonLikeFolding(pLexCurrent->iLexer)) {
 				iIndentView = SC_IV_LOOKFORWARD;
 			} else {
 				iIndentView = SC_IV_LOOKBOTH;

@@ -33,10 +33,11 @@ NP2_inline void InitScintillaHandle(HWND hwnd) {
 #if defined(__cplusplus)
 extern "C"
 #endif
-LRESULT WINAPI Scintilla_DirectFunction(HANDLE handle, UINT msg, WPARAM wParam, LPARAM lParam);
+LRESULT SCI_METHOD Scintilla_DirectFunction(HANDLE handle, UINT msg, WPARAM wParam, LPARAM lParam);
 #define SciCall(m, w, l)	Scintilla_DirectFunction(g_hScintilla, (m), (w), (l))
 
 typedef Sci_Position Sci_Line;
+typedef unsigned int Sci_MarkerMask;
 
 NP2_inline Sci_Position min_pos(Sci_Position x, Sci_Position y) {
 	return (x < y) ? x : y;
@@ -761,10 +762,6 @@ NP2_inline void SciCall_SetIMEInteraction(int imeInteraction) {
 	SciCall(SCI_SETIMEINTERACTION, imeInteraction, 0);
 }
 
-NP2_inline void SciCall_SetInlineIMEUseBlockCaret(BOOL useBlockCaret) {
-	SciCall(SCI_SETINLINEIMEUSEBLOCKCARET, useBlockCaret, 0);
-}
-
 // Brace highlighting
 
 NP2_inline void SciCall_BraceHighlight(Sci_Position posA, Sci_Position posB) {
@@ -787,6 +784,10 @@ NP2_inline void SciCall_SetTabWidth(int tabWidth) {
 
 NP2_inline int SciCall_GetTabWidth(void) {
 	return (int)SciCall(SCI_GETTABWIDTH, 0, 0);
+}
+
+NP2_inline void SciCall_SetTabMinimumWidth(int pixels) {
+	SciCall(SCI_SETTABMINIMUMWIDTH, pixels, 0);
 }
 
 NP2_inline void SciCall_SetUseTabs(BOOL useTabs) {
@@ -875,15 +876,15 @@ NP2_inline void SciCall_ClearMarker(void) {
 	SciCall_MarkerDeleteAll(-1);
 }
 
-NP2_inline int SciCall_MarkerGet(Sci_Line line) {
-	return (int)SciCall(SCI_MARKERGET, line, 0);
+NP2_inline Sci_MarkerMask SciCall_MarkerGet(Sci_Line line) {
+	return (Sci_MarkerMask)SciCall(SCI_MARKERGET, line, 0);
 }
 
-NP2_inline Sci_Line SciCall_MarkerNext(Sci_Line line, int markerMask) {
+NP2_inline Sci_Line SciCall_MarkerNext(Sci_Line line, Sci_MarkerMask markerMask) {
 	return SciCall(SCI_MARKERNEXT, line, markerMask);
 }
 
-NP2_inline Sci_Line SciCall_MarkerPrevious(Sci_Line line, int markerMask) {
+NP2_inline Sci_Line SciCall_MarkerPrevious(Sci_Line line, Sci_MarkerMask markerMask) {
 	return SciCall(SCI_MARKERPREVIOUS, line, markerMask);
 }
 

@@ -716,18 +716,19 @@ BOOL EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, EditFileIOStatus *
 		} else if (uFlags & NCP_8BIT) {
 			BOOL bCancelDataLoss = FALSE;
 			const UINT uCodePage = mEncoding[iEncoding].uCodePage;
+			const BOOL zeroFlags = IsZeroFlagsCodePage(uCodePage);
 
 			LPWSTR lpDataWide = (LPWSTR)NP2HeapAlloc(cbData * 2 + 16);
 			const int cbDataWide = MultiByteToWideChar(CP_UTF8, 0, lpData, cbData, lpDataWide, (int)(NP2HeapSize(lpDataWide) / sizeof(WCHAR)));
-			// Special cases: 42, 50220, 50221, 50222, 50225, 50227, 50229, 54936 GB18030, 57002-11, 65000, 65001
-			if (uCodePage == CP_UTF7 || uCodePage == 54936) {
+
+			if (zeroFlags) {
 				NP2HeapFree(lpData);
 				lpData = (char *)NP2HeapAlloc(NP2HeapSize(lpDataWide) * 2);
 			} else {
 				ZeroMemory(lpData, NP2HeapSize(lpData));
 			}
 
-			if (uCodePage == CP_UTF7 || uCodePage == 54936) {
+			if (zeroFlags) {
 				cbData = WideCharToMultiByte(uCodePage, 0, lpDataWide, cbDataWide, lpData, (int)NP2HeapSize(lpData), NULL, NULL);
 			} else {
 				cbData = WideCharToMultiByte(uCodePage, WC_NO_BEST_FIT_CHARS, lpDataWide, cbDataWide, lpData, (int)NP2HeapSize(lpData), NULL, &bCancelDataLoss);
@@ -3618,16 +3619,16 @@ typedef struct _SORTLINE {
 
 typedef int (__stdcall *FNSTRCMP)(LPCWSTR, LPCWSTR);
 
-int CmpStd(const void *s1, const void *s2) {
+static int __cdecl CmpStd(const void *s1, const void *s2) {
 	const int cmp = StrCmp(((SORTLINE *)s1)->pwszSortEntry, ((SORTLINE *)s2)->pwszSortEntry);
 	return (cmp) ? cmp : StrCmp(((SORTLINE *)s1)->pwszLine, ((SORTLINE *)s2)->pwszLine);
 }
 
-int CmpStdRev(const void *s1, const void *s2) {
+static int __cdecl CmpStdRev(const void *s1, const void *s2) {
 	return CmpStd(s2, s1);
 }
 
-int CmpLogical(const void *s1, const void *s2) {
+static int __cdecl CmpLogical(const void *s1, const void *s2) {
 	int cmp = (int)StrCmpLogicalW(((SORTLINE *)s1)->pwszSortEntry, ((SORTLINE *)s2)->pwszSortEntry);
 	if (cmp == 0) {
 		cmp = (int)StrCmpLogicalW(((SORTLINE *)s1)->pwszLine, ((SORTLINE *)s2)->pwszLine);
@@ -3638,7 +3639,7 @@ int CmpLogical(const void *s1, const void *s2) {
 	return (cmp) ? cmp : StrCmp(((SORTLINE *)s1)->pwszLine, ((SORTLINE *)s2)->pwszLine);
 }
 
-int CmpLogicalRev(const void *s1, const void *s2) {
+static int __cdecl CmpLogicalRev(const void *s1, const void *s2) {
 	return CmpLogical(s2, s1);
 }
 
@@ -5803,6 +5804,7 @@ typedef struct UnicodeControlCharacter {
 } UnicodeControlCharacter;
 
 // https://en.wikipedia.org/wiki/Unicode_control_characters
+// http://www.unicode.org/charts/PDF/U2000.pdf
 // scintilla/scripts/GenerateCharTable.py
 static const UnicodeControlCharacter kUnicodeControlCharacterTable[] = {
 	{ "\xe2\x80\x8e", "LRM" },	// U+200E	LRM		Left-to-right mark
@@ -5825,6 +5827,13 @@ static const UnicodeControlCharacter kUnicodeControlCharacterTable[] = {
 	{ "\x1f", NULL },			// U+001F	US		Unit Separator (Segment separator)
 	{ "\xe2\x80\xa8", NULL },	// U+2028	LS		Line Separator
 	{ "\xe2\x80\xa9", NULL },	// U+2029	PS		Paragraph Separator
+	// Other
+	{ "\xe2\x80\x8b", "ZWSP" },	// U+200B	ZWSP	Zero width space
+	{ "\xe2\x81\xa0", "WJ" },	// U+2060	WJ		Word joiner
+	{ "\xe2\x81\xa6", "LRI" },	// U+2066	LRI		Left-to-right isolate
+	{ "\xe2\x81\xa7", "RLI" },	// U+2067	RLI		Right-to-left isolate
+	{ "\xe2\x81\xa8", "FSI" },	// U+2068	FSI		First strong isolate
+	{ "\xe2\x81\xa9", "PDI" },	// U+2069	PDI		Pop directional isolate
 };
 
 void EditInsertUnicodeControlCharacter(int menu) {
@@ -5837,6 +5846,7 @@ void EditShowUnicodeControlCharacter(BOOL bShow) {
 	for (UINT i = 0; i < (UINT)COUNTOF(kUnicodeControlCharacterTable); i++) {
 		const UnicodeControlCharacter ucc = kUnicodeControlCharacterTable[i];
 		if (StrIsEmptyA(ucc.representation)) {
+			// built-in
 			continue;
 		}
 		if (bShow) {

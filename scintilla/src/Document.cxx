@@ -308,11 +308,11 @@ void Document::TentativeUndo() {
 	}
 }
 
-int Document::GetMark(Sci::Line line) const noexcept {
+MarkerMask Document::GetMark(Sci::Line line) const noexcept {
 	return Markers()->MarkValue(line);
 }
 
-Sci::Line Document::MarkerNext(Sci::Line lineStart, int mask) const noexcept {
+Sci::Line Document::MarkerNext(Sci::Line lineStart, MarkerMask mask) const noexcept {
 	return Markers()->MarkerNext(lineStart, mask);
 }
 
@@ -327,11 +327,11 @@ int Document::AddMark(Sci::Line line, int markerNum) {
 	}
 }
 
-void Document::AddMarkSet(Sci::Line line, int valueSet) {
+void Document::AddMarkSet(Sci::Line line, MarkerMask valueSet) {
 	if (line < 0 || line > LinesTotal()) {
 		return;
 	}
-	unsigned int m = valueSet;
+	MarkerMask m = valueSet;
 	for (int i = 0; m; i++, m >>= 1) {
 		if (m & 1)
 			Markers()->AddMark(line, i, LinesTotal());
@@ -606,23 +606,44 @@ bool Document::IsCrLf(Sci::Position pos) const noexcept {
 	return (cb.CharAt(pos) == '\r') && (cb.CharAt(pos + 1) == '\n');
 }
 
-int Document::LenChar(Sci::Position pos) noexcept {
-	if (pos < 0) {
+int Document::LenChar(Sci::Position pos, bool *invalid) noexcept {
+	if (pos < 0 || pos >= Length()) {
 		return 1;
 	} else if (IsCrLf(pos)) {
 		return 2;
-	} else if (SC_CP_UTF8 == dbcsCodePage) {
-		const unsigned char leadByte = cb.UCharAt(pos);
-		const int widthCharBytes = UTF8BytesOfLead(leadByte);
-		const Sci::Position lengthDoc = Length();
-		if ((pos + widthCharBytes) > lengthDoc)
-			return static_cast<int>(lengthDoc - pos);
-		else
-			return widthCharBytes;
-	} else if (dbcsCodePage) {
-		return IsDBCSLeadByteNoExcept(cb.CharAt(pos)) ? 2 : 1;
-	} else {
+	}
+
+	const unsigned char leadByte = cb.UCharAt(pos);
+	if (!dbcsCodePage || UTF8IsAscii(leadByte)) {
+		// Common case: ASCII character
 		return 1;
+	}
+	if (SC_CP_UTF8 == dbcsCodePage) {
+		const int widthCharBytes = UTF8BytesOfLead(leadByte);
+		unsigned char charBytes[UTF8MaxBytes] = { leadByte, 0, 0, 0 };
+		for (int b = 1; b < widthCharBytes; b++) {
+			charBytes[b] = cb.UCharAt(pos + b);
+		}
+		const int utf8status = UTF8ClassifyMulti(charBytes, widthCharBytes);
+		if (utf8status & UTF8MaskInvalid) {
+			// Treat as invalid and use up just one byte
+			if (invalid) {
+				*invalid = true;
+			}
+			return 1;
+		} else {
+			return utf8status & UTF8MaskWidth;
+		}
+	} else {
+		const bool lead = IsDBCSLeadByteNoExcept(leadByte);
+		if (lead && ((pos + 1) < Length())) {
+			return 2;
+		} else {
+			if (invalid) {
+				*invalid = lead;
+			}
+			return 1;
+		}
 	}
 }
 
@@ -1034,18 +1055,18 @@ int Document::SafeSegment(const char *text, int length, int lengthSegment) const
 			if (IsSpaceOrTab(text[j - 1]) && !IsSpaceOrTab(text[j])) {
 				lastSpaceBreak = j;
 			}
-			if (ch < 'A') {
+		}
+
+		lastEncodingAllowedBreak = j;
+		if (!dbcsCodePage || UTF8IsAscii(ch)) {
+			if (j > 0 && charClass.GetClass(ch) == CharClassify::ccPunctuation) {
 				lastPunctuationBreak = j;
 			}
-		}
-		lastEncodingAllowedBreak = j;
-
-		if (dbcsCodePage == SC_CP_UTF8) {
-			j += UTF8BytesOfLead(ch);
-		} else if (dbcsCodePage) {
-			j += IsDBCSLeadByteNoExcept(ch) ? 2 : 1;
-		} else {
 			j++;
+		} else if (dbcsCodePage == SC_CP_UTF8) {
+			j += UTF8BytesOfLead(ch);
+		} else {
+			j += IsDBCSLeadByteNoExcept(ch) ? 2 : 1;
 		}
 	}
 	if (lastSpaceBreak >= 0) {

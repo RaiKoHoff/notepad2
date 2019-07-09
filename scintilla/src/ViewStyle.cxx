@@ -29,7 +29,7 @@
 
 using namespace Scintilla;
 
-MarginStyle::MarginStyle(int style_, int width_, int mask_) noexcept :
+MarginStyle::MarginStyle(int style_, int width_, MarkerMask mask_) noexcept :
 	style(style_), width(width_), mask(mask_), sensitive(false), cursor(SC_CURSORREVERSEARROW) {
 }
 
@@ -54,13 +54,13 @@ void FontRealised::Realise(Surface &surface, int zoomLevel, int technology, cons
 	spaceWidth = surface.WidthText(font, " ");
 }
 
-ViewStyle::ViewStyle() : markers(MARKER_MAX + 1), indicators(INDIC_MAX + 1) {
+ViewStyle::ViewStyle() : markers(MARKER_MAX + 1), indicators(INDICATOR_MAX + 1) {
 	Init();
 }
 
 // Copy constructor only called when printing copies the screen ViewStyle so it can be
 // modified for printing styles.
-ViewStyle::ViewStyle(const ViewStyle &source) : markers(MARKER_MAX + 1), indicators(INDIC_MAX + 1) {
+ViewStyle::ViewStyle(const ViewStyle &source) : markers(MARKER_MAX + 1), indicators(INDICATOR_MAX + 1) {
 	Init(source.styles.size());
 	styles = source.styles;
 	for (size_t sty = 0; sty < source.styles.size(); sty++) {
@@ -157,7 +157,7 @@ ViewStyle::~ViewStyle() {
 void ViewStyle::CalculateMarginWidthAndMask() {
 	fixedColumnWidth = marginInside ? leftMarginWidth : 0;
 	maskInLine = 0xffffffffU;
-	unsigned int maskDefinedMarkers = 0;
+	MarkerMask maskDefinedMarkers = 0;
 	for (const MarginStyle &m : ms) {
 		fixedColumnWidth += m.width;
 		if (m.width > 0)
@@ -165,8 +165,8 @@ void ViewStyle::CalculateMarginWidthAndMask() {
 		maskDefinedMarkers |= m.mask;
 	}
 	maskDrawInText = 0;
-	for (int markBit = 0; markBit < 32; markBit++) {
-		const unsigned int maskBit = 1U << markBit;
+	for (int markBit = 0; markBit < MarkerBitCount; markBit++) {
+		const MarkerMask maskBit = 1U << markBit;
 		switch (markers[markBit].markType) {
 		case SC_MARK_EMPTY:
 			maskInLine &= ~maskBit;
@@ -453,15 +453,15 @@ bool ViewStyle::IsLineFrameOpaque(bool caretActive, bool lineContainsCaret) cons
 // display itself (as long as it's not an SC_MARK_EMPTY marker).  These are checked in order
 // with the earlier taking precedence.  When multiple markers cause background override,
 // the colour for the highest numbered one is used.
-ColourOptional ViewStyle::Background(int marksOfLine, bool caretActive, bool lineContainsCaret) const {
+ColourOptional ViewStyle::Background(MarkerMask marksOfLine, bool caretActive, bool lineContainsCaret) const {
 	ColourOptional background;
 	if (!caretLineFrame && (caretActive || alwaysShowCaretLineBackground) && showCaretLineBackground &&
 		(caretLineAlpha == SC_ALPHA_NOALPHA) && lineContainsCaret) {
 		background = ColourOptional(caretLineBackground, true);
 	}
 	if (!background.isSet && marksOfLine) {
-		unsigned int marks = marksOfLine;
-		for (int markBit = 0; (markBit < 32) && marks; markBit++) {
+		MarkerMask marks = marksOfLine;
+		for (int markBit = 0; (markBit < MarkerBitCount) && marks; markBit++) {
 			if ((marks & 1) && (markers[markBit].markType == SC_MARK_BACKGROUND) &&
 				(markers[markBit].alpha == SC_ALPHA_NOALPHA)) {
 				background = ColourOptional(markers[markBit].back, true);
@@ -470,9 +470,9 @@ ColourOptional ViewStyle::Background(int marksOfLine, bool caretActive, bool lin
 		}
 	}
 	if (!background.isSet && maskInLine) {
-		unsigned int marksMasked = marksOfLine & maskInLine;
+		MarkerMask marksMasked = marksOfLine & maskInLine;
 		if (marksMasked) {
-			for (int markBit = 0; (markBit < 32) && marksMasked; markBit++) {
+			for (int markBit = 0; (markBit < MarkerBitCount) && marksMasked; markBit++) {
 				if ((marksMasked & 1) &&
 					(markers[markBit].alpha == SC_ALPHA_NOALPHA)) {
 					background = ColourOptional(markers[markBit].back, true);
@@ -555,14 +555,39 @@ bool ViewStyle::SetWrapIndentMode(int wrapIndentMode_) noexcept {
 }
 
 bool ViewStyle::IsBlockCaretStyle() const noexcept {
-	return (caretStyle == CARETSTYLE_BLOCK) || (caretStyle & CARETSTYLE_OVERSTRIKE_BLOCK) != 0;
+	return ((caretStyle & CARETSTYLE_INS_MASK) == CARETSTYLE_BLOCK) ||
+		(caretStyle & CARETSTYLE_OVERSTRIKE_BLOCK) != 0;
 }
 
-ViewStyle::CaretShape ViewStyle::CaretShapeForMode(bool inOverstrike) const noexcept {
-	if (inOverstrike) {
-		return (caretStyle & CARETSTYLE_OVERSTRIKE_BLOCK) ? CaretShape::block : CaretShape::bar;
-	}
+bool ViewStyle::IsCaretVisible() const noexcept {
+	return caretWidth > 0 && caretStyle != CARETSTYLE_INVISIBLE;
+}
 
+bool ViewStyle::DrawCaretInsideSelection(bool inOverstrike, bool imeCaretBlockOverride) const noexcept {
+	if (caretStyle & CARETSTYLE_BLOCK_AFTER) {
+		return false;
+	}
+	return ((caretStyle & CARETSTYLE_INS_MASK) == CARETSTYLE_BLOCK) ||
+		(inOverstrike && (caretStyle & CARETSTYLE_OVERSTRIKE_BLOCK) != 0) ||
+		imeCaretBlockOverride;
+}
+
+ViewStyle::CaretShape ViewStyle::CaretShapeForMode(bool inOverstrike, bool drawDrag, bool drawOverstrikeCaret, bool imeCaretBlockOverride) const noexcept {
+	if (drawDrag) {
+		// Dragging text, use a line caret
+		return CaretShape::line;
+	}
+	if (inOverstrike) {
+		if (caretStyle & CARETSTYLE_OVERSTRIKE_BLOCK) {
+			return CaretShape::block;
+		}
+		if (drawOverstrikeCaret) {
+			return CaretShape::bar;
+		}
+	}
+	if (imeCaretBlockOverride) {
+		return CaretShape::block;
+	}
 	const int caret = caretStyle & CARETSTYLE_INS_MASK;
 	return (caret <= CARETSTYLE_BLOCK) ? static_cast<CaretShape>(caret) : CaretShape::line;
 }

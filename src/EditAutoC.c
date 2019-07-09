@@ -33,8 +33,8 @@ x86: sum(i//24 for i in a) => 11184632 nodes
 struct WordNode;
 struct WordList {
 	char wordBuf[1024];
-	int (*WL_strcmp)(LPCSTR, LPCSTR);
-	int (*WL_strncmp)(LPCSTR, LPCSTR, size_t);
+	int (__cdecl *WL_strcmp)(LPCSTR, LPCSTR);
+	int (__cdecl *WL_strncmp)(LPCSTR, LPCSTR, size_t);
 #if NP2_AUTOC_USE_STRING_ORDER
 	UINT (*WL_OrderFunc)(const void *, unsigned int);
 #endif
@@ -1739,7 +1739,7 @@ void EditAutoIndent(void) {
 	if (iCurLine > 0) {
 		const Sci_Position iPrevLineLength = SciCall_GetLineEndPosition(iCurLine - 1) - SciCall_PositionFromLine(iCurLine - 1);
 		if (iPrevLineLength == 0) {
-			const int bitmask = SciCall_MarkerGet(iCurLine - 1);
+			const Sci_MarkerMask bitmask = SciCall_MarkerGet(iCurLine - 1);
 			if (bitmask & MarkerBitmask_Bookmark) {
 				SciCall_MarkerDelete(iCurLine - 1, MarkerNumber_Bookmark);
 				SciCall_MarkerAdd(iCurLine, MarkerNumber_Bookmark);

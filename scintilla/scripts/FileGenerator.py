@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # FileGenerator.py - implemented 2013 by Neil Hodgson neilh@scintilla.org
 # Released to the public domain.
 
@@ -26,7 +26,7 @@ def DetectLineEnd(content):
         ch = content[index]
         index += 1
         if ch == '\r':
-            if indent < length and content[index] == '\n':
+            if index < length and content[index] == '\n':
                 return "\r\n"
         elif ch == '\n':
             return "\n"

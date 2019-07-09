@@ -61,7 +61,7 @@ protected:
 	void Initialise() noexcept override {}
 	void Finalise() noexcept override;
 
-	void InsertCharacter(std::string_view sv, CharacterSource charSource = CharacterSource::charSourceNormal) override;
+	void InsertCharacter(std::string_view sv, CharacterSource charSource) override;
 	void Command(int cmdId);
 	void CancelModes() noexcept override;
 	int KeyCommand(unsigned int iMessage) override;
@@ -80,8 +80,8 @@ protected:
 	void ListNotify(ListBoxEvent *plbe) override;
 
 	void CallTipClick() noexcept;
-	void CallTipShow(Point pt, NotificationPosition notifyPos, const char *defn);
-	virtual void CreateCallTipWindow(PRectangle rc) noexcept = 0;
+	void SCICALL CallTipShow(Point pt, NotificationPosition notifyPos, const char *defn);
+	virtual void SCICALL CreateCallTipWindow(PRectangle rc) noexcept = 0;
 
 #if SCI_EnablePopupMenu
 	virtual void AddToPopUp(const char *label, int cmd = 0, bool enabled = true) noexcept = 0;

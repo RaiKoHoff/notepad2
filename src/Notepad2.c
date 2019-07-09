@@ -188,7 +188,6 @@ static BOOL bEditLayoutRTL;
 BOOL	bWindowLayoutRTL;
 static int iRenderingTechnology;
 static BOOL bUseInlineIME;
-static BOOL bInlineIMEUseBlockCaret;
 static int iBidirectional;
 static BOOL bShowToolbar;
 static BOOL bShowStatusbar;
@@ -297,6 +296,7 @@ int		iMatchesCount	= 0;
 extern int iFontQuality;
 extern int iCaretStyle;
 extern int iOvrCaretStyle;
+extern BOOL bBlockCaretOutSelection;
 extern int iCaretBlinkPeriod;
 
 static BOOL fIsElevated = FALSE;
@@ -441,10 +441,16 @@ static void CleanUpResources(BOOL initialized) {
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nShowCmd) {
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
+#if 0 // used for clang ubsan
+	if (AttachConsole(ATTACH_PARENT_PROCESS)) {
+		freopen("CONOUT$", "w", stdout);
+		freopen("CONOUT$", "w", stderr);
+		fprintf(stdout, "%s:%d %s\n", __FILE__, __LINE__, __FUNCTION__);
+	}
+#endif
 
 	// Set global variable g_hInstance
 	g_hInstance = hInstance;
-
 #if _WIN32_WINNT < _WIN32_WINNT_WIN10
 	// Set the Windows version global variable
 	NP2_COMPILER_WARNING_PUSH
@@ -1569,7 +1575,6 @@ HWND EditCreate(HWND hwndParent) {
 	SciCall_SetTechnology(iRenderingTechnology);
 	SciCall_SetBidirectional(iBidirectional);
 	SciCall_SetIMEInteraction(bUseInlineIME);
-	SciCall_SetInlineIMEUseBlockCaret(bInlineIMEUseBlockCaret);
 	SciCall_SetPasteConvertEndings(TRUE);
 	SciCall_SetModEventMask(/*SC_MODEVENTMASKALL*/SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT);
 	SciCall_SetCommandEvents(FALSE);
@@ -2130,6 +2135,10 @@ void MsgNotifyZoom(void) {
 	ShowNotificationA(SC_NOTIFICATIONPOSITION_CENTER, buf);
 #endif
 
+	// See https://sourceforge.net/p/scintilla/bugs/2118/
+	// set minimum visual tab width to 1 when font size smaller than 3.5pt.
+	SciCall_SetTabMinimumWidth((iZoomLevel < 40)? 1 : 2);
+
 	UpdateStatusBarCache(STATUS_DOCZOOM);
 	UpdateLineNumberWidth();
 	UpdateFoldMarginWidth();
@@ -2362,6 +2371,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	i = IDM_VIEW_CARET_STYLE_BLOCK + iCaretStyle;
 	CheckMenuRadioItem(hmenu, IDM_VIEW_CARET_STYLE_BLOCK, IDM_VIEW_CARET_STYLE_WIDTH3, i, MF_BYCOMMAND);
 	CheckCmd(hmenu, IDM_VIEW_CARET_STYLE_NOBLINK, iCaretBlinkPeriod == 0);
+	CheckCmd(hmenu, IDM_VIEW_CARET_STYLE_SELECTION, !bBlockCaretOutSelection);
 	CheckCmd(hmenu, IDM_VIEW_LONGLINEMARKER, bMarkLongLines);
 	CheckCmd(hmenu, IDM_VIEW_TABSASSPACES, bTabsAsSpaces);
 	CheckCmd(hmenu, IDM_VIEW_SHOWINDENTGUIDES, bShowIndentGuides);
@@ -2422,7 +2432,6 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	CheckMenuRadioItem(hmenu, IDM_SET_BIDIRECTIONAL_NONE, IDM_SET_BIDIRECTIONAL_R2L, i, MF_BYCOMMAND);
 
 	CheckCmd(hmenu, IDM_SET_USE_INLINE_IME, bUseInlineIME);
-	CheckCmd(hmenu, IDM_SET_USE_BLOCK_CARET, bInlineIMEUseBlockCaret);
 
 	CheckCmd(hmenu, IDM_VIEW_NOSAVERECENT, bSaveRecentFiles);
 	CheckCmd(hmenu, IDM_VIEW_NOSAVEFINDREPL, bSaveFindReplace);
@@ -3260,6 +3269,12 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_INSERT_UNICODE_US:
 	case IDM_INSERT_UNICODE_LS:
 	case IDM_INSERT_UNICODE_PS:
+	case IDM_INSERT_UNICODE_ZWSP:
+	case IDM_INSERT_UNICODE_WJ:
+	case IDM_INSERT_UNICODE_LRI:
+	case IDM_INSERT_UNICODE_RLI:
+	case IDM_INSERT_UNICODE_FSI:
+	case IDM_INSERT_UNICODE_PDI:
 		EditInsertUnicodeControlCharacter(LOWORD(wParam));
 		break;
 
@@ -3620,7 +3635,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		const Sci_Position iPos = SciCall_GetCurrentPos();
 		const Sci_Line iLine = SciCall_LineFromPosition(iPos);
 
-		const int bitmask = SciCall_MarkerGet(iLine);
+		const Sci_MarkerMask bitmask = SciCall_MarkerGet(iLine);
 		if (bitmask & MarkerBitmask_Bookmark) {
 			// unset
 			SciCall_MarkerDelete(iLine, MarkerNumber_Bookmark);
@@ -4098,11 +4113,6 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		SciCall_SetIMEInteraction(bUseInlineIME);
 		break;
 
-	case IDM_SET_USE_BLOCK_CARET:
-		bInlineIMEUseBlockCaret = !bInlineIMEUseBlockCaret;
-		SciCall_SetInlineIMEUseBlockCaret(bInlineIMEUseBlockCaret);
-		break;
-
 	case IDM_VIEW_FONTQUALITY_DEFAULT:
 	case IDM_VIEW_FONTQUALITY_NONE:
 	case IDM_VIEW_FONTQUALITY_STANDARD:
@@ -4115,6 +4125,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		iOvrCaretStyle = !iOvrCaretStyle;
 		Style_UpdateCaret();
 		break;
+
 	case IDM_VIEW_CARET_STYLE_BLOCK:
 	case IDM_VIEW_CARET_STYLE_WIDTH1:
 	case IDM_VIEW_CARET_STYLE_WIDTH2:
@@ -4125,6 +4136,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_VIEW_CARET_STYLE_NOBLINK:
 		iCaretBlinkPeriod = (iCaretBlinkPeriod == 0)? -1 : 0;
+		Style_UpdateCaret();
+		break;
+
+	case IDM_VIEW_CARET_STYLE_SELECTION:
+		bBlockCaretOutSelection = !bBlockCaretOutSelection;
 		Style_UpdateCaret();
 		break;
 
@@ -4815,6 +4831,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			break;
 
 		case SCN_CHARADDED: {
+			// tentative input characters already ignored in Editor::InsertCharacter()
 			const int ch = scn->ch;
 			if (ch < 0x80) {
 				// Auto indent
@@ -4844,7 +4861,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			// auto complete word
 			if (!autoCompletionConfig.bCompleteWord
 				// ignore IME input
-				|| (scn->characterSource != SC_CHARACTERSOURCE_NORMAL && (ch >= 0x80 || autoCompletionConfig.bEnglistIMEModeOnly))
+				|| (scn->characterSource != SC_CHARACTERSOURCE_DIRECT_INPUT && (ch >= 0x80 || autoCompletionConfig.bEnglistIMEModeOnly))
 				|| !IsAutoCompletionWordCharacter(ch)
 			) {
 				return 0;
@@ -5313,23 +5330,12 @@ void LoadSettings(void) {
 	iFontQuality = clamp_i(iValue, SC_EFF_QUALITY_DEFAULT, SC_EFF_QUALITY_LCD_OPTIMIZED);
 
 	iValue = IniSectionGetInt(pIniSection, L"CaretStyle", 1);
-	iOvrCaretStyle = clamp_i(iValue / 10, 0, 1);
+	bBlockCaretOutSelection = (iValue / 100) & 1;
+	iValue %= 100;
+	iOvrCaretStyle = (iValue / 10) & 1;
 	iCaretStyle = clamp_i(iValue % 10, 0, 3);
 	iCaretBlinkPeriod = IniSectionGetInt(pIniSection, L"CaretBlinkPeriod", -1);
-
-	// Korean IME use inline mode (and block caret in inline mode) by default
-	bUseInlineIME = IniSectionGetBool(pIniSection, L"UseInlineIME", -1);
-	bInlineIMEUseBlockCaret = IniSectionGetBool(pIniSection, L"InlineIMEUseBlockCaret", 0);
-	if (bUseInlineIME == -1) { // auto detection once
-		// ScintillaWin::KoreanIME()
-		const int codePage = Scintilla_InputCodePage();
-		if (codePage == 949 || codePage == 1361) {
-			bUseInlineIME = TRUE;
-			bInlineIMEUseBlockCaret = TRUE;
-		} else {
-			bUseInlineIME = FALSE;
-		}
-	}
+	bUseInlineIME = IniSectionGetBool(pIniSection, L"UseInlineIME", 0);
 
 	strValue = IniSectionGetValue(pIniSection, L"ToolbarButtons");
 	if (StrIsEmpty(strValue)) {
@@ -5604,10 +5610,9 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetIntEx(pIniSection, L"RenderingTechnology", iRenderingTechnology, (IsVistaAndAbove()? SC_TECHNOLOGY_DIRECTWRITE : SC_TECHNOLOGY_DEFAULT));
 	IniSectionSetIntEx(pIniSection, L"Bidirectional", iBidirectional, SC_BIDIRECTIONAL_DISABLED);
 	IniSectionSetIntEx(pIniSection, L"FontQuality", iFontQuality, SC_EFF_QUALITY_LCD_OPTIMIZED);
-	IniSectionSetIntEx(pIniSection, L"CaretStyle", iCaretStyle + iOvrCaretStyle*10, 1);
+	IniSectionSetIntEx(pIniSection, L"CaretStyle", iCaretStyle + iOvrCaretStyle*10 + bBlockCaretOutSelection*100, 1);
 	IniSectionSetIntEx(pIniSection, L"CaretBlinkPeriod", iCaretBlinkPeriod, -1);
-	IniSectionSetBool(pIniSection, L"UseInlineIME", bUseInlineIME); // keep result of auto detection
-	IniSectionSetBoolEx(pIniSection, L"InlineIMEUseBlockCaret", bInlineIMEUseBlockCaret, 0);
+	IniSectionSetBoolEx(pIniSection, L"UseInlineIME", bUseInlineIME, 0);
 	Toolbar_GetButtons(hwndToolbar, TOOLBAR_COMMAND_BASE, tchToolbarButtons, COUNTOF(tchToolbarButtons));
 	IniSectionSetStringEx(pIniSection, L"ToolbarButtons", tchToolbarButtons, DefaultToolbarButtons);
 	IniSectionSetBoolEx(pIniSection, L"ShowToolbar", bShowToolbar, 1);
@@ -5757,13 +5762,15 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 	if (*opt == L'-') {
 		++opt;
 	}
-	if (*opt == 0) {
+	if (*opt == L'\0') {
 		return 0;
 	}
 
 	int state = 0;
-	if (opt[1] == 0) {
-		switch (*CharUpper(opt)) {
+	const int ch = ToUpperA(*opt);
+
+	if (opt[1] == L'\0') {
+		switch (ch) {
 		case L'A':
 			flagSetEncoding = IDM_ENCODING_ANSI - IDM_ENCODING_ANSI + 1;
 			state = 1;
@@ -5925,34 +5932,35 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 			state = 3;
 			break;
 		}
-	} else if (opt[2] == 0) {
-		switch (*CharUpper(opt)) {
+	} else if (opt[2] == L'\0') {
+		const int chNext = ToUpperA(opt[1]);
+		switch (ch) {
 		case L'C':
-			if (opt[1] == L'R') {
+			if (chNext == L'R') {
 				flagSetEOLMode = IDM_LINEENDINGS_CR - IDM_LINEENDINGS_CRLF + 1;
 				state = 1;
 			}
 			break;
 
 		case L'F':
-			if (opt[1] == L'0' || *CharUpper(opt + 1) == L'O') {
+			if (chNext == L'0' || chNext == L'O') {
 				lstrcpy(szIniFile, L"*?");
 				state = 1;
 			}
 			break;
 
 		case L'L':
-			if (opt[1] == L'F') {
+			if (chNext == L'F') {
 				flagSetEOLMode = IDM_LINEENDINGS_LF - IDM_LINEENDINGS_CRLF + 1;
 				state = 1;
-			} else if (opt[1] == L'0' || opt[1] == L'-' || *CharUpper(opt + 1) == L'O') {
+			} else if (chNext == L'0' || chNext == L'-' || chNext == L'O') {
 				flagChangeNotify = 1;
 				state = 1;
 			}
 			break;
 
 		case L'N':
-			if (*CharUpper(opt + 1) == L'S') {
+			if (chNext == L'S') {
 				flagReuseWindow = 0;
 				flagNoReuseWindow = 1;
 				flagSingleFileInstance = 1;
@@ -5961,14 +5969,14 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 			break;
 
 		case L'O':
-			if (opt[1] == L'0' || opt[1] == L'-' || *CharUpper(opt + 1) == L'O') {
+			if (chNext == L'0' || chNext == L'-' || chNext == L'O') {
 				flagAlwaysOnTop = 1;
 				state = 1;
 			}
 			break;
 
 		case L'R':
-			if (*CharUpper(opt + 1) == L'S') {
+			if (chNext == L'S') {
 				flagReuseWindow = 1;
 				flagNoReuseWindow = 0;
 				flagSingleFileInstance = 1;
@@ -5989,7 +5997,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 	}
 
 	state = 0;
-	switch (*CharUpper(opt)) {
+	switch (ch) {
 	case L'A':
 		if (StrCaseEqual(opt, L"ANSI")) {
 			flagSetEncoding = IDM_ENCODING_ANSI - IDM_ENCODING_ANSI + 1;
@@ -6007,12 +6015,12 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 		break;
 
 	case L'C':
-		if (opt[1] == L'R') {
+		if (opt[1] == L'R' || opt[1] == L'r') {
 			opt += 2;
 			if (*opt == L'-') {
 				++opt;
 			}
-			if (*opt == L'L' && opt[1] == L'F' && opt[2] == 0) {
+			if (opt[2] == L'\0' && (*opt == L'L' || *opt == L'l') && (opt[1] == L'F' || opt[1] == L'f')) {
 				flagSetEOLMode = IDM_LINEENDINGS_CRLF - IDM_LINEENDINGS_CRLF + 1;
 				state = 1;
 			}
@@ -6029,7 +6037,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 			BOOL bTransBS = FALSE;
 
 			++opt;
-			switch (*CharUpper(opt)) {
+			switch (ToUpperA(*opt)) {
 			case L'R':
 				bRegex = TRUE;
 				++opt;
@@ -6045,7 +6053,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 				bFindUp = TRUE;
 				++opt;
 			}
-			if (*opt != 0) {
+			if (*opt != L'\0') {
 				break;
 			}
 
@@ -6076,7 +6084,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 
 	case L'P': {
 		if (*bIsNotepadReplacement) {
-			if (*CharUpper(opt + 1) == L'T') {
+			if (opt[1] == L'T' || opt[1] == L't') {
 				ExtractFirstArgument(lp2, lp1, lp2);
 			}
 			state = 1;
@@ -6092,10 +6100,10 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 			++opt;
 		}
 
-		switch (*CharUpper(opt)) {
+		switch (ToUpperA(*opt)) {
 		case L'0':
 		case L'O':
-			if (opt[1] == 0) {
+			if (opt[1] == L'\0') {
 				flagPosParam = 1;
 				flagDefaultPos = 1;
 				state = 1;
@@ -6104,9 +6112,9 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 
 		case L'D':
 		case L'S':
-			if (opt[1] == 0 || (opt[2] == 0 && *CharUpper(opt + 1) == L'L')) {
+			if (opt[1] == L'\0' || (opt[2] == L'\0' && (opt[1] == L'L' || opt[1] == L'l'))) {
 				flagPosParam = 1;
-				flagDefaultPos = (opt[1] == 0)? 2 : 3;;
+				flagDefaultPos = (opt[1] == L'\0')? 2 : 3;;
 				state = 1;
 			}
 			break;
@@ -6117,12 +6125,12 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 		case L'T':
 		case L'B':
 		case L'M': {
-			WCHAR *p = opt;
+			LPCWSTR p = opt;
 			flagPosParam = 1;
 			flagDefaultPos = 0;
 			state = 1;
 			while (*p && state == 1) {
-				switch (*CharUpper(p)) {
+				switch (ToUpperA(*p)) {
 				case L'F':
 					flagDefaultPos &= ~(4 | 8 | 16 | 32);
 					flagDefaultPos |= 64;
@@ -6198,7 +6206,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 		// Shell integration
 		if (StrNCaseEqual(opt, L"sysmru=", CSTRLEN(L"sysmru="))) {
 			opt += CSTRLEN(L"sysmru=");
-			if (opt[1] == 0) {
+			if (opt[1] == L'\0') {
 				switch (*opt) {
 				case L'0':
 					flagUseSystemMRU = 1;
@@ -6225,7 +6233,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 				if (*opt == '-') {
 					++opt;
 				}
-				if (*opt == 0) {
+				if (*opt == L'\0') {
 					flagSetEncoding = IDM_ENCODING_UTF8 - IDM_ENCODING_ANSI + 1;
 					state = 1;
 				} else if (StrCaseEqual(opt, L"BOM") || StrCaseEqual(opt, L"SIG") || StrCaseEqual(opt, L"SIGNATURE")) {
@@ -6253,6 +6261,13 @@ void ParseCommandLine(void) {
 	if (cmdSize == sizeof(WCHAR)) {
 		return;
 	}
+
+#if 0
+	FILE *fp = fopen("args-dump.txt", "wb");
+	fwrite("\xFF\xFE", 1, 2, fp);
+	fwrite(lpCmdLine, 1, cmdSize - 2, fp);
+	fclose(fp);
+#endif
 
 	// Good old console can also send args separated by Tabs
 	StrTab2Space(lpCmdLine);

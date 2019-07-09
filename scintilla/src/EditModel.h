@@ -40,11 +40,8 @@ public:
 		imeWindowed, imeInline
 	} imeInteraction;
 	enum class CharacterSource {
-		charSourceNormal,
-		charSourceTentative,
-		charSourceIME,
+		directInput, tentativeInput, imeResult,
 	};
-	bool inlineIMEUseBlockCaret;
 	enum class Bidirectional {
 		bidiDisabled, bidiL2R, bidiR2L
 	} bidirectional;

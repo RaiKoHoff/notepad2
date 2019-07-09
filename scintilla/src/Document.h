@@ -323,7 +323,7 @@ public:
 		return cb.ContainsLineEnd(s, length);
 	}
 	bool IsCrLf(Sci::Position pos) const noexcept;
-	int LenChar(Sci::Position pos) noexcept;
+	int LenChar(Sci::Position pos, bool *invalid = nullptr) noexcept;
 	bool InGoodUTF8(Sci::Position pos, Sci::Position &start, Sci::Position &end) const noexcept;
 	Sci::Position MovePositionOutsideChar(Sci::Position pos, Sci::Position moveDir, bool checkLineEnd = true) const noexcept;
 	Sci::Position NextPosition(Sci::Position pos, int moveDir) const noexcept;
@@ -444,10 +444,10 @@ public:
 	void GetStyleRange(unsigned char *buffer, Sci::Position position, Sci::Position lengthRetrieve) const {
 		cb.GetStyleRange(buffer, position, lengthRetrieve);
 	}
-	int GetMark(Sci::Line line) const noexcept;
-	Sci::Line MarkerNext(Sci::Line lineStart, int mask) const noexcept;
+	MarkerMask GetMark(Sci::Line line) const noexcept;
+	Sci::Line MarkerNext(Sci::Line lineStart, MarkerMask mask) const noexcept;
 	int AddMark(Sci::Line line, int markerNum);
-	void AddMarkSet(Sci::Line line, int valueSet);
+	void AddMarkSet(Sci::Line line, MarkerMask valueSet);
 	void DeleteMark(Sci::Line line, int markerNum);
 	void DeleteMarkFromHandle(int markerHandle);
 	void DeleteAllMarks(int markerNum);

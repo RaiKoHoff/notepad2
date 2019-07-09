@@ -138,10 +138,10 @@ constexpr UINT SC_WIN_IDLE = 5001;
 // and delivering SCN_UPDATEUI
 constexpr UINT SC_WORK_IDLE = 5002;
 
-#define SC_INDICATOR_INPUT INDIC_IME
-#define SC_INDICATOR_TARGET (INDIC_IME + 1)
-#define SC_INDICATOR_CONVERTED (INDIC_IME + 2)
-#define SC_INDICATOR_UNKNOWN INDIC_IME_MAX
+#define SC_INDICATOR_INPUT INDICATOR_IME
+#define SC_INDICATOR_TARGET (INDICATOR_IME + 1)
+#define SC_INDICATOR_CONVERTED (INDICATOR_IME + 2)
+#define SC_INDICATOR_UNKNOWN INDICATOR_IME_MAX
 
 #ifndef SCS_CAP_SETRECONVERTSTRING
 #define SCS_CAP_SETRECONVERTSTRING 0x00000004
@@ -290,6 +290,30 @@ public:
 
 namespace {
 
+// InputLanguage() and SetCandidateWindowPos() are based on Chromium's IMM32Manager class.
+// https://github.com/chromium/chromium/blob/master/ui/base/ime/win/imm32_manager.cc
+
+// See Chromium's IMM32Manager::SetInputLanguage()
+LANGID InputLanguage() noexcept {
+	// Retrieve the current input language from the system's keyboard layout.
+	// Using GetKeyboardLayoutName instead of GetKeyboardLayout, because
+	// the language from GetKeyboardLayout is the language under where the
+	// keyboard layout is installed. And the language from GetKeyboardLayoutName
+	// indicates the language of the keyboard layout itself.
+	// See crbug.com/344834.
+	LANGID inputLang;
+	WCHAR keyboard_layout[KL_NAMELENGTH];
+	if (::GetKeyboardLayoutNameW(keyboard_layout)) {
+		inputLang =  static_cast<LANGID>(wcstol(&keyboard_layout[KL_NAMELENGTH >> 1], nullptr, 16));
+	} else {
+		/// TODO: Fallback to en-US?
+		HKL inputLocale = ::GetKeyboardLayout(0);
+		inputLang = LOWORD(inputLocale);
+	}
+	//Platform::DebugPrintf("InputLanguage(): %04X\n", inputLang);
+	return inputLang;
+}
+
 class IMContext {
 	HWND hwnd;
 public:
@@ -371,6 +395,12 @@ class ScintillaWin :
 	static ATOM scintillaClassAtom;
 	static ATOM callClassAtom;
 
+	// The current input Language ID.
+	LANGID inputLang;
+	// some IME not send WM_IME_STARTCOMPOSITION, but WM_IME_COMPOSITION with GCS_COMPSTR.
+	// ensure candidate window near caret when compositing starts.
+	bool gotImeStartComposition;
+
 #if defined(USE_D2D)
 	ID2D1RenderTarget *pRenderTarget;
 	bool renderTargetValid;
@@ -396,16 +426,16 @@ class ScintillaWin :
 
 	static sptr_t DirectFunction(
 		sptr_t ptr, UINT iMessage, uptr_t wParam, sptr_t lParam);
-	static LRESULT PASCAL SWndProc(
+	static LRESULT CALLBACK SWndProc(
 		HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
-	static LRESULT PASCAL CTWndProc(
+	static LRESULT CALLBACK CTWndProc(
 		HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 
 	enum {
 		invalidTimerID, standardTimerID, idleTimerID, fineTimerStart
 	};
 
-	bool DragThreshold(Point ptStart, Point ptNow) noexcept override;
+	bool SCICALL DragThreshold(Point ptStart, Point ptNow) noexcept override;
 	void StartDrag() override;
 	static int MouseModifiers(uptr_t wParam) noexcept;
 
@@ -415,18 +445,21 @@ class ScintillaWin :
 
 	sptr_t HandleCompositionWindowed(uptr_t wParam, sptr_t lParam);
 	sptr_t HandleCompositionInline(uptr_t wParam, sptr_t lParam);
-#if 0
-	static bool KoreanIME() noexcept;
-#endif
+
+	// Korean IME always use inline mode, and block caret in inline mode.
+	bool KoreanIME() const noexcept {
+		return PRIMARYLANGID(inputLang) == LANG_KOREAN;
+	}
+
 	void MoveImeCarets(Sci::Position offset);
 	void DrawImeIndicator(int indicator, int len);
 	void SetCandidateWindowPos();
 	void SelectionToHangul();
 	void EscapeHanja();
 	void ToggleHanja();
-	void AddWString(std::wstring_view wsv, CharacterSource charSource = CharacterSource::charSourceNormal);
+	void AddWString(std::wstring_view wsv, CharacterSource charSource);
 
-	UINT CodePageOfDocument() const;
+	UINT CodePageOfDocument() const noexcept;
 	bool ValidCodePage(int codePage) const noexcept override;
 	sptr_t DefWndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) noexcept override;
 	void IdleWork() override;
@@ -439,7 +472,7 @@ class ScintillaWin :
 	void SetMouseCapture(bool on) noexcept override;
 	bool HaveMouseCapture() noexcept override;
 	void SetTrackMouseLeaveEvent(bool on) noexcept;
-	bool PaintContains(PRectangle rc) const noexcept override;
+	bool SCICALL PaintContains(PRectangle rc) const noexcept override;
 	void ScrollText(Sci::Line linesToMove) override;
 	void NotifyCaretMove() noexcept override;
 	void UpdateSystemCaret() override;
@@ -459,7 +492,7 @@ class ScintillaWin :
 	void CopyAllowLine() override;
 	bool CanPaste() override;
 	void Paste(bool asBinary) override;
-	void CreateCallTipWindow(PRectangle rc) noexcept override;
+	void SCICALL CreateCallTipWindow(PRectangle rc) noexcept override;
 #if SCI_EnablePopupMenu
 	void AddToPopUp(const char *label, int cmd = 0, bool enabled = true) noexcept override;
 #endif
@@ -482,8 +515,8 @@ class ScintillaWin :
 	int SetScrollInfo(int nBar, LPCSCROLLINFO lpsi, BOOL bRedraw) const noexcept;
 	bool GetScrollInfo(int nBar, LPSCROLLINFO lpsi) const noexcept;
 	void ChangeScrollPos(int barType, Sci::Position pos);
-	sptr_t GetTextLength();
-	sptr_t GetText(uptr_t wParam, sptr_t lParam);
+	sptr_t GetTextLength() const noexcept;
+	sptr_t GetText(uptr_t wParam, sptr_t lParam) const;
 
 public:
 	~ScintillaWin() override;
@@ -592,6 +625,8 @@ ScintillaWin::ScintillaWin(HWND hwnd) {
 	sysCaretBitmap = nullptr;
 	sysCaretWidth = 0;
 	sysCaretHeight = 0;
+	inputLang = InputLanguage();
+	gotImeStartComposition = false;
 
 	styleIdleInQueue = false;
 
@@ -770,17 +805,6 @@ int ScintillaWin::MouseModifiers(uptr_t wParam) noexcept {
 }
 
 namespace {
-
-int InputCodePage() noexcept {
-	HKL inputLocale = ::GetKeyboardLayout(0);
-	const LANGID inputLang = LOWORD(inputLocale);
-	WCHAR sCodePage[10];
-	const int res = ::GetLocaleInfo(MAKELCID(inputLang, SORT_DEFAULT),
-		LOCALE_IDEFAULTANSICODEPAGE, sCodePage, sizeof(sCodePage) / sizeof(WCHAR));
-	if (!res)
-		return 0;
-	return static_cast<int>(wcstol(sCodePage, nullptr, 10));
-}
 
 /** Map the key codes to their equivalent SCK_ form. */
 int KeyTranslate(int keyIn) noexcept {
@@ -999,7 +1023,7 @@ sptr_t ScintillaWin::HandleCompositionWindowed(uptr_t wParam, sptr_t lParam) {
 	if (lParam & GCS_RESULTSTR) {
 		IMContext imc(MainHWND());
 		if (imc.hIMC) {
-			AddWString(imc.GetCompositionString(GCS_RESULTSTR), CharacterSource::charSourceIME);
+			AddWString(imc.GetCompositionString(GCS_RESULTSTR), CharacterSource::imeResult);
 
 			// Set new position after converted
 			const Point pos = PointMainCaret();
@@ -1012,13 +1036,6 @@ sptr_t ScintillaWin::HandleCompositionWindowed(uptr_t wParam, sptr_t lParam) {
 	}
 	return ::DefWindowProc(MainHWND(), WM_IME_COMPOSITION, wParam, lParam);
 }
-
-#if 0
-bool ScintillaWin::KoreanIME() noexcept {
-	const int codePage = InputCodePage();
-	return codePage == 949 || codePage == 1361;
-}
-#endif
 
 void ScintillaWin::MoveImeCarets(Sci::Position offset) {
 	// Move carets relatively by bytes.
@@ -1034,7 +1051,7 @@ void ScintillaWin::DrawImeIndicator(int indicator, int len) {
 	// Draw an indicator on the character before caret by the character bytes of len
 	// so it should be called after InsertCharacter().
 	// It does not affect caret positions.
-	if (indicator < 8 || indicator > INDIC_MAX) {
+	if (indicator < 8 || indicator > INDICATOR_MAX) {
 		return;
 	}
 	pdoc->DecorationSetCurrentIndicator(indicator);
@@ -1044,16 +1061,55 @@ void ScintillaWin::DrawImeIndicator(int indicator, int len) {
 	}
 }
 
+// See Chromium's IMM32Manager::MoveImeWindow()
 void ScintillaWin::SetCandidateWindowPos() {
 	IMContext imc(MainHWND());
 	if (imc.hIMC) {
 		const Point pos = PointMainCaret();
-		CANDIDATEFORM CandForm;
-		CandForm.dwIndex = 0;
-		CandForm.dwStyle = CFS_CANDIDATEPOS;
-		CandForm.ptCurrentPos.x = static_cast<LONG>(pos.x);
-		CandForm.ptCurrentPos.y = static_cast<LONG>(pos.y + vs.lineHeight);
-		::ImmSetCandidateWindow(imc.hIMC, &CandForm);
+		const int x = static_cast<int>(pos.x);
+		int y = static_cast<int>(pos.y);
+
+		if (PRIMARYLANGID(inputLang) == LANG_CHINESE) {
+			// As written in a comment in IMM32Manager::CreateImeWindow(),
+			// Chinese IMEs ignore function calls to ::ImmSetCandidateWindow()
+			// when a user disables TSF (Text Service Framework) and CUAS (Cicero
+			// Unaware Application Support).
+			// On the other hand, when a user enables TSF and CUAS, Chinese IMEs
+			// ignore the position of the current system caret and uses the
+			// parameters given to ::ImmSetCandidateWindow() with its 'dwStyle'
+			// parameter CFS_CANDIDATEPOS.
+			// Therefore, we do not only call ::ImmSetCandidateWindow() but also
+			// set the positions of the temporary system caret if it exists.
+			CANDIDATEFORM candidatePos = { 0, CFS_CANDIDATEPOS, { x, y }, { 0, 0, 0, 0 } };
+			::ImmSetCandidateWindow(imc.hIMC, &candidatePos);
+			::SetCaretPos(x, y);
+		} else if (PRIMARYLANGID(inputLang) == LANG_JAPANESE) {
+			// When a user disables TSF (Text Service Framework) and CUAS (Cicero
+			// Unaware Application Support), Chinese IMEs somehow ignore function calls
+			// to ::ImmSetCandidateWindow(), i.e. they do not move their candidate
+			// window to the position given as its parameters, and use the position
+			// of the current system caret instead, i.e. it uses ::GetCaretPos() to
+			// retrieve the position of their IME candidate window.
+			// Therefore, we create a temporary system caret for Chinese IMEs and use
+			// it during this input context.
+			// Since some third-party Japanese IME also uses ::GetCaretPos() to determine
+			// their window position, we also create a caret for Japanese IMEs.
+			::SetCaretPos(x, y + sysCaretHeight);
+		}
+
+		// Chinese IMEs and Japanese IMEs require the upper-left corner of
+		// the caret to move the position of their candidate windows.
+		// On the other hand, Korean IMEs require the lower-left corner of the
+		// caret to move their candidate windows.
+		constexpr int kCaretMargin = 4;
+		y += kCaretMargin;
+
+		// Japanese IMEs and Korean IMEs also use the rectangle given to
+		// ::ImmSetCandidateWindow() with its 'dwStyle' parameter CFS_EXCLUDE
+		// to move their candidate windows when a user disables TSF and CUAS.
+		// Therefore, we also set this parameter here.
+		CANDIDATEFORM excludeRect = { 0, CFS_EXCLUDE, { x, y },  { x, y, x + sysCaretWidth, y + sysCaretHeight }};
+		::ImmSetCandidateWindow(imc.hIMC, &excludeRect);
 	}
 }
 
@@ -1208,8 +1264,6 @@ sptr_t ScintillaWin::HandleCompositionInline(uptr_t, sptr_t lParam) {
 
 		std::vector<int> imeIndicator = MapImeIndicators(imc.GetImeAttributes());
 
-		const bool tmpRecordingMacro = recordingMacro;
-		recordingMacro = false;
 		const UINT codePage = CodePageOfDocument();
 		char inBufferCP[16];
 		const std::wstring_view wsv = wcs;
@@ -1217,12 +1271,11 @@ sptr_t ScintillaWin::HandleCompositionInline(uptr_t, sptr_t lParam) {
 			const size_t ucWidth = UTF16CharLength(wsv[i]);
 			const int size = MultiByteFromWideChar(codePage, wsv.substr(i, ucWidth), inBufferCP, sizeof(inBufferCP) - 1);
 			inBufferCP[size] = '\0';
-			InsertCharacter(std::string_view(inBufferCP, size), CharacterSource::charSourceTentative);
+			InsertCharacter(std::string_view(inBufferCP, size), CharacterSource::tentativeInput);
 
 			DrawImeIndicator(imeIndicator[i], size);
 			i += ucWidth;
 		}
-		recordingMacro = tmpRecordingMacro;
 
 		// Move IME caret from current last position to imeCaretPos.
 		const int imeEndToImeCaretU16 = imc.GetImeCaretPos() - static_cast<unsigned int>(wcs.size());
@@ -1230,14 +1283,24 @@ sptr_t ScintillaWin::HandleCompositionInline(uptr_t, sptr_t lParam) {
 
 		MoveImeCarets(-CurrentPosition() + imeCaretPosDoc);
 
-		if (inlineIMEUseBlockCaret) {
-			view.imeCaretBlockOverride = true;
-		}
+		view.imeCaretBlockOverride = KoreanIME();
 	} else if (lParam & GCS_RESULTSTR) {
-		AddWString(imc.GetCompositionString(GCS_RESULTSTR), CharacterSource::charSourceIME);
+		AddWString(imc.GetCompositionString(GCS_RESULTSTR), CharacterSource::imeResult);
 	}
+
 	EnsureCaretVisible();
-	SetCandidateWindowPos();
+	// don't move candidate window during compositing.
+	if (!gotImeStartComposition || (lParam & GCS_RESULTSTR) != 0) {
+		// See Chromium's InputMethodWinImm32::OnImeComposition() and InputMethodWinImm32::OnImeEndComposition()
+		//
+		// Japanese IMEs send a message containing both GCS_RESULTSTR and
+		// GCS_COMPSTR, which means an ongoing composition has been finished
+		// by the start of another composition.
+		//
+		// MS Korean IME on hitting Space key: (1) WM_IME_ENDCOMPOSITION (2) WM_IME_COMPOSITION with GCS_RESULTSTR
+		gotImeStartComposition = (lParam & GCS_RESULTSTR) == 0;
+		SetCandidateWindowPos();
+	}
 	ShowCaretAtCurrentPosition();
 	return 0;
 }
@@ -1312,38 +1375,36 @@ UINT CodePageFromCharSet(DWORD characterSet, UINT documentCodePage) noexcept {
 
 }
 
-UINT ScintillaWin::CodePageOfDocument() const {
+UINT ScintillaWin::CodePageOfDocument() const noexcept {
 	return CodePageFromCharSet(vs.styles[STYLE_DEFAULT].characterSet, pdoc->dbcsCodePage);
 }
 
-sptr_t ScintillaWin::GetTextLength() {
-	if (pdoc->Length() == 0)
-		return 0;
-	std::string docBytes(pdoc->Length(), '\0');
-	pdoc->GetCharRange(docBytes.data(), 0, pdoc->Length());
-	if (IsUnicodeMode()) {
-		return UTF16Length(std::string_view(docBytes));
-	} else {
-		return WideCharLenFromMultiByte(CodePageOfDocument(), docBytes);
-	}
+sptr_t ScintillaWin::GetTextLength() const noexcept {
+	return pdoc->CountUTF16(0, pdoc->Length());
 }
 
-sptr_t ScintillaWin::GetText(uptr_t wParam, sptr_t lParam) {
+sptr_t ScintillaWin::GetText(uptr_t wParam, sptr_t lParam) const {
+	if (lParam == 0) {
+		return pdoc->CountUTF16(0, pdoc->Length());
+	}
+	if (wParam == 0) {
+		return 0;
+	}
 	wchar_t *ptr = static_cast<wchar_t *>(PtrFromSPtr(lParam));
 	if (pdoc->Length() == 0) {
 		*ptr = L'\0';
 		return 0;
 	}
-	std::string docBytes(pdoc->Length(), '\0');
-	pdoc->GetCharRange(docBytes.data(), 0, pdoc->Length());
+	const Sci::Position lengthWanted = wParam - 1;
+	Sci::Position sizeRequestedRange = pdoc->GetRelativePositionUTF16(0, lengthWanted);
+	if (sizeRequestedRange < 0) {
+		// Requested more text than there is in the document.
+		sizeRequestedRange = pdoc->CountUTF16(0, pdoc->Length());
+	}
+	std::string docBytes(sizeRequestedRange, '\0');
+	pdoc->GetCharRange(&docBytes[0], 0, sizeRequestedRange);
 	if (IsUnicodeMode()) {
-		const std::string_view sv(docBytes);
-		const size_t lengthUTF16 = UTF16Length(sv);
-		if (lParam == 0)
-			return lengthUTF16;
-		if (wParam == 0)
-			return 0;
-		size_t uLen = UTF16FromUTF8(sv, ptr, wParam - 1);
+		const size_t uLen = UTF16FromUTF8(docBytes, ptr, lengthWanted);
 		ptr[uLen] = L'\0';
 		return uLen;
 	} else {
@@ -1351,8 +1412,8 @@ sptr_t ScintillaWin::GetText(uptr_t wParam, sptr_t lParam) {
 		// Convert to Unicode using the current Scintilla code page
 		const UINT cpSrc = CodePageOfDocument();
 		int lengthUTF16 = WideCharLenFromMultiByte(cpSrc, docBytes);
-		if (lengthUTF16 >= static_cast<int>(wParam))
-			lengthUTF16 = static_cast<int>(wParam) - 1;
+		if (lengthUTF16 > lengthWanted)
+			lengthUTF16 = static_cast<int>(lengthWanted);
 		WideCharFromMultiByte(cpSrc, docBytes, ptr, lengthUTF16);
 		ptr[lengthUTF16] = L'\0';
 		return lengthUTF16;
@@ -1599,7 +1660,7 @@ sptr_t ScintillaWin::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam
 					lastHighSurrogateChar = 0;
 					wclen = 2;
 				}
-				AddWString(std::wstring_view(wcs, wclen));
+				AddWString(std::wstring_view(wcs, wclen), CharacterSource::directInput);
 			}
 			return 0;
 
@@ -1611,7 +1672,7 @@ sptr_t ScintillaWin::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam
 			} else {
 				wchar_t wcs[3] = { 0 };
 				const unsigned int wclen = UTF16FromUTF32Character(static_cast<unsigned int>(wParam), wcs);
-				AddWString(std::wstring_view(wcs, wclen));
+				AddWString(std::wstring_view(wcs, wclen), CharacterSource::directInput);
 				return FALSE;
 			}
 
@@ -1687,7 +1748,9 @@ sptr_t ScintillaWin::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam
 			break;
 
 		case WM_IME_STARTCOMPOSITION: 	// dbcs
-			if (imeInteraction == imeInline) {
+			if (KoreanIME() || imeInteraction == imeInline) {
+				gotImeStartComposition = true;
+				SetCandidateWindowPos();
 				return 0;
 			} else {
 				ImeStartComposition();
@@ -1699,7 +1762,7 @@ sptr_t ScintillaWin::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam
 			return ::DefWindowProc(MainHWND(), iMessage, wParam, lParam);
 
 		case WM_IME_COMPOSITION:
-			if (imeInteraction == imeInline) {
+			if (KoreanIME() || imeInteraction == imeInline) {
 				return HandleCompositionInline(wParam, lParam);
 			} else {
 				return HandleCompositionWindowed(wParam, lParam);
@@ -1727,6 +1790,7 @@ sptr_t ScintillaWin::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam
 #endif
 			return ::DefWindowProc(MainHWND(), iMessage, wParam, lParam);
 		case WM_INPUTLANGCHANGE:
+			inputLang = InputLanguage();
 			return ::DefWindowProc(MainHWND(), iMessage, wParam, lParam);
 		case WM_INPUTLANGCHANGEREQUEST:
 			return ::DefWindowProc(MainHWND(), iMessage, wParam, lParam);
@@ -1739,7 +1803,7 @@ sptr_t ScintillaWin::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam
 			return 0;
 
 		case WM_IME_SETCONTEXT:
-			if (imeInteraction == imeInline) {
+			if (KoreanIME() || imeInteraction == imeInline) {
 				if (wParam) {
 					LPARAM NoImeWin = lParam;
 					NoImeWin = NoImeWin & (~ISC_SHOWUICOMPOSITIONWINDOW);
@@ -2690,7 +2754,7 @@ DataObject::DataObject() noexcept {
 
 /// Implement IUnknown
 STDMETHODIMP DropTarget::QueryInterface(REFIID riid, PVOID *ppv) noexcept {
-	Platform::DebugPrintf("DT QI %p\n", this);
+	//Platform::DebugPrintf("DT QI %p\n", this);
 	return sci->QueryInterface(riid, ppv);
 }
 STDMETHODIMP_(ULONG)DropTarget::AddRef() noexcept {
@@ -2785,6 +2849,7 @@ void ScintillaWin::ImeStartComposition() {
 
 /** Called when IME Window closed. */
 void ScintillaWin::ImeEndComposition() {
+	gotImeStartComposition = false;
 	ShowCaretAtCurrentPosition();
 }
 
@@ -3190,7 +3255,7 @@ void ScintillaWin::EnumDataSourceFormat(const char *tag, LPDATAOBJECT pIDataSour
 				const char *fmtName = GetSourceFormatName(fmt, name, sizeof(name));
 				const int len = sprintf(buf, "%s: fmt[%lu]=%u, 0x%04X; tymed=%lu, %s; name=%s\n",
 					tag, i, fmt, fmt, tymed, typeName, fmtName);
-				InsertCharacter(std::string_view(buf, len));
+				InsertCharacter(std::string_view(buf, len), CharacterSource::directInput);
 			}
 		}
 	}
@@ -3209,7 +3274,7 @@ void ScintillaWin::EnumAllClipboardFormat(const char *tag) {
 		const char *fmtName = GetSourceFormatName(fmt, name, sizeof(name));
 		const int len = sprintf(buf, "%s: fmt[%u]=%u, 0x%04X; name=%s\n",
 			tag, i, fmt, fmt, fmtName);
-		InsertCharacter(std::string_view(buf, len));
+		InsertCharacter(std::string_view(buf, len), CharacterSource::directInput);
 		i++;
 	}
 }
@@ -3551,7 +3616,7 @@ BOOL ScintillaWin::DestroySystemCaret() noexcept {
 	return retval;
 }
 
-LRESULT PASCAL ScintillaWin::CTWndProc(
+LRESULT CALLBACK ScintillaWin::CTWndProc(
 	HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam) {
 	// Find C++ object associated with window.
 	ScintillaWin *sciThis = static_cast<ScintillaWin *>(PointerFromWindow(hWnd));
@@ -3658,12 +3723,12 @@ sptr_t ScintillaWin::DirectFunction(
 }
 
 extern "C"
-sptr_t __stdcall Scintilla_DirectFunction(
+sptr_t SCI_METHOD Scintilla_DirectFunction(
 	ScintillaWin *sci, UINT iMessage, uptr_t wParam, sptr_t lParam) {
 	return sci->WndProc(iMessage, wParam, lParam);
 }
 
-LRESULT PASCAL ScintillaWin::SWndProc(
+LRESULT CALLBACK ScintillaWin::SWndProc(
 	HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam) {
 	//Platform::DebugPrintf("S W:%x M:%x WP:%x L:%x\n", hWnd, iMessage, wParam, lParam);
 
@@ -3721,8 +3786,4 @@ int ResourcesRelease(bool fromDllMain) noexcept {
 // This function is externally visible so it can be called from container when building statically.
 int Scintilla_ReleaseResources(void) {
 	return Scintilla::ResourcesRelease(false);
-}
-
-int Scintilla_InputCodePage(void) {
-	return InputCodePage();
 }
