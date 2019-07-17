@@ -213,8 +213,6 @@ static int cyEditFrame;
 int		cxRunDlg;
 int		cxEncodingDlg;
 int		cyEncodingDlg;
-int		cxRecodeDlg;
-int		cyRecodeDlg;
 int		cxFileMRUDlg;
 int		cyFileMRUDlg;
 int		cxOpenWithDlg;
@@ -2793,7 +2791,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_ENCODING_UTF8SIGN:
 	case IDM_ENCODING_SELECT: {
 		int iNewEncoding = iEncoding;
-		if (LOWORD(wParam) == IDM_ENCODING_SELECT && !SelectEncodingDlg(hwnd, &iNewEncoding)) {
+		if (LOWORD(wParam) == IDM_ENCODING_SELECT && !SelectEncodingDlg(hwnd, &iNewEncoding, IDS_SELRECT_CURRENT_ENCODING)) {
 			break;
 		}
 
@@ -2859,7 +2857,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				return 0;
 			}
 
-			if (RecodeDlg(hwnd, &iNewEncoding)) {
+			if (SelectEncodingDlg(hwnd, &iNewEncoding, IDS_SELRECT_RELOAD_ENCODING)) {
 				iSrcEncoding = iNewEncoding;
 				FileLoad(TRUE, FALSE, TRUE, FALSE, szCurFile);
 			}
@@ -5389,8 +5387,6 @@ void LoadSettings(void) {
 		cxRunDlg = IniSectionGetInt(pIniSection, L"RunDlgSizeX", 0);
 		cxEncodingDlg = IniSectionGetInt(pIniSection, L"EncodingDlgSizeX", 0);
 		cyEncodingDlg = IniSectionGetInt(pIniSection, L"EncodingDlgSizeY", 0);
-		cxRecodeDlg = IniSectionGetInt(pIniSection, L"RecodeDlgSizeX", 0);
-		cyRecodeDlg = IniSectionGetInt(pIniSection, L"RecodeDlgSizeY", 0);
 
 		cxFileMRUDlg = IniSectionGetInt(pIniSection, L"FileMRUDlgSizeX", 0);
 		cyFileMRUDlg = IniSectionGetInt(pIniSection, L"FileMRUDlgSizeY", 0);
@@ -5661,8 +5657,6 @@ void SaveWindowPosition(BOOL bSaveSettingsNow, WCHAR *pIniSectionBuf) {
 	IniSectionSetIntEx(pIniSection, L"RunDlgSizeX", cxRunDlg, 0);
 	IniSectionSetIntEx(pIniSection, L"EncodingDlgSizeX", cxEncodingDlg, 0);
 	IniSectionSetIntEx(pIniSection, L"EncodingDlgSizeY", cyEncodingDlg, 0);
-	IniSectionSetIntEx(pIniSection, L"RecodeDlgSizeX", cxRecodeDlg, 0);
-	IniSectionSetIntEx(pIniSection, L"RecodeDlgSizeY", cyRecodeDlg, 0);
 
 	IniSectionSetIntEx(pIniSection, L"FileMRUDlgSizeX", cxFileMRUDlg, 0);
 	IniSectionSetIntEx(pIniSection, L"FileMRUDlgSizeY", cyFileMRUDlg, 0);
@@ -5696,8 +5690,6 @@ void ClearWindowPositionHistory(void) {
 	cxRunDlg = 0;
 	cxEncodingDlg = 0;
 	cyEncodingDlg = 0;
-	cxRecodeDlg = 0;
-	cyRecodeDlg = 0;
 
 	cxFileMRUDlg = 0;
 	cyFileMRUDlg = 0;

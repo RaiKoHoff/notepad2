@@ -142,14 +142,14 @@ Or build from source, see the [Wiki](https://github.com/zufuliu/notepad2/wiki/Bu
 	* ANSI Art
 	* Many Others
 * API list for:
-	* C Standard Library, up to C11.
-	* C++ STL
-	* MFC Classes
-	* Cocoa Classes
+	* [C Standard Library](../master/tools/lang/C.c), up to C11.
+	* [C++ STL](../master/tools/lang/CPP.cpp), up to C++17.
+	* MFC
+	* Cocoa
 	* AutoIt Script
 	* CMake
-	* C# (class list only)
-	* Java (class list only)
+	* C#
+	* Java
 	* [JavaScript](../master/tools/lang/JavaScript.js), up to ECMAScript 2018, 9ed.
 	* Inno Setup
 	* [Julia Script](https://julialang.org/)
@@ -209,8 +209,10 @@ Or build from source, see the [Wiki](https://github.com/zufuliu/notepad2/wiki/Bu
 * [Official Notepad2-mod website](https://xhmikosr.github.io/notepad2-mod/)
 * [Scintilla's website](https://www.scintilla.org/)
 * [Build Notepad2 and metapath](https://github.com/zufuliu/notepad2/wiki/Build-Notepad2)
+* [Localization](https://github.com/zufuliu/notepad2/wiki/Localization)
 * [Notepad2 Wiki](https://github.com/zufuliu/notepad2/wiki)
 
-### Other projects based on original Notepad2 or Notepad2-mod:
+### Other projects based on (original) Notepad2 or Notepad2-mod:
+* [Notepad2 Korean Vision](https://teus.me/category/IT/Notepad2)
 * [Notepad3](https://github.com/rizonesoft/Notepad3)
 * [Notepad2e](https://github.com/ProgerXP/Notepad2e)

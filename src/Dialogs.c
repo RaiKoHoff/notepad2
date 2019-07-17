@@ -247,9 +247,11 @@ INT_PTR CALLBACK AboutDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam
 	case WM_INITDIALOG: {
 		WCHAR wch[256];
 #if defined(VERSION_BUILD_TOOL_BUILD)
-		wsprintf(wch, VERSION_BUILD_INFO_FORMAT, VERSION_BUILD_TOOL_NAME, VERSION_BUILD_TOOL_MAJOR, VERSION_BUILD_TOOL_MINOR, VERSION_BUILD_TOOL_PATCH, VERSION_BUILD_TOOL_BUILD);
+		wsprintf(wch, VERSION_BUILD_INFO_FORMAT, VERSION_BUILD_TOOL_NAME,
+			VERSION_BUILD_TOOL_MAJOR, VERSION_BUILD_TOOL_MINOR, VERSION_BUILD_TOOL_PATCH, VERSION_BUILD_TOOL_BUILD);
 #else
-		wsprintf(wch, VERSION_BUILD_INFO_FORMAT, VERSION_BUILD_TOOL_NAME, VERSION_BUILD_TOOL_MAJOR, VERSION_BUILD_TOOL_MINOR, VERSION_BUILD_TOOL_PATCH);
+		wsprintf(wch, VERSION_BUILD_INFO_FORMAT, VERSION_BUILD_TOOL_NAME,
+			VERSION_BUILD_TOOL_MAJOR, VERSION_BUILD_TOOL_MINOR, VERSION_BUILD_TOOL_PATCH);
 #endif
 
 		SetDlgItemText(hwnd, IDC_VERSION, VERSION_FILEVERSION_LONG);
@@ -1658,6 +1660,7 @@ typedef struct encodedlg {
 	int  idEncoding;
 	int  cxDlg;
 	int  cyDlg;
+	UINT uidLabel;
 } ENCODEDLG, *PENCODEDLG;
 
 typedef const ENCODEDLG *LPCENCODEDLG;
@@ -1666,17 +1669,10 @@ static INT_PTR CALLBACK SelectDefEncodingDlgProc(HWND hwnd, UINT umsg, WPARAM wP
 	switch (umsg) {
 	case WM_INITDIALOG: {
 		SetWindowLongPtr(hwnd, DWLP_USER, lParam);
-		const LPCENCODEDLG pdd = (LPCENCODEDLG)lParam;
 
-		HBITMAP hbmp = (HBITMAP)LoadImage(g_hInstance, MAKEINTRESOURCE(IDB_ENCODING), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
-		HIMAGELIST himl = ImageList_Create(16, 16, ILC_COLOR32 | ILC_MASK, 0, 0);
-		ImageList_AddMasked(himl, hbmp, CLR_DEFAULT);
-		DeleteObject(hbmp);
-
-		HWND hwndLV = GetDlgItem(hwnd, IDC_ENCODINGLIST);
-		SendMessage(hwndLV, CBEM_SETIMAGELIST, 0, (LPARAM)himl);
-		SendMessage(hwndLV, CB_SETEXTENDEDUI, TRUE, 0);
-		Encoding_AddToComboboxEx(hwndLV, pdd->idEncoding, 0);
+		const int iEncoding = *((int *)lParam);
+		Encoding_GetLabel(iEncoding);
+		SetDlgItemText(hwnd, IDC_ENCODING_LABEL, mEncoding[iEncoding].wchLabel);
 
 		if (bSkipUnicodeDetection) {
 			CheckDlgButton(hwnd, IDC_NOUNICODEDETECTION, BST_CHECKED);
@@ -1698,19 +1694,28 @@ static INT_PTR CALLBACK SelectDefEncodingDlgProc(HWND hwnd, UINT umsg, WPARAM wP
 	}
 	return TRUE;
 
+	case WM_NOTIFY: {
+		LPNMHDR pnmhdr = (LPNMHDR)lParam;
+		switch (pnmhdr->code) {
+		case NM_CLICK:
+		case NM_RETURN:
+			if (pnmhdr->idFrom == IDC_ENCODING_LINK) {
+				int *pidREncoding = (int *)GetWindowLongPtr(hwnd, DWLP_USER);
+				SelectEncodingDlg(hwndMain, pidREncoding, IDS_SELRECT_DEFAULT_ENCODING);
+			}
+			break;
+		}
+	}
+	break;
+
 	case WM_COMMAND:
 		switch (LOWORD(wParam)) {
 		case IDOK: {
-			PENCODEDLG pdd = (PENCODEDLG)GetWindowLongPtr(hwnd, DWLP_USER);
-			if (Encoding_GetFromComboboxEx(GetDlgItem(hwnd, IDC_ENCODINGLIST), &pdd->idEncoding)) {
-				bSkipUnicodeDetection = IsButtonChecked(hwnd, IDC_NOUNICODEDETECTION);
-				bLoadANSIasUTF8 = IsButtonChecked(hwnd, IDC_ANSIASUTF8);
-				bLoadNFOasOEM = IsButtonChecked(hwnd, IDC_NFOASOEM);
-				bNoEncodingTags = IsButtonChecked(hwnd, IDC_ENCODINGFROMFILEVARS);
-				EndDialog(hwnd, IDOK);
-			} else {
-				PostMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)(GetDlgItem(hwnd, IDC_ENCODINGLIST)), 1);
-			}
+			bSkipUnicodeDetection = IsButtonChecked(hwnd, IDC_NOUNICODEDETECTION);
+			bLoadANSIasUTF8 = IsButtonChecked(hwnd, IDC_ANSIASUTF8);
+			bLoadNFOasOEM = IsButtonChecked(hwnd, IDC_NFOASOEM);
+			bNoEncodingTags = IsButtonChecked(hwnd, IDC_ENCODINGFROMFILEVARS);
+			EndDialog(hwnd, IDOK);
 		}
 		break;
 
@@ -1728,18 +1733,8 @@ static INT_PTR CALLBACK SelectDefEncodingDlgProc(HWND hwnd, UINT umsg, WPARAM wP
 // SelectDefEncodingDlg()
 //
 BOOL SelectDefEncodingDlg(HWND hwnd, int *pidREncoding) {
-	ENCODEDLG dd;
-
-	dd.bRecodeOnly = FALSE;
-	dd.idEncoding = *pidREncoding;
-
-	const INT_PTR iResult = ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_DEFENCODING), hwnd, SelectDefEncodingDlgProc, (LPARAM)&dd);
-
-	if (iResult == IDOK) {
-		*pidREncoding = dd.idEncoding;
-		return TRUE;
-	}
-	return FALSE;
+	const INT_PTR iResult = ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_DEFENCODING), hwnd, SelectDefEncodingDlgProc, (LPARAM)(pidREncoding));
+	return iResult == IDOK;
 }
 
 //=============================================================================
@@ -1754,24 +1749,24 @@ static INT_PTR CALLBACK SelectEncodingDlgProc(HWND hwnd, UINT umsg, WPARAM wPara
 		const LPCENCODEDLG pdd = (LPCENCODEDLG)lParam;
 		ResizeDlg_Init(hwnd, pdd->cxDlg, pdd->cyDlg, IDC_RESIZEGRIP);
 
+		WCHAR wch[256];
+		GetString(pdd->uidLabel, wch, COUNTOF(wch));
+		SetDlgItemText(hwnd, IDC_ENCODING_LABEL, wch);
+
 		HBITMAP hbmp = (HBITMAP)LoadImage(g_hInstance, MAKEINTRESOURCE(IDB_ENCODING), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
 		HIMAGELIST himl = ImageList_Create(16, 16, ILC_COLOR32 | ILC_MASK, 0, 0);
 		ImageList_AddMasked(himl, hbmp, CLR_DEFAULT);
 		DeleteObject(hbmp);
-		ListView_SetImageList(GetDlgItem(hwnd, IDC_ENCODINGLIST), himl, LVSIL_SMALL);
 
-		HWND hwndLV = GetDlgItem(hwnd, IDC_ENCODINGLIST);
-		InitWindowCommon(hwndLV);
-		//SetExplorerTheme(hwndLV);
-		ListView_SetExtendedListViewStyle(hwndLV, /*LVS_EX_FULLROWSELECT|*/LVS_EX_DOUBLEBUFFER | LVS_EX_LABELTIP);
-		LVCOLUMN lvc = { LVCF_FMT | LVCF_TEXT, LVCFMT_LEFT, 0, NULL, -1, 0, 0, 0
-#if (NTDDI_VERSION >= NTDDI_VISTA)
-			, 0, 0, 0
-#endif
-		};
-		ListView_InsertColumn(hwndLV, 0, &lvc);
-		Encoding_AddToListView(hwndLV, pdd->idEncoding, pdd->bRecodeOnly);
-		ListView_SetColumnWidth(hwndLV, 0, LVSCW_AUTOSIZE_USEHEADER);
+		// folder icon
+		SHFILEINFO shfi;
+		SHGetFileInfo(L"Icon", FILE_ATTRIBUTE_DIRECTORY, &shfi, sizeof(SHFILEINFO), SHGFI_ICON | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES);
+		ImageList_AddIcon(himl, shfi.hIcon);
+
+		HWND hwndTV = GetDlgItem(hwnd, IDC_ENCODINGLIST);
+		InitWindowCommon(hwndTV);
+		TreeView_SetImageList(hwndTV, himl, TVSIL_NORMAL);
+		Encoding_AddToTreeView(hwndTV, pdd->idEncoding, pdd->bRecodeOnly);
 
 		CenterDlgInParent(hwnd);
 	}
@@ -1795,7 +1790,6 @@ static INT_PTR CALLBACK SelectEncodingDlgProc(HWND hwnd, UINT umsg, WPARAM wPara
 		hdwp = DeferCtlPos(hdwp, hwnd, IDCANCEL, dx, dy, SWP_NOSIZE);
 		hdwp = DeferCtlPos(hdwp, hwnd, IDC_ENCODINGLIST, dx, dy, SWP_NOMOVE);
 		EndDeferWindowPos(hdwp);
-		ListView_SetColumnWidth(GetDlgItem(hwnd, IDC_ENCODINGLIST), 0, LVSCW_AUTOSIZE_USEHEADER);
 	}
 	return TRUE;
 
@@ -1804,16 +1798,29 @@ static INT_PTR CALLBACK SelectEncodingDlgProc(HWND hwnd, UINT umsg, WPARAM wPara
 		return TRUE;
 
 	case WM_NOTIFY: {
-		if (((LPNMHDR)(lParam))->idFrom == IDC_ENCODINGLIST) {
-			switch (((LPNMHDR)(lParam))->code) {
-			case NM_DBLCLK:
-				SendWMCommand(hwnd, IDOK);
-				break;
+		LPNMHDR lpnmh = (LPNMHDR)lParam;
+		if (lpnmh->idFrom == IDC_ENCODINGLIST) {
+			switch (lpnmh->code) {
+			case NM_DBLCLK: {
+				int temp = -1;
+				if (Encoding_GetFromTreeView(GetDlgItem(hwnd, IDC_ENCODINGLIST), &temp, TRUE)) {
+					SendWMCommand(hwnd, IDOK);
+				}
+			}
+			break;
 
-			case LVN_ITEMCHANGED:
-			case LVN_DELETEITEM: {
-				const int i = ListView_GetNextItem(GetDlgItem(hwnd, IDC_ENCODINGLIST), -1, LVNI_ALL | LVNI_SELECTED);
-				EnableWindow(GetDlgItem(hwnd, IDOK), i != -1);
+			case TVN_SELCHANGED: {
+				HWND hwndTV = GetDlgItem(hwnd, IDC_ENCODINGLIST);
+				LPNMTREEVIEW lpnmtv = (LPNMTREEVIEW)lParam;
+				TVITEM item;
+				ZeroMemory(&item, sizeof(item));
+				item.mask = TVIF_PARAM;
+				item.hItem = lpnmtv->itemNew.hItem;
+				TreeView_GetItem(hwndTV, &item);
+				EnableWindow(GetDlgItem(hwnd, IDOK), item.lParam != 0);
+				if (item.lParam == 0) {
+					TreeView_Expand(hwndTV, lpnmtv->itemNew.hItem, TVE_EXPAND);
+				}
 			}
 			break;
 			}
@@ -1824,11 +1831,12 @@ static INT_PTR CALLBACK SelectEncodingDlgProc(HWND hwnd, UINT umsg, WPARAM wPara
 	case WM_COMMAND:
 		switch (LOWORD(wParam)) {
 		case IDOK: {
+			HWND hwndTV = GetDlgItem(hwnd, IDC_ENCODINGLIST);
 			PENCODEDLG pdd = (PENCODEDLG)GetWindowLongPtr(hwnd, DWLP_USER);
-			if (Encoding_GetFromListView(GetDlgItem(hwnd, IDC_ENCODINGLIST), &pdd->idEncoding)) {
+			if (Encoding_GetFromTreeView(hwndTV, &pdd->idEncoding, FALSE)) {
 				EndDialog(hwnd, IDOK);
 			} else {
-				PostMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(hwnd, IDC_ENCODINGLIST), 1);
+				PostMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)hwndTV, 1);
 			}
 		}
 		break;
@@ -1851,45 +1859,19 @@ static INT_PTR CALLBACK SelectEncodingDlgProc(HWND hwnd, UINT umsg, WPARAM wPara
 extern int cxEncodingDlg;
 extern int cyEncodingDlg;
 
-BOOL SelectEncodingDlg(HWND hwnd, int *pidREncoding) {
+BOOL SelectEncodingDlg(HWND hwnd, int *pidREncoding, UINT uidLabel) {
 	ENCODEDLG dd;
 
-	dd.bRecodeOnly = FALSE;
+	dd.bRecodeOnly = (uidLabel == IDS_SELRECT_RELOAD_ENCODING);
 	dd.idEncoding = *pidREncoding;
 	dd.cxDlg = cxEncodingDlg;
 	dd.cyDlg = cyEncodingDlg;
+	dd.uidLabel = uidLabel;
 
-	const INT_PTR iResult = ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_ENCODING), hwnd, SelectEncodingDlgProc, (LPARAM)&dd);
+	const INT_PTR iResult = ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_SELECT_ENCODING), hwnd, SelectEncodingDlgProc, (LPARAM)&dd);
 
 	cxEncodingDlg = dd.cxDlg;
 	cyEncodingDlg = dd.cyDlg;
-
-	if (iResult == IDOK) {
-		*pidREncoding = dd.idEncoding;
-		return TRUE;
-	}
-	return FALSE;
-}
-
-//=============================================================================
-//
-// RecodeDlg()
-//
-extern int cxRecodeDlg;
-extern int cyRecodeDlg;
-
-BOOL RecodeDlg(HWND hwnd, int *pidREncoding) {
-	ENCODEDLG dd;
-
-	dd.bRecodeOnly = TRUE;
-	dd.idEncoding = *pidREncoding;
-	dd.cxDlg = cxRecodeDlg;
-	dd.cyDlg = cyRecodeDlg;
-
-	const INT_PTR iResult = ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_RECODE), hwnd, SelectEncodingDlgProc, (LPARAM)&dd);
-
-	cxRecodeDlg = dd.cxDlg;
-	cyRecodeDlg = dd.cyDlg;
 
 	if (iResult == IDOK) {
 		*pidREncoding = dd.idEncoding;
