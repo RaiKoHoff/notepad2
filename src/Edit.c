@@ -110,13 +110,14 @@ void EditSetNewText(LPCSTR lpstrText, DWORD cbText) {
 	SciCall_EmptyUndoBuffer();
 	SciCall_ClearAll();
 	SciCall_ClearMarker();
-	SciCall_SetScrollWidth(2048);
 	SciCall_SetXOffset(0);
 
 	FileVars_Apply(&fvCurFile);
 
 	if (cbText > 0) {
+		SciCall_SetModEventMask(SC_MOD_NONE);
 		SciCall_AddText(cbText, lpstrText);
+		SciCall_SetModEventMask(SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT);
 	}
 
 	SciCall_SetUndoCollection(TRUE);
@@ -322,7 +323,7 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	/* '\r' and '\n' is not reused (e.g. as trailing byte in DBCS) by any known encoding,
 	it's safe to check whole data byte by byte.*/
 
-	UINT linesCount[3] = { 0, 0, 0 };
+	Sci_Line linesCount[3] = { 0, 0, 0 };
 #if 0
 	StopWatch watch;
 	StopWatch_Start(watch);
@@ -359,7 +360,7 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	} while (ptr < end);
 #endif
 
-	const UINT linesMax = max_u(max_u(linesCount[0], linesCount[1]), linesCount[2]);
+	const Sci_Line linesMax = max_pos(max_pos(linesCount[0], linesCount[1]), linesCount[2]);
 	if (linesMax != linesCount[iEOLMode]) {
 		if (linesMax == linesCount[SC_EOL_CRLF]) {
 			iEOLMode = SC_EOL_CRLF;
@@ -386,7 +387,6 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 //
 // EditLoadFile()
 //
-extern DWORD dwFileLoadWarningMB;
 BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus *status) {
 	HANDLE hFile = CreateFile(pszFile,
 					   GENERIC_READ,
@@ -403,17 +403,14 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 	}
 
 	// calculate buffer limit
-	const DWORD dwFileSize = GetFileSize(hFile, NULL);
-
-	// Check if a warning message should be displayed for large files
-	if (dwFileLoadWarningMB != 0 && dwFileLoadWarningMB * 1024 * 1024 < dwFileSize) {
-		if (InfoBox(MBYESNO, L"MsgFileSizeWarning", IDS_WARNLOADBIGFILE) != IDYES) {
-			CloseHandle(hFile);
-			status->bFileTooBig = TRUE;
-			iSrcEncoding = -1;
-			iWeakSrcEncoding = -1;
-			return FALSE;
-		}
+	LARGE_INTEGER fileSize;
+	fileSize.QuadPart = 0;
+	if (!GetFileSizeEx(hFile, &fileSize)) {
+		dwLastIOError = GetLastError();
+		CloseHandle(hFile);
+		iSrcEncoding = -1;
+		iWeakSrcEncoding = -1;
+		return FALSE;
 	}
 
 	// display real path name
@@ -438,9 +435,40 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 		}
 	}
 
-	char *lpData = (char *)NP2HeapAlloc(dwFileSize + 16);
+	// Check if a warning message should be displayed for large files
+#if defined(_WIN64)
+	// less than 1/3 available physical memory:
+	//     1. the buffers we allocated below, depends on encoding.
+	//     2. Scintilla's content buffer and style buffer, see CellBuffer class.
+	// large file TODO:
+	// [ ] [> 2 GiB] use SC_DOCUMENTOPTION_TEXT_LARGE somewhere or hard-coded in EditModel::EditModel().
+	// [ ] [> 4 GiB] use SetFilePointerEx() and ReadFile()/WriteFile() to read/write file.
+	// [ ] [> 2 GiB] fix encoding conversion with MultiByteToWideChar() and WideCharToMultiByte().
+	// [x] [> 4 GiB] fix sprintf(), wsprintf() for Sci_Position and Sci_Line, currently UINT is used.
+	// [x] [> 2 GiB] ensure Sci_PositionCR is same as Sci_Position, see Sci_Position.h
+	const LONGLONG maxFileSize = INT64_C(0x80000000);
+#else
+	// 2 GiB: ptrdiff_t / Sci_Position used in Scintilla
+	const LONGLONG maxFileSize = INT64_C(0x80000000);
+#endif
+	if (fileSize.QuadPart > maxFileSize) {
+		CloseHandle(hFile);
+		status->bFileTooBig = TRUE;
+		iSrcEncoding = -1;
+		iWeakSrcEncoding = -1;
+		WCHAR tchDocSize[32];
+		WCHAR tchMaxSize[32];
+		StrFormatByteSize(fileSize.QuadPart, tchDocSize, COUNTOF(tchDocSize));
+		StrFormatByteSize(maxFileSize, tchMaxSize, COUNTOF(tchMaxSize));
+		MsgBox(MBWARN, IDS_WARNLOADBIGFILE, pszFile, tchDocSize, tchMaxSize);
+		return FALSE;
+	}
+
+	char *lpData = (char *)NP2HeapAlloc((SIZE_T)(fileSize.QuadPart) + 16);
 	DWORD cbData = 0;
-	const BOOL bReadSuccess = ReadFile(hFile, lpData, (DWORD)NP2HeapSize(lpData) - 2, &cbData, NULL);
+	// prevent unsigned integer overflow.
+	const DWORD readLen = max_u((DWORD)(NP2HeapSize(lpData) - 2), (DWORD)fileSize.QuadPart);
+	const BOOL bReadSuccess = ReadFile(hFile, lpData, readLen, &cbData, NULL);
 	dwLastIOError = GetLastError();
 	CloseHandle(hFile);
 
@@ -490,11 +518,9 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 		SciCall_SetCodePage((mEncoding[iEncoding].uFlags & NCP_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
 		EditSetEmptyText();
 		SciCall_SetEOLMode(status->iEOLMode);
-	} else if (!bSkipEncodingDetection &&
-			   (iSrcEncoding == -1 || iSrcEncoding == CPI_UNICODE || iSrcEncoding == CPI_UNICODEBE) &&
-			   (iSrcEncoding == CPI_UNICODE || iSrcEncoding == CPI_UNICODEBE || IsUnicode(lpData, cbData, &bBOM, &bReverse)) &&
-			   (iSrcEncoding == CPI_UNICODE || iSrcEncoding == CPI_UNICODEBE || !utf8Sig)) {
-
+	} else if ((iSrcEncoding == CPI_UNICODE || iSrcEncoding == CPI_UNICODEBE) // reload as UTF-16
+		|| (!bSkipEncodingDetection && iSrcEncoding == -1 && !utf8Sig && IsUnicode(lpData, cbData, &bBOM, &bReverse))
+		) {
 		if (iSrcEncoding == CPI_UNICODE) {
 			bBOM = (lpData[0] == '\xFF' && lpData[1] == '\xFE');
 			bReverse = FALSE;
@@ -534,16 +560,14 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 		NP2HeapFree(lpDataUTF8);
 	} else {
 		FileVars_Init(lpData, cbData, &fvCurFile);
-		if (!bSkipEncodingDetection
-				&& (iSrcEncoding == -1 || iSrcEncoding == CPI_UTF8 || iSrcEncoding == CPI_UTF8SIGN)
-				&& ((utf8Sig
-					 || FileVars_IsUTF8(&fvCurFile)
-					 || (iSrcEncoding == CPI_UTF8 || iSrcEncoding == CPI_UTF8SIGN)
-					 || (!bPreferOEM && bLoadANSIasUTF8) // from menu "Reload As... UTF-8"
-					 || IsUTF8(lpData, cbData)
-					)
-				   )
-				&& !(FileVars_IsNonUTF8(&fvCurFile) && (iSrcEncoding != CPI_UTF8 && iSrcEncoding != CPI_UTF8SIGN))) {
+		if (iSrcEncoding == -1) {
+			iSrcEncoding = FileVars_GetEncoding(&fvCurFile);
+		}
+		if ((iSrcEncoding == CPI_UTF8 || iSrcEncoding == CPI_UTF8SIGN) // reload as UTF-8 or UTF-8 filevar
+			|| ((iSrcEncoding == -1) && ((bLoadANSIasUTF8 && !bPreferOEM) // load ANSI as UTF-8
+				|| (!bSkipEncodingDetection && (utf8Sig || IsUTF8(lpData, cbData)))
+			))
+		) {
 			SciCall_SetCodePage(SC_CP_UTF8);
 			if (utf8Sig) {
 				EditSetNewText(lpData + 3, cbData - 3);
@@ -555,27 +579,21 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 				EditDetectEOLMode(lpData, cbData, status);
 			}
 		} else {
-			if (iSrcEncoding != -1) {
-				iEncoding = iSrcEncoding;
-			} else {
-				iEncoding = FileVars_GetEncoding(&fvCurFile);
-				if (iEncoding == -1) {
-					if (fvCurFile.mask & FV_ENCODING) {
-						iEncoding = CPI_DEFAULT;
+			iEncoding = iSrcEncoding;
+			if (iEncoding == -1) {
+				if (fvCurFile.mask & FV_ENCODING) {
+					iEncoding = CPI_DEFAULT;
+				} else {
+					if ((iWeakSrcEncoding != -1) && (mEncoding[iWeakSrcEncoding].uFlags & NCP_INTERNAL)) {
+						iEncoding = iDefaultEncoding;
 					} else {
-						if ((iWeakSrcEncoding != -1) && (mEncoding[iWeakSrcEncoding].uFlags & NCP_INTERNAL)) {
-							iEncoding = iDefaultEncoding;
-						} else {
-							iEncoding = _iDefaultEncoding;
-						}
+						iEncoding = _iDefaultEncoding;
 					}
 				}
 			}
 
 			const UINT uCodePage = mEncoding[iEncoding].uCodePage;
-			if (((mEncoding[iEncoding].uFlags & NCP_8BIT) && uCodePage != CP_UTF7) ||
-					(uCodePage == CP_UTF7 && IsUTF7(lpData, cbData))) {
-
+			if ((mEncoding[iEncoding].uFlags & NCP_8BIT) || ((mEncoding[iEncoding].uFlags & NCP_7BIT) && IsUTF7(lpData, cbData))) {
 				LPWSTR lpDataWide = (LPWSTR)NP2HeapAlloc(cbData * sizeof(WCHAR) + 16);
 				const int cbDataWide = MultiByteToWideChar(uCodePage, 0, lpData, cbData, lpDataWide, (int)(NP2HeapSize(lpDataWide) / sizeof(WCHAR)));
 				NP2HeapFree(lpData);
@@ -713,7 +731,7 @@ BOOL EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, EditFileIOStatus *
 
 			bWriteSuccess = WriteFile(hFile, lpData, cbData, &dwBytesWritten, NULL);
 			dwLastIOError = GetLastError();
-		} else if (uFlags & NCP_8BIT) {
+		} else if (uFlags & (NCP_8BIT | NCP_7BIT)) {
 			BOOL bCancelDataLoss = FALSE;
 			const UINT uCodePage = mEncoding[iEncoding].uCodePage;
 			const BOOL zeroFlags = IsZeroFlagsCodePage(uCodePage);
@@ -2232,13 +2250,13 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 
 	BOOL bPrefixNumPadZero = FALSE;
 	char *mszPrefix2 = NULL;
-	Sci_Position iPrefixNum = 0;
+	Sci_Line iPrefixNum = 0;
 	int iPrefixNumWidth = 1;
 	BOOL bPrefixNum = FALSE;
 
 	BOOL bAppendNumPadZero = FALSE;
 	char *mszAppend2 = NULL;
-	Sci_Position iAppendNum = 0;
+	Sci_Line iAppendNum = 0;
 	int iAppendNumWidth = 1;
 	BOOL bAppendNum = FALSE;
 
@@ -2251,7 +2269,7 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 				strcpy(mszPrefix2, p + CSTRLEN("$(I)"));
 				bPrefixNum = TRUE;
 				iPrefixNum = 0;
-				for (Sci_Position i = iLineEnd - iLineStart; i >= 10; i = i / 10) {
+				for (Sci_Line i = iLineEnd - iLineStart; i >= 10; i = i / 10) {
 					iPrefixNumWidth++;
 				}
 				bPrefixNumPadZero = FALSE;
@@ -2260,7 +2278,7 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 				strcpy(mszPrefix2, p + CSTRLEN("$(0I)"));
 				bPrefixNum = TRUE;
 				iPrefixNum = 0;
-				for (Sci_Position i = iLineEnd - iLineStart; i >= 10; i = i / 10) {
+				for (Sci_Line i = iLineEnd - iLineStart; i >= 10; i = i / 10) {
 					iPrefixNumWidth++;
 				}
 				bPrefixNumPadZero = TRUE;
@@ -2269,7 +2287,7 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 				strcpy(mszPrefix2, p + CSTRLEN("$(N)"));
 				bPrefixNum = TRUE;
 				iPrefixNum = 1;
-				for (Sci_Position i = iLineEnd - iLineStart + 1; i >= 10; i = i / 10) {
+				for (Sci_Line i = iLineEnd - iLineStart + 1; i >= 10; i = i / 10) {
 					iPrefixNumWidth++;
 				}
 				bPrefixNumPadZero = FALSE;
@@ -2278,7 +2296,7 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 				strcpy(mszPrefix2, p + CSTRLEN("$(0N)"));
 				bPrefixNum = TRUE;
 				iPrefixNum = 1;
-				for (Sci_Position i = iLineEnd - iLineStart + 1; i >= 10; i = i / 10) {
+				for (Sci_Line i = iLineEnd - iLineStart + 1; i >= 10; i = i / 10) {
 					iPrefixNumWidth++;
 				}
 				bPrefixNumPadZero = TRUE;
@@ -2287,7 +2305,7 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 				strcpy(mszPrefix2, p + CSTRLEN("$(L)"));
 				bPrefixNum = TRUE;
 				iPrefixNum = iLineStart + 1;
-				for (Sci_Position i = iLineEnd + 1; i >= 10; i = i / 10) {
+				for (Sci_Line i = iLineEnd + 1; i >= 10; i = i / 10) {
 					iPrefixNumWidth++;
 				}
 				bPrefixNumPadZero = FALSE;
@@ -2296,7 +2314,7 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 				strcpy(mszPrefix2, p + CSTRLEN("$(0L)"));
 				bPrefixNum = TRUE;
 				iPrefixNum = iLineStart + 1;
-				for (Sci_Position i = iLineEnd + 1; i >= 10; i = i / 10) {
+				for (Sci_Line i = iLineEnd + 1; i >= 10; i = i / 10) {
 					iPrefixNumWidth++;
 				}
 				bPrefixNumPadZero = TRUE;
@@ -2314,7 +2332,7 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 				strcpy(mszAppend2, p + CSTRLEN("$(I)"));
 				bAppendNum = TRUE;
 				iAppendNum = 0;
-				for (Sci_Position i = iLineEnd - iLineStart; i >= 10; i = i / 10) {
+				for (Sci_Line i = iLineEnd - iLineStart; i >= 10; i = i / 10) {
 					iAppendNumWidth++;
 				}
 				bAppendNumPadZero = FALSE;
@@ -2323,7 +2341,7 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 				strcpy(mszAppend2, p + CSTRLEN("$(0I)"));
 				bAppendNum = TRUE;
 				iAppendNum = 0;
-				for (Sci_Position i = iLineEnd - iLineStart; i >= 10; i = i / 10) {
+				for (Sci_Line i = iLineEnd - iLineStart; i >= 10; i = i / 10) {
 					iAppendNumWidth++;
 				}
 				bAppendNumPadZero = TRUE;
@@ -2332,7 +2350,7 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 				strcpy(mszAppend2, p + CSTRLEN("$(N)"));
 				bAppendNum = TRUE;
 				iAppendNum = 1;
-				for (Sci_Position i = iLineEnd - iLineStart + 1; i >= 10; i = i / 10) {
+				for (Sci_Line i = iLineEnd - iLineStart + 1; i >= 10; i = i / 10) {
 					iAppendNumWidth++;
 				}
 				bAppendNumPadZero = FALSE;
@@ -2341,7 +2359,7 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 				strcpy(mszAppend2, p + CSTRLEN("$(0N)"));
 				bAppendNum = TRUE;
 				iAppendNum = 1;
-				for (Sci_Position i = iLineEnd - iLineStart + 1; i >= 10; i = i / 10) {
+				for (Sci_Line i = iLineEnd - iLineStart + 1; i >= 10; i = i / 10) {
 					iAppendNumWidth++;
 				}
 				bAppendNumPadZero = TRUE;
@@ -2350,7 +2368,7 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 				strcpy(mszAppend2, p + CSTRLEN("$(L)"));
 				bAppendNum = TRUE;
 				iAppendNum = iLineStart + 1;
-				for (Sci_Position i = iLineEnd + 1; i >= 10; i = i / 10) {
+				for (Sci_Line i = iLineEnd + 1; i >= 10; i = i / 10) {
 					iAppendNumWidth++;
 				}
 				bAppendNumPadZero = FALSE;
@@ -2359,7 +2377,7 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 				strcpy(mszAppend2, p + CSTRLEN("$(0L)"));
 				bAppendNum = TRUE;
 				iAppendNum = iLineStart + 1;
-				for (Sci_Position i = iLineEnd + 1; i >= 10; i = i / 10) {
+				for (Sci_Line i = iLineEnd + 1; i >= 10; i = i / 10) {
 					iAppendNumWidth++;
 				}
 				bAppendNumPadZero = TRUE;
@@ -2376,11 +2394,19 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 
 			if (bPrefixNum) {
 				char tchNum[64];
+#if defined(_WIN64)
 				if (bPrefixNumPadZero) {
-					sprintf(tchNum, "%0*i", iPrefixNumWidth, (int)iPrefixNum);
+					sprintf(tchNum, "%0*" PRId64, iPrefixNumWidth, iPrefixNum);
 				} else {
-					sprintf(tchNum, "%*i", iPrefixNumWidth, (int)iPrefixNum);
+					sprintf(tchNum, "%*" PRId64, iPrefixNumWidth, iPrefixNum);
 				}
+#else
+				if (bPrefixNumPadZero) {
+					sprintf(tchNum, "%0*d", iPrefixNumWidth, (int)iPrefixNum);
+				} else {
+					sprintf(tchNum, "%*d", iPrefixNumWidth, (int)iPrefixNum);
+				}
+#endif
 				strcat(mszInsert, tchNum);
 				strcat(mszInsert, mszPrefix2);
 				iPrefixNum++;
@@ -2397,11 +2423,19 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 
 			if (bAppendNum) {
 				char tchNum[64];
+#if defined(_WIN64)
 				if (bAppendNumPadZero) {
-					sprintf(tchNum, "%0*i", iAppendNumWidth, (int)iAppendNum);
+					sprintf(tchNum, "%0*" PRId64, iAppendNumWidth, iAppendNum);
 				} else {
-					sprintf(tchNum, "%*i", iAppendNumWidth, (int)iAppendNum);
+					sprintf(tchNum, "%*" PRId64, iAppendNumWidth, iAppendNum);
 				}
+#else
+				if (bAppendNumPadZero) {
+					sprintf(tchNum, "%0*d", iAppendNumWidth, (int)iAppendNum);
+				} else {
+					sprintf(tchNum, "%*d", iAppendNumWidth, (int)iAppendNum);
+				}
+#endif
 				strcat(mszInsert, tchNum);
 				strcat(mszInsert, mszAppend2);
 				iAppendNum++;
@@ -3762,7 +3796,7 @@ void EditSortLines(int iSortFlags) {
 			qsort(pLines, iLineCount, sizeof(SORTLINE), CmpStdRev);
 		}
 	} else if (iSortFlags & SORT_SHUFFLE) {
-		srand((UINT)GetTickCount());
+		srand(GetTickCount());
 		for (Sci_Line i = iLineCount - 1; i > 0; i--) {
 			const Sci_Line j = rand() % i;
 			const SORTLINE sLine = pLines[i];
@@ -4862,7 +4896,7 @@ BOOL EditReplace(HWND hwnd, LPEDITFINDREPLACE lpefr) {
 // Mark all occurrences of the text currently selected (by Aleksandar Lekov)
 //
 
-extern int iMatchesCount;
+extern Sci_Position iMatchesCount;
 
 void EditMarkAll_Clear(void) {
 	if (iMatchesCount == 0) {
@@ -4952,6 +4986,17 @@ void EditMarkAll(BOOL bChanged, BOOL bMarkOccurrencesMatchCase, BOOL bMarkOccurr
 	}
 }
 
+static void ShwowReplaceCount(Sci_Position iCount) {
+	if (iCount > 0) {
+		WCHAR tchNum[32];
+		PosToStrW(iCount, tchNum);
+		FormatNumberStr(tchNum);
+		InfoBox(0, L"MsgReplaceCount", IDS_REPLCOUNT, tchNum);
+	} else {
+		InfoBox(0, L"MsgNotFound", IDS_NOTFOUND);
+	}
+}
+
 //=============================================================================
 //
 // EditReplaceAll()
@@ -5006,7 +5051,7 @@ BOOL EditReplaceAll(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bShowInfo) {
 	ttf.chrg.cpMax = (Sci_PositionCR)SciCall_GetLength();
 	ttf.lpstrText = szFind2;
 
-	int iCount = 0;
+	Sci_Position iCount = 0;
 	while (SciCall_FindText(lpefr->fuFlags, &ttf) != -1) {
 		if (iCount == 0 && bRegexStartOrEndOfLine) {
 			if (0 == SciCall_GetLineEndPosition(0)) {
@@ -5057,11 +5102,7 @@ BOOL EditReplaceAll(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bShowInfo) {
 	EndWaitCursor();
 
 	if (bShowInfo) {
-		if (iCount > 0) {
-			InfoBox(0, L"MsgReplaceCount", IDS_REPLCOUNT, iCount);
-		} else {
-			InfoBox(0, L"MsgNotFound", IDS_NOTFOUND);
-		}
+		ShwowReplaceCount(iCount);
 	}
 
 	LocalFree(pszReplace2);
@@ -5127,7 +5168,7 @@ BOOL EditReplaceAllInSelection(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bShowInf
 	ttf.chrg.cpMax = (Sci_PositionCR)SciCall_GetLength();
 	ttf.lpstrText = szFind2;
 
-	int iCount = 0;
+	Sci_Position iCount = 0;
 	BOOL fCancel = FALSE;
 	while (!fCancel && SciCall_FindText(lpefr->fuFlags, &ttf) != -1) {
 		if (ttf.chrgText.cpMin >= SciCall_GetSelectionStart() && ttf.chrgText.cpMax <= SciCall_GetSelectionEnd()) {
@@ -5198,11 +5239,7 @@ BOOL EditReplaceAllInSelection(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bShowInf
 	EndWaitCursor();
 
 	if (bShowInfo) {
-		if (iCount > 0) {
-			InfoBox(0, L"MsgReplaceCount", IDS_REPLCOUNT, iCount);
-		} else {
-			InfoBox(0, L"MsgNotFound", IDS_NOTFOUND);
-		}
+		ShwowReplaceCount(iCount);
 	}
 
 	LocalFree(pszReplace2);
@@ -5223,7 +5260,6 @@ static INT_PTR CALLBACK EditLineNumDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, 
 		const Sci_Line iMaxLine = SciCall_GetLineCount();
 		const Sci_Position iLength = SciCall_GetLength();
 
-		SetDlgItemInt(hwnd, IDC_LINENUM, (int)iCurLine, FALSE);
 		SendDlgItemMessage(hwnd, IDC_LINENUM, EM_LIMITTEXT, 20, 0);
 		SendDlgItemMessage(hwnd, IDC_COLNUM, EM_LIMITTEXT, 20, 0);
 
@@ -5231,13 +5267,16 @@ static INT_PTR CALLBACK EditLineNumDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, 
 		WCHAR tchLines[64];
 		WCHAR tchFmt[64];
 
-		wsprintf(tchLn, L"%i", (int)iMaxLine);
+		PosToStrW(iCurLine, tchLn);
+		SetDlgItemText(hwnd, IDC_LINENUM, tchLn);
+
+		PosToStrW(iMaxLine, tchLn);
 		FormatNumberStr(tchLn);
 		GetDlgItemText(hwnd, IDC_LINE_RANGE, tchFmt, COUNTOF(tchFmt));
 		wsprintf(tchLines, tchFmt, tchLn);
 		SetDlgItemText(hwnd, IDC_LINE_RANGE, tchLines);
 
-		wsprintf(tchLn, L"%i", (int)iLength);
+		PosToStrW(iLength, tchLn);
 		FormatNumberStr(tchLn);
 		GetDlgItemText(hwnd, IDC_COLUMN_RANGE, tchFmt, COUNTOF(tchFmt));
 		wsprintf(tchLines, tchFmt, tchLn);
@@ -5253,16 +5292,29 @@ static INT_PTR CALLBACK EditLineNumDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, 
 			BOOL fTranslated;
 			BOOL fTranslated2;
 			WCHAR tchLn[32];
-			int iNewLine = 0;
-			int iNewCol;
+			Sci_Line iNewLine = 0;
+			Sci_Position iNewCol = 0;
 
 			// Extract line number from the text entered
 			// For example: "5410:" will result in 5410
 			GetDlgItemText(hwnd, IDC_LINENUM, tchLn, COUNTOF(tchLn));
-			fTranslated = CRTStrToInt(tchLn, &iNewLine);
+#if defined(_WIN64)
+			int64_t iLine = 0;
+			fTranslated = CRTStrToInt64(tchLn, &iLine);
+#else
+			int iLine = 0;
+			fTranslated = CRTStrToInt(tchLn, &iLine);
+#endif
+			iNewLine = iLine;
 
 			if (SendDlgItemMessage(hwnd, IDC_COLNUM, WM_GETTEXTLENGTH, 0, 0) > 0) {
-				iNewCol = GetDlgItemInt(hwnd, IDC_COLNUM, &fTranslated2, FALSE);
+				GetDlgItemText(hwnd, IDC_LINENUM, tchLn, COUNTOF(tchLn));
+#if defined(_WIN64)
+				fTranslated2 = CRTStrToInt64(tchLn, &iLine);
+#else
+				fTranslated2 = CRTStrToInt(tchLn, &iLine);
+#endif
+				iNewCol = iLine;
 			} else {
 				iNewCol = 1;
 				fTranslated2 = fTranslated;
@@ -6277,7 +6329,8 @@ BOOL FileVars_Init(LPCSTR lpData, DWORD cbData, LPFILEVARS lpfv) {
 	}
 
 	char tch[512];
-	strncpy(tch, lpData, min_u(cbData + 1, COUNTOF(tch)));
+	strncpy(tch, lpData, min_u(cbData, sizeof(tch)));
+	tch[sizeof(tch) - 1] = '\0';
 	const BOOL utf8Sig = IsUTF8Signature(lpData);
 	BOOL bDisableFileVariables = FALSE;
 
@@ -6750,6 +6803,7 @@ static void FoldToggleNode(Sci_Line line, FOLD_ACTION *pAction, BOOL *fToggled) 
 
 void FoldToggleAll(FOLD_ACTION action) {
 	BOOL fToggled = FALSE;
+	SciCall_ColouriseAll();
 	const Sci_Line lineCount = SciCall_GetLineCount();
 
 	for (Sci_Line line = 0; line < lineCount; ++line) {
@@ -6770,6 +6824,7 @@ void FoldToggleAll(FOLD_ACTION action) {
 
 void FoldToggleLevel(int lev, FOLD_ACTION action) {
 	BOOL fToggled = FALSE;
+	SciCall_ColouriseAll();
 	const Sci_Line lineCount = SciCall_GetLineCount();
 	Sci_Line line = 0;
 
@@ -6835,6 +6890,7 @@ void FoldToggleCurrentBlock(FOLD_ACTION action) {
 }
 
 void FoldToggleCurrentLevel(FOLD_ACTION action) {
+	SciCall_ColouriseAll();
 	Sci_Line line = SciCall_LineFromPosition(SciCall_GetCurrentPos());
 	int level = SciCall_GetFoldLevel(line);
 
@@ -6876,6 +6932,7 @@ void FoldToggleCurrentLevel(FOLD_ACTION action) {
 void FoldToggleDefault(FOLD_ACTION action) {
 	BOOL fToggled = FALSE;
 	int maxLevel = 0;
+	SciCall_ColouriseAll();
 	const UINT state = Style_GetDefaultFoldState(pLexCurrent->rid, &maxLevel);
 	const Sci_Line lineCount = SciCall_GetLineCount();
 	Sci_Line line = 0;

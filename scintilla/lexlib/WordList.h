@@ -18,17 +18,26 @@ class WordList {
 	char *list;
 	int len;
 	bool onlyLineEnds;	///< Delimited by any white space or only line ends
-	int starts[256];
+	// words in [start, end) starts with same character.
+	struct Range {
+		int start;
+		int end;
+	};
+	Range ranges[128];	// only ASCII, most word starts with character in '_a-zA-Z'
 public:
 	explicit WordList(bool onlyLineEnds_ = false) noexcept;
 	~WordList();
 	operator bool() const noexcept;
 	bool operator!=(const WordList &other) const noexcept;
+	bool operator==(const WordList &other) const noexcept {
+		return !(*this != other);
+	}
 	int Length() const noexcept;
 	void Clear() noexcept;
 	void Set(const char *s);
-	void Reset(WordList &other) noexcept;
+	bool Reset(const char *s);
 	bool InList(const char *s) const noexcept;
+	bool InListPrefixed(const char *s, char marker) const noexcept;
 	bool InListAbbreviated(const char *s, char marker) const noexcept;
 	bool InListAbridged(const char *s, char marker) const noexcept;
 	const char *WordAt(int n) const noexcept;

@@ -1701,7 +1701,10 @@ static INT_PTR CALLBACK SelectDefEncodingDlgProc(HWND hwnd, UINT umsg, WPARAM wP
 		case NM_RETURN:
 			if (pnmhdr->idFrom == IDC_ENCODING_LINK) {
 				int *pidREncoding = (int *)GetWindowLongPtr(hwnd, DWLP_USER);
-				SelectEncodingDlg(hwndMain, pidREncoding, IDS_SELRECT_DEFAULT_ENCODING);
+				if (SelectEncodingDlg(hwndMain, pidREncoding, IDS_SELRECT_DEFAULT_ENCODING)) {
+					Encoding_GetLabel(*pidREncoding);
+					SetDlgItemText(hwnd, IDC_ENCODING_LABEL, mEncoding[*pidREncoding].wchLabel);
+				}
 			}
 			break;
 		}
@@ -1967,7 +1970,7 @@ static INT_PTR CALLBACK WarnLineEndingDlgProc(HWND hwnd, UINT umsg, WPARAM wPara
 		WCHAR tchFmt[128];
 		for (int i = 0; i < 3; i++) {
 			WCHAR tchLn[32];
-			wsprintf(tchLn, L"%u", status->linesCount[i]);
+			PosToStrW(status->linesCount[i], tchLn);
 			FormatNumberStr(tchLn);
 			GetDlgItemText(hwnd, IDC_EOL_SUM_CRLF + i, tchFmt, COUNTOF(tchFmt));
 			wsprintf(wch, tchFmt, tchLn);

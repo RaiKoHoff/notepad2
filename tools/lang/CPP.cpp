@@ -31,7 +31,12 @@ and and_eq bitand bitor compl not not_eq or or_eq xor xor_eq
 namespace std { // Common definitions
 	nullptr_t = decltype(nullptr);
 	enum class byte : unsigned char {};
+	template <class IntType>
+	constexpr IntType to_integer(byte b) noexcept;
 }
+
+// Implementation properties
+#include <version> // C++20
 
 #include <limits>
 namespace std { // Implementation properties
@@ -93,19 +98,23 @@ namespace std { // Implementation properties
 namespace std { // Dynamic memory management
 	class bad_alloc : public exception {};
 	class bad_array_new_length : public bad_alloc {};
+	struct destroying_delete_t { // C++20
+		explicit destroying_delete_t() = default;
+	};
+	inline constexpr destroying_delete_t destroying_delete {}; //C++20
 	enum class align_val_t : size_t {};
 	struct nothrow_t {};
 	extern const nothrow_t nothrow;
 	using new_handler = void (*)();
 	new_handler get_new_handler() noexcept;
 	new_handler set_new_handler(new_handler new_p) noexcept;
-	template <class T> constexpr T* launder(T* p) noexcept;
+	template <class T> [[nodiscard]] constexpr T* launder(T* p) noexcept;
 	size_t hardware_destructive_interference_size;
 	size_t hardware_constructive_interference_size;
 
-	void* operator new(size_t size);
+	[[nodiscard]] void* operator new(size_t size);
 	void operator delete(void* ptr) noexcept;
-	void* operator new[](std::size_t size);
+	[[nodiscard]] void* operator new[](std::size_t size);
 	void operator delete[](void* ptr) noexcept;
 }
 
@@ -120,10 +129,176 @@ namespace std { // Type identification
 	class bad_typeid : public exception {};
 }
 
+#include <contract> // C++20
+namespace std { // Contract violation handling
+	class contract_violation {
+		uint_least32_t line_number() const noexcept;
+		string_view file_name() const noexcept;
+		string_view function_name() const noexcept;
+		string_view comment() const noexcept;
+		string_view assertion_level() const noexcept;
+	};
+}
+
+#include <compare> // C++20
+namespace std { // Comparisons
+	class weak_equality {
+		static const weak_equality equivalent;
+		static const weak_equality nonequivalent;
+	};
+	class strong_equality {
+		static const strong_equality equal;
+		static const strong_equality nonequal;
+		static const strong_equality equivalent;
+		static const strong_equality nonequivalent;
+	};
+	class partial_ordering {
+		static const partial_ordering less;
+		static const partial_ordering equivalent;
+		static const partial_ordering greater;
+		static const partial_ordering unordered;
+	};
+	class weak_ordering {
+		static const weak_ordering less;
+		static const weak_ordering equivalent;
+		static const weak_ordering greater;
+	};
+	class strong_ordering {
+		static const strong_ordering less;
+		static const strong_ordering equal;
+		static const strong_ordering equivalent;
+		static const strong_ordering greater;
+	};
+	constexpr bool is_eq(weak_equality cmp) noexcept { return cmp == 0; }
+	constexpr bool is_neq(weak_equality cmp) noexcept { return cmp != 0; }
+	constexpr bool is_lt(partial_ordering cmp) noexcept { return cmp < 0; }
+	constexpr bool is_lteq(partial_ordering cmp) noexcept { return cmp <= 0; }
+	constexpr bool is_gt(partial_ordering cmp) noexcept { return cmp > 0; }
+	constexpr bool is_gteq(partial_ordering cmp) noexcept { return cmp >= 0; }
+	template<class... Ts>
+	struct common_comparison_category {
+		using type;
+	};
+	template<class... Ts>
+	using common_comparison_category_t = typename common_comparison_category<Ts...>::type;
+	template<class T> constexpr strong_ordering strong_order(const T& a, const T& b);
+	template<class T> constexpr weak_ordering weak_order(const T& a, const T& b);
+	template<class T> constexpr partial_ordering partial_order(const T& a, const T& b);
+	template<class T> constexpr strong_equality strong_equal(const T& a, const T& b);
+	template<class T> constexpr weak_equality weak_equal(const T& a, const T& b);
+}
+
+#include <coroutine> // C++20
+namespace std { // Coroutines
+	template<class R, class... ArgTypes>
+	struct coroutine_traits {
+		using promise_type = typename R::promise_type;
+	};
+	template<>
+	struct coroutine_handle<void> {
+		constexpr void* address() const noexcept;
+		static constexpr coroutine_handle from_address(void* addr);
+		bool done() const;
+		void resume() const;
+		void destroy() const;
+	};
+	template<class Promise>
+	struct coroutine_handle : coroutine_handle<> {
+		using coroutine_handle<>::coroutine_handle;
+		static coroutine_handle from_promise(Promise&);
+		static constexpr coroutine_handle from_address(void* addr);
+		Promise& promise() const;
+	};
+	struct noop_coroutine_promise;
+	template<> struct coroutine_handle<noop_coroutine_promise> : coroutine_handle<> {
+		constexpr bool done() const noexcept;
+		constexpr void resume() const noexcept;
+		constexpr void destroy() const noexcept;
+		noop_coroutine_promise& promise() const noexcept;
+		constexpr void* address() const noexcept;
+	};
+	using noop_coroutine_handle = coroutine_handle<noop_coroutine_promise>;
+	noop_coroutine_handle noop_coroutine() noexcept;
+	struct suspend_never {
+		constexpr bool await_ready() const noexcept { return true; }
+		constexpr void await_suspend(coroutine_handle<>) const noexcept {}
+		constexpr void await_resume() const noexcept {}
+	};
+	struct suspend_always;
+}
+
+#include <concepts> // C++20
+namespace std { // Concepts
+	// language-related concepts
+	template<class T, class U>
+	concept Same;
+	template<class Derived, class Base>
+	concept DerivedFrom;
+	template<class From, class To>
+	concept ConvertibleTo;
+	template<class T, class U>
+	concept CommonReference;
+	template<class T, class U>
+	concept Common;
+	template<class T>
+	concept Integral;
+	template<class T>
+	concept SignedIntegral;
+	template<class T>
+	concept UnsignedIntegral;
+	template<class LHS, class RHS>
+	concept Assignable;
+	template<class T>
+	concept Swappable;
+	template<class T, class U>
+	concept SwappableWith;
+	template<class T>
+	concept Destructible;
+	template<class T, class... Args>
+	concept Constructible;
+	template<class T>
+	concept DefaultConstructible;
+	template<class T>
+	concept MoveConstructible;
+	template<class T>
+	concept CopyConstructible;
+	// comparison concepts
+	template<class B>
+	concept Boolean;
+	template<class T>
+	concept EqualityComparable;
+	template<class T, class U>
+	concept EqualityComparableWith;
+	template<class T>
+	concept StrictTotallyOrdered;
+	template<class T, class U>
+	concept StrictTotallyOrderedWith;
+	// object concepts
+	template<class T>
+	concept Movable;
+	template<class T>
+	concept Copyable;
+	template<class T>
+	concept Semiregular;
+	template<class T>
+	concept Regular;
+	// callable concepts
+	template<class F, class... Args>
+	concept Invocable;
+	template<class F, class... Args>
+	concept RegularInvocable;
+	template<class F, class... Args>
+	concept Predicate;
+	template<class R, class T, class U>
+	concept Relation;
+	template<class R, class T, class U>
+	concept StrictWeakOrder;
+}
+
 #include <exception>
 namespace std { // Exception handling
 	class exception {
-		const char* what() const noexcept;;
+		const char* what() const noexcept;
 	}
 	class bad_exception : public exception {};
 	class nested_exception {
@@ -320,26 +495,6 @@ namespace std { // Utility components
 	template <class T> void as_const(const T&&) = delete;
 	template <class T> add_rvalue_reference_t<T> declval() noexcept;
 
-	// Primitive numeric output conversion
-	enum class chars_format {
-		scientific ,
-		fixed,
-		hex,
-		general = fixed | scientific
-	};
-	struct to_chars_result {
-		char* ptr;
-		error_code ec;
-	};
-	to_chars_result to_chars(char* first, char* last, float value);
-	struct from_chars_result {
-		const char* ptr;
-		error_code ec;
-	};
-	// Primitive numeric input conversion
-	from_chars_result from_chars(const char* first, const char* last, float& value,
-	chars_format fmt = chars_format::general);
-
 	// Compile-time integer sequences
 	template<class T, T...>
 	struct integer_sequence {
@@ -479,6 +634,9 @@ namespace std { // Bitsets
 		bitset<N>& reset(size_t pos);
 		bitset<N>& flip() noexcept;
 		bitset<N>& flip(size_t pos);
+		unsigned long to_ulong() const;
+		unsigned long long to_ullong() const;
+		basic_string to_string() const;
 		size_t count() const noexcept;
 		constexpr size_t size() const noexcept;
 		bool test(size_t pos) const;
@@ -498,6 +656,7 @@ namespace std { // Memory
 		static pointer pointer_to(r);
 	};
 	template <class T> struct pointer_traits<T*>;
+	template<class Ptr> auto to_address(const Ptr& p) noexcept; // C++20
 	enum class pointer_safety { relaxed, preferred, strict };
 	// Pointer safety
 	void declare_reachable(void* p);
@@ -507,11 +666,21 @@ namespace std { // Memory
 	pointer_safety get_pointer_safety() noexcept;
 	// Align
 	void* align(size_t alignment, size_t size, void*& ptr, size_t& space);
+	template<size_t N, class T>
+	[[nodiscard]] constexpr T* assume_aligned(T* ptr); // C++20
 	// Allocator argument tag
 	struct allocator_arg_t { explicit allocator_arg_t() = default; };
 	inline constexpr allocator_arg_t allocator_arg{};
 	// uses_allocator
 	template <class T, class Alloc> struct uses_allocator;
+	template<class T, class Alloc>
+	inline constexpr bool uses_allocator_v = uses_allocator<T, Alloc>::value;
+	template<class T, class Alloc>
+	auto uses_allocator_construction_args(const Alloc& alloc); // C++20
+	template<class T, class Alloc, class... Args>
+	T make_obj_using_allocator(const Alloc& alloc, Args&&... args); // C++20
+	template<class T, class Alloc, class... Args>
+	T* uninitialized_construct_using_allocator(T* p, const Alloc& alloc, Args&&... args); // C++20
 	// Allocator traits
 	template <class Alloc> struct allocator_traits {
 		using allocator_type = Alloc;
@@ -522,11 +691,11 @@ namespace std { // Memory
 		using const_void_pointer;
 		using propagate_on_container_copy_assignment;
 		using propagate_on_container_move_assignment;
-		using propagate_on_container_swap;;
+		using propagate_on_container_swap;
 		using is_always_equal;
 
-		static pointer allocate(Alloc& a, size_type n);
-		static pointer allocate(Alloc& a, size_type n, const_void_pointer hint);
+		[[nodiscard]] static pointer allocate(Alloc& a, size_type n);
+		[[nodiscard]] static pointer allocate(Alloc& a, size_type n, const_void_pointer hint);
 		static void deallocate(Alloc& a, pointer p, size_type n);
 		template <class T, class... Args>
 		static void construct(Alloc& a, T* p, Args&&... args);
@@ -584,6 +753,7 @@ namespace std { // Memory
 	template <class T, class D> class unique_ptr<T[], D>;
 	template <class T, class... Args> unique_ptr<T> make_unique(Args&&... args);
 	template <class T> unique_ptr<T> make_unique(size_t n);
+	template<class T> unique_ptr<T> make_unique_default_init(size_t n); // C++20
 	template <class T, class D> void swap(unique_ptr<T, D>& x, unique_ptr<T, D>& y) noexcept;
 	// Shared-ownership pointers
 	class bad_weak_ptr : public exception {};
@@ -602,6 +772,7 @@ namespace std { // Memory
 	shared_ptr<T> make_shared(Args&&... args);
 	template<class T, class A, class... Args>
 	shared_ptr<T> allocate_shared(const A& a, Args&&... args);
+	template<class T> shared_ptr<T> make_shared_default_init(); // C++20
 	template<class T, class U>
 	shared_ptr<T> static_pointer_cast(const shared_ptr<U>& r) noexcept;
 	template<class T, class U>
@@ -631,23 +802,30 @@ namespace std { // Memory
 	};
 	template<class T>
 	bool atomic_is_lock_free(const shared_ptr<T>* p);
-	template <class T, class Alloc>
-	inline constexpr bool uses_allocator_v = uses_allocator<T, Alloc>::value;
+
+	template <class Y> [[deprecated]] struct auto_ptr_ref {}; // C++03
+	template <class X> [[deprecated]] class auto_ptr {}; // C++03
 }
 
 #include <memory_resource>
 namespace std { // Memory resources
 	class memory_resource {
 		static constexpr size_t max_align = alignof(max_align_t);
-		void* allocate(size_t bytes, size_t alignment = max_align);
+		[[nodiscard]] void* allocate(size_t bytes, size_t alignment = max_align);
 		void deallocate(void* p, size_t bytes, size_t alignment = max_align);
 		bool is_equal(const memory_resource& other) const noexcept;
 	};
 	template <class Tp>
 	class polymorphic_allocator {
 		using value_type = Tp;
-		Tp* allocate(size_t n);
+		[[nodiscard]] Tp* allocate(size_t n);
 		void deallocate(Tp* p, size_t n);
+		void* allocate_bytes(size_t nbytes, size_t alignment = alignof(max_align_t));
+		void deallocate_bytes(void* p, size_t nbytes, size_t alignment = alignof(max_align_t));
+		template<class T> T* allocate_object(size_t n = 1);
+		template<class T> void deallocate_object(T* p, size_t n = 1);
+		template<class T, class... CtorArgs> T* new_object(CtorArgs&&... ctor_args);
+		template<class T> void delete_object(T* p);
 		template <class T, class... Args>
 		void construct(T* p, Args&&... args);
 		template <class T>
@@ -669,10 +847,6 @@ namespace std { // Memory resources
 		void release();
 		memory_resource* upstream_resource() const;
 		pool_options options() const;
-	protected:
-		void *do_allocate(size_t bytes, size_t alignment) override;
-		void do_deallocate(void *p, size_t bytes, size_t alignment) override;
-		bool do_is_equal(const memory_resource& other) const noexcept override;
 	};
 	class unsynchronized_pool_resource : public memory_resource {};
 	class monotonic_buffer_resource : public memory_resource {};
@@ -715,6 +889,9 @@ namespace std { // Function objects
 	template <class T> reference_wrapper<const T> cref(const T&) noexcept;
 	template <class T> void ref(const T&&) = delete;
 	template <class T> void cref(const T&&) = delete;
+	template<class T> struct unwrap_reference; // C++20
+	template<class T> struct unwrap_ref_decay : unwrap_reference<decay_t<T>> {};
+	template<class T> using unwrap_ref_decay_t = typename unwrap_ref_decay<T>::type;
 	// arithmetic operations
 	template <class T = void> struct plus;
 	template <class T = void> struct minus;
@@ -739,8 +916,12 @@ namespace std { // Function objects
 	template <class T = void> struct bit_xor;
 	template <class T = void> struct bit_not;
 
+	struct identity { // // C++20
+		using is_transparent
+	};
 	template <class F>
 	not_fn(F&& f);
+	template<class F, class... Args> bind_front(F&&, Args&&...); // C++20
 
 	template<class T> struct is_bind_expression;
 	template<class T> struct is_placeholder;
@@ -765,9 +946,34 @@ namespace std { // Function objects
 
 	template <class T> inline constexpr bool is_bind_expression_v = is_bind_expression<T>::value;
 	template <class T> inline constexpr int is_placeholder_v = is_placeholder<T>::value;
+
+	namespace ranges { // C++20
+		// concept-constrained comparisons
+		struct equal_to;
+		struct not_equal_to;
+		struct greater;
+		struct less;
+		struct greater_equal;
+		struct less_equal;
+	}
+
+	// deprecated C++03 function objects and binders
+	template <class Arg, class Result> struct unary_function {}; // C++03
+	template <class Arg1, class Arg2, class Result> struct binary_function {}; // C++03
+	template <class Arg, class Result> class pointer_to_unary_function : public unary_function<Arg, Result> {}; // C++03
+	template <class Arg1, class Arg2, class Result> class pointer_to_binary_function : public binary_function<Arg1,Arg2,Result> {}; // C++03
+	template <class S, class T> class mem_fun_t : public unary_function<T*, S> {}; // C++03
+	template <class S, class T, class A> class mem_fun1_t : public binary_function<T*, A, S> {};  // C++03
+	template <class S, class T> class mem_fun_ref_t : public unary_function<T, S> {};  // C++03
+	template <class S, class T, class A> class mem_fun1_ref_t : public binary_function<T, A, S> {};  // C++03
+	template <class S, class T> class const_mem_fun_t : public unary_function<const T*, S> {};  // C++03
+	template <class S, class T, class A> class const_mem_fun1_t : public binary_function<const T*, A, S> {};  // C++03
+	template <class S, class T, class A> class const_mem_fun1_ref_t : public binary_function<T, A, S> {};  // C++03
+	template <class Fn> class binder1st : public unary_function<typename Fn::second_argument_type, typename Fn::result_type> {};  // C++03
+	template <class Fn> class binder2nd : public unary_function<typename Fn::first_argument_type, typename Fn::result_type> {};  // C++03
 }
 
-	#include <type_traits>
+#include <type_traits>
 namespace std { // Metaprogramming and type traits
 	template <class T, T v>
 	struct integral_constant {
@@ -810,7 +1016,7 @@ namespace std { // Metaprogramming and type traits
 	template <class T> struct is_trivial;
 	template <class T> struct is_trivially_copyable;
 	template <class T> struct is_standard_layout;
-	template <class T> struct is_pod;
+	template <class T> [[deprecated]] struct is_pod; // C++17
 	template <class T> struct is_empty;
 	template <class T> struct is_polymorphic;
 	template <class T> struct is_abstract;
@@ -818,33 +1024,44 @@ namespace std { // Metaprogramming and type traits
 	template <class T> struct is_aggregate;
 	template <class T> struct is_signed;
 	template <class T> struct is_unsigned;
+	template<class T> struct is_bounded_array; // C++20
+	template<class T> struct is_unbounded_array; // C++20
+
 	template <class T, class... Args> struct is_constructible;
 	template <class T> struct is_default_constructible;
 	template <class T> struct is_copy_constructible;
 	template <class T> struct is_move_constructible;
+
 	template <class T, class U> struct is_assignable;
 	template <class T> struct is_copy_assignable;
 	template <class T> struct is_move_assignable;
+
 	template <class T, class U> struct is_swappable_with;
 	template <class T> struct is_swappable;
 	template <class T> struct is_destructible;
+
 	template <class T, class... Args> struct is_trivially_constructible;
 	template <class T> struct is_trivially_default_constructible;
 	template <class T> struct is_trivially_copy_constructible;
 	template <class T> struct is_trivially_move_constructible;
+
 	template <class T, class U> struct is_trivially_assignable;
 	template <class T> struct is_trivially_copy_assignable;
 	template <class T> struct is_trivially_move_assignable;
 	template <class T> struct is_trivially_destructible;
+
 	template <class T, class... Args> struct is_nothrow_constructible;
 	template <class T> struct is_nothrow_default_constructible;
 	template <class T> struct is_nothrow_copy_constructible;
 	template <class T> struct is_nothrow_move_constructible;
+
 	template <class T, class U> struct is_nothrow_assignable;
 	template <class T> struct is_nothrow_copy_assignable;
 	template <class T> struct is_nothrow_move_assignable;
+
 	template <class T, class U> struct is_nothrow_swappable_with;
 	template <class T> struct is_nothrow_swappable;
+
 	template <class T> struct is_nothrow_destructible;
 	template <class T> struct has_virtual_destructor;
 	template <class T> struct has_unique_object_representations;
@@ -856,6 +1073,8 @@ namespace std { // Metaprogramming and type traits
 	template <class T, class U> struct is_same;
 	template <class Base, class Derived> struct is_base_of;
 	template <class From, class To> struct is_convertible;
+	template<class From, class To> struct is_nothrow_convertible; // C++20
+
 	template <class Fn, class... ArgTypes> struct is_invocable;
 	template <class R, class Fn, class... ArgTypes> struct is_invocable_r;
 	template <class Fn, class... ArgTypes> struct is_nothrow_invocable;
@@ -896,20 +1115,29 @@ namespace std { // Metaprogramming and type traits
 	template <class T> using remove_pointer_t = typename remove_pointer<T>::type;
 	template <class T> using add_pointer_t = typename add_pointer<T>::type;
 	// other transformations
+	template<class T> struct type_identity; // C++20
 	template <size_t Len, size_t Align = default-alignment > struct aligned_storage;
 	template <size_t Len, class... Types> struct aligned_union;
+	template<class T> struct remove_cvref; // C++20
 	template <class T> struct decay;
 	template <bool, class T = void> struct enable_if;
 	template <bool, class T, class F> struct conditional;
 	template <class... T> struct common_type;
+	template<class T, class U, template<class> class TQual, template<class> class UQual>
+	struct basic_common_reference {}; // C++20
+	template<class... T> struct common_reference; // C++20
 	template <class T> struct underlying_type;
 	template <class Fn, class... ArgTypes> struct invoke_result;
-	template <size_t Len, size_t Align = default-alignment > using aligned_storage_t = typename aligned_storage<Len, Align>::type;
+
+	template<class T> using type_identity_t = typename type_identity<T>::type;
+	template <size_t Len, size_t Align = default-alignment> using aligned_storage_t = typename aligned_storage<Len, Align>::type;
 	template <size_t Len, class... Types> using aligned_union_t = typename aligned_union<Len, Types...>::type;
+	template<class T> using remove_cvref_t = typename remove_cvref<T>::type; // C++20
 	template <class T> using decay_t = typename decay<T>::type;
 	template <bool b, class T = void> using enable_if_t = typename enable_if<b, T>::type;
 	template <bool b, class T, class F> using conditional_t = typename conditional<b, T, F>::type;
 	template <class... T> using common_type_t = typename common_type<T...>::type;
+	template<class... T> using common_reference_t = typename common_reference<T...>::type; // C++20
 	template <class T> using underlying_type_t = typename underlying_type<T>::type;
 	template <class Fn, class... ArgTypes> using invoke_result_t = typename invoke_result<Fn, ArgTypes...>::type;
 	template <class...> using void_t = void;
@@ -917,6 +1145,11 @@ namespace std { // Metaprogramming and type traits
 	template<class... B> struct conjunction;
 	template<class... B> struct disjunction;
 	template<class B> struct negation;
+	enum class endian { // C++20
+		little,
+		big,
+		native
+	};
 	// primary type categories
 	template <class T> inline constexpr bool is_void_v = is_void<T>::value;
 	template <class T> inline constexpr bool is_null_pointer_v = is_null_pointer<T>::value;
@@ -932,7 +1165,7 @@ namespace std { // Metaprogramming and type traits
 	template <class T> inline constexpr bool is_union_v = is_union<T>::value;
 	template <class T> inline constexpr bool is_class_v = is_class<T>::value;
 	template <class T> inline constexpr bool is_function_v = is_function<T>::value;
-	// 23.15.4.2, composite type categories
+	// composite type categories
 	template <class T> inline constexpr bool is_reference_v = is_reference<T>::value;
 	template <class T> inline constexpr bool is_arithmetic_v = is_arithmetic<T>::value;
 	template <class T> inline constexpr bool is_fundamental_v = is_fundamental<T>::value;
@@ -946,7 +1179,7 @@ namespace std { // Metaprogramming and type traits
 	template <class T> inline constexpr bool is_trivial_v = is_trivial<T>::value;
 	template <class T> inline constexpr bool is_trivially_copyable_v = is_trivially_copyable<T>::value;
 	template <class T> inline constexpr bool is_standard_layout_v = is_standard_layout<T>::value;
-	template <class T> inline constexpr bool is_pod_v = is_pod<T>::value;
+	template <class T> [[deprecated]] inline constexpr bool is_pod_v = is_pod<T>::value; // C++17
 	template <class T> inline constexpr bool is_empty_v = is_empty<T>::value;
 	template <class T> inline constexpr bool is_polymorphic_v = is_polymorphic<T>::value;
 	template <class T> inline constexpr bool is_abstract_v = is_abstract<T>::value;
@@ -954,6 +1187,8 @@ namespace std { // Metaprogramming and type traits
 	template <class T> inline constexpr bool is_aggregate_v = is_aggregate<T>::value;
 	template <class T> inline constexpr bool is_signed_v = is_signed<T>::value;
 	template <class T> inline constexpr bool is_unsigned_v = is_unsigned<T>::value;
+	template<class T> inline constexpr bool is_bounded_array_v = is_bounded_array<T>::value; // C++20
+	template<class T> inline constexpr bool is_unbounded_array_v = is_unbounded_array<T>::value; // C++20
 	template <class T, class... Args> inline constexpr bool is_constructible_v = is_constructible<T, Args...>::value;
 	template <class T> inline constexpr bool is_default_constructible_v = is_default_constructible<T>::value;
 	template <class T> inline constexpr bool is_copy_constructible_v = is_copy_constructible<T>::value;
@@ -992,6 +1227,7 @@ namespace std { // Metaprogramming and type traits
 	template <class T, class U> inline constexpr bool is_same_v = is_same<T, U>::value;
 	template <class Base, class Derived> inline constexpr bool is_base_of_v = is_base_of<Base, Derived>::value;
 	template <class From, class To> inline constexpr bool is_convertible_v = is_convertible<From, To>::value;
+	template<class From, class To> inline constexpr bool is_nothrow_convertible_v = is_nothrow_convertible<From, To>::value; // C++20
 	template <class Fn, class... ArgTypes> inline constexpr bool is_invocable_v = is_invocable<Fn, ArgTypes...>::value;
 	template <class R, class Fn, class... ArgTypes> inline constexpr bool is_invocable_r_v = is_invocable_r<R, Fn, ArgTypes...>::value;
 	template <class Fn, class... ArgTypes> inline constexpr bool is_nothrow_invocable_v = is_nothrow_invocable<Fn, ArgTypes...>::value;
@@ -1000,6 +1236,7 @@ namespace std { // Metaprogramming and type traits
 	template<class... B> inline constexpr bool conjunction_v = conjunction<B...>::value;
 	template<class... B> inline constexpr bool disjunction_v = disjunction<B...>::value;
 	template<class B> inline constexpr bool negation_v = negation<B>::value;
+	constexpr bool is_constant_evaluated() noexcept;
 }
 
 #include <ratio>
@@ -1052,70 +1289,259 @@ namespace std { // Compile-time rational arithmetic
 	using yotta;
 }
 
-#include <chrono>
-namespace std { // Time utilities
-	namespace chrono {
-		// class template duration
-		template <class Rep, class Period = ratio<1>>
-		class duration {
-			using rep = Rep;
-			using period = typename Period::type;
-		};
-		// class template time_point
-		template <class Clock, class Duration = typename Clock::duration>
-		class time_point {
-			using clock = Clock;
-			using duration = Duration;
-			using rep = typename duration::rep;
-			using period = typename duration::period;
-		};
+#include <utility> // C++17
+#include <charconv> // C++20
+namespace std { // Primitive numeric conversions
+	enum class chars_format {
+		scientific ,
+		fixed,
+		hex,
+		general = fixed | scientific
+	};
+	struct to_chars_result {
+		char* ptr;
+		error_code ec;
+	};
+	to_chars_result to_chars(char* first, char* last, float value);
+	struct from_chars_result {
+		const char* ptr;
+		error_code ec;
+	};
+	from_chars_result from_chars(const char* first, const char* last, float& value,
+	chars_format fmt = chars_format::general);
+}
 
-		// customization traits
-		template <class Rep> struct treat_as_floating_point;
-		template <class Rep> struct duration_values {
-			static constexpr Rep zero();
-			static constexpr Rep min();
-			static constexpr Rep max();
-		};
-		template <class Rep> inline constexpr bool treat_as_floating_point_v = treat_as_floating_point<Rep>::value;
-		// duration_cast
-		template <class ToDuration, class Rep, class Period> constexpr ToDuration duration_cast(const duration<Rep, Period>& d);
-		template <class ToDuration, class Rep, class Period> constexpr ToDuration floor(const duration<Rep, Period>& d);
-		template <class ToDuration, class Rep, class Period> constexpr ToDuration ceil(const duration<Rep, Period>& d);
-		template <class ToDuration, class Rep, class Period> constexpr ToDuration round(const duration<Rep, Period>& d);
-		// convenience typedefs
-		using nanoseconds;
-		using microseconds;
-		using milliseconds;
-		using seconds;
-		using minutes;
-		using hours;
-		// time_point_cast
-		template <class ToDuration, class Clock, class Duration>
-		constexpr time_point<Clock, ToDuration> time_point_cast(const time_point<Clock, Duration>& t);
-		template <class ToDuration, class Clock, class Duration>
-		constexpr time_point<Clock, ToDuration> floor(const time_point<Clock, Duration>& tp);
-		template <class ToDuration, class Clock, class Duration>
-		constexpr time_point<Clock, ToDuration> ceil(const time_point<Clock, Duration>& tp);
-		template <class ToDuration, class Clock, class Duration>
-		constexpr time_point<Clock, ToDuration> round(const time_point<Clock, Duration>& tp);
-		template <class Rep, class Period>
-		constexpr duration<Rep, Period> abs(duration<Rep, Period> d);
-		// clocks
-		class system_clock {
-			using time_point = chrono::time_point<system_clock>;
-			static constexpr bool is_steady ;
-			static time_point now() noexcept;
-			static time_t to_time_t (const time_point& t) noexcept;
-			static time_point from_time_t(time_t t) noexcept;
-		};
-		class steady_clock;
-		class high_resolution_clock;
-	}
-	template <class Rep1, class Period1, class Rep2, class Period2>
-	struct common_type<chrono::duration<Rep1, Period1>, chrono::duration<Rep2, Period2>>;
-	template <class Clock, class Duration1, class Duration2>
-	struct common_type<chrono::time_point<Clock, Duration1>, chrono::time_point<Clock, Duration2>>;
+#include <chrono>
+namespace std::chrono { // Time
+	// class template duration
+	template <class Rep, class Period = ratio<1>>
+	class duration {
+		using rep = Rep;
+		using period = typename Period::type;
+		constexpr rep count() const;
+		static constexpr duration zero();
+		static constexpr duration min();
+		static constexpr duration max();
+	};
+	// class template time_point
+	template <class Clock, class Duration = typename Clock::duration>
+	class time_point {
+		using clock = Clock;
+		using duration = Duration;
+		using rep = typename duration::rep;
+		using period = typename duration::period;
+		constexpr duration time_since_epoch() const;
+		static constexpr time_point min();
+		static constexpr time_point max();
+	};
+
+	// customization traits
+	template <class Rep> struct treat_as_floating_point;
+	template <class Rep> struct duration_values {
+		static constexpr Rep zero();
+		static constexpr Rep min();
+		static constexpr Rep max();
+	};
+	template <class Rep> inline constexpr bool treat_as_floating_point_v = treat_as_floating_point<Rep>::value;
+	template<class T> struct is_clock; // C++20
+	template<class T> inline constexpr bool is_clock_v = is_clock<T>::value;		// duration_cast
+	template <class ToDuration, class Rep, class Period> constexpr ToDuration duration_cast(const duration<Rep, Period>& d);
+	template <class ToDuration, class Rep, class Period> constexpr ToDuration floor(const duration<Rep, Period>& d);
+	template <class ToDuration, class Rep, class Period> constexpr ToDuration ceil(const duration<Rep, Period>& d);
+	template <class ToDuration, class Rep, class Period> constexpr ToDuration round(const duration<Rep, Period>& d);
+	template<class charT, class traits, class Rep, class Period>
+	basic_ostream<charT, traits>& to_stream(basic_ostream<charT, traits>& os, const charT* fmt, const duration<Rep, Period>& d); // C++20
+	template<class charT, class traits, class Rep, class Period, class Alloc = allocator<charT>>
+	basic_istream<charT, traits>& from_stream(basic_istream<charT, traits>& is, const charT* fmt,duration<Rep, Period>& d, basic_string<charT, traits, Alloc>* abbrev = nullptr, minutes* offset = nullptr); // C++20
+	// convenience typedefs
+	using nanoseconds;
+	using microseconds;
+	using milliseconds;
+	using seconds;
+	using minutes;
+	using hours;
+	using days; // C++20
+	using weeks; // C++20
+	using years; // C++20
+	using months; // C++20
+	// time_point_cast
+	template <class ToDuration, class Clock, class Duration>
+	constexpr time_point<Clock, ToDuration> time_point_cast(const time_point<Clock, Duration>& t);
+	template <class ToDuration, class Clock, class Duration>
+	constexpr time_point<Clock, ToDuration> floor(const time_point<Clock, Duration>& tp);
+	template <class ToDuration, class Clock, class Duration>
+	constexpr time_point<Clock, ToDuration> ceil(const time_point<Clock, Duration>& tp);
+	template <class ToDuration, class Clock, class Duration>
+	constexpr time_point<Clock, ToDuration> round(const time_point<Clock, Duration>& tp);
+	template <class Rep, class Period>
+	constexpr duration<Rep, Period> abs(duration<Rep, Period> d);
+	// clocks
+	class system_clock {
+		using time_point = chrono::time_point<system_clock>;
+		static constexpr bool is_steady ;
+		static time_point now() noexcept;
+		static time_t to_time_t(const time_point& t) noexcept;
+		static time_point from_time_t(time_t t) noexcept;
+	};
+	template<class Duration>
+	using sys_time = time_point<system_clock, Duration>; // C++20
+	using sys_seconds = sys_time<seconds>;
+	using sys_days = sys_time<days>;
+	class utc_clock { // C++20
+		template<class Duration>
+		static sys_time<common_type_t<Duration, seconds>> to_sys(const utc_time<Duration>& t);
+		template<class Duration>
+		static utc_time<common_type_t<Duration, seconds>> from_sys(const sys_time<Duration>& t);
+	};
+	template<class Duration>
+	using utc_time = time_point<utc_clock, Duration>;
+	using utc_seconds = utc_time<seconds>;
+	class tai_clock { // C++20
+		template<class Duration>
+		static utc_time<common_type_t<Duration, seconds>> to_utc(const tai_time<Duration>&) noexcept;
+		template<class Duration>
+		static tai_time<common_type_t<Duration, seconds>> from_utc(const utc_time<Duration>&) noexcept;
+	};
+	template<class Duration>
+	using tai_time = time_point<tai_clock, Duration>;
+	using tai_seconds = tai_time<seconds>;
+	class gps_clock; // C++20
+	template<class Duration>
+	using gps_time = time_point<gps_clock, Duration>;
+	using gps_seconds = gps_time<seconds>;
+	using file_clock; // C++20
+	template<class Duration>
+	using file_time = time_point<file_clock, Duration>;
+	class steady_clock;
+	class high_resolution_clock;
+	// local time C++20
+	struct local_t {};
+	template<class Duration>
+	using local_time = time_point<local_t, Duration>;
+	using local_seconds = local_time<seconds>;
+	using local_days = local_time<days>;
+	template<class DestClock, class SourceClock>
+	struct clock_time_conversion;
+	template<class DestClock, class SourceClock, class Duration>
+	auto clock_cast(const time_point<SourceClock, Duration>& t);
+	struct last_spec;
+	class day;
+	class month;
+	class year;
+	class weekday;
+	class weekday_indexed;
+	class weekday_last;
+	class month_day;
+	class month_day_last;
+	class month_weekday;
+	class month_weekday_last;
+	class year_month;
+	class year_month_day;
+	class year_month_day_last;
+	class year_month_weekday;
+	class year_month_weekday_last;
+	template<class Duration> class time_of_day {
+		using precision;
+		constexpr precision to_duration() const noexcept;
+		constexpr void make24() noexcept;
+		constexpr void make12() noexcept;
+	};
+	template<> class time_of_day<hours>;
+	template<> class time_of_day<minutes>;
+	template<> class time_of_day<seconds>;
+	template<class Rep, class Period> class time_of_day<duration<Rep, Period>>;
+	// time zone database
+	struct tzdb {
+		string version;
+		vector<time_zone> zones;
+		vector<link> links;
+		vector<leap> leaps;
+		const time_zone* locate_zone(string_view tz_name) const;
+		const time_zone* current_zone() const;
+	};
+	class tzdb_list {
+		class const_iterator;
+		const tzdb& front() const noexcept;
+		const_iterator erase_after(const_iterator p);
+	};
+	const tzdb& get_tzdb();
+	tzdb_list& get_tzdb_list();
+	const time_zone* locate_zone(string_view tz_name);
+	const time_zone* current_zone();
+	const tzdb& reload_tzdb();
+	string remote_version();
+	class nonexistent_local_time : public runtime_error {};
+	class ambiguous_local_time : public runtime_error {};
+	struct sys_info {
+		sys_seconds begin;
+		sys_seconds end;
+		seconds offset;
+		minutes save;
+		string abbrev;
+	};
+	struct local_info {
+		static constexpr int unique = 0;
+		static constexpr int nonexistent = 1;
+		static constexpr int ambiguous = 2;
+		int result;
+		sys_info first;
+		sys_info second;
+	};
+	enum class choose {earliest, latest};
+	class time_zone {
+		string_view name() const noexcept;
+		template<class Duration> sys_info get_info(const sys_time<Duration>& st) const;
+		template<class Duration>
+		local_info get_info(const local_time<Duration>& tp) const;
+		template<class Duration>
+		sys_time<common_type_t<Duration, seconds>> to_sys(const local_time<Duration>& tp) const;
+		template<class Duration>
+		local_time<common_type_t<Duration, seconds>> to_local(const sys_time<Duration>& tp) const;
+	};
+	template<class T> struct zoned_traits {
+		static const time_zone* default_zone();
+		static const time_zone* locate_zone(string_view name);
+	};
+	template<class Duration, class TimeZonePtr = const time_zone*>
+	class zoned_time {
+		TimeZonePtr get_time_zone() const;
+		local_time<duration> get_local_time() const;
+		sys_time<duration> get_sys_time() const;
+		sys_info get_info() const;
+	};
+	using zoned_seconds = zoned_time<seconds>;
+	class leap {
+		constexpr sys_seconds date() const noexcept;
+	};
+	class link {
+		string_view name() const noexcept;
+		string_view target() const noexcept;
+	};
+	template<class charT, class Streamable>
+	basic_string<charT> format(const charT* fmt, const Streamable& s);
+	template<class charT, class traits, class Alloc, class Parsable>
+	parse(const basic_string<charT, traits, Alloc>& format, Parsable& tp);
+	// calendrical constants
+	inline constexpr last_spec last{};
+	inline constexpr weekday Sunday{0};
+	inline constexpr weekday Monday{1};
+	inline constexpr weekday Tuesday{2};
+	inline constexpr weekday Wednesday{3};
+	inline constexpr weekday Thursday{4};
+	inline constexpr weekday Friday{5};
+	inline constexpr weekday Saturday{6};
+	inline constexpr month January{1};
+	inline constexpr month February{2};
+	inline constexpr month March{3};
+	inline constexpr month April{4};
+	inline constexpr month May{5};
+	inline constexpr month June{6};
+	inline constexpr month July{7};
+	inline constexpr month August{8};
+	inline constexpr month September{9};
+	inline constexpr month October{10};
+	inline constexpr month November{11};
+	inline constexpr month December{12}
 }
 
 #include <typeindex>
@@ -1165,6 +1591,13 @@ namespace std { // Strings
 		static constexpr bool eq_int_type(int_type c1, int_type c2) noexcept;
 		static constexpr int_type eof() noexcept;
 	};
+	template<> struct char_traits<char8_t> { // C++20
+		using char_type = char8_t;
+		using int_type = unsigned int;
+		using off_type = streamoff;
+		using pos_type = u8streampos;
+		using state_type = mbstate_t;
+	}
 	template<> struct char_traits<char16_t> {
 		using char_type = char16_t;
 		using int_type = uint_least16_t;
@@ -1189,8 +1622,13 @@ namespace std { // Strings
 
 	template<class charT, class traits, class Allocator>
 	basic_istream<charT, traits>& getline(basic_istream<charT, traits>& is, basic_string<charT, traits, Allocator>& str, charT delim);
+	template<class charT, class traits, class Allocator, class U>
+	void erase(basic_string<charT, traits, Allocator>& c, const U& value); // C++20
+	template<class charT, class traits, class Allocator, class Predicate>
+	void erase_if(basic_string<charT, traits, Allocator>& c, Predicate pred); // C++20
 
 	using string = basic_string<char>;
+	using u8string = basic_string<char8_t>; // C++20
 	using u16string = basic_string<char16_t>;
 	using u32string = basic_string<char32_t>;
 	using wstring = basic_string<wchar_t>;
@@ -1245,7 +1683,7 @@ namespace std { // Strings
 		void reserve(size_type res_arg = 0);
 		void shrink_to_fit();
 		void clear() noexcept;
-		bool empty() const noexcept;
+		[[nodiscard]] bool empty() const noexcept;
 
 		const_reference operator[](size_type pos) const;
 		reference operator[](size_type pos);
@@ -1257,11 +1695,14 @@ namespace std { // Strings
 		charT& back();
 
 		basic_string& append(const charT* s);
+		void push_back(charT c);
 		basic_string& assign(const basic_string& str);
 		basic_string& insert(size_type pos, const basic_string& str);
 		basic_string& erase(size_type pos = 0, size_type n = npos)
 		void pop_back();
 		basic_string& replace(size_type pos1, size_type n1, const basic_string& str);
+		size_type copy(charT* s, size_type n, size_type pos = 0) const;
+		void swap(basic_string& str) noexcept;
 
 		const charT* c_str() const noexcept;
 		const charT* data() const noexcept;
@@ -1274,12 +1715,15 @@ namespace std { // Strings
 		size_type find_last_not_of(basic_string_view<charT, traits> sv, size_type pos = npos) const noexcept;
 		basic_string substr(size_type pos = 0, size_type n = npos) const;
 		int compare(basic_string_view<charT, traits> sv) const noexcept;
+		bool starts_with(basic_string_view<charT, traits> x) const noexcept; // C++20
+		bool ends_with(basic_string_view<charT, traits> x) const noexcept; // C++20
 	};
 }
 
 #include <string_view>
 namespace std { // String view
 	using string_view = basic_string_view<char>;
+	using u8string_view = basic_string_view<char8_t>; // C++20
 	using u16string_view = basic_string_view<char16_t>;
 	using u32string_view = basic_string_view<char32_t>;
 	using wstring_view = basic_string_view<wchar_t>;
@@ -1373,6 +1817,28 @@ namespace std { // Localization
 	};
 	template <class internT, class externT, class stateT>
 	class codecvt_byname : public codecvt<internT, externT, stateT> {};
+
+	// deprecated C++14 code conversion facets
+	enum codecvt_mode { // C++14
+		consume_header,
+		generate_header,
+		little_endian
+	};
+	template<class Elem, unsigned long Maxcode = 0x10ffff, codecvt_mode Mode = (codecvt_mode)0>
+	class codecvt_utf8 : public codecvt<Elem, char, mbstate_t> {}; // C++14
+	template<class Elem, unsigned long Maxcode = 0x10ffff, codecvt_mode Mode = (codecvt_mode)0>
+	class codecvt_utf16 : public codecvt<Elem, char, mbstate_t> {}; // C++14
+	template<class Elem, unsigned long Maxcode = 0x10ffff, codecvt_mode Mode = (codecvt_mode)0>
+	class codecvt_utf8_utf16 : public codecvt<Elem, char, mbstate_t> {}; // C++14
+	template<class Codecvt, class Elem = wchar_t, class Wide_alloc = allocator<Elem>, class Byte_alloc = allocator<char>>
+	class wstring_convert { // C++14
+		wide_string from_bytes(char byte);
+		byte_string to_bytes(Elem wchar);
+		size_t converted() const noexcept;
+		state_type state() const;
+	};
+	template<class Codecvt, class Elem = wchar_t, class Tr = char_traits<Elem>>
+	class wbuffer_convert; // C++14
 
 	// numeric
 	template <class charT, class InputIterator = istreambuf_iterator<charT>>
@@ -1646,6 +2112,7 @@ namespace std { // Associative containers
 		template <class M> pair<iterator, bool> insert_or_assign(const key_type& k, M&& obj);
 		iterator find(const key_type& x);
 		size_type count(const key_type& x) const;
+		bool contains(const key_type& x) const; // C++20
 		template <class K> size_type count(const K& x) const;
 		iterator lower_bound(const key_type& x);
 		iterator upper_bound(const key_type& x);
@@ -1731,8 +2198,26 @@ namespace std { // Container adaptors
 	};
 }
 
+#include <span> // C++20
+namespace std { // Views
+	inline constexpr size_t dynamic_extent = numeric_limits<size_t>::max();
+	template<class ElementType, size_t Extent = dynamic_extent>
+	class span {
+		static constexpr index_type extent = Extent;
+		constexpr index_type size_bytes() const noexcept;
+	};
+	template<class ElementType, size_t Extent>
+	span<const byte> as_bytes(span<ElementType, Extent> s) noexcept;
+	template<class ElementType, size_t Extent>
+	span<byte> as_writable_bytes(span<ElementType, Extent> s) noexcept;
+}
+
 #include <iterator>
 namespace std { // Iterators
+	template<class> struct incrementable_traits; // C++20
+	template<class T> using iter_difference_t;
+	template<class> struct readable_traits; // C++20
+	template<class T> using iter_value_t;
 	// primitives
 	template<class Iterator> struct iterator_traits;
 	template<class T> struct iterator_traits<T*> {
@@ -1742,12 +2227,44 @@ namespace std { // Iterators
 		using reference = T&;
 		using iterator_category = random_access_iterator_tag;
 	};
+	template<T> using iter_reference_t = decltype(*declval<T&>()); // C++20
+	using iter_rvalue_reference_t = decltype(ranges::iter_move(declval<T&>()));
+	// C++20 iterator concepts
+	template<class In> concept Readable;
+	template<class Out, class T> concept Writable;
+	template<class I> concept WeaklyIncrementable;
+	template<class I> concept Incrementable;
+	template<class I> concept Iterator;
+	template<class S, class I> concept Sentinel;
+	template<class S, class I> concept SizedSentinel;
+	template<class I> concept InputIterator;
+	template<class I, class T> concept OutputIterator;
+	template<class I> concept ForwardIterator;
+	template<class I> concept BidirectionalIterator;
+	template<class I> concept RandomAccessIterator;
+	template<class I> concept ContiguousIterator;
+	template<class F, class I> concept IndirectUnaryInvocable;
+	template<class F, class I> concept IndirectRegularUnaryInvocable;
+	template<class F, class I> concept IndirectUnaryPredicate;
+	template<class F, class I1, class I2 = I1> concept IndirectRelation;
+	template<class F, class I1, class I2 = I1> concept IndirectStrictWeakOrder;
+	template<class In, class Out> concept IndirectlyMovable;
+	template<class In, class Out> concept IndirectlyMovableStorable;
+	template<class In, class Out> concept IndirectlyCopyable;
+	template<class In, class Out> concept IndirectlyCopyableStorable;
+	template<class I1, class I2 = I1> concept IndirectlySwappable;
+	template<class I1, class I2, class R, class P1 = identity, class P2 = identity> concept IndirectlyComparable;
+	template<class I> concept Permutable;
+	template<class I1, class I2, class Out, class R = ranges::less, class P1 = identity, class P2 = identity> concept Mergeable;
+	template<class I, class R = ranges::less, class P = identity> concept Sortable;
+
 	template<class T> struct iterator_traits<const T*>;
 	struct input_iterator_tag {};
 	struct output_iterator_tag {};
 	struct forward_iterator_tag: public input_iterator_tag {};
 	struct bidirectional_iterator_tag: public forward_iterator_tag {};
 	struct random_access_iterator_tag: public bidirectional_iterator_tag {};
+	struct contiguous_iterator_tag: public random_access_iterator_tag {}; // C++20
 
 	// iterator operations
 	template <class InputIterator, class Distance>
@@ -1760,7 +2277,11 @@ namespace std { // Iterators
 	constexpr BidirectionalIterator prev(BidirectionalIterator x, typename iterator_traits<BidirectionalIterator>::difference_type n = 1);
 
 	// predefined iterators
-	template <class Iterator> class reverse_iterator;
+	template <class Iterator> class reverse_iterator {
+		constexpr Iterator base() const;
+		iter_move(const reverse_iterator& i); // C++20
+		iter_swap(const reverse_iterator& x, const reverse_iterator<Iterator2>& y); // C++20
+	};
 	template <class Iterator>
 	constexpr reverse_iterator<Iterator> make_reverse_iterator(Iterator i);
 	template <class Container> class back_insert_iterator;
@@ -1775,6 +2296,23 @@ namespace std { // Iterators
 	template <class Iterator> class move_iterator;
 	template <class Iterator>
 	constexpr move_iterator<Iterator> make_move_iterator(Iterator i);
+
+	template<Semiregular S> class move_sentinel; // C++20
+	template<Iterator I, Sentinel<I> S>
+	requires (!Same<I, S>) class common_iterator; // C++20
+	template<class I, class S>
+	struct incrementable_traits<common_iterator<I, S>>;
+	template<InputIterator I, class S>
+	struct iterator_traits<common_iterator<I, S>>;
+	struct default_sentinel_t;
+	inline constexpr default_sentinel_t default_sentinel{};
+	template<Iterator I> class counted_iterator; // C++20
+	template<class I>
+	struct incrementable_traits<counted_iterator<I>>;
+	template<InputIterator I>
+	struct iterator_traits<counted_iterator<I>>;
+	struct unreachable_sentinel_t; // C++20
+	inline constexpr unreachable_sentinel_t unreachable_sentinel{};
 
 	// stream iterators
 	template <class T, class charT = char, class traits = char_traits<charT>, class Distance = ptrdiff_t>
@@ -1795,10 +2333,71 @@ namespace std { // Iterators
 	class ostreambuf_iterator {
 		using ostream_type = basic_ostream<charT,traits>;
 	};
+
+	template<class T, ptrdiff_t N> constexpr ptrdiff_t ssize(const T (&array)[N]) noexcept; // C++20
+}
+
+#include <ranges> // C++20
+namespace std {
 }
 
 #include <algorithm>
 namespace std { // Algorithms
+	namespace ranges { // C++20
+		template<class I, class F>
+		struct for_each_result;
+		template<class I1, class I2>
+		struct mismatch_resul;
+		template<class I, class O>
+		struct copy_result;
+		template<class I, class O>
+		using copy_n_result = copy_result<I, O>;
+		template<class I, class O>
+		using copy_if_result = copy_result<I, O>;
+		template<class I1, class I2>
+		using copy_backward_result = copy_result<I1, I2>;
+		template<class I, class O>
+		using move_result = copy_result<I, O>;
+		template<class I1, class I2>
+		using move_backward_result = copy_result<I1, I2>;
+		template<class I1, class I2>
+		using swap_ranges_result = mismatch_result<I1, I2>;
+		template<class I, class O>
+		using unary_transform_result = copy_result<I, O>;
+		template<class I1, class I2, class O>
+		struct binary_transform_result;
+		template<class I, class O>
+		using replace_copy_result = copy_result<I, O>;
+		template<class I, class O>
+		using replace_copy_if_result = copy_result<I, O>;
+		template<class I, class O>
+		using remove_copy_result = copy_result<I, O>;
+		template<class I, class O>
+		using remove_copy_if_result = copy_result<I, O>;
+		template<class I, class O>
+		using unique_copy_result = copy_result<I, O>;
+		template<class I, class O>
+		using reverse_copy_result = copy_result<I, O>;
+		template<class I, class O>
+		using rotate_copy_result = copy_result<I, O>;
+		template<class I, class O1, class O2>
+		struct partition_copy_result;
+		template<class I1, class I2, class O>
+		using merge_result = binary_transform_result<I1, I2, O>;
+		template<class I1, class I2, class O>
+		using set_union_result = binary_transform_result<I1, I2, O>;
+		template<class I1, class I2, class O>
+		using set_intersection_result = binary_transform_result<I1, I2, O>;
+		template<class I, class O>
+		using set_difference_result = copy_result<I, O>;
+		template<class I1, class I2, class O>
+		using set_symmetric_difference_result = binary_transform_result<I1, I2, O>;
+		template<class T>
+		struct minmax_result;
+		template<class I>
+		using minmax_element_result = minmax_result<I>;
+	}
+
 	template <class InputIterator, class Predicate>
 	bool all_of(InputIterator first, InputIterator last, Predicate pred);
 	template <class InputIterator, class Predicate>
@@ -1893,6 +2492,10 @@ namespace std { // Algorithms
 	SampleIterator sample(PopulationIterator first, PopulationIterator last, SampleIterator out, Distance n, UniformRandomBitGenerator&& g);
 	template<class RandomAccessIterator, class UniformRandomBitGenerator>
 	void shuffle(RandomAccessIterator first, RandomAccessIterator last, UniformRandomBitGenerator&& g);
+	template<class ForwardIterator>
+	constexpr ForwardIterator shift_left(ForwardIterator first, ForwardIterator last, typename iterator_traits<ForwardIterator>::difference_type n); // C++20
+	template<class ForwardIterator>
+	constexpr ForwardIterator shift_right(ForwardIterator first, ForwardIterator last, typename iterator_traits<ForwardIterator>::difference_type n); // C++20
 	// partitions
 	template <class InputIterator, class Predicate>
 	bool is_partitioned(InputIterator first, InputIterator last, Predicate pred);
@@ -1929,6 +2532,7 @@ namespace std { // Algorithms
 	template<class ForwardIterator, class T>
 	bool binary_search(ForwardIterator first, ForwardIterator last, const T& value);
 	template<class InputIterator1, class InputIterator2, class OutputIterator>
+	// merge
 	OutputIterator merge(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2, InputIterator2 last2, OutputIterator result);
 	template<class BidirectionalIterator>
 	void inplace_merge(BidirectionalIterator first, BidirectionalIterator middle, BidirectionalIterator last);
@@ -1942,6 +2546,7 @@ namespace std { // Algorithms
 	OutputIterator set_difference(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2, InputIterator2 last2, OutputIterator result);
 	template<class InputIterator1, class InputIterator2, class OutputIterator>
 	OutputIterator set_symmetric_difference(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2, InputIterator2 last2, OutputIterator result);
+	// heap operations
 	template<class RandomAccessIterator>
 	void push_heap(RandomAccessIterator first, RandomAccessIterator last);
 	template<class RandomAccessIterator>
@@ -1954,6 +2559,7 @@ namespace std { // Algorithms
 	bool is_heap(RandomAccessIterator first, RandomAccessIterator last);
 	template<class RandomAccessIterator>
 	RandomAccessIterator is_heap_until(RandomAccessIterator first, RandomAccessIterator last);
+	// minimum and maximum
 	template<class T> constexpr const T& min(const T& a, const T& b);
 	template<class T> constexpr const T& max(const T& a, const T& b);
 	template<class T> constexpr pair<const T&, const T&> minmax(const T& a, const T& b);
@@ -1963,10 +2569,18 @@ namespace std { // Algorithms
 	constexpr ForwardIterator max_element(ForwardIterator first, ForwardIterator last);
 	template<class ForwardIterator>
 	constexpr pair<ForwardIterator, ForwardIterator> minmax_element(ForwardIterator first, ForwardIterator last);
+	// bounded value
 	template<class T>
 	constexpr const T& clamp(const T& v, const T& lo, const T& hi);
+	// lexicographical comparison
 	template<class InputIterator1, class InputIterator2>
 	bool lexicographical_compare(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2, InputIterator2 last2);
+	// three-way comparison algorithms C++20
+	template<class T, class U>
+	constexpr auto compare_3way(const T& a, const U& b);
+	template<class InputIterator1, class InputIterator2, class Cmp>
+	constexpr auto lexicographical_compare_3way(InputIterator1 b1, InputIterator1 e1, InputIterator2 b2, InputIterator2 e2, Cmp comp);
+	// permutations
 	template<class BidirectionalIterator>
 	bool next_permutation(BidirectionalIterator first, BidirectionalIterator last);
 	template<class BidirectionalIterator>
@@ -1996,6 +2610,8 @@ namespace std { // Complex numbers
 
 #include <random>
 namespace std { // Random number generation
+	template<class G>
+	concept UniformRandomBitGenerator;
 	template<class UIntType, UIntType a, UIntType c, UIntType m>
 	class linear_congruential_engine {
 		using result_type = UIntType;
@@ -2221,6 +2837,22 @@ namespace std { // Generalized numeric operations
 	constexpr common_type_t<M,N> gcd(M m, N n);
 	template <class M, class N>
 	constexpr common_type_t<M,N> lcm(M m, N n);
+	template<class T>
+	constexpr T midpoint(T a, T b) noexcept; // C++20
+}
+
+#include <bit> // C++20
+namespace std { // Bit manipulation
+	template<typename To, typename From>
+	constexpr To bit_cast(const From& from) noexcept;
+	template<class T>
+	constexpr bool ispow2(T x) noexcept;
+	template<class T>
+	constexpr T ceil2(T x) noexcept;
+	template<class T>
+	constexpr T floor2(T x) noexcept;
+	template<class T>
+	constexpr T log2p1(T x) noexcept;
 }
 
 #include <cmath>
@@ -2258,13 +2890,15 @@ namespace std { // Mathematical functions
 #include <iostream>
 #include <sstream>
 #include <fstream>
-namespace std { // Input/output library
+#include <syncstream> // C++20
+namespace std { // Input/output
 	// <iosfwd>
-	template<class charT> class char_traits;
-	template<> class char_traits<char>;
-	template<> class char_traits<char16_t>;
-	template<> class char_traits<char32_t>;
-	template<> class char_traits<wchar_t>;
+	template<class charT> struct char_traits;
+	template<> struct char_traits<char>;
+	template<> struct char_traits<char8_t>;
+	template<> struct char_traits<char16_t>;
+	template<> struct char_traits<char32_t>;
+	template<> struct char_traits<wchar_t>;
 	template<class T> class allocator;
 	template <class charT, class traits = char_traits<charT>>
 	class istreambuf_iterator;
@@ -2280,6 +2914,9 @@ namespace std { // Input/output library
 	};
 	using streampos = fpos<char_traits<char>::state_type>;
 	using wstreampos = fpos<char_traits<wchar_t>::state_type>;
+	using u8streampos = fpos<char_traits<char8_t>::state_type>;
+	using u16streampos = fpos<char_traits<char16_t>::state_type>;
+	using u32streampos = fpos<char_traits<char32_t>::state_type>;
 
 	class ios_base {
 		class failure : public system_error {};
@@ -2385,6 +3022,7 @@ namespace std { // Input/output library
 	using ios = basic_ios<char>;
 	using wios = basic_ios<wchar_t>;
 
+	// manipulators
 	ios_base& boolalpha(ios_base& str);
 	ios_base& noboolalpha(ios_base& str);
 	ios_base& showbase(ios_base& str);
@@ -2399,12 +3037,15 @@ namespace std { // Input/output library
 	ios_base& nouppercase(ios_base& str);
 	ios_base& unitbuf(ios_base& str);
 	ios_base& nounitbuf(ios_base& str);
+	// adjustfield
 	ios_base& internal(ios_base& str);
 	ios_base& left(ios_base& str);
 	ios_base& right(ios_base& str);
+	// basefield
 	ios_base& dec(ios_base& str);
 	ios_base& hex(ios_base& str);
 	ios_base& oct(ios_base& str);
+	// floatfield
 	ios_base& fixed(ios_base& str);
 	ios_base& scientific(ios_base& str);
 	ios_base& hexfloat(ios_base& str);
@@ -2413,7 +3054,7 @@ namespace std { // Input/output library
 	enum class io_errc {
 		stream = 1
 	};
-	template <> struct is_error_code_enum<io_errc> : public true_type { };
+	template <> struct is_error_code_enum<io_errc> : public true_type {};
 	error_code make_error_code(io_errc e) noexcept;
 	error_condition make_error_condition(io_errc e) noexcept;
 	const error_category& iostream_category() noexcept;
@@ -2512,12 +3153,19 @@ namespace std { // Input/output library
 	extern wostream wcerr;
 	extern wostream wclog;
 
+	// manipulators
 	template <class charT, class traits>
 	basic_ostream<charT, traits>& endl(basic_ostream<charT, traits>& os);
 	template <class charT, class traits>
 	basic_ostream<charT, traits>& ends(basic_ostream<charT, traits>& os);
 	template <class charT, class traits>
 	basic_ostream<charT, traits>& flush(basic_ostream<charT, traits>& os);
+	template<class charT, class traits>
+	basic_ostream<charT, traits>& emit_on_flush(basic_ostream<charT, traits>& os); // C++20
+	template<class charT, class traits>
+	basic_ostream<charT, traits>& noemit_on_flush(basic_ostream<charT, traits>& os); // C++20
+	template<class charT, class traits>
+	basic_ostream<charT, traits>& flush_emit(basic_ostream<charT, traits>& os); // C++20
 
 	// <iomanip>
 	T1 resetiosflags(ios_base::fmtflags mask);
@@ -2526,7 +3174,9 @@ namespace std { // Input/output library
 	template<charT> T4 setfill(charT c);
 	T5 setprecision(int n);
 	T6 setw(int n);
+	template <class moneyT> T7 get_money(moneyT& mon, bool intl = false);
 	template <class moneyT> T8 put_money(const moneyT& mon, bool intl = false);
+	template <class charT> T9 get_time(struct tm* tmb, const charT* fmt);
 	template <class charT> T10 put_time(const struct tm* tmb, const charT* fmt);
 	template <class charT> T11 quoted(const charT* s, charT delim = charT('"'), charT escape = charT('\\'));
 
@@ -2611,6 +3261,42 @@ namespace std { // Input/output library
 	};
 	using fstream = basic_fstream<char>;
 	using wfstream = basic_fstream<wchar_t>;
+
+	template<class charT, class traits = char_traits<charT>, class Allocator = allocator<charT>>
+	class basic_syncbuf : public basic_streambuf<charT, traits> {
+		bool emit();
+		streambuf_type* get_wrapped() const noexcept;
+		allocator_type get_allocator() const noexcept;
+		void set_emit_on_sync(bool) noexcept;
+	};
+	using syncbuf = basic_syncbuf<char>;
+	using wsyncbuf = basic_syncbuf<wchar_t>;
+	template<class charT, class traits = char_traits<charT>, class Allocator = allocator<charT>>
+	class basic_osyncstream : public basic_ostream<charT, traits> {
+		using allocator_type = Allocator;
+		using streambuf_type = basic_streambuf<charT, traits>;
+		using syncbuf_type = basic_syncbuf<charT, traits, Allocator>;
+	};
+	using osyncstream = basic_osyncstream<char>;
+	using wosyncstream = basic_osyncstream<wchar_t>;
+}
+#include <strstream> // C++98
+namespace std { // deprecated char* streams
+	class strstreambuf : public basic_streambuf<char> {
+		void freeze(bool freezefl = true);
+		char* str();
+		int pcount();
+	protected:
+		int_type overflow (int_type c = EOF) override;
+		int_type pbackfail(int_type c = EOF) override;
+		int_type underflow() override;
+		pos_type seekoff(off_type off, ios_base::seekdir way, ios_base::openmode which = ios_base::in | ios_base::out) override;
+		pos_type seekpos(pos_type sp, ios_base::openmode which = ios_base::in | ios_base::out) override;
+		streambuf* setbuf(char* s, streamsize n) override;
+	};
+	class istrstream : public basic_istream<char> {};
+	class ostrstream : public basic_ostream<char> {};
+	class strstream : public basic_iostream<char> {};
 }
 
 #include <filesystem>
@@ -2636,15 +3322,14 @@ namespace std::filesystem { // File systems
 		path& replace_extension(const path& replacement = path());
 		const string_type& native() const noexcept;
 		const value_type* c_str() const noexcept;
-		operator string_type() const;
 		std::string string() const;
 		std::wstring wstring() const;
-		std::string u8string() const;
+		std::u8string u8string() const;
 		std::u16string u16string() const;
 		std::u32string u32string() const;
 		std::string generic_string() const;
 		std::wstring generic_wstring() const;
-		std::string generic_u8string() const;
+		std::u8string generic_u8string() const;
 		std::u16string generic_u16string() const;
 		std::u32string generic_u32string() const;
 		int compare(const path& p) const noexcept;
@@ -2658,7 +3343,7 @@ namespace std::filesystem { // File systems
 		path stem() const;
 		path extension() const;
 		// query
-		bool empty() const noexcept;
+		[[nodiscard]] bool empty() const noexcept;
 		bool has_root_name() const;
 		bool has_root_directory() const;
 		bool has_root_path() const;
@@ -2676,9 +3361,9 @@ namespace std::filesystem { // File systems
 	};
 	size_t hash_value(const path& p) noexcept;
 	template <class Source>
-	path u8path(const Source& source);
+	[[deprecated]] path u8path(const Source& source); // C++17
 	template <class InputIterator>
-	path u8path(InputIterator first, InputIterator last);
+	[[deprecated]] path u8path(InputIterator first, InputIterator last); // C++17
 	class filesystem_error : public system_error {
 		const path& path1() const noexcept;
 		const path& path2() const noexcept;
@@ -2703,8 +3388,13 @@ namespace std::filesystem { // File systems
 		file_status status() const;
 		file_status symlink_status() const;
 	};
-	class directory_iterator {};
+	class directory_iterator {
+		directory_iterator& increment(error_code& ec);
+	};
 	class recursive_directory_iterator {
+		directory_options options() const;
+		int depth() const;
+		bool recursion_pending() const;
 		void pop();
 		void disable_recursion_pending();
 	};
@@ -2775,7 +3465,7 @@ namespace std::filesystem { // File systems
 		follow_directory_symlink,
 		skip_permission_denied,
 	};
-	using file_time_type = chrono::time_point<trivial-clock>;
+	using file_time_type = chrono::time_point<chrono::file_clock>;
 	path absolute(const path& p, const path& base = current_path());
 	path canonical(const path& p, const path& base = current_path());
 	path canonical(const path& p, error_code& ec);
@@ -2895,6 +3585,7 @@ namespace std { // Regular expressions
 		using string_type = typename traits::string_type;
 		using flag_type = regex_constants::syntax_option_type;
 		using locale_type = typename traits::locale_type;
+		basic_regex& assign(const basic_regex& that);
 		unsigned mark_count() const;
 		flag_type flags() const;
 	};
@@ -2913,6 +3604,7 @@ namespace std { // Regular expressions
 	using wssub_match = sub_match<wstring::const_iterator>;
 	template <class BidirectionalIterator, class Allocator = allocator<sub_match<BidirectionalIterator>>>
 	class match_results {
+		bool ready() const;
 		difference_type length(size_type sub = 0) const;
 		difference_type position(size_type sub = 0) const;
 		string_type str(size_type sub = 0) const;
@@ -2960,6 +3652,7 @@ namespace std { // Regular expressions
 
 #include <atomic>
 namespace std { // Atomic operations
+	template<class T> struct atomic_ref {}; // C++20
 	template<class T>
 	struct atomic {
 		static constexpr bool is_always_lock_free;
@@ -3047,9 +3740,9 @@ namespace std { // Mutual exclusion
 	struct defer_lock_t { explicit defer_lock_t() = default; };
 	struct try_to_lock_t { explicit try_to_lock_t() = default; };
 	struct adopt_lock_t { explicit adopt_lock_t() = default; };
-	inline constexpr defer_lock_t defer_lock { };
-	inline constexpr try_to_lock_t try_to_lock { };
-	inline constexpr adopt_lock_t adopt_lock { };
+	inline constexpr defer_lock_t defer_lock {};
+	inline constexpr try_to_lock_t try_to_lock {};
+	inline constexpr adopt_lock_t adopt_lock {};
 
 	template <class Mutex> class lock_guard;
 	template <class... MutexTypes> class scoped_lock;
@@ -3111,7 +3804,7 @@ namespace std { // Futures
 		deferred
 	};
 
-	template <> struct is_error_code_enum<future_errc> : public true_type { };
+	template <> struct is_error_code_enum<future_errc> : public true_type {};
 	error_code make_error_code(future_errc e) noexcept;
 	error_condition make_error_condition(future_errc e) noexcept;
 	const error_category& future_category() noexcept;
@@ -3150,7 +3843,7 @@ namespace std { // Futures
 	};
 
 	template <class F, class... Args>
-	future<invoke_result_t<decay_t<F>, decay_t<Args>...>> async(F&& f, Args&&... args);
+	[[nodiscard]] future<invoke_result_t<decay_t<F>, decay_t<Args>...>> async(F&& f, Args&&... args);
 	template <class F, class... Args>
-	future<invoke_result_t<decay_t<F>, decay_t<Args>...>> async(launch policy, F&& f, Args&&... args);
+	[[nodiscard]] future<invoke_result_t<decay_t<F>, decay_t<Args>...>> async(launch policy, F&& f, Args&&... args);
 }

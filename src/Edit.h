@@ -184,7 +184,7 @@ void	EditOpenSelection(int type);
 extern "C" {
 #endif
 
-BOOL	EditPrint(HWND hwnd, LPCWSTR pszDocTitle, LPCWSTR pszPageFormat);
+BOOL	EditPrint(HWND hwnd, LPCWSTR pszDocTitle);
 void	EditPrintSetup(HWND hwnd);
 
 #ifdef __cplusplus
@@ -246,13 +246,13 @@ typedef struct EditAutoCompletionConfig {
 	BOOL bScanWordsInDocument;
 	BOOL bEnglistIMEModeOnly;
 	BOOL bIgnoreCase;
-	int iVisibleItemCount;
+	UINT iVisibleItemCount;
 	int iMinWordLength;
 	int iMinNumberLength;
 	int fAutoCompleteFillUpMask;
 	int fAutoInsertMask;
 	int iAsmLineCommentChar;
-	int iPreviousItemCount;		// status
+	UINT iPreviousItemCount;		// status
 	char szAutoCompleteFillUp[MAX_AUTO_COMPLETION_FILLUP_LENGTH + 4];
 	WCHAR wszAutoCompleteFillUp[MAX_AUTO_COMPLETION_FILLUP_LENGTH];
 } EditAutoCompletionConfig;
@@ -285,6 +285,7 @@ void	EditShowCallTips(Sci_Position position);
 #define NCP_8BIT					64
 #define NCP_INTERNAL				(NCP_DEFAULT | NCP_UTF8 | NCP_UTF8_SIGN | NCP_UNICODE | NCP_UNICODE_REVERSE | NCP_UNICODE_BOM)
 #define NCP_RECODE					128
+#define NCP_7BIT					256		// encoded in ASCII with escapes: UTF-7, ISO-2022, HZ-GB-2312
 #define CPI_NONE					(-1)
 #define CPI_DEFAULT					0
 #define CPI_OEM						1
@@ -302,7 +303,7 @@ typedef struct _np2encoding {
 	const UINT uFlags;
 	/*const*/UINT uCodePage;
 	const char * const pszParseNames;
-	const int idsName;
+	const UINT idsName;
 	LPWSTR wchLabel;
 } NP2ENCODING;
 

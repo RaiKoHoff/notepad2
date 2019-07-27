@@ -47,6 +47,24 @@ NP2_inline Sci_Position max_pos(Sci_Position x, Sci_Position y) {
 	return (x > y) ? x : y;
 }
 
+#if defined(_WIN64)
+NP2_inline void PosToStrW(Sci_Position pos, LPWSTR tch) {
+	_i64tow(pos, tch, 10);
+}
+
+NP2_inline void PosToStrA(Sci_Position pos, LPSTR tch) {
+	_i64toa(pos, tch, 10);
+}
+#else
+NP2_inline void PosToStrW(Sci_Position pos, LPWSTR tch) {
+	_ltow(pos, tch, 10);
+}
+
+NP2_inline void PosToStrA(Sci_Position pos, LPSTR tch) {
+	_ltoa(pos, tch, 10);
+}
+#endif
+
 // Text retrieval and modification
 
 NP2_inline Sci_Position SciCall_GetText(Sci_Position length, char *text) {
@@ -385,6 +403,10 @@ NP2_inline void SciCall_SetAdditionalSelectionTyping(BOOL additionalSelectionTyp
 	SciCall(SCI_SETADDITIONALSELECTIONTYPING, additionalSelectionTyping, 0);
 }
 
+NP2_inline void SciCall_SetMultiPaste(int multiPaste) {
+	SciCall(SCI_SETMULTIPASTE, multiPaste, 0);
+}
+
 NP2_inline void SciCall_SetVirtualSpaceOptions(int virtualSpaceOptions) {
 	SciCall(SCI_SETVIRTUALSPACEOPTIONS, virtualSpaceOptions, 0);
 }
@@ -457,10 +479,6 @@ NP2_inline void SciCall_SetXCaretPolicy(int caretPolicy, int caretSlop) {
 
 NP2_inline void SciCall_SetYCaretPolicy(int caretPolicy, int caretSlop) {
 	SciCall(SCI_SETYCARETPOLICY, caretPolicy, caretSlop);
-}
-
-NP2_inline void SciCall_SetScrollWidth(int pixelWidth) {
-	SciCall(SCI_SETSCROLLWIDTH, pixelWidth, 0);
 }
 
 NP2_inline void SciCall_SetScrollWidthTracking(BOOL tracking) {
@@ -554,6 +572,10 @@ NP2_inline Sci_Position SciCall_GetEndStyled(void) {
 
 NP2_inline void SciCall_SetIdleStyling(int idleStyling) {
 	SciCall(SCI_SETIDLESTYLING, idleStyling, 0);
+}
+
+NP2_inline void SciCall_StartStyling(Sci_Position start) {
+	SciCall(SCI_STARTSTYLING, start, 0);
 }
 
 // Style definition
@@ -1244,10 +1266,6 @@ NP2_inline void SciCall_SetLexer(int lexer) {
 
 NP2_inline void SciCall_Colourise(Sci_Position start, Sci_Position end) {
 	SciCall(SCI_COLOURISE, start, end);
-}
-
-NP2_inline void SciCall_ColouriseToEnd(Sci_Position start) {
-	SciCall_Colourise(start, -1);
 }
 
 NP2_inline void SciCall_ColouriseAll(void) {

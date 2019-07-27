@@ -86,7 +86,7 @@ BEGIN
 		MENUITEM "Re&vert\tF5",						IDM_FILE_REVERT
 		POPUP "Reloa&d"
 		BEGIN
-			MENUITEM "As UFT-&8\tShift+F8",			CMD_RELOADANSIASUTF8
+			MENUITEM "As UFT-&8\tShift+F8",			CMD_RELOADUTF8
 			MENUITEM "As &ANSI\tCtrl+Shift+A",		CMD_RELOADANSI
 			MENUITEM "As &OEM\tCtrl+Shift+O",		CMD_RELOADOEM
 			MENUITEM SEPARATOR
@@ -846,7 +846,7 @@ BEGIN
     VK_F8,          IDM_RECODE_SELECT,    VIRTKEY, NOINVERT
     VK_F8,          IDM_EDIT_INSERT_ENCODING, VIRTKEY, CONTROL, NOINVERT
     VK_F8,          CMD_RELOADNOFILEVARS,   VIRTKEY, ALT, NOINVERT
-    VK_F8,          CMD_RELOADANSIASUTF8,  VIRTKEY, SHIFT, NOINVERT
+    VK_F8,          CMD_RELOADUTF8,  VIRTKEY, SHIFT, NOINVERT
     VK_F9,          IDM_ENCODING_SELECT,    VIRTKEY, NOINVERT
     VK_F9,          IDM_EDIT_INSERT_FILENAME, VIRTKEY, CONTROL, NOINVERT
     VK_F9,          IDM_FILE_MANAGEFAV,     VIRTKEY, ALT, NOINVERT
@@ -940,14 +940,14 @@ FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     LTEXT           "Search Strin&g:",IDC_STATIC,7,7,67,8
     COMBOBOX        IDC_FINDTEXT,7,17,210,116,CBS_DROPDOWN | CBS_AUTOHSCROLL | WS_VSCROLL | WS_TABSTOP
-    CONTROL         "Match &case",IDC_FINDCASE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,37,73,10
-    CONTROL         "Match &whole word only",IDC_FINDWORD,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,49,110,10
-    CONTROL         "Match &beginning of word only",IDC_FINDSTART,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,61,124,10
-    CONTROL         "Regular &expression search",IDC_FINDREGEXP,"Button", BS_AUTOCHECKBOX | WS_TABSTOP,7,73,112,10
-    CONTROL         "&Transform backslashes",IDC_FINDTRANSFORMBS,"Button", BS_AUTOCHECKBOX | WS_TABSTOP,7,85,95,10
-    CONTROL         "&Don't wrap around",IDC_NOWRAP,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,132,37,79,10
-    CONTROL         "C&lose after find",IDC_FINDCLOSE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,132,49,77,10
-    CONTROL         "W&ildcard search",IDC_WILDCARDSEARCH,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,132,61,74,10
+    AUTOCHECKBOX    "Match &case",IDC_FINDCASE,7,37,73,10,WS_TABSTOP
+    AUTOCHECKBOX    "Match &whole word only",IDC_FINDWORD,7,49,110,10,WS_TABSTOP
+    AUTOCHECKBOX    "Match &beginning of word only",IDC_FINDSTART,7,61,124,10,WS_TABSTOP
+    AUTOCHECKBOX    "Regular &expression search",IDC_FINDREGEXP,7,73,112,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Transform backslashes",IDC_FINDTRANSFORMBS,7,85,95,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Don't wrap around",IDC_NOWRAP,132,37,79,10,WS_TABSTOP
+    AUTOCHECKBOX    "C&lose after find",IDC_FINDCLOSE,132,49,77,10,WS_TABSTOP
+    AUTOCHECKBOX    "W&ildcard search",IDC_WILDCARDSEARCH,132,61,74,10,WS_TABSTOP
     DEFPUSHBUTTON   "&Find Next",IDOK,223,7,60,14
     PUSHBUTTON      "Find &Previous",IDC_FINDPREV,223,24,60,14
     PUSHBUTTON      "Close",IDCANCEL,223,41,60,14
@@ -955,7 +955,7 @@ BEGIN
     CONTROL         "<a>(?)</a>",IDC_BACKSLASHHELP,"SysLink",0x0,118,85,14,10
     CONTROL         "<a>(?)</a>",IDC_WILDCARDHELP,"SysLink",0x0,208,61,14,10
     CONTROL         "<a>Clear History</a>",IDC_CLEAR_FIND,"SysLink",WS_TABSTOP,173,7,48,10
-    CONTROL         "Transparent mode on losing focus",IDC_TRANSPARENT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,96,124,10
+    AUTOCHECKBOX    "Transparent mode on losing focus",IDC_TRANSPARENT,7,96,124,10,WS_TABSTOP
     CONTROL         "<a>Goto Replace (Ctrl+H)</a>",IDC_TOGGLEFINDREPLACE, "SysLink",WS_TABSTOP,138,97,80,10
     CONTROL         "<a>Save Position (&O)</a>",IDC_SAVEPOSITION,"SysLink",WS_TABSTOP,223,85,60,10
     CONTROL         "<a>Reset Position (&P)</a>",IDC_RESETPOSITION,"SysLink",WS_TABSTOP,223,96,60,10
@@ -971,14 +971,14 @@ BEGIN
     COMBOBOX        IDC_FINDTEXT,7,17,210,116,CBS_DROPDOWN | CBS_AUTOHSCROLL | WS_VSCROLL | WS_TABSTOP
     LTEXT           "Replace Wit&h:",IDC_STATIC,7,35,64,8
     COMBOBOX        IDC_REPLACETEXT,7,46,209,116,CBS_DROPDOWN | CBS_AUTOHSCROLL | WS_VSCROLL | WS_TABSTOP
-    CONTROL         "Match &case",IDC_FINDCASE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,66,53,10
-    CONTROL         "Match &whole word only",IDC_FINDWORD,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,78,105,10
-    CONTROL         "Match &beginning of word only",IDC_FINDSTART,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,90,124,10
-    CONTROL         "Regular &expression search",IDC_FINDREGEXP,"Button", BS_AUTOCHECKBOX | WS_TABSTOP,7,102,112,10
-    CONTROL         "&Transform backslashes",IDC_FINDTRANSFORMBS,"Button", BS_AUTOCHECKBOX | WS_TABSTOP,7,114,97,10
-    CONTROL         "&Don't wrap around",IDC_NOWRAP,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,132,66,79,10
-    CONTROL         "C&lose after replace",IDC_FINDCLOSE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,132,78,90,10
-    CONTROL         "W&ildcard search",IDC_WILDCARDSEARCH,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,132,90,74,10
+    AUTOCHECKBOX    "Match &case",IDC_FINDCASE,7,66,53,10,WS_TABSTOP
+    AUTOCHECKBOX    "Match &whole word only",IDC_FINDWORD,7,78,105,10,WS_TABSTOP
+    AUTOCHECKBOX    "Match &beginning of word only",IDC_FINDSTART,7,90,124,10,WS_TABSTOP
+    AUTOCHECKBOX    "Regular &expression search",IDC_FINDREGEXP,7,102,112,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Transform backslashes",IDC_FINDTRANSFORMBS,7,114,97,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Don't wrap around",IDC_NOWRAP,132,66,79,10,WS_TABSTOP
+    AUTOCHECKBOX    "C&lose after replace",IDC_FINDCLOSE,132,78,90,10,WS_TABSTOP
+    AUTOCHECKBOX    "W&ildcard search",IDC_WILDCARDSEARCH,132,90,74,10,WS_TABSTOP
     DEFPUSHBUTTON   "&Find Next",IDOK,223,7,60,14
     PUSHBUTTON      "Find &Previous",IDC_FINDPREV,223,24,60,14
     PUSHBUTTON      "&Replace",IDC_REPLACE,223,41,60,14
@@ -990,7 +990,7 @@ BEGIN
     CONTROL         "<a>(?)</a>",IDC_WILDCARDHELP,"SysLink",0x0,208,90,14,10
     CONTROL         "<a>Clear History</a>",IDC_CLEAR_FIND,"SysLink",WS_TABSTOP,173,6,48,10
     CONTROL         "<a>Clear History</a>",IDC_CLEAR_REPLACE,"SysLink",WS_TABSTOP,173,35,48,10
-    CONTROL         "Transparent mode on losing focus",IDC_TRANSPARENT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,126,124,10
+    AUTOCHECKBOX    "Transparent mode on losing focus",IDC_TRANSPARENT,7,126,124,10,WS_TABSTOP
     CONTROL         "<a>Goto Find (Ctrl+F)</a>",IDC_TOGGLEFINDREPLACE, "SysLink",WS_TABSTOP,138,127,80,10
     CONTROL         "<a>Save Position (&O)</a>",IDC_SAVEPOSITION,"SysLink",WS_TABSTOP,223,114,60,10
     CONTROL         "<a>Reset Position (&P)</a>",IDC_RESETPOSITION,"SysLink",WS_TABSTOP,223,126,60,10
@@ -1032,14 +1032,10 @@ BEGIN
     LTEXT           "&Default encoding:",IDC_STATIC,7,7,195,8
     EDITTEXT        IDC_ENCODING_LABEL,7,20,195,14,ES_READONLY | ES_AUTOHSCROLL | WS_TABSTOP
     CONTROL         "<a>Click here to select default encoding.</a>",IDC_ENCODING_LINK,"SysLink",WS_TABSTOP,7,38,195,10
-    CONTROL         "Skip automatic &Unicode detection.",IDC_NOUNICODEDETECTION,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,52,195,10
-    CONTROL         "Open &ANSI (unknown encoding) files in UTF-8 mode.",IDC_ANSIASUTF8,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,62,195,10
-    CONTROL         "Open ANSI Art (*.&nfo, *.diz) files in DOS-437 mode.",IDC_NFOASOEM,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,72,195,10
-    CONTROL         "Don't parse encoding &tags.",IDC_ENCODINGFROMFILEVARS,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,82,195,10
+    AUTOCHECKBOX    "Skip automatic &Unicode detection.",IDC_NOUNICODEDETECTION,7,52,195,10,WS_TABSTOP
+    AUTOCHECKBOX    "Open &ANSI (unknown encoding) files in UTF-8 mode.",IDC_ANSIASUTF8,7,62,195,10,WS_TABSTOP
+    AUTOCHECKBOX    "Open ANSI Art (*.&nfo, *.diz) files in DOS-437 mode.",IDC_NFOASOEM,7,72,195,10,WS_TABSTOP
+    AUTOCHECKBOX    "Don't parse encoding &tags.",IDC_ENCODINGFROMFILEVARS,7,82,195,10,WS_TABSTOP
     DEFPUSHBUTTON   "OK",IDOK,96,98,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,152,98,50,14
 END
@@ -1051,12 +1047,9 @@ FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     LTEXT           "&Default line ending mode:",IDC_STATIC,7,7,116,8
     COMBOBOX        IDC_EOLMODELIST,7,20,118,81,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    CONTROL         "Show inconsistent line endings warning on loading.",IDC_WARNINCONSISTENTEOLS,
-                    "Button",BS_AUTOCHECKBOX | BS_VCENTER | WS_TABSTOP,7,40,186,10
-    CONTROL         "&Ensure consistent line endings when saving.",IDC_CONSISTENTEOLS,
-                    "Button",BS_AUTOCHECKBOX | BS_VCENTER | WS_TABSTOP,7,52,182,10
-    CONTROL         "&Strip trailing blanks when saving.",IDC_AUTOSTRIPBLANKS,
-                    "Button",BS_AUTOCHECKBOX | BS_VCENTER | WS_TABSTOP,7,64,173,10
+    AUTOCHECKBOX    "Show inconsistent line endings warning on loading.",IDC_WARNINCONSISTENTEOLS,7,40,186,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Ensure consistent line endings when saving.",IDC_CONSISTENTEOLS,7,52,182,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Strip trailing blanks when saving.",IDC_AUTOSTRIPBLANKS,7,64,173,10,WS_TABSTOP
     DEFPUSHBUTTON   "OK",IDOK,139,7,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,139,24,50,14
 END
@@ -1077,8 +1070,7 @@ BEGIN
     COMBOBOX        IDC_EOLMODELIST,7,64,118,81,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     PUSHBUTTON      "&Yes",IDOK,138,63,50,14
     PUSHBUTTON      "&No",IDCANCEL,138,80,50,14
-    CONTROL         "&Always show this dialog.",IDC_WARNINCONSISTENTEOLS,
-                    "Button",BS_AUTOCHECKBOX | BS_VCENTER | WS_TABSTOP,7,82,118,10
+    AUTOCHECKBOX    "&Always show this dialog.",IDC_WARNINCONSISTENTEOLS,7,82,118,10,WS_TABSTOP
 END
 
 IDD_LINENUM DIALOGEX 0, 0, 166, 70
@@ -1087,9 +1079,9 @@ CAPTION "Goto"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     LTEXT           "&Line (empty or 1 - %s):",IDC_LINE_RANGE,7,7,150,8
-    EDITTEXT        IDC_LINENUM,7,18,90,14,ES_AUTOHSCROLL
+    EDITTEXT        IDC_LINENUM,7,18,90,14,ES_NUMBER | ES_AUTOHSCROLL
     LTEXT           "&Column (empty or 1 - %s):",IDC_COLUMN_RANGE,7,37,150,8
-    EDITTEXT        IDC_COLNUM,7,48,90,14,ES_AUTOHSCROLL
+    EDITTEXT        IDC_COLNUM,7,48,90,14,ES_NUMBER | ES_AUTOHSCROLL
     DEFPUSHBUTTON   "OK",IDOK,109,18,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,109,48,50,14
 END
@@ -1100,7 +1092,7 @@ CAPTION "Open Recent File"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     CONTROL         "",IDC_FILEMRU,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS | LVS_AUTOARRANGE | LVS_NOCOLUMNHEADER | WS_BORDER | WS_TABSTOP,7,7,212,158
-    CONTROL         "&Remember recent files on exit.",IDC_SAVEMRU,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,169,114,10
+    AUTOCHECKBOX    "&Remember recent files on exit.",IDC_SAVEMRU,7,169,114,10,WS_TABSTOP
     CONTROL         "<a>Clear History</a>",IDC_EMPTY_MRU,"SysLink",WS_TABSTOP,172,169,48,10
     DEFPUSHBUTTON   "OK",IDOK,113,183,50,14,WS_DISABLED
     PUSHBUTTON      "Cancel",IDCANCEL,169,183,50,14
@@ -1112,10 +1104,10 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSM
 CAPTION "File Change Notification"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
-    CONTROL         "&None.",IDC_CHANGENOTIFY_NONE,"Button",BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,7,7,35,10
-    CONTROL         "&Show message.",IDC_CHANGENOTIFY_SHOW_MSG,"Button",BS_AUTORADIOBUTTON | WS_TABSTOP,7,19,71,10
-    CONTROL         "&Auto-reload (unmodified).",IDC_CHANGENOTIFY_AUTO_RELOAD,"Button",BS_AUTORADIOBUTTON | WS_TABSTOP,7,31,114,10
-    CONTROL         "&Reset if a new file is opened.",IDC_CHANGENOTIFY_RESET_WATCH,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,48,143,10
+    AUTORADIOBUTTON "&None.",IDC_CHANGENOTIFY_NONE,7,7,35,10,WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "&Show message.",IDC_CHANGENOTIFY_SHOW_MSG,7,19,71,10,WS_TABSTOP
+    AUTORADIOBUTTON "&Auto-reload (unmodified).",IDC_CHANGENOTIFY_AUTO_RELOAD,7,31,114,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Reset if a new file is opened.",IDC_CHANGENOTIFY_RESET_WATCH,7,48,143,10,WS_TABSTOP
     DEFPUSHBUTTON   "OK",IDOK,127,7,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,127,24,50,14
 END
@@ -1126,10 +1118,8 @@ CAPTION "Select Scheme"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     CONTROL         "",IDC_STYLELIST,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS | LVS_AUTOARRANGE | LVS_NOCOLUMNHEADER | WS_BORDER | WS_TABSTOP,7,7,151,162
-    CONTROL         "Set selected scheme as &default.",IDC_DEFAULTSCHEME,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,171,151,10
-    CONTROL         "&Auto-select by filename extension.",IDC_AUTOSELECT,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,182,151,10
+    AUTOCHECKBOX    "Set selected scheme as &default.",IDC_DEFAULTSCHEME,7,171,151,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Auto-select by filename extension.",IDC_AUTOSELECT,7,182,151,10,WS_TABSTOP
     DEFPUSHBUTTON   "OK",IDOK,52,196,50,14,WS_DISABLED
     PUSHBUTTON      "Cancel",IDCANCEL,108,196,50,14
     SCROLLBAR       IDC_RESIZEGRIP3,7,198,10,10
@@ -1173,12 +1163,12 @@ CAPTION "Tab Settings"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     LTEXT           "&Tabulator width:",IDC_STATIC,7,10,67,8
-    EDITTEXT        IDC_TAB_WIDTH,78,7,30,14,ES_AUTOHSCROLL
+    EDITTEXT        IDC_TAB_WIDTH,78,7,30,14,ES_NUMBER | ES_AUTOHSCROLL
     LTEXT           "&Indentation size:",IDC_STATIC,7,30,69,8
-    EDITTEXT        IDC_INDENT_WIDTH,78,27,30,14,ES_AUTOHSCROLL
-    CONTROL         "Insert tabs as &spaces.",IDC_TAB_AS_SPACE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,47,101,10
-    CONTROL         "Tab &key reformats indentation.",IDC_TAB_INDENT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,59,139,10
-    CONTROL         "&Backspace key reformats indentation.",IDC_BACKSPACE_UNINDENT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,71,160,10
+    EDITTEXT        IDC_INDENT_WIDTH,78,27,30,14,ES_NUMBER | ES_AUTOHSCROLL
+    AUTOCHECKBOX    "Insert tabs as &spaces.",IDC_TAB_AS_SPACE,7,47,101,10,WS_TABSTOP
+    AUTOCHECKBOX    "Tab &key reformats indentation.",IDC_TAB_INDENT,7,59,139,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Backspace key reformats indentation.",IDC_BACKSPACE_UNINDENT,7,71,160,10,WS_TABSTOP
     DEFPUSHBUTTON   "OK",IDOK,117,7,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,117,27,50,14
 END
@@ -1189,9 +1179,9 @@ CAPTION "Long Lines"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     LTEXT           "&Limit for long lines:",IDC_STATIC,7,10,85,8
-    EDITTEXT        IDC_LONGLINE_LIMIT,91,7,30,14,ES_AUTOHSCROLL
-    CONTROL         "Show &edge line.",IDC_LONGLINE_EDGE_LINE,"Button",BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,7,27,75,10
-    CONTROL         "Change &background color.",IDC_LONGLINE_BACK_COLOR,"Button",BS_AUTORADIOBUTTON | WS_TABSTOP,7,38,114,10
+    EDITTEXT        IDC_LONGLINE_LIMIT,91,7,30,14,ES_NUMBER | ES_AUTOHSCROLL
+    AUTORADIOBUTTON "Show &edge line.",IDC_LONGLINE_EDGE_LINE,7,27,75,10,WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "Change &background color.",IDC_LONGLINE_BACK_COLOR,7,38,114,10,WS_TABSTOP
     DEFPUSHBUTTON   "OK",IDOK,127,7,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,127,24,50,14
 END
@@ -1212,8 +1202,8 @@ BEGIN
     LTEXT           "No visual indicators after wrap|Show visual indicators after wrap (near text)|Show visual indicators after wrap (near borders)|Show visual indicators after wrap (in line number margin)",IDC_WRAP_SYMBOL_AFTER_OPTIONS,0,0,402,8,NOT WS_VISIBLE
     LTEXT           "No wrap|Wrap text between words|Wrap text between any characters|Wrap text on whitespace|Automatic word wrap",IDC_WRAP_MODE_OPTIONS,0,0,187,8,NOT WS_VISIBLE
     GROUPBOX        "For wrapped line",IDC_STATIC,7,74,235,38
-    CONTROL         "Only select subline when selecting line from left margin.",IDC_WRAP_SELECT_SUBLINE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,84,220,10
-    CONTROL         "Only highlight subline when highlighting current line.",IDC_WRAP_HIGHLIGHT_SUBLINE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,96,220,10
+    AUTOCHECKBOX    "Only select subline when selecting line from left margin.",IDC_WRAP_SELECT_SUBLINE,14,84,220,10,WS_TABSTOP
+    AUTOCHECKBOX    "Only highlight subline when highlighting current line.",IDC_WRAP_HIGHLIGHT_SUBLINE,14,96,220,10,WS_TABSTOP
 END
 
 IDD_PAGESETUP DIALOGEX 5, 5, 356, 260
@@ -1227,17 +1217,17 @@ BEGIN
     LTEXT           "&Source:",IDC_PAGESETUP_SOURCE_LABEL,16,45,36,8
     COMBOBOX        IDC_PAGESETUP_ORIENTATION_LIST,64,42,160,160,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_GROUP | WS_TABSTOP
     GROUPBOX        "Orientation",IDC_PAGESETUP_ORIENTATION_BOX,8,69,64,56,WS_GROUP
-    CONTROL         "P&ortrait",IDC_PAGESETUP_PORTRAIT,"Button",BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,16,82,52,12
-    CONTROL         "L&andscape",IDC_PAGESETUP_LANDSCAPE,"Button",BS_AUTORADIOBUTTON,16,103,52,12
+    AUTORADIOBUTTON "P&ortrait",IDC_PAGESETUP_PORTRAIT,16,82,52,12,WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "L&andscape",IDC_PAGESETUP_LANDSCAPE,16,103,52,12,WS_TABSTOP
     GROUPBOX        "Margins",IDC_PAGESETUP_MARGIN_BOX,80,69,152,56,WS_GROUP
     LTEXT           "&Left:",IDC_PAGESETUP_MARGIN_LEFT_LABEL,88,85,32,8
-    EDITTEXT        IDC_PAGESETUP_MARGIN_LEFT,120,82,28,12,WS_GROUP
+    EDITTEXT        IDC_PAGESETUP_MARGIN_LEFT,120,82,28,12,ES_NUMBER | WS_GROUP
     LTEXT           "&Top:",IDC_PAGESETUP_MARGIN_TOP_LABEL,88,104,32,8
-    EDITTEXT        IDC_PAGESETUP_MARGIN_RIGHT,120,103,28,12,WS_GROUP
+    EDITTEXT        IDC_PAGESETUP_MARGIN_RIGHT,120,103,28,12,ES_NUMBER | WS_GROUP
     LTEXT           "&Right:",IDC_PAGESETUP_MARGIN_RIGHT_LABEL,164,85,32,8
-    EDITTEXT        IDC_PAGESETUP_MARGIN_TOP,196,82,28,12,WS_GROUP
+    EDITTEXT        IDC_PAGESETUP_MARGIN_TOP,196,82,28,12,ES_NUMBER | WS_GROUP
     LTEXT           "&Bottom:",IDC_PAGESETUP_MARGIN_BOTTOM_LABEL,164,104,32,8
-    EDITTEXT        IDC_PAGESETUP_MARGIN_BOOTOM,196,103,28,12,WS_GROUP
+    EDITTEXT        IDC_PAGESETUP_MARGIN_BOOTOM,196,103,28,12,ES_NUMBER | WS_GROUP
     GROUPBOX        "Headers and Footers",IDC_PAGESETUP_HEADER_FOOTER_BOX,8,130,224,56,WS_GROUP
     LTEXT           "&Header:",IDC_STATIC,16,146,36,8
     COMBOBOX        IDC_PAGESETUP_HEADER_LIST,64,145,160,160,CBS_DROPDOWNLIST | WS_VSCROLL | WS_GROUP | WS_TABSTOP
@@ -1289,7 +1279,7 @@ CAPTION "Column Wrap"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     LTEXT           "&Boundary:",IDC_STATIC,7,7,34,8
-    EDITTEXT        IDC_COLUMNWRAP,7,24,54,14,ES_AUTOHSCROLL
+    EDITTEXT        IDC_COLUMNWRAP,7,24,54,14,ES_NUMBER | ES_AUTOHSCROLL
     DEFPUSHBUTTON   "OK",IDOK,73,7,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,73,24,50,14
 END
@@ -1354,8 +1344,7 @@ BEGIN
     ICON            IDR_MAINWND,IDC_INFOBOXICON,7,7,20,20
     LTEXT           "",IDC_INFOBOXTEXT,35,7,202,42
     DEFPUSHBUTTON   "OK",IDOK,187,53,50,14
-    CONTROL         "&Don't show this message again.",IDC_INFOBOXCHECK,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,55,120,10
+    AUTOCHECKBOX    "&Don't show this message again.",IDC_INFOBOXCHECK,7,55,120,10,WS_TABSTOP
 END
 
 IDD_INFOBOX_YESNO DIALOGEX 0, 0, 244, 74
@@ -1368,8 +1357,7 @@ BEGIN
     LTEXT           "",IDC_INFOBOXTEXT,35,7,202,42
     PUSHBUTTON      "&Yes",IDYES,131,54,50,14
     PUSHBUTTON      "&No",IDNO,187,54,50,14
-    CONTROL         "&Don't show this message again.",IDC_INFOBOXCHECK,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,55,120,10
+    AUTOCHECKBOX    "&Don't show this message again.",IDC_INFOBOXCHECK,7,55,120,10,WS_TABSTOP
 END
 
 IDD_SORT DIALOGEX 0, 0, 184, 140
@@ -1377,15 +1365,15 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSM
 CAPTION "Sort Lines"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
-    CONTROL         "Sort &ascending.",IDC_SORT_ASC,"Button",BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,7,7,85,10
-    CONTROL         "Sort &descending.",IDC_SORT_DESC,"Button",BS_AUTORADIOBUTTON | WS_TABSTOP,7,19,84,10
-    CONTROL         "Shu&ffle lines.",IDC_SORT_SHUFFLE,"Button",BS_AUTORADIOBUTTON | WS_TABSTOP,7,31,70,10
-    CONTROL         "&Merge duplicate lines.",IDC_SORT_MERGE_DUP,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,50,100,10
-    CONTROL         "&Remove duplicate lines.",IDC_SORT_REMOVE_DUP,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,62,100,10
-    CONTROL         "Remove &unique lines.",IDC_SORT_REMOVE_UNIQUE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,74,100,10
-    CONTROL         "&Case insensitive.",IDC_SORT_IGNORE_CASE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,92,81,10
-    CONTROL         "Logical &number comparison.",IDC_SORT_LOGICAL_NUMBER,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,104,130,10
-    CONTROL         "Column &sort (rectangular selection).",IDC_SORT_COLUMN,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,122,150,10
+    AUTORADIOBUTTON "Sort &ascending.",IDC_SORT_ASC,7,7,85,10,WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "Sort &descending.",IDC_SORT_DESC,7,19,84,10,WS_TABSTOP
+    AUTORADIOBUTTON "Shu&ffle lines.",IDC_SORT_SHUFFLE,7,31,70,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Merge duplicate lines.",IDC_SORT_MERGE_DUP,7,50,100,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Remove duplicate lines.",IDC_SORT_REMOVE_DUP,7,62,100,10,WS_TABSTOP
+    AUTOCHECKBOX    "Remove &unique lines.",IDC_SORT_REMOVE_UNIQUE,7,74,100,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Case insensitive.",IDC_SORT_IGNORE_CASE,7,92,81,10,WS_TABSTOP
+    AUTOCHECKBOX    "Logical &number comparison.",IDC_SORT_LOGICAL_NUMBER,7,104,130,10,WS_TABSTOP
+    AUTOCHECKBOX    "Column &sort (rectangular selection).",IDC_SORT_COLUMN,7,122,150,10,WS_TABSTOP
     DEFPUSHBUTTON   "OK",IDOK,127,7,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,127,24,50,14
 END
@@ -1400,8 +1388,7 @@ BEGIN
     LTEXT           "",IDC_INFOBOXTEXT,35,7,202,42
     DEFPUSHBUTTON   "OK",IDOK,131,53,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,187,53,50,14
-    CONTROL         "&Don't show this message again.",IDC_INFOBOXCHECK,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,55,120,10
+    AUTOCHECKBOX    "&Don't show this message again.",IDC_INFOBOXCHECK,7,55,120,10,WS_TABSTOP
 END
 
 IDD_SELECT_ENCODING DIALOGEX 0, 0, 187, 238
@@ -1421,11 +1408,11 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSM
 CAPTION "Align Lines"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
-    CONTROL         "&Left.",IDC_ALIGN_LEFT,"Button",BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,7,7,31,10
-    CONTROL         "&Right.",IDC_ALIGN_RIGHT,"Button",BS_AUTORADIOBUTTON | WS_TABSTOP,7,19,35,10
-    CONTROL         "&Center.",IDC_ALIGN_CENTER,"Button",BS_AUTORADIOBUTTON,7,31,41,10
-    CONTROL         "&Justify.",IDC_ALIGN_JUSTIFY,"Button",BS_AUTORADIOBUTTON,7,43,40,10
-    CONTROL         "Justify (&Paragraph mode).",IDC_ALIGN_JUSTIFY_PAR,"Button",BS_AUTORADIOBUTTON,7,55,124,10
+    AUTORADIOBUTTON "&Left.",IDC_ALIGN_LEFT,7,7,31,10,WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "&Right.",IDC_ALIGN_RIGHT,7,19,35,10,WS_TABSTOP
+    AUTORADIOBUTTON "&Center.",IDC_ALIGN_CENTER,7,31,41,10,WS_TABSTOP
+    AUTORADIOBUTTON "&Justify.",IDC_ALIGN_JUSTIFY,7,43,40,10,WS_TABSTOP
+    AUTORADIOBUTTON "Justify (&Paragraph mode).",IDC_ALIGN_JUSTIFY_PAR,7,55,124,10,WS_TABSTOP
     DEFPUSHBUTTON   "OK",IDOK,127,7,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,127,24,50,14
 END
@@ -1447,38 +1434,38 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSM
 CAPTION "Auto Completion Settings"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
-    CONTROL         "Auto indent text.",IDC_AUTO_INDENT_TEXT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,7,120,10
-    CONTROL         "Auto close HTML and XML tags.",IDC_AUTO_CLOSE_TAGS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,19,120,10
+    AUTOCHECKBOX    "Auto indent text.",IDC_AUTO_INDENT_TEXT,7,7,120,10,WS_TABSTOP
+    AUTOCHECKBOX    "Auto close HTML and XML tags.",IDC_AUTO_CLOSE_TAGS,7,19,120,10,WS_TABSTOP
     GROUPBOX        "",IDC_STATIC,7,35,218,82
-    CONTROL         "Auto complete word while typing.",IDC_AUTO_COMPLETE_WORD,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,34,122,10
+    AUTOCHECKBOX    "Auto complete word while typing.",IDC_AUTO_COMPLETE_WORD,14,34,122,10,WS_TABSTOP
     LTEXT           "Visible item count in auto completion list:",IDC_STATIC,14,46,148,10,SS_RIGHT
-    EDITTEXT        IDC_AUTOC_VISIBLE_ITEM_COUNT,166,44,50,12,WS_TABSTOP
+    EDITTEXT        IDC_AUTOC_VISIBLE_ITEM_COUNT,166,44,50,12,ES_NUMBER | WS_TABSTOP
     LTEXT           "Minimum length for word:",IDC_STATIC,14,62,148,10,SS_RIGHT
-    EDITTEXT        IDC_AUTOC_MIN_WORD_LENGTH,166,60,50,12,WS_TABSTOP
+    EDITTEXT        IDC_AUTOC_MIN_WORD_LENGTH,166,60,50,12,ES_NUMBER | WS_TABSTOP
     LTEXT           "Minimum length for number (without prefix):",IDC_STATIC,14,78,148,10,SS_RIGHT
-    EDITTEXT        IDC_AUTOC_MIN_NUMBER_LENGTH,166,76,50,12,WS_TABSTOP
-    CONTROL         "Scan words in current document.",IDC_AUTOC_SCAN_DOCUMENT_WORDS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,92,160,10
-    CONTROL         "Only trigger auto completion in English IME mode.",IDC_AUTOC_ENGLISH_IME_ONLY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,104,180,10
+    EDITTEXT        IDC_AUTOC_MIN_NUMBER_LENGTH,166,76,50,12,ES_NUMBER | WS_TABSTOP
+    AUTOCHECKBOX    "Scan words in current document.",IDC_AUTOC_SCAN_DOCUMENT_WORDS,14,92,160,10,WS_TABSTOP
+    AUTOCHECKBOX    "Only trigger auto completion in English IME mode.",IDC_AUTOC_ENGLISH_IME_ONLY,14,104,180,10,WS_TABSTOP
     GROUPBOX        "Keys used to finish auto completion (use Esc to cancel)",IDC_STATIC,7,123,218,44
-    CONTROL         "Enter",IDC_AUTOC_FILLUP_ENTER,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,135,35,10
-    CONTROL         "Tab",IDC_AUTOC_FILLUP_TAB,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,66,135,35,10
-    CONTROL         "Space",IDC_AUTOC_FILLUP_SPACE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,118,135,35,10
-    CONTROL         "Punctuation:",IDC_AUTOC_FILLUP_PUNCTUATION,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,152,50,10
+    AUTOCHECKBOX    "Enter",IDC_AUTOC_FILLUP_ENTER,14,135,35,10,WS_TABSTOP
+    AUTOCHECKBOX    "Tab",IDC_AUTOC_FILLUP_TAB,66,135,35,10,WS_TABSTOP
+    AUTOCHECKBOX    "Space",IDC_AUTOC_FILLUP_SPACE,118,135,35,10,WS_TABSTOP
+    AUTOCHECKBOX    "Punctuation:",IDC_AUTOC_FILLUP_PUNCTUATION,14,152,50,10,WS_TABSTOP
     EDITTEXT        IDC_AUTOC_FILLUP_PUNCTUATION_LIST,66,150,150,12,WS_TABSTOP
     GROUPBOX        "Auto Insert",IDC_STATIC,231,7,218,110
-    CONTROL         ") after typing (.",IDC_AUTO_INSERT_PARENTHESIS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,238,19,80,10
-    CONTROL         "} after typing {.",IDC_AUTO_INSERT_BRACE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,238,31,80,10
-    CONTROL         "] after typring [, except for Smali, Jasmin and javap.",IDC_AUTO_INSERT_SQUARE_BRACKET,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,238,43,210,10
-    CONTROL         "> after typing <, when <> is used in generics / template.",IDC_AUTO_INSERT_ANGLE_BRACKET,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,238,55,210,10
-    CONTROL         "Double quote (""), when """" is used to quote string / bytes.",IDC_AUTO_INSERT_DOUBLE_QUOTE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,238,67,210,10
-    CONTROL         "Single quote ('), when '' is used to quote string / bytes.",IDC_AUTO_INSERT_SINGLE_QUOTE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,238,79,210,10
-    CONTROL         "Backtick (`).",IDC_AUTO_INSERT_BACKTICK,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,238,91,80,10
-    CONTROL         "Space after typing comma (,) when appropriate.",IDC_AUTO_INSERT_SPACE_COMMA,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,238,103,180,10
+    AUTOCHECKBOX    ") after typing (.",IDC_AUTO_INSERT_PARENTHESIS,238,19,80,10,WS_TABSTOP
+    AUTOCHECKBOX    "} after typing {.",IDC_AUTO_INSERT_BRACE,238,31,80,10,WS_TABSTOP
+    AUTOCHECKBOX    "] after typring [, except for Smali, Jasmin and javap.",IDC_AUTO_INSERT_SQUARE_BRACKET,238,43,210,10,WS_TABSTOP
+    AUTOCHECKBOX    "> after typing <, when <> is used in generics / template.",IDC_AUTO_INSERT_ANGLE_BRACKET,238,55,210,10,WS_TABSTOP
+    AUTOCHECKBOX    "Double quote (""), when """" is used to quote string / bytes.",IDC_AUTO_INSERT_DOUBLE_QUOTE,238,67,210,10,WS_TABSTOP
+    AUTOCHECKBOX    "Single quote ('), when '' is used to quote string / bytes.",IDC_AUTO_INSERT_SINGLE_QUOTE,238,79,210,10,WS_TABSTOP
+    AUTOCHECKBOX    "Backtick (`).",IDC_AUTO_INSERT_BACKTICK,238,91,80,10,WS_TABSTOP
+    AUTOCHECKBOX    "Space after typing comma (,) when appropriate.",IDC_AUTO_INSERT_SPACE_COMMA,238,103,180,10,WS_TABSTOP
     GROUPBOX        "Characters used to toggle line comment for Assembler source",IDC_STATIC,231,123,218,26
-    CONTROL         "Semicolon (;)",IDC_ASM_LINE_COMMENT_SEMICOLON,"Button",BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,238,135,60,10
-    CONTROL         "#",IDC_ASM_LINE_COMMENT_SHARP,"Button",BS_AUTORADIOBUTTON,316,135,22,10
-    CONTROL         "//",IDC_ASM_LINE_COMMENT_SLASH,"Button",BS_AUTORADIOBUTTON,362,135,22,10
-    CONTROL         "@",IDC_ASM_LINE_COMMENT_AT,"Button",BS_AUTORADIOBUTTON,408,135,22,10
+    AUTORADIOBUTTON "Semicolon (;)",IDC_ASM_LINE_COMMENT_SEMICOLON,238,135,60,10,WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "#",IDC_ASM_LINE_COMMENT_SHARP,316,135,22,10,WS_TABSTOP
+    AUTORADIOBUTTON "//",IDC_ASM_LINE_COMMENT_SLASH,362,135,22,10,WS_TABSTOP
+    AUTORADIOBUTTON "@",IDC_ASM_LINE_COMMENT_AT,408,135,22,10,WS_TABSTOP
     DEFPUSHBUTTON   "OK",IDOK,343,157,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,399,157,50,14
 END
@@ -1721,7 +1708,7 @@ BEGIN
     IDS_DOCPOS              "Ln %s / %s  Col %s / %s  Ch %s / %s  Sel %s / %s  SelLn %s  Fnd %s"
     IDS_LOADFILE            "Loading ""%s""..."
     IDS_SAVEFILE            "Saving ""%s""..."
-    IDS_PRINTFILE           "Printing page %i..."
+    IDS_PRINTFILE           "Printing page %s..."
     IDS_SAVINGSETTINGS      "Saving settings..."
     IDS_LINKDESCRIPTION     "Edit with Notepad2"
     IDS_FILTER_ALL          "All files (*.*)|*.*|"
@@ -1826,7 +1813,7 @@ BEGIN
     IDS_FIND_WRAPFW         "Reached the end of the document, restarting search at the beginning."
     IDS_FIND_WRAPRE         "Reached the beginning of the document, restarting search at the end."
     IDS_NOTFOUND            "The specified text was not found."
-    IDS_REPLCOUNT           "%i occurrences of the specified text have been replaced."
+    IDS_REPLCOUNT           "%s occurrences of the specified text have been replaced."
     IDS_ASK_ENCODING        "Switching the file encoding from ANSI to non-ANSI (and vice versa) may replace unsupported text with default characters, and the undo history will be cleared. Continue?"
     IDS_ASK_ENCODING2       "You are about to change the encoding of an empty file from ANSI to non-ANSI. Note that this will clear the undo history, as it can't be synchronized with the new encoding. Continue?"
     IDS_ERR_ENCODINGNA      "Code page conversion tables for the selected encoding are not available on your system."
@@ -1868,7 +1855,7 @@ END
 STRINGTABLE
 BEGIN
     IDS_ERR_UNICODE2        "Certain characters in the current text are not supported by the selected encoding, and may be replaced by default placeholders when saving. It's recommended to choose another file encoding. Continue?"
-    IDS_WARNLOADBIGFILE     "Are you sure you want to open this large file?"
+    IDS_WARNLOADBIGFILE     "Loading file: %s\n\nThis file is too large (%s) to open.\nCurrently maximum supported file size is %s."
     //IDS_ERR_DROP            "Only one file can be dropped at the same time!"
     IDS_ASK_SAVE            "Save changes to ""%s""?"
     IDS_ASK_REVERT          "Revert file to last saved state? Your changes will be lost!"
@@ -1877,7 +1864,7 @@ BEGIN
     IDS_PRINT_HEADER        "Filename, Current Date and Time|Filename, Current Date|Filename|Leave blank"
     IDS_PRINT_FOOTER        "Page Number|Leave blank"
     IDS_PRINT_COLOR         "Normal|Invert light (dark background)|Black on white|Color on white|Color on white (except line numbers)|Current screen color (WYSIWYG)"
-    IDS_PRINT_PAGENUM       "Page %i"
+    IDS_PRINT_PAGENUM       "Page %s"
     IDS_PRINT_EMPTY         "This document doesn't contain any text to be printed."
     IDS_PRINT_ERROR         "Error printing ""%s""!"
     IDS_FAV_SUCCESS         "A shortcut to the current file has been created in the favorites directory."
@@ -1904,6 +1891,7 @@ BEGIN
     IDS_WIKI_SEARCH_URL     "https://en.wikipedia.org/wiki/Special:Search?search=%s"
 END
 
+// encoding name string format: 'long descriptive name on Select Encoding dialog' + ';' + 'short name on statusbar'
 STRINGTABLE
 BEGIN
     61000                   "ANSI;ANSI"
@@ -1916,87 +1904,88 @@ BEGIN
     61007                   "UTF-8 with BOM;UTF-8 BOM"
     61008                   "UTF-7;UTF-7"
     61009                   "Transparent ASMO (DOS-720);DOS-720"					// Arabic
-    61010                   "ISO 8859-6, Visual Order;ISO 8859-6"					// Arabic
-    61011                   "ISO 8859-6-I, Logical Order;ISO 8859-6-I"				// Arabic
+    61010                   "ISO 8859-6 (Visual Order);ISO 8859-6"					// Arabic
+    61011                   "ISO 8859-6-I (Logical Order);ISO 8859-6-I"				// Arabic
     61012                   "Windows-1256;Windows-1256"								// Arabic
     61013                   "OEM Baltic (DOS-775);DOS-775"							// Baltic Northern European
-    61014                   "Baltic, Latin-4, ISO 8859-4;ISO 8859-4"				// Baltic Northern European
-    61015                   "ANSI Baltic, Windows-1257;Windows-1257"				// Baltic Northern European
+    61014                   "Baltic (Latin-4, ISO 8859-4);ISO 8859-4"				// Baltic Northern European
+    61015                   "ANSI Baltic (Windows-1257);Windows-1257"				// Baltic Northern European
     61016                   "OEM Latin-2 (DOS-852);DOS-852"							// Central European
-    61017                   "Latin-2, ISO 8859-2;ISO 8859-2"						// Central European
-    61018                   "Mac Latin-2;Mac (Central)"								// Central European
-    61019                   "Latin-2, Windows-1250;Windows-1250"					// Central European
+    61017                   "Latin-2 (ISO 8859-2);ISO 8859-2"						// Central European
+    61018                   "Mac Latin-2;Mac Latin-2"								// Central European
+    61019                   "Latin-2 (Windows-1250);Windows-1250"					// Central European
     61020                   "Simplified Chinese (GBK, GB2312);GBK"					// Chinese
     61021                   "Simplified Chinese (GB18030);GB18030"					// Chinese
     61022                   "Traditional Chinese (Big5, Big5-HKSCS);Big5"			// Chinese
-    61024                   "Mac (Croatian);Mac (Croatian)"							// Southeast European
+    61024                   "Mac Croatian;Mac Croatian"								// Southeast European
     61025                   "OEM Russian (DOS-866);DOS-866"							// Cyrillic
     61026                   "ISO 8859-5;ISO 8859-5"									// Cyrillic
-    61027                   "Russian, KOI8-R;KOI8-R"								// Cyrillic
-    61028                   "Ukrainian, KOI8-U;KOI8-U"								// Cyrillic
-    61029                   "Mac (Cyrillic);Mac (Cyrillic)"							// Cyrillic
+    61027                   "Russian (KOI8-R);KOI8-R"								// Cyrillic
+    61028                   "Ukrainian (KOI8-U);KOI8-U"								// Cyrillic
+    61029                   "Mac Cyrillic;Mac Cyrillic"								// Cyrillic
     61030                   "Windows-1251;Windows-1251"								// Cyrillic
-    61031                   "Estonian, Baltic Rim, Latin-7, ISO 8859-13;ISO 8859-13"	// Northern European
+    61031                   "Estonian (Baltic Rim, Latin-7, ISO 8859-13);ISO 8859-13"	// Northern European
     61032                   "OEM French Canadian (DOS-863);DOS-863"					// Western European
     61033                   "OEM Greek (DOS-737);DOS-737"							// Greek
     61034                   "ISO 8859-7;ISO 8859-7"									// Greek
-    61035                   "Mac (Greek);Mac (Greek)"								// Greek
+    61035                   "Mac Greek;Mac Greek"									// Greek
     61036                   "Windows-1253;Windows-1253"								// Greek
     61037                   "OEM Modern Greek (DOS-869);DOS-869"					// Greek
     61038                   "OEM Hebrew (DOS-862);DOS-862"							// Hebrew
-    61039                   "ISO 8859-8-I, Logical Order;ISO 8859-8-I"				// Hebrew
-    61040                   "ISO 8859-8, Visual Order;ISO 8859-8"					// Hebrew
-    61041                   "Mac (Hebrew);Mac (Hebrew)"								// Hebrew
+    61039                   "ISO 8859-8-I (Logical Order);ISO 8859-8-I"				// Hebrew
+    61040                   "ISO 8859-8 (Visual Order);ISO 8859-8"					// Hebrew
+    61041                   "Mac Hebrew;Mac Hebrew"									// Hebrew
     61042                   "Windows-1255;Windows-1255"								// Hebrew
     61043                   "OEM Icelandic (DOS-861);DOS-861"						// Northern European
-    61044                   "Mac (Icelandic);Mac (Icelandic)"						// Northern European
-    61045                   "ISO-2022 (JIS);ISO-2022-JP"							// Japanese
+    61044                   "Mac Icelandic;Mac Icelandic"							// Northern European
+    61045                   "ISO 2022 (no halfwidth Katakana);ISO-2022-JP"			// Japanese
     61046                   "Shift-JIS;Shift-JIS"									// Japanese
     61047                   "Johab;Johab"											// Korean
     61048                   "Unified Hangul Code;UHC"								// Korean
-    61049                   "Latin-3, ISO 8859-3;ISO 8859-3"						// South European
-    61050                   "Latin-9, ISO 8859-15;ISO 8859-15"						// Western European
-    61051                   "Nordic, Latin-6, ISO 8859-10;ISO 8859-10"				// Northern European
-    61052                   "EUC-JP;EUC-JP"											// Japanese
-    61053                   "EUC-KR;EUC-KR"											// Korean
-    61054                   "South-Eastern European (Latin-10, ISO 8859-16);ISO 8859-16"	// Southeast European
-    61055                   "Celtic, Latin-8, ISO 8859-14;ISO 8859-14"				// Western European
-    61056                   "Mac (Thai);Mac (Thai)"									// Southeast Asia
+    61049                   "Southern European (Latin-3, ISO 8859-3);ISO 8859-3"	// Southern European
+    61050                   "Latin-9 (ISO 8859-15);ISO 8859-15"						// Western European
+    61051                   "Nordic (Latin-6, ISO 8859-10);ISO 8859-10"				// Northern European
+    61052                   "EUC Japanese;EUC-JP"									// Japanese
+    61053                   "EUC Korean;EUC-KR"										// Korean
+    61054                   "South-Eastern European (Latin-10, ISO 8859-16);ISO 8859-16"	// South-Eastern European
+    61055                   "Celtic (Latin-8, ISO 8859-14);ISO 8859-14"				// Western European
+    61056                   "Mac Thai;Mac Thai"										// Southeast Asia
     61057                   "Thai (TIS-620, Windows-874, ISO 8859-11);TIS-620"		// Southeast Asia
     61058                   "OEM Turkish (DOS-857);DOS-857"							// Turkish
-    61059                   "Latin-5, ISO 8859-9;ISO 8859-9"						// Turkish
-    61060                   "Mac (Turkish);Mac (Turkish)"							// Turkish
+    61059                   "Latin-5 (ISO 8859-9);ISO 8859-9"						// Turkish
+    61060                   "Mac Turkish;Mac Turkish"								// Turkish
     61061                   "Windows-1254;Windows-1254"								// Turkish
-    61062                   "Mac (Ukrainian);Mac (Ukrainian)"						// Cyrillic
+    61062                   "Mac Ukrainian;Mac Ukrainian"							// Cyrillic
     61063                   "Vietnamese (Windows-1258);Windows-1258"				// Southeast Asia
     61064                   "OEM Latin-1 (DOS-850);DOS-850"							// Western European
-    61065                   "Latin-1, ISO 8859-1;ISO 8859-1"						// Western European
-    61066                   "Mac Roman;Mac (Western)"								// Western European
-    61067                   "Latin-1, Windows-1252;Windows-1252"					// Western European
-	61068					"US-Canada;EBCDIC (US-Canada)"							// EBCDIC
-	61069					"US-Canada + Euro Symbol;EBCDIC (US-Canada Euro)"		// EBCDIC
-	61070					"International;EBCDIC (Intl.)"							// EBCDIC
-	61071					"Latin-2;EBCDIC (Latin-2)"								// EBCDIC
-	61072					"Greek Modern;EBCDIC (Greek)"							// EBCDIC
-	61073					"Turkish, Latin-5;EBCDIC (Latin-5)"						// EBCDIC
+    61065                   "Latin-1 (ISO 8859-1);ISO 8859-1"						// Western European
+    61066                   "Mac Roman;Mac Roman"									// Western European
+    61067                   "Latin-1 (Windows-1252);Windows-1252"					// Western European
+	61068					"US-Canada (IBM037);EBCDIC (US-Canada)"					// EBCDIC
+	61069					"US-Canada + Euro Symbol (IBM1140);EBCDIC (US-Canada Euro)"	// EBCDIC
+	61070					"International (IBM500);EBCDIC (Intl.)"					// EBCDIC
+	61071					"Latin-2 (IBM870);EBCDIC (Latin-2)"						// EBCDIC
+	61072					"Greek Modern (CP875);EBCDIC (Greek)"					// EBCDIC
+	61073					"Turkish (Latin-5) (IBM1026);EBCDIC (Latin-5)"			// EBCDIC
 	61074					"OEM United States (DOS-437);DOS-437"					// Western European
     61075                   "OEM Latin-1 + Euro Symbol (DOS-858);DOS-858"			// Western European
 	61076					"OEM Portuguese (DOS-860);DOS-860"						// Western European
-	61077					"Mac (Arabic);Mac (Arabic)"								// Arabic
+	61077					"Mac Arabic;Mac Arabic"									// Arabic
 	61078					"OEM Arabic (DOS-864);OEM Arabic"						// Arabic
-	61079					"Mac (Romanian);Mac (Romanian)"							// South European
+	61079					"Mac Romanian;Mac Romanian"								// South European
 	61080					"OEM Nordic (DOS-865);DOS-865"							// Northern European
-	61081					"OEM Cyrillic (Primarily Russian);OEM Cyrillic"			// Cyrillic
-	61082					"Mac (Japanese);Mac (Japanese)"							// Japanese
-	61083					"ISO-2022 (JIS-Allow 1 byte Kana);CS ISO-2022-JP"		// Japanese
-	61084					"ISO-2022 (JIS-Allow 1 byte Kana - SO/SI);ISO-2022-JP SI/SO"	// Japanese
-	61085					"Mac (Korean);Mac (Korean)"								// Korean
-	61086					"ISO-2022 Korean;ISO-2022-KR"							// Korean
-	61087					"Simplified Chinese (Mac);Mac (GB 2312)"				// Chinese
+	61081					"OEM Cyrillic (primarily Russian) (IBM855);OEM Cyrillic"// Cyrillic
+	61082					"Mac Japanese;Mac Japanese"								// Japanese
+	61083					"ISO 2022 (allow 1 byte Kana);CS ISO-2022-JP"			// Japanese
+	61084					"ISO 2022 (allow 1 byte Kana - SO/SI);ISO-2022-JP SI/SO"// Japanese
+	61085					"Mac Korean;Mac Korean"									// Korean
+	61086					"ISO 2022 Korean;ISO-2022-KR"							// Korean
+	61087					"Simplified Chinese (Mac);Mac GB-2312"					// Chinese
 	61088					"Simplified Chinese (HZ-GB2312);HZ-GB2312"				// Chinese
-	61089					"Simplified Chinese (ISO-2022);ISO-2022-CN(S)"			// Chinese
-	61090					"Traditional Chinese (Mac);Mac (Big5)"					// Chinese
-	61091					"Traditional Chinese (ISO-2022);ISO-2022-CN(T)"			// Chinese
+	61089					"Simplified Chinese (ISO 2022);ISO-2022-CN(S)"			// Chinese
+	61090					"Traditional Chinese (Mac);Mac Big5"					// Chinese
+	61091					"Traditional Chinese (ISO 2022);ISO-2022-CN(T)"			// Chinese
+	61092					"Traditional Chinese (CNS);CNS"							// Chinese
 
 	IDS_SELRECT_CURRENT_ENCODING	"Select current file &encoding:"
 	IDS_SELRECT_RELOAD_ENCODING		"Select source &encoding to reload file:"
@@ -2004,15 +1993,15 @@ BEGIN
 	IDS_ENCODINGGROUP_UNICODE		"Unicode"
 	IDS_ENCODINGGROUP_WESTERNEURO	"Western European"
 	IDS_ENCODINGGROUP_ARABIC		"Arabic"
-	IDS_ENCODINGGROUP_NORTHERNEURO	"Baltic, Northern European"
-	IDS_ENCODINGGROUP_CENTRALEURO	"Central European"
+	IDS_ENCODINGGROUP_NORTHERNEURO	"Baltic and Northern European"
+	IDS_ENCODINGGROUP_CENTRALEURO	"Central and Eastern European"
 	IDS_ENCODINGGROUP_CHINESE		"Chinese"
 	IDS_ENCODINGGROUP_CYRILLIC		"Cyrillic"
 	IDS_ENCODINGGROUP_GREEK			"Greek"
 	IDS_ENCODINGGROUP_HEBREW		"Hebrew"
 	IDS_ENCODINGGROUP_JAPANESE		"Japanese"
 	IDS_ENCODINGGROUP_KOREAN		"Korean"
-	IDS_ENCODINGGROUP_SOUTHEURO		"South, Southeast European"
+	IDS_ENCODINGGROUP_SOUTHEURO		"South European"
 	IDS_ENCODINGGROUP_SOUTASIA		"Southeast Asia"
 	IDS_ENCODINGGROUP_TURKISH		"Turkish"
 	IDS_ENCODINGGROUP_EBCDIC		"IBM EBCDIC"
