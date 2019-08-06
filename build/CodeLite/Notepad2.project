@@ -10,6 +10,7 @@
       <File Name="../../scintilla/include/Sci_Position.h"/>
       <File Name="../../scintilla/include/SciLexer.h"/>
       <File Name="../../scintilla/include/Scintilla.h"/>
+      <File Name="../../scintilla/include/VectorISA.h"/>
     </VirtualDirectory>
     <VirtualDirectory Name="lexers">
       <File Name="../../scintilla/lexers/LexAsm.cxx"/>
@@ -212,7 +213,7 @@
     <File Name="../../src/EditEncoding.c"/>
     <File Name="../../src/Helpers.c"/>
     <File Name="../../src/Notepad2.c"/>
-    <File Name="../../src/Print.cpp"/>
+    <File Name="../../src/Bridge.cpp"/>
     <File Name="../../src/Styles.c"/>
   </VirtualDirectory>
   <VirtualDirectory Name="Header Files">

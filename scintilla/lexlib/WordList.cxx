@@ -24,8 +24,8 @@ static char **ArrayFromWordList(char *wordlist, size_t slen, int *len, bool only
 	int prev = true;
 	int words = 0;
 	// For rapid determination of whether a character is a separator, build
-	// a look up table.
-	bool wordSeparator[256] = {};	// Initialise all to false.
+	// a look up table, for ASCII only.
+	bool wordSeparator[128] = {};	// Initialise all to false.
 	wordSeparator[static_cast<unsigned int>('\r')] = true;
 	wordSeparator[static_cast<unsigned int>('\n')] = true;
 	if (!onlyLineEnds) {
@@ -165,6 +165,9 @@ bool WordList::InList(const char *s) const noexcept {
 		return false;
 	}
 	const unsigned char firstChar = s[0];
+	if (firstChar > 0x7F) {
+		return false;
+	}
 	Range r = ranges[firstChar];
 	if (r.end) {
 		int count = r.end - r.start;
@@ -233,6 +236,9 @@ bool WordList::InListPrefixed(const char *s, const char marker) const noexcept {
 		return false;
 	}
 	const unsigned char firstChar = s[0];
+	if (firstChar > 0x7F) {
+		return false;
+	}
 	Range r = ranges[firstChar];
 	if (r.end) {
 		int count = r.end - r.start;
@@ -300,6 +306,9 @@ bool WordList::InListAbbreviated(const char *s, const char marker) const noexcep
 		return false;
 	}
 	const unsigned char firstChar = s[0];
+	if (firstChar > 0x7F) {
+		return false;
+	}
 	Range r = ranges[firstChar];
 	if (r.end) {
 		for (int j = r.start; j < r.end; j++) {
@@ -353,6 +362,9 @@ bool WordList::InListAbridged(const char *s, const char marker) const noexcept {
 		return false;
 	}
 	const unsigned char firstChar = s[0];
+	if (firstChar > 0x7F) {
+		return false;
+	}
 	Range r = ranges[firstChar];
 	if (r.end) {
 		for (int j = r.start; j < r.end; j++) {

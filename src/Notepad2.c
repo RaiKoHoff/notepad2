@@ -164,6 +164,9 @@ BOOL	bLoadNFOasOEM;
 BOOL	bNoEncodingTags;
 int		iSrcEncoding = -1;
 int		iWeakSrcEncoding = -1;
+#if defined(_WIN64)
+BOOL	bLargeFileMode = FALSE;
+#endif
 int		iDefaultEOLMode;
 BOOL	bWarnLineEndings;
 BOOL	bFixLineEndings;
@@ -439,11 +442,11 @@ static void CleanUpResources(BOOL initialized) {
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nShowCmd) {
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
-#if 0 // used for clang ubsan
+#if 0 // used for clang ubsan or printing debug message on console.
 	if (AttachConsole(ATTACH_PARENT_PROCESS)) {
 		freopen("CONOUT$", "w", stdout);
 		freopen("CONOUT$", "w", stderr);
-		fprintf(stdout, "%s:%d %s\n", __FILE__, __LINE__, __FUNCTION__);
+		fprintf(stdout, "\n%s:%d %s\n", __FILE__, __LINE__, __FUNCTION__);
 	}
 #endif
 
@@ -884,8 +887,10 @@ HWND InitInstance(HINSTANCE hInstance, int nCmdShow) {
 		SetNotifyIconTitle(hwndMain);
 	}
 
-	bInitDone = TRUE;
-	UpdateStatusBarWidth();
+	if (!bInitDone) {
+		bInitDone = TRUE;
+		UpdateStatusBarWidth();
+	}
 	if (SciCall_GetLength() == 0) {
 		UpdateToolbar();
 		UpdateStatusbar();
@@ -1682,6 +1687,21 @@ HWND EditCreate(HWND hwndParent) {
 	return hwnd;
 }
 
+void EditReplaceDocument(HANDLE pdoc) {
+	const UINT cpEdit = SciCall_GetCodePage();
+	SciCall_SetDocPointer(pdoc);
+	// reduce reference count to 1
+	SciCall_ReleaseDocument(pdoc);
+	SciCall_SetCodePage(cpEdit);
+	SciCall_SetEOLMode(iEOLMode);
+
+	SciCall_SetUseTabs(!bTabsAsSpaces);
+	SciCall_SetTabIndents(bTabIndents);
+	SciCall_SetBackSpaceUnIndents(bBackspaceUnindents);
+	SciCall_SetTabWidth(iTabWidth);
+	SciCall_SetIndent(iIndentWidth);
+}
+
 //=============================================================================
 //
 // MsgCreate() - Handles WM_CREATE
@@ -2164,6 +2184,10 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	EnableCmd(hmenu, CMD_RELOADOEM, i);
 	EnableCmd(hmenu, CMD_RELOADNOFILEVARS, i);
 	EnableCmd(hmenu, CMD_RECODEDEFAULT, i);
+#if defined(_WIN64)
+	EnableCmd(hmenu, IDM_FILE_LARGE_FILE_MODE, !bLargeFileMode);
+	EnableCmd(hmenu, IDM_FILE_LARGE_FILE_MODE_RELOAD, !bLargeFileMode);
+#endif
 	EnableCmd(hmenu, IDM_FILE_LAUNCH, i);
 	EnableCmd(hmenu, IDM_FILE_PROPERTIES, i);
 	EnableCmd(hmenu, IDM_FILE_CREATELINK, i);
@@ -2480,8 +2504,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 static void ConvertLineEndings(int iNewEOLMode) {
 	iEOLMode = iNewEOLMode;
 	SciCall_SetEOLMode(iNewEOLMode);
-	SciCall_ConvertEOLs(iNewEOLMode);
-	EditFixPositions();
+	EditEnsureConsistentLineEndings();
 	UpdateStatusBarCache(STATUS_EOLMODE);
 	UpdateToolbar();
 	UpdateStatusbar();
@@ -2505,7 +2528,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		FileLoad(FALSE, FALSE, FALSE, FALSE, L"");
 		break;
 
-	case IDM_FILE_REVERT: {
+	case IDM_FILE_REVERT:
 		if (StrNotEmpty(szCurFile)) {
 			if (IsDocumentModified() && MsgBox(MBOKCANCEL, IDS_ASK_REVERT) != IDOK) {
 				return 0;
@@ -2531,8 +2554,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 #endif
 			}
 		}
-	}
-	break;
+		break;
 
 	case IDM_FILE_SAVE:
 		FileSave(TRUE, FALSE, FALSE, FALSE);
@@ -2832,7 +2854,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	}
 	break;
 
-	case IDM_RECODE_SELECT: {
+	case IDM_RECODE_SELECT:
 		if (StrNotEmpty(szCurFile)) {
 			int iNewEncoding;
 			switch (iEncoding) {
@@ -2862,8 +2884,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				FileLoad(TRUE, FALSE, TRUE, FALSE, szCurFile);
 			}
 		}
-	}
-	break;
+		break;
 
 	case IDM_ENCODING_SETDEFAULT:
 		SelectDefEncodingDlg(hwnd, &iDefaultEncoding);
@@ -4305,7 +4326,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		SciCall_SetTabIndents(bTabIndents);
 		break;
 
-	case CMD_RECODEDEFAULT: {
+	case CMD_RECODEDEFAULT:
 		if (StrNotEmpty(szCurFile)) {
 			if (iDefaultEncoding == CPI_UNICODEBOM) {
 				iSrcEncoding = CPI_UNICODE;
@@ -4318,34 +4339,30 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			}
 			FileLoad(FALSE, FALSE, TRUE, FALSE, szCurFile);
 		}
-	}
-	break;
+		break;
 
-	case CMD_RELOADANSI: {
+	case CMD_RELOADANSI:
 		if (StrNotEmpty(szCurFile)) {
 			iSrcEncoding = CPI_DEFAULT;
 			FileLoad(FALSE, FALSE, TRUE, FALSE, szCurFile);
 		}
-	}
-	break;
+		break;
 
-	case CMD_RELOADOEM: {
+	case CMD_RELOADOEM:
 		if (StrNotEmpty(szCurFile)) {
 			iSrcEncoding = CPI_OEM;
 			FileLoad(FALSE, FALSE, TRUE, FALSE, szCurFile);
 		}
-	}
-	break;
+		break;
 
-	case CMD_RELOADUTF8: {
+	case CMD_RELOADUTF8:
 		if (StrNotEmpty(szCurFile)) {
 			iSrcEncoding = CPI_UTF8;
 			FileLoad(FALSE, FALSE, TRUE, FALSE, szCurFile);
 		}
-	}
-	break;
+		break;
 
-	case CMD_RELOADNOFILEVARS: {
+	case CMD_RELOADNOFILEVARS:
 		if (StrNotEmpty(szCurFile)) {
 			const int _fNoFileVariables = fNoFileVariables;
 			const BOOL _bNoEncodingTags = bNoEncodingTags;
@@ -4355,8 +4372,24 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			fNoFileVariables = _fNoFileVariables;
 			bNoEncodingTags = _bNoEncodingTags;
 		}
-	}
-	break;
+		break;
+
+#if defined(_WIN64)
+	case IDM_FILE_LARGE_FILE_MODE_RELOAD:
+		if (StrNotEmpty(szCurFile)) {
+			bLargeFileMode = TRUE;
+			iSrcEncoding = iEncoding;
+			FileLoad(FALSE, FALSE, TRUE, FALSE, szCurFile);
+			bLargeFileMode = SciCall_GetDocumentOptions() & SC_DOCUMENTOPTION_TEXT_LARGE;
+		}
+		if (!bLargeFileMode) {
+			EditConvertToLargeMode();
+		}
+		break;
+	case IDM_FILE_LARGE_FILE_MODE:
+		EditConvertToLargeMode();
+		break;
+#endif
 
 	case IDM_LANG_TEXTFILE:
 	case IDM_LANG_2NDTEXTFILE:
@@ -4783,12 +4816,6 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 				// Brace Match
 				if (bMatchBraces) {
-					const Sci_Position iEndStyled = SciCall_GetEndStyled();
-					if (iEndStyled == 0) {
-						// wait idle styling.
-						return 0;
-					}
-
 					Sci_Position iPos = SciCall_GetCurrentPos();
 					int ch = SciCall_GetCharAt(iPos);
 					if (ch < 0x80 && strchr("()[]{}<>", ch)) {
@@ -7115,6 +7142,10 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 #endif
 		}
 
+		if (!bInitDone) {
+			bInitDone = TRUE;
+			UpdateStatusBarWidth();
+		}
 		UpdateStatusbar();
 		UpdateDocumentModificationStatus();
 		// Show warning: Unicode file loaded as ANSI

@@ -30,6 +30,7 @@
 #include <limits.h>
 #include <inttypes.h>
 #include "SciCall.h"
+#include "VectorISA.h"
 #include "Helpers.h"
 #include "Notepad2.h"
 #include "Edit.h"
@@ -71,6 +72,8 @@ static DString wchAppendSelection;
 static DString wchPrefixLines;
 static DString wchAppendLines;
 
+#define MAX_NON_UTF8_SIZE	(UINT_MAX/2 - 16)
+
 static struct EditMarkAllStatus {
 	int findFlag;
 	Sci_Position iSelCount;
@@ -98,6 +101,9 @@ static inline void NotifyRectangleSelection(void) {
 //
 extern BOOL bFreezeAppTitle;
 extern BOOL bLockedForEditing;
+#if defined(_WIN64)
+extern BOOL bLargeFileMode;
+#endif
 extern FILEVARS fvCurFile;
 
 void EditSetNewText(LPCSTR lpstrText, DWORD cbText) {
@@ -114,9 +120,29 @@ void EditSetNewText(LPCSTR lpstrText, DWORD cbText) {
 
 	FileVars_Apply(&fvCurFile);
 
+#if defined(_WIN64)
+	if (bLargeFileMode || cbText >= MAX_NON_UTF8_SIZE) {
+		int options = SciCall_GetDocumentOptions();
+		if (!(options & SC_DOCUMENTOPTION_TEXT_LARGE)) {
+			options |= SC_DOCUMENTOPTION_TEXT_LARGE;
+			HANDLE pdoc = SciCall_CreateDocument(cbText + 1, options);
+			EditReplaceDocument(pdoc);
+			bLargeFileMode = TRUE;
+		}
+	}
+#endif
+
 	if (cbText > 0) {
 		SciCall_SetModEventMask(SC_MOD_NONE);
+#if 0
+		StopWatch watch;
+		StopWatch_Start(watch);
+#endif
 		SciCall_AddText(cbText, lpstrText);
+#if 0
+		StopWatch_Stop(watch);
+		StopWatch_ShowLog(&watch, "AddText time");
+#endif
 		SciCall_SetModEventMask(SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT);
 	}
 
@@ -139,48 +165,95 @@ BOOL EditConvertText(UINT cpSource, UINT cpDest, BOOL bSetSavePoint) {
 	}
 
 	const Sci_Position length = SciCall_GetLength();
-	if (length == 0) {
-		SciCall_Cancel();
-		SciCall_SetUndoCollection(FALSE);
-		SciCall_EmptyUndoBuffer();
-		SciCall_ClearAll();
-		SciCall_ClearMarker();
-		SciCall_SetCodePage(cpDest);
-		SciCall_SetUndoCollection(TRUE);
-		SciCall_EmptyUndoBuffer();
-		SciCall_GotoPos(0);
-		SciCall_ChooseCaretX();
+	if (length >= (int)MAX_NON_UTF8_SIZE) {
+		return TRUE;
+	}
 
-		if (bSetSavePoint) {
-			SciCall_SetSavePoint();
-		}
-	} else {
+	char *pchText = NULL;
+	int cbText = 0;
+	if (length > 0) {
 		// DBCS: length -> WCHAR: sizeof(WCHAR) * (length / 2) -> UTF-8: kMaxMultiByteCount * (length / 2)
-		char *pchText = (char *)NP2HeapAlloc((length + 1) * sizeof(WCHAR));
+		pchText = (char *)NP2HeapAlloc((length + 1) * sizeof(WCHAR));
 		SciCall_GetText(NP2HeapSize(pchText), pchText);
 
 		WCHAR *pwchText = (WCHAR *)NP2HeapAlloc((length + 1) * sizeof(WCHAR));
 		const int cbwText = MultiByteToWideChar(cpSource, 0, pchText, (int)length, pwchText, (int)(NP2HeapSize(pwchText) / sizeof(WCHAR)));
-		const int cbText = WideCharToMultiByte(cpDest, 0, pwchText, cbwText, pchText, (int)(NP2HeapSize(pchText)), NULL, NULL);
-
-		SciCall_Cancel();
-		SciCall_SetUndoCollection(FALSE);
-		SciCall_EmptyUndoBuffer();
-		SciCall_ClearAll();
-		SciCall_ClearMarker();
-		SciCall_SetCodePage(cpDest);
-		SciCall_AddText(cbText, pchText);
-		SciCall_EmptyUndoBuffer();
-		SciCall_SetUndoCollection(TRUE);
-		SciCall_GotoPos(0);
-		SciCall_ChooseCaretX();
-
-		NP2HeapFree(pchText);
+		cbText = WideCharToMultiByte(cpDest, 0, pwchText, cbwText, pchText, (int)(NP2HeapSize(pchText)), NULL, NULL);
 		NP2HeapFree(pwchText);
 	}
 
+	bLockedForEditing = FALSE;
+	SciCall_SetReadOnly(FALSE);
+	SciCall_Cancel();
+	SciCall_SetUndoCollection(FALSE);
+	SciCall_EmptyUndoBuffer();
+	SciCall_ClearAll();
+	SciCall_ClearMarker();
+	SciCall_SetCodePage(cpDest);
+
+	if (cbText > 0) {
+		SciCall_SetModEventMask(SC_MOD_NONE);
+		SciCall_AddText(cbText, pchText);
+		SciCall_SetModEventMask(SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT);
+	}
+	if (pchText != NULL) {
+		NP2HeapFree(pchText);
+	}
+
+	SciCall_EmptyUndoBuffer();
+	SciCall_SetUndoCollection(TRUE);
+	SciCall_GotoPos(0);
+	SciCall_ChooseCaretX();
+	if (length == 0 && bSetSavePoint) {
+		SciCall_SetSavePoint();
+	}
 	return TRUE;
 }
+
+#if defined(_WIN64)
+void EditConvertToLargeMode(void) {
+	int options = SciCall_GetDocumentOptions();
+	if (options & SC_DOCUMENTOPTION_TEXT_LARGE) {
+		return;
+	}
+
+	options |= SC_DOCUMENTOPTION_TEXT_LARGE;
+	const Sci_Position length = SciCall_GetLength();
+	HANDLE pdoc = SciCall_CreateDocument(length + 1, options);
+	char *pchText = NULL;
+	if (length > 0) {
+		pchText = (char *)NP2HeapAlloc(length + 1);
+		SciCall_GetText(NP2HeapSize(pchText), pchText);
+	}
+
+	bLockedForEditing = FALSE;
+	SciCall_SetReadOnly(FALSE);
+	SciCall_Cancel();
+	SciCall_SetUndoCollection(FALSE);
+	SciCall_EmptyUndoBuffer();
+	SciCall_ClearAll();
+	SciCall_ClearMarker();
+
+	EditReplaceDocument(pdoc);
+	if (length > 0) {
+		SciCall_SetModEventMask(SC_MOD_NONE);
+		SciCall_AddText(length, pchText);
+		SciCall_SetModEventMask(SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT);
+	}
+	if (pchText != NULL) {
+		NP2HeapFree(pchText);
+	}
+
+	SciCall_SetUndoCollection(TRUE);
+	SciCall_EmptyUndoBuffer();
+	SciCall_GotoPos(0);
+	SciCall_ChooseCaretX();
+	SciCall_SetSavePoint();
+
+	Style_SetLexer(pLexCurrent, TRUE);
+	bLargeFileMode = TRUE;
+}
+#endif
 
 //=============================================================================
 //
@@ -308,6 +381,23 @@ BOOL EditCopyAppend(HWND hwnd) {
 	return succ;
 }
 
+// https://docs.microsoft.com/en-us/cpp/intrinsics/popcnt16-popcnt-popcnt64
+// use __popcnt() or _mm_popcnt_u32() require testing __cpuid():
+/*
+* int cpuInfo[4];
+* __cpuid(cpuInfo, 0x00000001);
+* const BOOL cpuPOPCNT = cpuInfo[2] & (1 << 23);
+*/
+// https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+// Bit Twiddling Hacks copyright 1997-2005 Sean Eron Anderson
+#if !defined(__clang__) && !defined(__GNUC__)
+static inline unsigned int bth_popcount(unsigned int v) {
+	v = v - ((v >> 1) & 0x55555555U);
+	v = (v & 0x33333333U) + ((v >> 2) & 0x33333333U);
+	return (((v + (v >> 4)) & 0x0F0F0F0FU) * 0x01010101U) >> 24;
+}
+#endif
+
 //=============================================================================
 //
 // EditDetectEOLMode()
@@ -329,7 +419,6 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	StopWatch_Start(watch);
 #endif
 
-#if 1
 	// tools/GenerateTable.py
 	static const uint8_t eol_table[16] = {
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 0, // 00 - 0F
@@ -337,10 +426,115 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 
 	const uint8_t *ptr = (const uint8_t *)lpData;
 	const uint8_t * const end = ptr + cbData;
+
+#if NP2_USE_AVX2
+	const __m256i vectCR = _mm256_set1_epi8('\r');
+	const __m256i vectLF = _mm256_set1_epi8('\n');
+	while (ptr + sizeof(__m256i) <= end) {
+		// unaligned loading: line starts at random position.
+		const __m256i chunk = _mm256_loadu_si256((__m256i *)ptr);
+		uint32_t maskCR = _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, vectCR));
+		const uint32_t maskLF = _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, vectLF));
+		_mm256_zeroupper();
+		const uint8_t *const next = ptr + sizeof(__m256i);
+		if (maskCR) {
+			maskCR |= maskLF; // CR alone is rare
+			do {
+#if defined(__clang__) || defined(__GNUC__)
+				const int trailing = __builtin_ctz(maskCR);
+#else
+				const DWORD trailing = _tzcnt_u32(maskCR);
+#endif
+				maskCR >>= trailing;
+				//! shift 32 bit is undefined behavior: (0x80000000 >> 32) == 0x80000000.
+				maskCR >>= 1;
+				ptr += trailing;
+
+				const uint8_t ch = *ptr++;
+				switch (ch) {
+				case '\n':
+					++linesCount[SC_EOL_LF];
+					break;
+				case '\r':
+					if (*ptr == '\n') {
+						++ptr;
+						maskCR >>= 1;
+						++linesCount[SC_EOL_CRLF];
+					} else {
+						++linesCount[SC_EOL_CR];
+					}
+					break;
+				}
+			} while (maskCR);
+			ptr = (ptr < next) ? next : ptr;
+		} else if (maskLF) {
+#if defined(__clang__) || defined(__GNUC__)
+			linesCount[SC_EOL_LF] += __builtin_popcount(maskLF);
+#else
+			linesCount[SC_EOL_LF] += _mm_popcnt_u32(maskLF);
+#endif
+			ptr = next;
+		} else {
+			ptr = next;
+		}
+	}
+	// end NP2_USE_AVX2
+#elif NP2_USE_SSE2
+	const __m128i vectCR = _mm_set1_epi8('\r');
+	const __m128i vectLF = _mm_set1_epi8('\n');
+	while (ptr + sizeof(__m128i) <= end) {
+		// unaligned loading: line starts at random position.
+		const __m128i chunk = _mm_loadu_si128((__m128i *)ptr);
+		uint32_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectCR));
+		const uint32_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectLF));
+		const uint8_t *const next = ptr + sizeof(__m128i);
+		if (maskCR) {
+			maskCR |= maskLF; // CR alone is rare
+			do {
+#if defined(__clang__) || defined(__GNUC__)
+				const int trailing = __builtin_ctz(maskCR);
+#else
+				DWORD trailing;
+				_BitScanForward(&trailing, maskCR);
+#endif
+				maskCR >>= trailing + 1;
+				ptr += trailing;
+
+				const uint8_t ch = *ptr++;
+				switch (ch) {
+				case '\n':
+					++linesCount[SC_EOL_LF];
+					break;
+				case '\r':
+					if (*ptr == '\n') {
+						++ptr;
+						maskCR >>= 1;
+						++linesCount[SC_EOL_CRLF];
+					} else {
+						++linesCount[SC_EOL_CR];
+					}
+					break;
+				}
+			} while (maskCR);
+			ptr = (ptr < next) ? next : ptr;
+		} else if (maskLF) {
+#if defined(__clang__) || defined(__GNUC__)
+			linesCount[SC_EOL_LF] += __builtin_popcount(maskLF);
+#else
+			linesCount[SC_EOL_LF] += bth_popcount(maskLF);
+#endif
+			ptr = next;
+		} else {
+			ptr = next;
+		}
+	}
+	// end NP2_USE_SSE2
+#endif
+
 	do {
 		// skip to line end
-		UINT ch;
-		UINT type = 0;
+		uint8_t ch;
+		uint8_t type = 0;
 		while (ptr < end && ((ch = *ptr++) > '\r' || (type = eol_table[ch]) == 0)) {
 			// nop
 		}
@@ -358,7 +552,6 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 			break;
 		}
 	} while (ptr < end);
-#endif
 
 	const Sci_Line linesMax = max_pos(max_pos(linesCount[0], linesCount[1]), linesCount[2]);
 	if (linesMax != linesCount[iEOLMode]) {
@@ -373,7 +566,18 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 
 #if 0
 	StopWatch_Stop(watch);
-	StopWatch_Show(&watch, L"EOL time");
+	StopWatch_ShowLog(&watch, "EOL time");
+#if defined(_WIN64)
+	printf("%s CR+LF:%" PRId64 ", LF: %" PRId64 ", CR: %" PRId64 "\n", __func__, linesCount[SC_EOL_CRLF], linesCount[SC_EOL_LF], linesCount[SC_EOL_CR]);
+#else
+	printf("%s CR+LF:%d, LF: %d, CR: %d\n", __func__, linesCount[SC_EOL_CRLF], linesCount[SC_EOL_LF], linesCount[SC_EOL_CR]);
+#endif
+#endif
+
+#if defined(_WIN64)
+	if (cbData + linesCount[0] + linesCount[1] + linesCount[2] >= MAX_NON_UTF8_SIZE) {
+		bLargeFileMode = TRUE;
+	}
 #endif
 
 	status->iEOLMode = iEOLMode;
@@ -415,15 +619,16 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 
 	// display real path name
 	if (IsVistaAndAbove()) {
-		// since since Windows Vista
-		typedef DWORD (WINAPI *GetFinalPathNameByHandleSig)(HANDLE hFile, LPWSTR lpszFilePath, DWORD cchFilePath, DWORD dwFlags);
 		WCHAR path[MAX_PATH] = L"";
+		// since Windows Vista
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
-		GetFinalPathNameByHandleSig pfnGetFinalPathNameByHandle = GetFinalPathNameByHandleW;
+		if (GetFinalPathNameByHandleW(hFile, path, MAX_PATH, FILE_NAME_OPENED))
 #else
+		typedef DWORD (WINAPI *GetFinalPathNameByHandleSig)(HANDLE hFile, LPWSTR lpszFilePath, DWORD cchFilePath, DWORD dwFlags);
 		GetFinalPathNameByHandleSig pfnGetFinalPathNameByHandle = (GetFinalPathNameByHandleSig)GetProcAddress(GetModuleHandle(L"kernel32.dll"), "GetFinalPathNameByHandleW");
+		if (pfnGetFinalPathNameByHandle && pfnGetFinalPathNameByHandle(hFile, path, MAX_PATH, FILE_NAME_OPENED))
 #endif
-		if (pfnGetFinalPathNameByHandle && pfnGetFinalPathNameByHandle(hFile, path, MAX_PATH, FILE_NAME_OPENED)) {
+		{
 			if (StrNEqual(path, L"\\\\?\\", CSTRLEN(L"\\\\?\\"))) {
 				WCHAR *p = path + 4;
 				if (StrNEqual(p, L"UNC\\", CSTRLEN(L"UNC\\"))) {
@@ -438,19 +643,33 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 	// Check if a warning message should be displayed for large files
 #if defined(_WIN64)
 	// less than 1/3 available physical memory:
-	//     1. the buffers we allocated below, depends on encoding.
-	//     2. Scintilla's content buffer and style buffer, see CellBuffer class.
+	//     1. The buffers we allocated below or when saving file, depends on encoding.
+	//     2. Scintilla's content buffer and style buffer, see CellBuffer class. The style buffer can be disabled by using SCLEX_NULL and SC_DOCUMENTOPTION_STYLES_NONE.
+	//     3. Extra memory when moving gaps on editing, it may requires more than 2/3 physical memory.
 	// large file TODO:
-	// [ ] [> 2 GiB] use SC_DOCUMENTOPTION_TEXT_LARGE somewhere or hard-coded in EditModel::EditModel().
+	// [x] [> 2 GiB] use SC_DOCUMENTOPTION_TEXT_LARGE somewhere or hard-coded in EditModel::EditModel().
 	// [ ] [> 4 GiB] use SetFilePointerEx() and ReadFile()/WriteFile() to read/write file.
-	// [ ] [> 2 GiB] fix encoding conversion with MultiByteToWideChar() and WideCharToMultiByte().
+	// [-] [> 2 GiB] fix encoding conversion with MultiByteToWideChar() and WideCharToMultiByte().
 	// [x] [> 4 GiB] fix sprintf(), wsprintf() for Sci_Position and Sci_Line, currently UINT is used.
 	// [x] [> 2 GiB] ensure Sci_PositionCR is same as Sci_Position, see Sci_Position.h
-	const LONGLONG maxFileSize = INT64_C(0x80000000);
+	LONGLONG maxFileSize = INT64_C(0x100000000);
 #else
 	// 2 GiB: ptrdiff_t / Sci_Position used in Scintilla
-	const LONGLONG maxFileSize = INT64_C(0x80000000);
+	LONGLONG maxFileSize = INT64_C(0x80000000);
 #endif
+
+	MEMORYSTATUSEX statex;
+	ULONGLONG maxMem = 0;
+	statex.dwLength = sizeof(statex);
+	if (GlobalMemoryStatusEx(&statex)) {
+		maxMem = statex.ullTotalPhys/3U;
+		if (maxMem < (ULONGLONG)maxFileSize) {
+			maxFileSize = (LONGLONG)maxMem;
+		}
+	} else {
+		dwLastIOError = GetLastError();
+	}
+
 	if (fileSize.QuadPart > maxFileSize) {
 		CloseHandle(hFile);
 		status->bFileTooBig = TRUE;
@@ -458,9 +677,15 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 		iWeakSrcEncoding = -1;
 		WCHAR tchDocSize[32];
 		WCHAR tchMaxSize[32];
+		WCHAR tchDocBytes[32];
+		WCHAR tchMaxBytes[32];
 		StrFormatByteSize(fileSize.QuadPart, tchDocSize, COUNTOF(tchDocSize));
 		StrFormatByteSize(maxFileSize, tchMaxSize, COUNTOF(tchMaxSize));
-		MsgBox(MBWARN, IDS_WARNLOADBIGFILE, pszFile, tchDocSize, tchMaxSize);
+		_i64tow(fileSize.QuadPart, tchDocBytes, 10);
+		_i64tow(maxFileSize, tchMaxBytes, 10);
+		FormatNumberStr(tchDocBytes);
+		FormatNumberStr(tchMaxBytes);
+		MsgBox(MBWARN, IDS_WARNLOADBIGFILE, pszFile, tchDocSize, tchDocBytes, tchMaxSize, tchMaxBytes);
 		return FALSE;
 	}
 
@@ -518,9 +743,9 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 		SciCall_SetCodePage((mEncoding[iEncoding].uFlags & NCP_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
 		EditSetEmptyText();
 		SciCall_SetEOLMode(status->iEOLMode);
-	} else if ((iSrcEncoding == CPI_UNICODE || iSrcEncoding == CPI_UNICODEBE) // reload as UTF-16
+	} else if (cbData < MAX_NON_UTF8_SIZE && ((iSrcEncoding == CPI_UNICODE || iSrcEncoding == CPI_UNICODEBE) // reload as UTF-16
 		|| (!bSkipEncodingDetection && iSrcEncoding == -1 && !utf8Sig && IsUnicode(lpData, cbData, &bBOM, &bReverse))
-		) {
+		)) {
 		if (iSrcEncoding == CPI_UNICODE) {
 			bBOM = (lpData[0] == '\xFF' && lpData[1] == '\xFE');
 			bReverse = FALSE;
@@ -543,7 +768,8 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 			}
 		}
 
-		char *lpDataUTF8 = (char *)NP2HeapAlloc(cbData * kMaxMultiByteCount + 2);
+		// cbData/2 => WCHAR, WCHAR*3 => UTF-8
+		char *lpDataUTF8 = (char *)NP2HeapAlloc((cbData + 1)*sizeof(WCHAR));
 		cbData = WideCharToMultiByte(CP_UTF8, 0, (bBOM ? (LPWSTR)lpData + 1 : (LPWSTR)lpData),
 									 (int)(bBOM ? (cbData / sizeof(WCHAR)) : (cbData / sizeof(WCHAR)) + 1),
 									 lpDataUTF8, (int)NP2HeapSize(lpDataUTF8), NULL, NULL);
@@ -553,10 +779,10 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 			status->bUnicodeErr = TRUE;
 		}
 
-		SciCall_SetCodePage(SC_CP_UTF8);
-		FileVars_Init(lpDataUTF8, cbData - 1, &fvCurFile);
-		EditSetNewText(lpDataUTF8, cbData - 1);
 		EditDetectEOLMode(lpDataUTF8, cbData - 1, status);
+		FileVars_Init(lpDataUTF8, cbData - 1, &fvCurFile);
+		SciCall_SetCodePage(SC_CP_UTF8);
+		EditSetNewText(lpDataUTF8, cbData - 1);
 		NP2HeapFree(lpDataUTF8);
 	} else {
 		FileVars_Init(lpData, cbData, &fvCurFile);
@@ -565,18 +791,18 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 		}
 		if ((iSrcEncoding == CPI_UTF8 || iSrcEncoding == CPI_UTF8SIGN) // reload as UTF-8 or UTF-8 filevar
 			|| ((iSrcEncoding == -1) && ((bLoadANSIasUTF8 && !bPreferOEM) // load ANSI as UTF-8
-				|| (!bSkipEncodingDetection && (utf8Sig || IsUTF8(lpData, cbData)))
+				|| ((!bSkipEncodingDetection || cbData >= MAX_NON_UTF8_SIZE) && (utf8Sig || IsUTF8(lpData, cbData)))
 			))
 		) {
 			SciCall_SetCodePage(SC_CP_UTF8);
 			if (utf8Sig) {
+				EditDetectEOLMode(lpData + 3, cbData - 3, status);
 				EditSetNewText(lpData + 3, cbData - 3);
 				iEncoding = CPI_UTF8SIGN;
-				EditDetectEOLMode(lpData + 3, cbData - 3, status);
 			} else {
+				EditDetectEOLMode(lpData, cbData, status);
 				EditSetNewText(lpData, cbData);
 				iEncoding = CPI_UTF8;
-				EditDetectEOLMode(lpData, cbData, status);
 			}
 		} else {
 			iEncoding = iSrcEncoding;
@@ -593,7 +819,9 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 			}
 
 			const UINT uCodePage = mEncoding[iEncoding].uCodePage;
-			if ((mEncoding[iEncoding].uFlags & NCP_8BIT) || ((mEncoding[iEncoding].uFlags & NCP_7BIT) && IsUTF7(lpData, cbData))) {
+			if (cbData < MAX_NON_UTF8_SIZE && ((mEncoding[iEncoding].uFlags & NCP_8BIT)
+				|| ((mEncoding[iEncoding].uFlags & NCP_7BIT) && IsUTF7(lpData, cbData))
+			)) {
 				LPWSTR lpDataWide = (LPWSTR)NP2HeapAlloc(cbData * sizeof(WCHAR) + 16);
 				const int cbDataWide = MultiByteToWideChar(uCodePage, 0, lpData, cbData, lpDataWide, (int)(NP2HeapSize(lpDataWide) / sizeof(WCHAR)));
 				NP2HeapFree(lpData);
@@ -601,14 +829,14 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 				cbData = WideCharToMultiByte(CP_UTF8, 0, lpDataWide, cbDataWide, lpData, (int)NP2HeapSize(lpData), NULL, NULL);
 				NP2HeapFree(lpDataWide);
 
+				EditDetectEOLMode(lpData, cbData, status);
 				SciCall_SetCodePage(SC_CP_UTF8);
 				EditSetNewText(lpData, cbData);
-				EditDetectEOLMode(lpData, cbData, status);
 			} else {
+				EditDetectEOLMode(lpData, cbData, status);
 				SciCall_SetCodePage(iDefaultCodePage);
 				EditSetNewText(lpData, cbData);
 				iEncoding = CPI_DEFAULT;
-				EditDetectEOLMode(lpData, cbData, status);
 			}
 		}
 	}
@@ -667,16 +895,29 @@ BOOL EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, EditFileIOStatus *
 	BOOL bWriteSuccess;
 	// get text
 	DWORD cbData = (DWORD)SciCall_GetLength();
-	char *lpData = (char *)NP2HeapAlloc(cbData + 1);
-	SciCall_GetText(NP2HeapSize(lpData), lpData);
+	char *lpData = NULL;
 
 	if (cbData == 0) {
 		bWriteSuccess = SetEndOfFile(hFile);
 		dwLastIOError = GetLastError();
 	} else {
 		DWORD dwBytesWritten;
-		const int iEncoding = status->iEncoding;
-		const UINT uFlags = mEncoding[iEncoding].uFlags;
+		int iEncoding = status->iEncoding;
+		UINT uFlags = mEncoding[iEncoding].uFlags;
+		if (cbData >= MAX_NON_UTF8_SIZE) {
+			// save in UTF-8 or ANSI
+			if (!(uFlags & (NCP_DEFAULT | NCP_UTF8))) {
+				if (uFlags & NCP_UNICODE_BOM) {
+					iEncoding = CPI_UTF8SIGN;
+				} else {
+					iEncoding = CPI_UTF8;
+				}
+				uFlags = mEncoding[iEncoding].uFlags;
+			}
+		}
+
+		lpData = (char *)NP2HeapAlloc(cbData + 1);
+		SciCall_GetText(NP2HeapSize(lpData), lpData);
 		// FIXME: move checks in front of disk file access
 		/*if ((uFlags & NCP_UNICODE) == 0 && (uFlags & NCP_UTF8_SIGN) == 0) {
 				BOOL bEncodingMismatch = TRUE;
@@ -736,7 +977,7 @@ BOOL EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, EditFileIOStatus *
 			const UINT uCodePage = mEncoding[iEncoding].uCodePage;
 			const BOOL zeroFlags = IsZeroFlagsCodePage(uCodePage);
 
-			LPWSTR lpDataWide = (LPWSTR)NP2HeapAlloc(cbData * 2 + 16);
+			LPWSTR lpDataWide = (LPWSTR)NP2HeapAlloc(cbData * sizeof(WCHAR) + 16);
 			const int cbDataWide = MultiByteToWideChar(CP_UTF8, 0, lpData, cbData, lpDataWide, (int)(NP2HeapSize(lpDataWide) / sizeof(WCHAR)));
 
 			if (zeroFlags) {
@@ -772,9 +1013,11 @@ BOOL EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, EditFileIOStatus *
 		}
 	}
 
-	NP2HeapFree(lpData);
-	CloseHandle(hFile);
+	if (lpData != NULL) {
+		NP2HeapFree(lpData);
+	}
 
+	CloseHandle(hFile);
 	if (bWriteSuccess) {
 		if (!bSaveCopy) {
 			SciCall_SetSavePoint();
@@ -3992,7 +4235,25 @@ void EditEnsureSelectionVisible(void) {
 }
 
 void EditEnsureConsistentLineEndings(void) {
-	SciCall_ConvertEOLs(SciCall_GetEOLMode());
+	const int iEOLMode = SciCall_GetEOLMode();
+	if (iEOLMode == SC_EOL_CRLF) {
+#if defined(_WIN64)
+		const int options = SciCall_GetDocumentOptions();
+		if (!(options & SC_DOCUMENTOPTION_TEXT_LARGE)) {
+			const Sci_Position dwLength = SciCall_GetLength() + SciCall_GetLineCount();
+			if (dwLength >= INT_MAX) {
+				return;
+			}
+		}
+#else
+		const DWORD dwLength = (DWORD)SciCall_GetLength() + (DWORD)SciCall_GetLineCount();
+		if (dwLength >= INT_MAX) {
+			return;
+		}
+#endif
+	}
+
+	SciCall_ConvertEOLs(iEOLMode);
 	EditFixPositions();
 }
 

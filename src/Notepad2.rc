@@ -81,8 +81,14 @@ BEGIN
 		MENUITEM "Save &As...\tF6",					IDM_FILE_SAVEAS
 		MENUITEM "Save Cop&y...\tCtrl+F6",			IDM_FILE_SAVECOPY
 		MENUITEM SEPARATOR
-		MENUITEM "&Read Only",						IDM_FILE_READONLY
-		MENUITEM "Lo&ck For Editing",				IDM_FILE_LOCK_EDITING
+		POPUP "File &Mode"
+		BEGIN
+			MENUITEM "&Read Only",					IDM_FILE_READONLY
+			MENUITEM "Lo&ck For Editing",			IDM_FILE_LOCK_EDITING
+#if defined(_WIN64)
+			MENUITEM "&Large File Mode",			IDM_FILE_LARGE_FILE_MODE
+#endif
+		END
 		MENUITEM "Re&vert\tF5",						IDM_FILE_REVERT
 		POPUP "Reloa&d"
 		BEGIN
@@ -92,6 +98,9 @@ BEGIN
 			MENUITEM SEPARATOR
 			MENUITEM "&No File Variables\tAlt+F8",	CMD_RELOADNOFILEVARS
 			MENUITEM "&Default\tCtrl+Alt+F",		CMD_RECODEDEFAULT
+#if defined(_WIN64)
+			MENUITEM "&Large File Mode",			IDM_FILE_LARGE_FILE_MODE_RELOAD
+#endif
 			MENUITEM SEPARATOR
 			MENUITEM "&With Encoding...\tF8",		IDM_RECODE_SELECT
 		END
@@ -1032,7 +1041,7 @@ BEGIN
     LTEXT           "&Default encoding:",IDC_STATIC,7,7,195,8
     EDITTEXT        IDC_ENCODING_LABEL,7,20,195,14,ES_READONLY | ES_AUTOHSCROLL | WS_TABSTOP
     CONTROL         "<a>Click here to select default encoding.</a>",IDC_ENCODING_LINK,"SysLink",WS_TABSTOP,7,38,195,10
-    AUTOCHECKBOX    "Skip automatic &Unicode detection.",IDC_NOUNICODEDETECTION,7,52,195,10,WS_TABSTOP
+    AUTOCHECKBOX    "Skip statistical &Unicode (UTF-16) detection.",IDC_NOUNICODEDETECTION,7,52,195,10,WS_TABSTOP
     AUTOCHECKBOX    "Open &ANSI (unknown encoding) files in UTF-8 mode.",IDC_ANSIASUTF8,7,62,195,10,WS_TABSTOP
     AUTOCHECKBOX    "Open ANSI Art (*.&nfo, *.diz) files in DOS-437 mode.",IDC_NFOASOEM,7,72,195,10,WS_TABSTOP
     AUTOCHECKBOX    "Don't parse encoding &tags.",IDC_ENCODINGFROMFILEVARS,7,82,195,10,WS_TABSTOP
@@ -1855,7 +1864,7 @@ END
 STRINGTABLE
 BEGIN
     IDS_ERR_UNICODE2        "Certain characters in the current text are not supported by the selected encoding, and may be replaced by default placeholders when saving. It's recommended to choose another file encoding. Continue?"
-    IDS_WARNLOADBIGFILE     "Loading file: %s\n\nThis file is too large (%s) to open.\nCurrently maximum supported file size is %s."
+    IDS_WARNLOADBIGFILE     "Loading file: %s\n\nThis file is too large (%s, %s bytes) to open.\nCurrently maximum loadable file size is %s (%s bytes)."
     //IDS_ERR_DROP            "Only one file can be dropped at the same time!"
     IDS_ASK_SAVE            "Save changes to ""%s""?"
     IDS_ASK_REVERT          "Revert file to last saved state? Your changes will be lost!"

@@ -70,6 +70,8 @@ NP2_inline void* align_ptr(const void *ptr) {
 	return align_ptr_ex(ptr, NP2DefaultPointerAlignment);
 }
 
+#define unaligned_ptr(ptr, size)	(((uintptr_t)(ptr)) & ((size) - 1))
+
 NP2_inline unsigned int bswap32(unsigned int x) {
 	return (x << 24) | ((x << 8) & 0xff0000) | ((x >> 8) & 0xff00) | (x >> 24);
 }
@@ -173,8 +175,7 @@ typedef struct StopWatch {
 
 NP2_inline double StopWatch_Get(const StopWatch *watch) {
 	const LONGLONG diff = watch->end.QuadPart - watch->begin.QuadPart;
-	const double freq = (double)(watch->freq.QuadPart);
-	return (diff / freq) * 1000;
+	return (diff * 1000) / (double)(watch->freq.QuadPart);
 }
 
 void StopWatch_Show(const StopWatch *watch, LPCWSTR msg);
@@ -428,9 +429,9 @@ static inline void DString_Free(DString *s) {
 	}
 }
 
-void DString_GetWindowText(DString *s, HWND hwnd);
-NP2_inline void DString_GetDlgItemText(DString *s, HWND hwndDlg, int nCtlId) {
-	DString_GetWindowText(s, GetDlgItem(hwndDlg, nCtlId));
+int DString_GetWindowText(DString *s, HWND hwnd);
+NP2_inline int DString_GetDlgItemText(DString *s, HWND hwndDlg, int nCtlId) {
+	return DString_GetWindowText(s, GetDlgItem(hwndDlg, nCtlId));
 }
 
 NP2_inline BOOL KeyboardIsKeyDown(int key) {
@@ -596,8 +597,8 @@ void	FormatNumberStr(LPWSTR lpNumberStr);
 BOOL	SetDlgItemIntEx(HWND hwnd, int nIdItem, UINT uValue);
 
 UINT	GetDlgItemTextA2W(UINT uCP, HWND hDlg, int nIDDlgItem, LPSTR lpString, int nMaxCount);
-UINT	SetDlgItemTextA2W(UINT uCP, HWND hDlg, int nIDDlgItem, LPCSTR lpString);
-LRESULT ComboBox_AddStringA2W(UINT uCP, HWND hwnd, LPCSTR lpString);
+void	SetDlgItemTextA2W(UINT uCP, HWND hDlg, int nIDDlgItem, LPCSTR lpString);
+void ComboBox_AddStringA2W(UINT uCP, HWND hwnd, LPCSTR lpString);
 
 UINT CodePageFromCharSet(UINT uCharSet);
 
