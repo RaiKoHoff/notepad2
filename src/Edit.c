@@ -391,11 +391,19 @@ BOOL EditCopyAppend(HWND hwnd) {
 // https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
 // Bit Twiddling Hacks copyright 1997-2005 Sean Eron Anderson
 #if !defined(__clang__) && !defined(__GNUC__)
-static inline unsigned int bth_popcount(unsigned int v) {
+static __forceinline unsigned int bth_popcount(unsigned int v) {
 	v = v - ((v >> 1) & 0x55555555U);
 	v = (v & 0x33333333U) + ((v >> 2) & 0x33333333U);
 	return (((v + (v >> 4)) & 0x0F0F0F0FU) * 0x01010101U) >> 24;
 }
+#endif
+#if defined(__clang__) || defined(__GNUC__)
+#define np2_popcount	__builtin_popcount
+#elif NP2_USE_AVX2
+#define np2_popcount	_mm_popcnt_u32
+#else
+//#define np2_popcount	__popcnt
+#define np2_popcount	bth_popcount
 #endif
 
 //=============================================================================
@@ -413,7 +421,9 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	/* '\r' and '\n' is not reused (e.g. as trailing byte in DBCS) by any known encoding,
 	it's safe to check whole data byte by byte.*/
 
-	Sci_Line linesCount[3] = { 0, 0, 0 };
+	Sci_Line lineCountCRLF = 0;
+	Sci_Line lineCountCR = 0;
+	Sci_Line lineCountLF = 0;
 #if 0
 	StopWatch watch;
 	StopWatch_Start(watch);
@@ -425,109 +435,103 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	};
 
 	const uint8_t *ptr = (const uint8_t *)lpData;
+	// TODO: remove implicitly NULL-terminated requirement for *ptr == '\n'
 	const uint8_t * const end = ptr + cbData;
 
 #if NP2_USE_AVX2
+	#define LAST_CR_MASK	(1U << (sizeof(__m256i) - 1))
 	const __m256i vectCR = _mm256_set1_epi8('\r');
 	const __m256i vectLF = _mm256_set1_epi8('\n');
 	while (ptr + sizeof(__m256i) <= end) {
 		// unaligned loading: line starts at random position.
 		const __m256i chunk = _mm256_loadu_si256((__m256i *)ptr);
 		uint32_t maskCR = _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, vectCR));
-		const uint32_t maskLF = _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, vectLF));
+		uint32_t maskLF = _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, vectLF));
 		_mm256_zeroupper();
-		const uint8_t *const next = ptr + sizeof(__m256i);
+		ptr += sizeof(__m256i);
 		if (maskCR) {
-			maskCR |= maskLF; // CR alone is rare
-			do {
-#if defined(__clang__) || defined(__GNUC__)
-				const int trailing = __builtin_ctz(maskCR);
-#else
-				const DWORD trailing = _tzcnt_u32(maskCR);
-#endif
-				maskCR >>= trailing;
-				//! shift 32 bit is undefined behavior: (0x80000000 >> 32) == 0x80000000.
-				maskCR >>= 1;
-				ptr += trailing;
-
-				const uint8_t ch = *ptr++;
-				switch (ch) {
-				case '\n':
-					++linesCount[SC_EOL_LF];
-					break;
-				case '\r':
-					if (*ptr == '\n') {
-						++ptr;
-						maskCR >>= 1;
-						++linesCount[SC_EOL_CRLF];
-					} else {
-						++linesCount[SC_EOL_CR];
-					}
-					break;
+			if (maskCR & LAST_CR_MASK) {
+				maskCR &= LAST_CR_MASK - 1;
+				if (*ptr == '\n') {
+					// CR+LF across boundary
+					++ptr;
+					++lineCountCRLF;
+				} else {
+					// clear highest bit (last CR) to avoid using following code:
+					// maskCR = (maskCR_LF ^ maskLF) | (maskCR & LAST_CR_MASK);
+					++lineCountCR;
 				}
-			} while (maskCR);
-			ptr = (ptr < next) ? next : ptr;
-		} else if (maskLF) {
-#if defined(__clang__) || defined(__GNUC__)
-			linesCount[SC_EOL_LF] += __builtin_popcount(maskLF);
-#else
-			linesCount[SC_EOL_LF] += _mm_popcnt_u32(maskLF);
-#endif
-			ptr = next;
-		} else {
-			ptr = next;
+			}
+
+			// maskCR and maskLF never have some bit set. after shifting maskCR by 1 bit,
+			// the bits both set in maskCR and maskLF represents CR+LF;
+			// the bits only set in maskCR or maskLF represents individual CR or LF.
+			const uint32_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
+			const uint32_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
+			maskLF = maskCR_LF & maskLF; // LF alone
+			maskCR = maskCR_LF ^ maskLF; // CR alone
+			if (maskCRLF) {
+				lineCountCRLF += np2_popcount(maskCRLF);
+			}
+			if (maskCR) {
+				lineCountCR += np2_popcount(maskCR);
+			}
+		}
+		if (maskLF) {
+			lineCountLF += np2_popcount(maskLF);
 		}
 	}
+
+	#undef LAST_CR_MASK
 	// end NP2_USE_AVX2
 #elif NP2_USE_SSE2
+	#define LAST_CR_MASK	(1U << (2*sizeof(__m128i) - 1))
 	const __m128i vectCR = _mm_set1_epi8('\r');
 	const __m128i vectLF = _mm_set1_epi8('\n');
-	while (ptr + sizeof(__m128i) <= end) {
+	while (ptr + 2*sizeof(__m128i) <= end) {
 		// unaligned loading: line starts at random position.
-		const __m128i chunk = _mm_loadu_si128((__m128i *)ptr);
+		__m128i chunk = _mm_loadu_si128((__m128i *)ptr);
 		uint32_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectCR));
-		const uint32_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectLF));
-		const uint8_t *const next = ptr + sizeof(__m128i);
+		uint32_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectLF));
+		ptr += sizeof(__m128i);
+		chunk = _mm_loadu_si128((__m128i *)ptr);
+		maskCR |= _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectCR)) << sizeof(__m128i);
+		maskLF |= _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectLF)) << sizeof(__m128i);
+		ptr += sizeof(__m128i);
 		if (maskCR) {
-			maskCR |= maskLF; // CR alone is rare
-			do {
-#if defined(__clang__) || defined(__GNUC__)
-				const int trailing = __builtin_ctz(maskCR);
-#else
-				DWORD trailing;
-				_BitScanForward(&trailing, maskCR);
-#endif
-				maskCR >>= trailing + 1;
-				ptr += trailing;
-
-				const uint8_t ch = *ptr++;
-				switch (ch) {
-				case '\n':
-					++linesCount[SC_EOL_LF];
-					break;
-				case '\r':
-					if (*ptr == '\n') {
-						++ptr;
-						maskCR >>= 1;
-						++linesCount[SC_EOL_CRLF];
-					} else {
-						++linesCount[SC_EOL_CR];
-					}
-					break;
+			if (maskCR & LAST_CR_MASK) {
+				maskCR &= LAST_CR_MASK - 1;
+				if (*ptr == '\n') {
+					// CR+LF across boundary
+					++ptr;
+					++lineCountCRLF;
+				} else {
+					// clear highest bit (last CR) to avoid using following code:
+					// maskCR = (maskCR_LF ^ maskLF) | (maskCR & LAST_CR_MASK);
+					++lineCountCR;
 				}
-			} while (maskCR);
-			ptr = (ptr < next) ? next : ptr;
-		} else if (maskLF) {
-#if defined(__clang__) || defined(__GNUC__)
-			linesCount[SC_EOL_LF] += __builtin_popcount(maskLF);
-#else
-			linesCount[SC_EOL_LF] += bth_popcount(maskLF);
-#endif
-			ptr = next;
-		} else {
-			ptr = next;
+			}
+
+			// maskCR and maskLF never have some bit set. after shifting maskCR by 1 bit,
+			// the bits both set in maskCR and maskLF represents CR+LF;
+			// the bits only set in maskCR or maskLF represents individual CR or LF.
+			const uint32_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
+			const uint32_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
+			maskLF = maskCR_LF & maskLF; // LF alone
+			maskCR = maskCR_LF ^ maskLF; // CR alone
+			if (maskCRLF) {
+				lineCountCRLF += np2_popcount(maskCRLF);
+			}
+			if (maskCR) {
+				lineCountCR += np2_popcount(maskCR);
+			}
+		}
+		if (maskLF) {
+			lineCountLF += np2_popcount(maskLF);
 		}
 	}
+
+	#undef LAST_CR_MASK
 	// end NP2_USE_SSE2
 #endif
 
@@ -540,24 +544,26 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 		}
 		switch (type) {
 		case 1: //'\n'
-			++linesCount[SC_EOL_LF];
+			++lineCountLF;
 			break;
 		case 2: //'\r'
 			if (*ptr == '\n') {
 				++ptr;
-				++linesCount[SC_EOL_CRLF];
+				++lineCountCRLF;
 			} else {
-				++linesCount[SC_EOL_CR];
+				++lineCountCR;
 			}
 			break;
 		}
 	} while (ptr < end);
 
-	const Sci_Line linesMax = max_pos(max_pos(linesCount[0], linesCount[1]), linesCount[2]);
+	const Sci_Line linesMax = max_pos(max_pos(lineCountCRLF, lineCountCR), lineCountLF);
+	// values must kept in same order as SC_EOL_CRLF, SC_EOL_CR, SC_EOL_LF
+	const Sci_Line linesCount[3] = { lineCountCRLF, lineCountCR, lineCountLF };
 	if (linesMax != linesCount[iEOLMode]) {
-		if (linesMax == linesCount[SC_EOL_CRLF]) {
+		if (linesMax == lineCountCRLF) {
 			iEOLMode = SC_EOL_CRLF;
-		} else if (linesMax == linesCount[SC_EOL_LF]) {
+		} else if (linesMax == lineCountLF) {
 			iEOLMode = SC_EOL_LF;
 		} else {
 			iEOLMode = SC_EOL_CR;
@@ -568,23 +574,24 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	StopWatch_Stop(watch);
 	StopWatch_ShowLog(&watch, "EOL time");
 #if defined(_WIN64)
-	printf("%s CR+LF:%" PRId64 ", LF: %" PRId64 ", CR: %" PRId64 "\n", __func__, linesCount[SC_EOL_CRLF], linesCount[SC_EOL_LF], linesCount[SC_EOL_CR]);
+	printf("%s CR+LF:%" PRId64 ", LF: %" PRId64 ", CR: %" PRId64 "\n", __func__, lineCountCRLF, lineCountLF, lineCountCR);
 #else
-	printf("%s CR+LF:%d, LF: %d, CR: %d\n", __func__, linesCount[SC_EOL_CRLF], linesCount[SC_EOL_LF], linesCount[SC_EOL_CR]);
+	printf("%s CR+LF:%d, LF: %d, CR: %d\n", __func__, lineCountCRLF, lineCountLF, lineCountCR);
 #endif
 #endif
 
 #if defined(_WIN64)
-	if (cbData + linesCount[0] + linesCount[1] + linesCount[2] >= MAX_NON_UTF8_SIZE) {
+	// enable conversion between line endings
+	if (cbData + lineCountCRLF + lineCountCR + lineCountLF >= MAX_NON_UTF8_SIZE) {
 		bLargeFileMode = TRUE;
 	}
 #endif
 
 	status->iEOLMode = iEOLMode;
-	status->bInconsistent = ((!!linesCount[0]) + (!!linesCount[1]) + (!!linesCount[2])) > 1;
-	status->linesCount[0] = linesCount[SC_EOL_CRLF];
-	status->linesCount[1] = linesCount[SC_EOL_LF];
-	status->linesCount[2] = linesCount[SC_EOL_CR];
+	status->bInconsistent = ((!!lineCountCRLF) + (!!lineCountCR) + (!!lineCountLF)) > 1;
+	status->linesCount[0] = lineCountCRLF;
+	status->linesCount[1] = lineCountLF;
+	status->linesCount[2] = lineCountCR;
 }
 
 //=============================================================================
