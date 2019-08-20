@@ -56,6 +56,7 @@ public:
 	void operator=(LineMarkers &&) = delete;
 	~LineMarkers() override;
 	void Init() override;
+	bool IsActive() const noexcept override;
 	void InsertLine(Sci::Line line) override;
 	void RemoveLine(Sci::Line line) override;
 
@@ -79,6 +80,7 @@ public:
 	void operator=(LineLevels &&) = delete;
 	~LineLevels() override;
 	void Init() override;
+	bool IsActive() const noexcept override;
 	void InsertLine(Sci::Line line) override;
 	void RemoveLine(Sci::Line line) override;
 
@@ -99,11 +101,12 @@ public:
 	void operator=(LineState &&) = delete;
 	~LineState() override;
 	void Init() override;
+	bool IsActive() const noexcept override;
 	void InsertLine(Sci::Line line) override;
 	void RemoveLine(Sci::Line line) override;
 
-	int SetLineState(Sci::Line line, int state);
-	int GetLineState(Sci::Line line);
+	int SetLineState(Sci::Line line, int state, Sci::Line lines);
+	int GetLineState(Sci::Line line) const noexcept;
 	Sci::Line GetMaxLineState() const noexcept;
 };
 
@@ -118,6 +121,7 @@ public:
 	void operator=(LineAnnotation &&) = delete;
 	~LineAnnotation() override;
 	void Init() override;
+	bool IsActive() const noexcept override;
 	void InsertLine(Sci::Line line) override;
 	void RemoveLine(Sci::Line line) override;
 
@@ -146,6 +150,7 @@ public:
 	void operator=(LineTabstops &&) = delete;
 	~LineTabstops() override;
 	void Init() override;
+	bool IsActive() const noexcept override;
 	void InsertLine(Sci::Line line) override;
 	void RemoveLine(Sci::Line line) override;
 

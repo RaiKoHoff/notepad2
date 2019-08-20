@@ -87,6 +87,10 @@ void LineMarkers::Init() {
 	markers.DeleteAll();
 }
 
+bool LineMarkers::IsActive() const noexcept {
+	return markers.Length() != 0;
+}
+
 void LineMarkers::InsertLine(Sci::Line line) {
 	if (markers.Length()) {
 		markers.Insert(line, nullptr);
@@ -194,6 +198,10 @@ void LineLevels::Init() {
 	levels.DeleteAll();
 }
 
+bool LineLevels::IsActive() const noexcept {
+	return levels.Length() != 0;
+}
+
 void LineLevels::InsertLine(Sci::Line line) {
 	if (levels.Length()) {
 		const int level = (line < levels.Length()) ? levels[line] : SC_FOLDLEVELBASE;
@@ -215,6 +223,7 @@ void LineLevels::RemoveLine(Sci::Line line) {
 }
 
 void LineLevels::ExpandLevels(Sci::Line sizeNew) {
+	levels.ReAllocate(sizeNew + 1);
 	levels.InsertValue(levels.Length(), sizeNew - levels.Length(), SC_FOLDLEVELBASE);
 }
 
@@ -237,7 +246,7 @@ int LineLevels::SetLevel(Sci::Line line, int level, Sci::Line lines) {
 }
 
 int LineLevels::GetLevel(Sci::Line line) const noexcept {
-	if (levels.Length() && (line >= 0) && (line < levels.Length())) {
+	if ((line >= 0) && (line < levels.Length())) {
 		return levels[line];
 	} else {
 		return SC_FOLDLEVELBASE;
@@ -248,6 +257,10 @@ LineState::~LineState() = default;
 
 void LineState::Init() {
 	lineStates.DeleteAll();
+}
+
+bool LineState::IsActive() const noexcept {
+	return lineStates.Length() != 0;
 }
 
 void LineState::InsertLine(Sci::Line line) {
@@ -264,17 +277,18 @@ void LineState::RemoveLine(Sci::Line line) {
 	}
 }
 
-int LineState::SetLineState(Sci::Line line, int state) {
+int LineState::SetLineState(Sci::Line line, int state, Sci::Line lines) {
+	lineStates.ReAllocate(lines + 2);
 	lineStates.EnsureLength(line + 1);
 	const int stateOld = lineStates[line];
 	lineStates[line] = state;
 	return stateOld;
 }
 
-int LineState::GetLineState(Sci::Line line) {
-	if (line < 0)
+int LineState::GetLineState(Sci::Line line) const noexcept {
+	if (line < 0 || line >= lineStates.Length()) {
 		return 0;
-	lineStates.EnsureLength(line + 1);
+	}
 	return lineStates[line];
 }
 
@@ -313,6 +327,10 @@ LineAnnotation::~LineAnnotation() {
 
 void LineAnnotation::Init() {
 	ClearAll();
+}
+
+bool LineAnnotation::IsActive() const noexcept {
+	return annotations.Length() != 0;
 }
 
 void LineAnnotation::InsertLine(Sci::Line line) {
@@ -435,6 +453,10 @@ LineTabstops::~LineTabstops() {
 
 void LineTabstops::Init() {
 	tabstops.DeleteAll();
+}
+
+bool LineTabstops::IsActive() const noexcept {
+	return tabstops.Length() != 0;
 }
 
 void LineTabstops::InsertLine(Sci::Line line) {

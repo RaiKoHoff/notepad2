@@ -2139,8 +2139,9 @@ void Editor::ClearAll() {
 
 void Editor::ClearDocumentStyle() {
 	pdoc->decorations->DeleteLexerDecorations();
+	const Sci::Position endStyled = pdoc->GetEndStyled();
 	pdoc->StartStyling(0);
-	pdoc->SetStyleFor(pdoc->Length(), 0);
+	pdoc->SetStyleFor(endStyled, 0);
 	pcs->ShowAll();
 	SetAnnotationHeights(0, pdoc->LinesTotal());
 	pdoc->ClearLevels();
@@ -5935,6 +5936,10 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 			return 1;
 		else
 			return pdoc->LinesTotal();
+
+	case SCI_SETINITLINECOUNT:
+		pdoc->SetInitLineCount(wParam);
+		break;
 
 	case SCI_GETMODIFY:
 		return !pdoc->IsSavePoint();

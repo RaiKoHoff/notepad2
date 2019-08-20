@@ -106,7 +106,7 @@ extern BOOL bLargeFileMode;
 #endif
 extern FILEVARS fvCurFile;
 
-void EditSetNewText(LPCSTR lpstrText, DWORD cbText) {
+void EditSetNewText(LPCSTR lpstrText, DWORD cbText, Sci_Line lineCount) {
 	bFreezeAppTitle = TRUE;
 	bLockedForEditing = FALSE;
 
@@ -121,7 +121,8 @@ void EditSetNewText(LPCSTR lpstrText, DWORD cbText) {
 	FileVars_Apply(&fvCurFile);
 
 #if defined(_WIN64)
-	if (bLargeFileMode || cbText >= MAX_NON_UTF8_SIZE) {
+	// enable conversion between line endings
+	if (bLargeFileMode || cbText + lineCount >= MAX_NON_UTF8_SIZE) {
 		int options = SciCall_GetDocumentOptions();
 		if (!(options & SC_DOCUMENTOPTION_TEXT_LARGE)) {
 			options |= SC_DOCUMENTOPTION_TEXT_LARGE;
@@ -138,6 +139,7 @@ void EditSetNewText(LPCSTR lpstrText, DWORD cbText) {
 		StopWatch watch;
 		StopWatch_Start(watch);
 #endif
+		SciCall_SetInitLineCount(lineCount);
 		SciCall_AddText(cbText, lpstrText);
 #if 0
 		StopWatch_Stop(watch);
@@ -411,10 +413,7 @@ static __forceinline unsigned int bth_popcount(unsigned int v) {
 // EditDetectEOLMode()
 //
 void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
-	int iEOLMode = iLineEndings[iDefaultEOLMode];
-
 	if (cbData == 0) {
-		status->iEOLMode = iEOLMode;
 		return;
 	}
 
@@ -435,8 +434,8 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	};
 
 	const uint8_t *ptr = (const uint8_t *)lpData;
-	// TODO: remove implicitly NULL-terminated requirement for *ptr == '\n'
-	const uint8_t * const end = ptr + cbData;
+	// No NULL-terminated requirement for *ptr == '\n'
+	const uint8_t * const end = ptr + cbData - 1;
 
 #if NP2_USE_AVX2
 	#define LAST_CR_MASK	(1U << (sizeof(__m256i) - 1))
@@ -447,7 +446,7 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 		const __m256i chunk = _mm256_loadu_si256((__m256i *)ptr);
 		uint32_t maskCR = _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, vectCR));
 		uint32_t maskLF = _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, vectLF));
-		_mm256_zeroupper();
+
 		ptr += sizeof(__m256i);
 		if (maskCR) {
 			if (maskCR & LAST_CR_MASK) {
@@ -469,7 +468,7 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 			const uint32_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
 			const uint32_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
 			maskLF = maskCR_LF & maskLF; // LF alone
-			maskCR = maskCR_LF ^ maskLF; // CR alone
+			maskCR = maskCR_LF ^ maskLF; // CR alone (with one position offset)
 			if (maskCRLF) {
 				lineCountCRLF += np2_popcount(maskCRLF);
 			}
@@ -493,11 +492,11 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 		__m128i chunk = _mm_loadu_si128((__m128i *)ptr);
 		uint32_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectCR));
 		uint32_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectLF));
-		ptr += sizeof(__m128i);
-		chunk = _mm_loadu_si128((__m128i *)ptr);
-		maskCR |= _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectCR)) << sizeof(__m128i);
-		maskLF |= _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectLF)) << sizeof(__m128i);
-		ptr += sizeof(__m128i);
+		chunk = _mm_loadu_si128((__m128i *)(ptr + sizeof(__m128i)));
+		maskCR |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectCR))) << sizeof(__m128i);
+		maskLF |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectLF))) << sizeof(__m128i);
+
+		ptr += 2*sizeof(__m128i);
 		if (maskCR) {
 			if (maskCR & LAST_CR_MASK) {
 				maskCR &= LAST_CR_MASK - 1;
@@ -518,7 +517,7 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 			const uint32_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
 			const uint32_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
 			maskLF = maskCR_LF & maskLF; // LF alone
-			maskCR = maskCR_LF ^ maskLF; // CR alone
+			maskCR = maskCR_LF ^ maskLF; // CR alone (with one position offset)
 			if (maskCRLF) {
 				lineCountCRLF += np2_popcount(maskCRLF);
 			}
@@ -557,9 +556,21 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 		}
 	} while (ptr < end);
 
+	if (ptr == end) {
+		switch (*ptr) {
+		case '\n':
+			++lineCountLF;
+			break;
+		case '\r':
+			++lineCountCR;
+			break;
+		}
+	}
+
 	const Sci_Line linesMax = max_pos(max_pos(lineCountCRLF, lineCountCR), lineCountLF);
 	// values must kept in same order as SC_EOL_CRLF, SC_EOL_CR, SC_EOL_LF
 	const Sci_Line linesCount[3] = { lineCountCRLF, lineCountCR, lineCountLF };
+	int iEOLMode = status->iEOLMode;
 	if (linesMax != linesCount[iEOLMode]) {
 		if (linesMax == lineCountCRLF) {
 			iEOLMode = SC_EOL_CRLF;
@@ -580,15 +591,9 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 #endif
 #endif
 
-#if defined(_WIN64)
-	// enable conversion between line endings
-	if (cbData + lineCountCRLF + lineCountCR + lineCountLF >= MAX_NON_UTF8_SIZE) {
-		bLargeFileMode = TRUE;
-	}
-#endif
-
 	status->iEOLMode = iEOLMode;
 	status->bInconsistent = ((!!lineCountCRLF) + (!!lineCountCR) + (!!lineCountLF)) > 1;
+	status->totalLineCount = lineCountCRLF + lineCountCR + lineCountLF + 1;
 	status->linesCount[0] = lineCountCRLF;
 	status->linesCount[1] = lineCountLF;
 	status->linesCount[2] = lineCountCR;
@@ -733,9 +738,12 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 	BOOL bBOM = FALSE;
 	BOOL bReverse = FALSE;
 
+	status->iEOLMode = iLineEndings[iDefaultEOLMode];
+	status->bInconsistent = FALSE;
+	status->totalLineCount = 1;
+
 	if (cbData == 0) {
 		FileVars_Init(NULL, 0, &fvCurFile);
-		status->iEOLMode = iLineEndings[iDefaultEOLMode];
 
 		if (iSrcEncoding == -1) {
 			if (bLoadANSIasUTF8 && !bPreferOEM) {
@@ -789,7 +797,7 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 		EditDetectEOLMode(lpDataUTF8, cbData - 1, status);
 		FileVars_Init(lpDataUTF8, cbData - 1, &fvCurFile);
 		SciCall_SetCodePage(SC_CP_UTF8);
-		EditSetNewText(lpDataUTF8, cbData - 1);
+		EditSetNewText(lpDataUTF8, cbData - 1, status->totalLineCount);
 		NP2HeapFree(lpDataUTF8);
 	} else {
 		FileVars_Init(lpData, cbData, &fvCurFile);
@@ -804,11 +812,11 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 			SciCall_SetCodePage(SC_CP_UTF8);
 			if (utf8Sig) {
 				EditDetectEOLMode(lpData + 3, cbData - 3, status);
-				EditSetNewText(lpData + 3, cbData - 3);
+				EditSetNewText(lpData + 3, cbData - 3, status->totalLineCount);
 				iEncoding = CPI_UTF8SIGN;
 			} else {
 				EditDetectEOLMode(lpData, cbData, status);
-				EditSetNewText(lpData, cbData);
+				EditSetNewText(lpData, cbData, status->totalLineCount);
 				iEncoding = CPI_UTF8;
 			}
 		} else {
@@ -838,11 +846,11 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 
 				EditDetectEOLMode(lpData, cbData, status);
 				SciCall_SetCodePage(SC_CP_UTF8);
-				EditSetNewText(lpData, cbData);
+				EditSetNewText(lpData, cbData, status->totalLineCount);
 			} else {
 				EditDetectEOLMode(lpData, cbData, status);
 				SciCall_SetCodePage(iDefaultCodePage);
-				EditSetNewText(lpData, cbData);
+				EditSetNewText(lpData, cbData, status->totalLineCount);
 				iEncoding = CPI_DEFAULT;
 			}
 		}
