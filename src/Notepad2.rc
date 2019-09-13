@@ -26,7 +26,7 @@
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
 #ifdef _WIN32
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
-#pragma code_page(1252)
+#pragma code_page(65001)
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1108,7 +1108,7 @@ BEGIN
     SCROLLBAR       IDC_RESIZEGRIP,7,187,10,10
 END
 
-IDD_CHANGENOTIFY DIALOGEX 0, 0, 184, 65
+IDD_CHANGENOTIFY DIALOGEX 0, 0, 196, 89
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "File Change Notification"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
@@ -1116,9 +1116,11 @@ BEGIN
     AUTORADIOBUTTON "&None.",IDC_CHANGENOTIFY_NONE,7,7,35,10,WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "&Show message.",IDC_CHANGENOTIFY_SHOW_MSG,7,19,71,10,WS_TABSTOP
     AUTORADIOBUTTON "&Auto-reload (unmodified).",IDC_CHANGENOTIFY_AUTO_RELOAD,7,31,114,10,WS_TABSTOP
-    AUTOCHECKBOX    "&Reset if a new file is opened.",IDC_CHANGENOTIFY_RESET_WATCH,7,48,143,10,WS_TABSTOP
-    DEFPUSHBUTTON   "OK",IDOK,127,7,50,14
-    PUSHBUTTON      "Cancel",IDCANCEL,127,24,50,14
+    AUTOCHECKBOX    "Detect file change by &polling instead of notification.",IDC_CHANGENOTIFY_USE_POLLING,7,48,184,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Keep at document end after reloading.",IDC_CHANGENOTIFY_KEEP_AT_END,7,60,184,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Reset if a new file is opened.",IDC_CHANGENOTIFY_RESET_WATCH,7,72,184,10,WS_TABSTOP
+    DEFPUSHBUTTON   "OK",IDOK,139,7,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,139,24,50,14
 END
 
 IDD_STYLESELECT DIALOGEX 0, 0, 165, 217
@@ -1835,14 +1837,14 @@ BEGIN
 	IDS_CMDLINEHELP			"Command Line Help\n\n\
 file\tMust be the last argument, no quoted spaces by default.\n\
 +\tAccept multiple file arguments (with quoted spaces).\n\
--\tAccept single file argument (without quoted spaces).\n\x85\
-\tEncoding (/ansi, /unicode, /unicodele, /unicodebe,\n\x85\
-\t/utf8, /utf8sig, /utf8bom, /utf16, /utf16le, /utf16be).\n\x85\
-\tLine ending mode (/crlf, /lf, /cr).\n\
+-\tAccept single file argument (without quoted spaces).\n\
+…\tEncoding (/ansi, /unicode, /unicodele, /unicodebe,\n\
+…\t/utf8, /utf8sig, /utf8bom, /utf16, /utf16le, /utf16be).\n\
+…\tLine ending mode (/crlf, /lf, /cr).\n\
 /e encoding\tFile source encoding.\n\
 /g line[,column]\tJump to specified position (/g -1 end of file).\n\
 /m text\tMatch specified text (/m- last, /mr regex, /mb backslash).\n\
-/l\tAuto-reload modified files.\n\
+/l[o|p]\tAuto-reload modified files.\n\
 /q\tForce creation of new files without prompt.\n\
 /s name\tSelect specified syntax scheme.\n\
 /d\tSelect default text scheme.\n\

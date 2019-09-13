@@ -179,6 +179,8 @@ RECT	pageSetupMargin;
 static BOOL bSaveBeforeRunningTools;
 BOOL bOpenFolderWithMetapath;
 int		iFileWatchingMode;
+int		iFileWatchingMethod;
+BOOL	bFileWatchingKeepAtEnd;
 BOOL	bResetFileWatching;
 static DWORD dwFileCheckInverval;
 static DWORD dwAutoReloadTimeout;
@@ -1302,11 +1304,10 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 				const Sci_Line iDocTopLine = SciCall_DocLineFromVisible(iVisTopLine);
 				const int iXOffset = SciCall_GetXOffset();
 #endif
-				const BOOL bIsTail = (iCurPos == iAnchorPos) && (iCurPos == SciCall_GetLength());
+				const BOOL bIsTail = bFileWatchingKeepAtEnd || ((iCurPos == iAnchorPos) && (SciCall_LineFromPosition(iCurPos) + 1 == SciCall_GetLineCount()));
 
 				iWeakSrcEncoding = iEncoding;
 				if (FileLoad(TRUE, FALSE, TRUE, FALSE, szCurFile)) {
-
 					if (bIsTail && iFileWatchingMode == 2) {
 						SciCall_DocumentEnd();
 						EditEnsureSelectionVisible();
@@ -5324,7 +5325,8 @@ void LoadSettings(void) {
 
 	iValue = IniSectionGetInt(pIniSection, L"FileWatchingMode", 2);
 	iFileWatchingMode = clamp_i(iValue, 0, 2);
-
+	iFileWatchingMethod = IniSectionGetBool(pIniSection, L"FileWatchingMethod", 0);
+	bFileWatchingKeepAtEnd = IniSectionGetBool(pIniSection, L"FileWatchingKeepAtEnd", 0);
 	bResetFileWatching = IniSectionGetBool(pIniSection, L"ResetFileWatching", 0);
 
 	iValue = IniSectionGetInt(pIniSection, L"EscFunction", 0);
@@ -5616,6 +5618,8 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBoolEx(pIniSection, L"SaveBeforeRunningTools", bSaveBeforeRunningTools, 0);
 	IniSectionSetBoolEx(pIniSection, L"OpenFolderWithMetapath", bOpenFolderWithMetapath, 1);
 	IniSectionSetIntEx(pIniSection, L"FileWatchingMode", iFileWatchingMode, 2);
+	IniSectionSetBoolEx(pIniSection, L"FileWatchingMethod", iFileWatchingMethod, 0);
+	IniSectionSetBoolEx(pIniSection, L"FileWatchingKeepAtEnd", bFileWatchingKeepAtEnd, 0);
 	IniSectionSetBoolEx(pIniSection, L"ResetFileWatching", bResetFileWatching, 0);
 	IniSectionSetIntEx(pIniSection, L"EscFunction", iEscFunction, 0);
 	IniSectionSetBoolEx(pIniSection, L"AlwaysOnTop", bAlwaysOnTop, 0);
@@ -7070,7 +7074,7 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 				bReadOnly = FALSE;
 			}
 		} else if (result == IDCANCEL) {
-			NP2ExitWind(hwndMain);
+			PostWMCommand(hwndMain, IDM_FILE_EXIT);
 			return FALSE;
 		} else {
 			return FALSE;
@@ -8058,14 +8062,11 @@ void InstallFileWatching(LPCWSTR lpszFile) {
 		PathRemoveFileSpec(tchDirectory);
 
 		// Save data of current file
-		HANDLE hFind = FindFirstFile(szCurFile, &fdCurFile);
-		if (hFind != INVALID_HANDLE_VALUE) {
-			FindClose(hFind);
-		} else {
+		if (!GetFileAttributesEx(szCurFile, GetFileExInfoStandard, &fdCurFile)) {
 			ZeroMemory(&fdCurFile, sizeof(WIN32_FIND_DATA));
 		}
 
-		hChangeHandle = FindFirstChangeNotification(tchDirectory, FALSE,
+		hChangeHandle = iFileWatchingMethod ? NULL : FindFirstChangeNotification(tchDirectory, FALSE,
 						FILE_NOTIFY_CHANGE_FILE_NAME	| \
 						FILE_NOTIFY_CHANGE_DIR_NAME		| \
 						FILE_NOTIFY_CHANGE_ATTRIBUTES	| \
@@ -8074,6 +8075,44 @@ void InstallFileWatching(LPCWSTR lpszFile) {
 
 		bRunningWatch = TRUE;
 		dwChangeNotifyTime = 0;
+	}
+}
+
+static inline BOOL IsCurrentFileChangedOutsideApp(void) {
+	// Check if the file has been changed
+	WIN32_FIND_DATA fdUpdated;
+	if (!GetFileAttributesEx(szCurFile, GetFileExInfoStandard, &fdUpdated)) {
+		// The current file has been removed
+		return TRUE;
+	}
+
+	const BOOL changed = (fdCurFile.nFileSizeLow != fdUpdated.nFileSizeLow)
+			|| (fdCurFile.nFileSizeHigh != fdUpdated.nFileSizeHigh)
+			// CompareFileTime(&fdCurFile.ftLastWriteTime, &fdUpdated.ftLastWriteTime) != 0
+			|| (fdCurFile.ftLastWriteTime.dwLowDateTime != fdUpdated.ftLastWriteTime.dwLowDateTime)
+			|| (fdCurFile.ftLastWriteTime.dwHighDateTime != fdUpdated.ftLastWriteTime.dwHighDateTime);
+	return changed;
+}
+
+static void CheckCurrentFileChangedOutsideApp(void) {
+	// Check if the changes affect the current file
+	if (IsCurrentFileChangedOutsideApp()) {
+		// Shutdown current watching and give control to main window
+		if (hChangeHandle) {
+			FindCloseChangeNotification(hChangeHandle);
+			hChangeHandle = NULL;
+		}
+		if (iFileWatchingMode == 2) {
+			bRunningWatch = TRUE;
+			dwChangeNotifyTime = GetTickCount();
+		} else {
+			KillTimer(NULL, ID_WATCHTIMER);
+			bRunningWatch = FALSE;
+			dwChangeNotifyTime = 0;
+			SendMessage(hwndMain, APPM_CHANGENOTIFY, 0, 0);
+		}
+	} else if (iFileWatchingMethod == 0) {
+		FindNextChangeNotification(hChangeHandle);
 	}
 }
 
@@ -8099,39 +8138,16 @@ void CALLBACK WatchTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
 			dwChangeNotifyTime = 0;
 			SendMessage(hwndMain, APPM_CHANGENOTIFY, 0, 0);
 		}
-
+		// polling, not very efficient but useful for watching continuously updated file
+		else if (iFileWatchingMethod) {
+			if (dwChangeNotifyTime == 0) {
+				CheckCurrentFileChangedOutsideApp();
+			}
+		}
 		// Check Change Notification Handle
+		// TODO: notification not fired for continuously updated file
 		else if (WAIT_OBJECT_0 == WaitForSingleObject(hChangeHandle, 0)) {
-			// Check if the changes affect the current file
-			WIN32_FIND_DATA fdUpdated;
-			HANDLE hFind = FindFirstFile(szCurFile, &fdUpdated);
-			if (INVALID_HANDLE_VALUE != hFind) {
-				FindClose(hFind);
-			} else { // The current file has been removed
-				ZeroMemory(&fdUpdated, sizeof(WIN32_FIND_DATA));
-			}
-
-			// Check if the file has been changed
-			if (CompareFileTime(&fdCurFile.ftLastWriteTime, &fdUpdated.ftLastWriteTime) != 0 ||
-					fdCurFile.nFileSizeLow != fdUpdated.nFileSizeLow ||
-					fdCurFile.nFileSizeHigh != fdUpdated.nFileSizeHigh) {
-				// Shutdown current watching and give control to main window
-				if (hChangeHandle) {
-					FindCloseChangeNotification(hChangeHandle);
-					hChangeHandle = NULL;
-				}
-				if (iFileWatchingMode == 2) {
-					bRunningWatch = TRUE; /* ! */
-					dwChangeNotifyTime = GetTickCount();
-				} else {
-					KillTimer(NULL, ID_WATCHTIMER);
-					bRunningWatch = FALSE;
-					dwChangeNotifyTime = 0;
-					SendMessage(hwndMain, APPM_CHANGENOTIFY, 0, 0);
-				}
-			} else {
-				FindNextChangeNotification(hChangeHandle);
-			}
+			CheckCurrentFileChangedOutsideApp();
 		}
 	}
 }

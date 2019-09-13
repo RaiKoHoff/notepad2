@@ -1312,6 +1312,8 @@ BOOL FileMRUDlg(HWND hwnd, LPWSTR lpstrFile) {
 //
 //
 extern int iFileWatchingMode;
+extern int iFileWatchingMethod;
+extern BOOL bFileWatchingKeepAtEnd;
 extern BOOL bResetFileWatching;
 
 static INT_PTR CALLBACK ChangeNotifyDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) {
@@ -1320,6 +1322,12 @@ static INT_PTR CALLBACK ChangeNotifyDlgProc(HWND hwnd, UINT umsg, WPARAM wParam,
 	switch (umsg) {
 	case WM_INITDIALOG:
 		CheckRadioButton(hwnd, IDC_CHANGENOTIFY_NONE, IDC_CHANGENOTIFY_AUTO_RELOAD, IDC_CHANGENOTIFY_NONE + iFileWatchingMode);
+		if (iFileWatchingMethod) {
+			CheckDlgButton(hwnd, IDC_CHANGENOTIFY_USE_POLLING, BST_CHECKED);
+		}
+		if (bFileWatchingKeepAtEnd) {
+			CheckDlgButton(hwnd, IDC_CHANGENOTIFY_KEEP_AT_END, BST_CHECKED);
+		}
 		if (bResetFileWatching) {
 			CheckDlgButton(hwnd, IDC_CHANGENOTIFY_RESET_WATCH, BST_CHECKED);
 		}
@@ -1330,6 +1338,8 @@ static INT_PTR CALLBACK ChangeNotifyDlgProc(HWND hwnd, UINT umsg, WPARAM wParam,
 		switch (LOWORD(wParam)) {
 		case IDOK:
 			iFileWatchingMode = GetCheckedRadioButton(hwnd, IDC_CHANGENOTIFY_NONE, IDC_CHANGENOTIFY_AUTO_RELOAD) - IDC_CHANGENOTIFY_NONE;
+			iFileWatchingMethod = IsButtonChecked(hwnd, IDC_CHANGENOTIFY_USE_POLLING);
+			bFileWatchingKeepAtEnd = IsButtonChecked(hwnd, IDC_CHANGENOTIFY_KEEP_AT_END);
 			bResetFileWatching = IsButtonChecked(hwnd, IDC_CHANGENOTIFY_RESET_WATCH);
 			EndDialog(hwnd, IDOK);
 			break;
@@ -2018,8 +2028,8 @@ void InitZoomLevelComboBox(HWND hwnd, int nCtlId, int zoomLevel) {
 	WCHAR tch[16];
 	int selIndex = -1;
 	const int levelList[] = {
-		25, 50, 75, 100, 125, 150, 175, 200,
-		250, 300, 350, 400, 450, 500,
+		500, 450, 350, 300, 250,
+		200, 175, 150, 125, 100, 75, 50, 25,
 	};
 
 	HWND hwndCtl = GetDlgItem(hwnd, nCtlId);

@@ -194,9 +194,7 @@ BOOL EditConvertText(UINT cpSource, UINT cpDest, BOOL bSetSavePoint) {
 	SciCall_SetCodePage(cpDest);
 
 	if (cbText > 0) {
-		SciCall_SetModEventMask(SC_MOD_NONE);
 		SciCall_AddText(cbText, pchText);
-		SciCall_SetModEventMask(SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT);
 	}
 	if (pchText != NULL) {
 		NP2HeapFree(pchText);
@@ -2395,7 +2393,7 @@ void EditMoveDown(void) {
 }
 
 // only convert CR+LF
-static void ConvertWinEditLineEndingsEx(char *s, int iEOLMode, int *linesCount) {
+static void ConvertWinEditLineEndingsEx(char *s, int iEOLMode, int *lineCount) {
 	int count = 0;
 	if (iEOLMode != SC_EOL_CRLF) {
 		char *p = s;
@@ -2426,10 +2424,10 @@ static void ConvertWinEditLineEndingsEx(char *s, int iEOLMode, int *linesCount) 
 		}
 
 		*p = '\0';
-		if (linesCount != NULL) {
-			*linesCount = count;
+		if (lineCount != NULL) {
+			*lineCount = count;
 		}
-	} else if (linesCount != NULL) {
+	} else if (lineCount != NULL) {
 		while (*s) {
 			switch (*s++) {
 			case '\r':
@@ -2444,7 +2442,7 @@ static void ConvertWinEditLineEndingsEx(char *s, int iEOLMode, int *linesCount) 
 				break;
 			}
 		}
-		*linesCount = count;
+		*lineCount = count;
 	}
 }
 
@@ -2520,6 +2518,7 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 
 	if (iPrefixLen != 0) {
 		char *p = mszPrefix1;
+		Sci_Line lineCount = 0;
 		mszPrefix2 = (char *)NP2HeapAlloc(iPrefixLen * kMaxMultiByteCount + 1);
 		while (!bPrefixNum && (p = strstr(p, "$(")) != NULL) {
 			if (strncmp(p, "$(I)", CSTRLEN("$(I)")) == 0) {
@@ -2527,62 +2526,57 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 				strcpy(mszPrefix2, p + CSTRLEN("$(I)"));
 				bPrefixNum = TRUE;
 				iPrefixNum = 0;
-				for (Sci_Line i = iLineEnd - iLineStart; i >= 10; i = i / 10) {
-					iPrefixNumWidth++;
-				}
+				lineCount = iLineEnd - iLineStart;
 				bPrefixNumPadZero = FALSE;
 			} else if (strncmp(p, "$(0I)", CSTRLEN("$(0I)")) == 0) {
 				*p = 0;
 				strcpy(mszPrefix2, p + CSTRLEN("$(0I)"));
 				bPrefixNum = TRUE;
 				iPrefixNum = 0;
-				for (Sci_Line i = iLineEnd - iLineStart; i >= 10; i = i / 10) {
-					iPrefixNumWidth++;
-				}
+				lineCount = iLineEnd - iLineStart;
 				bPrefixNumPadZero = TRUE;
 			} else if (strncmp(p, "$(N)", CSTRLEN("$(N)")) == 0) {
 				*p = 0;
 				strcpy(mszPrefix2, p + CSTRLEN("$(N)"));
 				bPrefixNum = TRUE;
 				iPrefixNum = 1;
-				for (Sci_Line i = iLineEnd - iLineStart + 1; i >= 10; i = i / 10) {
-					iPrefixNumWidth++;
-				}
+				lineCount = iLineEnd - iLineStart + 1;
 				bPrefixNumPadZero = FALSE;
 			} else if (strncmp(p, "$(0N)", CSTRLEN("$(0N)")) == 0) {
 				*p = 0;
 				strcpy(mszPrefix2, p + CSTRLEN("$(0N)"));
 				bPrefixNum = TRUE;
 				iPrefixNum = 1;
-				for (Sci_Line i = iLineEnd - iLineStart + 1; i >= 10; i = i / 10) {
-					iPrefixNumWidth++;
-				}
+				lineCount = iLineEnd - iLineStart + 1;
 				bPrefixNumPadZero = TRUE;
 			} else if (strncmp(p, "$(L)", CSTRLEN("$(L)")) == 0) {
 				*p = 0;
 				strcpy(mszPrefix2, p + CSTRLEN("$(L)"));
 				bPrefixNum = TRUE;
 				iPrefixNum = iLineStart + 1;
-				for (Sci_Line i = iLineEnd + 1; i >= 10; i = i / 10) {
-					iPrefixNumWidth++;
-				}
+				lineCount = iLineEnd + 1;
 				bPrefixNumPadZero = FALSE;
 			} else if (strncmp(p, "$(0L)", CSTRLEN("$(0L)")) == 0) {
 				*p = 0;
 				strcpy(mszPrefix2, p + CSTRLEN("$(0L)"));
 				bPrefixNum = TRUE;
 				iPrefixNum = iLineStart + 1;
-				for (Sci_Line i = iLineEnd + 1; i >= 10; i = i / 10) {
-					iPrefixNumWidth++;
-				}
+				lineCount = iLineEnd + 1;
 				bPrefixNumPadZero = TRUE;
 			}
 			p += CSTRLEN("$(");
+		}
+		if (bPrefixNum) {
+			while (lineCount >= 10) {
+				++iPrefixNumWidth;
+				lineCount /= 10;
+			}
 		}
 	}
 
 	if (iAppendLen != 0) {
 		char *p = mszAppend1;
+		Sci_Line lineCount = 0;
 		mszAppend2 = (char *)NP2HeapAlloc(iAppendLen * kMaxMultiByteCount + 1);
 		while (!bAppendNum && (p = strstr(p, "$(")) != NULL) {
 			if (strncmp(p, "$(I)", CSTRLEN("$(I)")) == 0) {
@@ -2590,57 +2584,51 @@ void EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend) {
 				strcpy(mszAppend2, p + CSTRLEN("$(I)"));
 				bAppendNum = TRUE;
 				iAppendNum = 0;
-				for (Sci_Line i = iLineEnd - iLineStart; i >= 10; i = i / 10) {
-					iAppendNumWidth++;
-				}
+				lineCount = iLineEnd - iLineStart;
 				bAppendNumPadZero = FALSE;
 			} else if (strncmp(p, "$(0I)", CSTRLEN("$(0I)")) == 0) {
 				*p = 0;
 				strcpy(mszAppend2, p + CSTRLEN("$(0I)"));
 				bAppendNum = TRUE;
 				iAppendNum = 0;
-				for (Sci_Line i = iLineEnd - iLineStart; i >= 10; i = i / 10) {
-					iAppendNumWidth++;
-				}
+				lineCount = iLineEnd - iLineStart;
 				bAppendNumPadZero = TRUE;
 			} else if (strncmp(p, "$(N)", CSTRLEN("$(N)")) == 0) {
 				*p = 0;
 				strcpy(mszAppend2, p + CSTRLEN("$(N)"));
 				bAppendNum = TRUE;
 				iAppendNum = 1;
-				for (Sci_Line i = iLineEnd - iLineStart + 1; i >= 10; i = i / 10) {
-					iAppendNumWidth++;
-				}
+				lineCount = iLineEnd - iLineStart + 1;
 				bAppendNumPadZero = FALSE;
 			} else if (strncmp(p, "$(0N)", CSTRLEN("$(0N)")) == 0) {
 				*p = 0;
 				strcpy(mszAppend2, p + CSTRLEN("$(0N)"));
 				bAppendNum = TRUE;
 				iAppendNum = 1;
-				for (Sci_Line i = iLineEnd - iLineStart + 1; i >= 10; i = i / 10) {
-					iAppendNumWidth++;
-				}
+				lineCount = iLineEnd - iLineStart + 1;
 				bAppendNumPadZero = TRUE;
 			} else if (strncmp(p, "$(L)", CSTRLEN("$(L)")) == 0) {
 				*p = 0;
 				strcpy(mszAppend2, p + CSTRLEN("$(L)"));
 				bAppendNum = TRUE;
 				iAppendNum = iLineStart + 1;
-				for (Sci_Line i = iLineEnd + 1; i >= 10; i = i / 10) {
-					iAppendNumWidth++;
-				}
+				lineCount = iLineEnd + 1;
 				bAppendNumPadZero = FALSE;
 			} else if (strncmp(p, "$(0L)", CSTRLEN("$(0L)")) == 0) {
 				*p = 0;
 				strcpy(mszAppend2, p + CSTRLEN("$(0L)"));
 				bAppendNum = TRUE;
 				iAppendNum = iLineStart + 1;
-				for (Sci_Line i = iLineEnd + 1; i >= 10; i = i / 10) {
-					iAppendNumWidth++;
-				}
+				lineCount = iLineEnd + 1;
 				bAppendNumPadZero = TRUE;
 			}
 			p += CSTRLEN("$(");
+		}
+		if (bAppendNum) {
+			while (lineCount >= 10) {
+				++iAppendNumWidth;
+				lineCount /= 10;
+			}
 		}
 	}
 
@@ -3127,10 +3115,8 @@ void EditToggleLineComments(LPCWSTR pwszComment, BOOL bInsertAtStart) {
 			switch (iAction) {
 			case 0:
 				iAction = 2;
-#if defined(__cplusplus)
-			[[fallthrough]];
-#endif
-			// fall through
+				FALLTHROUGH_ATTR;
+				// fall through
 			case 2:
 				iCommentPos = iIndentPos;
 				// a line with [space/tab] comment only
@@ -3153,10 +3139,8 @@ void EditToggleLineComments(LPCWSTR pwszComment, BOOL bInsertAtStart) {
 			switch (iAction) {
 			case 0:
 				iAction = 1;
-#if defined(__cplusplus)
-			[[fallthrough]];
-#endif
-			// fall through
+				FALLTHROUGH_ATTR;
+				// fall through
 			case 1:
 				iCommentPos = SciCall_FindColumn(iLine, iCommentCol);
 				if (!bWhitespaceLine || (iLineStart == iLineEnd)) {
