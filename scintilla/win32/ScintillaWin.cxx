@@ -53,10 +53,20 @@ Used by VSCode, Atom etc.
 #if !defined(DISABLE_D2D)
 #define USE_D2D 1
 #endif
+#ifndef _WIN32_WINNT_WIN7
+#define _WIN32_WINNT_WIN7					0x0601
+#endif
 
 #if defined(USE_D2D)
+#if defined(_MSC_BUILD) && (VER_PRODUCTVERSION_W <= _WIN32_WINNT_WIN7)
+#pragma warning(push)
+#pragma warning(disable: 4458)
+#endif
 #include <d2d1.h>
 #include <dwrite.h>
+#if defined(_MSC_BUILD) && (VER_PRODUCTVERSION_W <= _WIN32_WINNT_WIN7)
+#pragma warning(pop)
+#endif
 #endif
 
 #include "Platform.h"
@@ -1181,7 +1191,7 @@ void ScintillaWin::EscapeHanja() {
 
 	// ImmEscapeW() may overwrite uniChar[] with a null terminated string.
 	// So enlarge it enough to Maximum 4 as in UTF-8.
-	unsigned int const safeLength = UTF8MaxBytes + 1;
+	constexpr unsigned int safeLength = UTF8MaxBytes + 1;
 	std::string oneChar(safeLength, '\0');
 	pdoc->GetCharRange(oneChar.data(), currentPos, oneCharLen);
 
@@ -1612,7 +1622,7 @@ sptr_t ScintillaWin::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam
 
 						const DWORD dwCurrent = GetTickCount();
 						const DWORD dwStart = wParam ? static_cast<DWORD>(wParam) : dwCurrent;
-						const DWORD maxWorkTime = 50;
+						constexpr DWORD maxWorkTime = 50;
 
 						if (dwCurrent >= dwStart && dwCurrent > maxWorkTime && dwCurrent - maxWorkTime < dwStart)
 							PostMessage(MainHWND(), SC_WIN_IDLE, dwStart, 0);
@@ -2043,17 +2053,18 @@ bool ScintillaWin::FineTickerRunning(TickReason reason) noexcept {
 
 void ScintillaWin::FineTickerStart(TickReason reason, int millis, int tolerance) noexcept {
 	FineTickerCancel(reason);
+	const int idEvent = static_cast<int>(fineTimerStart) + static_cast<int>(reason);
 #if _WIN32_WINNT < _WIN32_WINNT_WIN8
 	if (SetCoalescableTimerFn && tolerance) {
-		timers[reason] = SetCoalescableTimerFn(MainHWND(), fineTimerStart + reason, millis, nullptr, tolerance);
+		timers[reason] = SetCoalescableTimerFn(MainHWND(), idEvent, millis, nullptr, tolerance);
 	} else {
-		timers[reason] = ::SetTimer(MainHWND(), fineTimerStart + reason, millis, nullptr);
+		timers[reason] = ::SetTimer(MainHWND(), idEvent, millis, nullptr);
 	}
 #else
 	if (tolerance) {
-		timers[reason] = SetCoalescableTimer(MainHWND(), fineTimerStart + reason, millis, nullptr, tolerance);
+		timers[reason] = SetCoalescableTimer(MainHWND(), idEvent, millis, nullptr, tolerance);
 	} else {
-		timers[reason] = ::SetTimer(MainHWND(), fineTimerStart + reason, millis, nullptr);
+		timers[reason] = ::SetTimer(MainHWND(), idEvent, millis, nullptr);
 	}
 #endif
 }

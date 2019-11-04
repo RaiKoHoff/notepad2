@@ -1,7 +1,9 @@
-// Lexer for Lisp.
+// This file is part of Notepad2.
+// See License.txt for details about distribution and modification.
+//! Lexer for Lisp.
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include "ILexer.h"
@@ -64,12 +66,11 @@ static void ColouriseLispDoc(Sci_PositionU startPos, Sci_Position length, int in
 			break;
 		case SCE_C_IDENTIFIER:
 			if (!(iswordchar(ch) || ch == '-')) {
-				buf[wordLen] = 0;
+				buf[wordLen] = '\0';
 				if (keywords.InList(buf)) {
 					styler.ColourTo(i - 1, SCE_C_WORD);
 				}
 				state = SCE_C_DEFAULT;
-				wordLen = 0;
 			} else if (wordLen < MAX_WORD_LENGTH) {
 				buf[wordLen++] = static_cast<char>(ch);
 			}
@@ -131,7 +132,8 @@ static void ColouriseLispDoc(Sci_PositionU startPos, Sci_Position length, int in
 			} else if (iswordstart(ch)) {
 				styler.ColourTo(i - 1, state);
 				state = SCE_C_IDENTIFIER;
-				buf[wordLen++] = static_cast<char>(ch);
+				buf[0] = static_cast<char>(ch);
+				wordLen = 1;
 			} else if (IsLispOp(ch)) {
 				styler.ColourTo(i - 1, state);
 				state = SCE_C_OPERATOR;
@@ -147,8 +149,6 @@ static void ColouriseLispDoc(Sci_PositionU startPos, Sci_Position length, int in
 #define IsStreamStyle(style)		((style) == SCE_C_STRING)
 #define IsStreamCommantStyle(style)	((style) == SCE_C_COMMENT)
 static void FoldListDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
 	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
 	const bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;
 

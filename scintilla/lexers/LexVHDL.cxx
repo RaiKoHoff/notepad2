@@ -10,8 +10,8 @@
 // Copyright 1998-2002 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include "ILexer.h"
@@ -140,8 +140,6 @@ static constexpr bool IsStreamCommentStyle(int style) noexcept {
 
 // Folding the code
 static void FoldVHDLDoc(Sci_PositionU startPos, Sci_Position length, int /*initStyle*/, LexerWordList keywordLists, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
 	const WordList &kwFold = *keywordLists[8];
 
 	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;

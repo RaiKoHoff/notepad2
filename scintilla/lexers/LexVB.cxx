@@ -9,8 +9,8 @@
 // Copyright 1998-2005 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include "ILexer.h"
@@ -106,7 +106,8 @@ static void ColouriseVBDoc(Sci_PositionU startPos, Sci_Position length, int init
 					sc.Forward();
 				}
 				char s[128];
-				Sci_Position len = sc.GetCurrentLowered(s, sizeof(s));
+				sc.GetCurrentLowered(s, sizeof(s));
+				const Sci_Position len = sc.LengthCurrent();
 				if (skipType) {
 					s[len - 1] = '\0';
 				}
@@ -276,8 +277,6 @@ static bool IsVBSome(Sci_Position line, int kind, Accessor &styler) noexcept {
 #define IsVB6Type(line)			IsVBSome(line, 1, styler)
 
 static void FoldVBDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
 	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
 	const bool foldPreprocessor = styler.GetPropertyInt("fold.preprocessor") != 0;
 	const bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;

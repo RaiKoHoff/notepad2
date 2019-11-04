@@ -95,7 +95,7 @@ void ActionDuration::AddSample(size_t numberActions, double durationOfActions) n
 
 	// Alpha value for exponential smoothing.
 	// Most recent value contributes 25% to smoothed value.
-	const double alpha = 0.25;
+	constexpr double alpha = 0.25;
 
 	const double durationOne = durationOfActions / numberActions;
 	duration = std::clamp(alpha * durationOne + (1.0 - alpha) * duration,
@@ -391,7 +391,7 @@ Sci_Position SCI_METHOD Document::LineEnd(Sci_Position line) const noexcept {
 		return LineStart(line + 1);
 	} else {
 		Sci::Position position = LineStart(line + 1);
-		if (SC_CP_UTF8 == dbcsCodePage) {
+		if (cb.GetLineEndTypes()) {
 			const unsigned char bytes[] = {
 				cb.UCharAt(position - 3),
 				cb.UCharAt(position - 2),
@@ -1008,20 +1008,20 @@ int SCI_METHOD Document::CodePage() const noexcept {
 	return dbcsCodePage;
 }
 
-bool SCI_METHOD Document::IsDBCSLeadByte(char ch) const noexcept {
+bool SCI_METHOD Document::IsDBCSLeadByte(unsigned char ch) const noexcept {
 	// Used by lexers so must match IDocument method exactly
 	return dbcsCharClass && dbcsCharClass->IsLeadByte(ch);
 }
 
-bool Document::IsDBCSLeadByteNoExcept(char ch) const noexcept {
+bool Document::IsDBCSLeadByteNoExcept(unsigned char ch) const noexcept {
 	return dbcsCharClass->IsLeadByte(ch);
 }
 
-bool Document::IsDBCSLeadByteInvalid(char ch) const noexcept {
+bool Document::IsDBCSLeadByteInvalid(unsigned char ch) const noexcept {
 	return dbcsCharClass->IsLeadByteInvalid(ch);
 }
 
-bool Document::IsDBCSTrailByteInvalid(char ch) const noexcept {
+bool Document::IsDBCSTrailByteInvalid(unsigned char ch) const noexcept {
 	return dbcsCharClass->IsTrailByteInvalid(ch);
 }
 
@@ -1945,7 +1945,7 @@ Sci::Position Document::FindText(Sci::Position minPos, Sci::Position maxPos, con
 					break;
 			}
 		} else if (SC_CP_UTF8 == dbcsCodePage) {
-			const size_t maxFoldingExpansion = 4;
+			constexpr size_t maxFoldingExpansion = 4;
 			std::vector<char> searchThing((lengthFind + 1) * UTF8MaxBytes * maxFoldingExpansion + 1);
 			const size_t lenSearch =
 				pcf->Fold(searchThing.data(), searchThing.size(), search, lengthFind);
@@ -1997,8 +1997,8 @@ Sci::Position Document::FindText(Sci::Position minPos, Sci::Position maxPos, con
 				}
 			}
 		} else if (dbcsCodePage) {
-			const size_t maxBytesCharacter = 2;
-			const size_t maxFoldingExpansion = 4;
+			constexpr size_t maxBytesCharacter = 2;
+			constexpr size_t maxFoldingExpansion = 4;
 			std::vector<char> searchThing((lengthFind + 1) * maxBytesCharacter * maxFoldingExpansion + 1);
 			const size_t lenSearch = pcf->Fold(searchThing.data(), searchThing.size(), search, lengthFind);
 			while (forward ? (pos < endPos) : (pos >= endPos)) {

@@ -2,13 +2,10 @@
 # HFacer.py - regenerate the Scintilla.h file from the Scintilla.iface interface
 # definition file.
 # Implemented 2000 by Neil Hodgson neilh@scintilla.org
-# Requires Python 2.5 or later
 
-import sys
-import os
 import Face
 
-from FileGenerator import UpdateFile, Generate, Regenerate, UpdateLineInFile, lineEnd
+from FileGenerator import Regenerate
 
 def printLexHFile(f):
 	out = []

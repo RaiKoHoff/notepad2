@@ -1,7 +1,9 @@
-// Lexer for NSIS.
+// This file is part of Notepad2.
+// See License.txt for details about distribution and modification.
+//! Lexer for NSIS.
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include "ILexer.h"
@@ -34,8 +36,6 @@ static void ColouriseNSISDoc(Sci_PositionU startPos, Sci_Position length, int in
 
 	int visibleChars = 0;
 	Sci_Position lineCurrent = styler.GetLine(startPos);
-	//char buf[MAX_WORD_LENGTH + 1] = "";
-	//int wordLen = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
 		const int chPrev = ch;
@@ -216,8 +216,6 @@ static constexpr bool IsNsisFoldPPStart(int ch) noexcept {
 }
 
 static void FoldNSISDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
 	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
 	const bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;
 

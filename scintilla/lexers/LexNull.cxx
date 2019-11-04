@@ -5,11 +5,8 @@
 // Copyright 1998-2001 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
 
-#include <cstring>
 #include <cassert>
-#include <cctype>
-
-#include <algorithm>
+#include <cstring>
 
 #include "ILexer.h"
 #include "Scintilla.h"
@@ -18,27 +15,31 @@
 #include "WordList.h"
 #include "LexAccessor.h"
 #include "Accessor.h"
-#include "StyleContext.h"
 #include "CharacterSet.h"
 #include "LexerModule.h"
 
 using namespace Scintilla;
 
-static void ColouriseNullDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWordList, Accessor &styler) {
+namespace {
+
+void ColouriseNullDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int, LexerWordList, Accessor &styler) {
 	// Null language means all style bytes are 0 so just mark the end - no need to fill in.
-	if (length > 0) {
-		styler.StartAt(startPos + length - 1);
-		styler.StartSegment(startPos + length - 1);
-		styler.ColourTo(startPos + length - 1, 0);
+#if 0
+	styler.StartAt(startPos + lengthDoc);
+#else
+	if (lengthDoc > 0) {
+		styler.StartAt(startPos + lengthDoc - 1);
+		styler.StartSegment(startPos + lengthDoc - 1);
+		styler.ColourTo(startPos + lengthDoc - 1, 0);
 	}
+#endif
 }
 
-static void FoldNullDoc(Sci_PositionU startPos, Sci_Position length, int /* initStyle */, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
-	const Sci_Position maxPos = startPos + length;
-	const Sci_Position maxLines = (maxPos == styler.Length()) ? styler.GetLine(maxPos) : styler.GetLine(maxPos - 1);	// Requested last line
+// code folding based on Python
+void FoldNullDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /* initStyle */, LexerWordList, Accessor &styler) {
+	const Sci_Position maxPos = startPos + lengthDoc;
 	const Sci_Position docLines = styler.GetLine(styler.Length());	// Available last line
+	const Sci_Position maxLines = (maxPos == styler.Length()) ? docLines : styler.GetLine(maxPos - 1);	// Requested last line
 
 	const bool foldCompact = styler.GetPropertyInt("fold.compact") != 0;
 
@@ -59,7 +60,7 @@ static void FoldNullDoc(Sci_PositionU startPos, Sci_Position length, int /* init
 	// Process all characters to end of requested range
 	// Cap processing in all cases
 	// to end of document (in case of unclosed quote at end).
-	while ((lineCurrent <= docLines) && ((lineCurrent <= maxLines))) {
+	while (lineCurrent <= maxLines) {
 		// Gather info
 		int lev = indentCurrent;
 		Sci_Position lineNext = lineCurrent + 1;
@@ -79,7 +80,7 @@ static void FoldNullDoc(Sci_PositionU startPos, Sci_Position length, int /* init
 		}
 
 		const int levelAfterBlank = indentNext & SC_FOLDLEVELNUMBERMASK;
-		const int levelBeforeBlank = std::max(indentCurrentLevel, levelAfterBlank);
+		const int levelBeforeBlank = (indentCurrentLevel > levelAfterBlank) ? indentCurrentLevel : levelAfterBlank;
 
 		// Now set all the indent levels on the lines we skipped
 		// Do this from end to start. Once we encounter one line
@@ -122,6 +123,8 @@ static void FoldNullDoc(Sci_PositionU startPos, Sci_Position length, int /* init
 	// NOTE: Cannot set level of last line here because indentCurrent doesn't have
 	// header flag set; the loop above is crafted to take care of this case!
 	//styler.SetLevel(lineCurrent, indentCurrent);
+}
+
 }
 
 LexerModule lmNull(SCLEX_NULL, ColouriseNullDoc, "null", FoldNullDoc);

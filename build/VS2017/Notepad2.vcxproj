@@ -17,6 +17,10 @@
       <Configuration>AVX2Release</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|ARM">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|ARM64">
       <Configuration>Debug</Configuration>
       <Platform>ARM64</Platform>
@@ -53,6 +57,10 @@
       <Configuration>LLVMRelease</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM">
+      <Configuration>Release</Configuration>
+      <Platform>ARM</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Release|ARM64">
       <Configuration>Release</Configuration>
       <Platform>ARM64</Platform>
@@ -70,7 +78,8 @@
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{B69A8C7E-A22D-45DA-9997-2D1403C7AEE8}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion Condition="'$(VisualStudioVersion)'=='15.0'">10.0.17763.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion Condition="'$(VisualStudioVersion)'!='15.0'">10.0</WindowsTargetPlatformVersion>
     <VcpkgConfiguration Condition="'$(Configuration)'=='LLVMDebug'">Debug</VcpkgConfiguration>
     <VcpkgConfiguration Condition="'$(Configuration)'=='AVX2Debug'">Debug</VcpkgConfiguration>
     <VcpkgConfiguration Condition="'$(Configuration)'=='AVX2LLVMDebug'">Debug</VcpkgConfiguration>
@@ -111,6 +120,14 @@
     <PlatformToolset Condition="'$(VisualStudioVersion)'=='16.0'">v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='15.0'">v141</PlatformToolset>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='16.0'">v142</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
@@ -174,6 +191,13 @@
     <PlatformToolset Condition="'$(VisualStudioVersion)'=='15.0'">v141</PlatformToolset>
     <PlatformToolset Condition="'$(VisualStudioVersion)'=='16.0'">v142</PlatformToolset>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='15.0'">v141</PlatformToolset>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='16.0'">v142</PlatformToolset>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='LLVMDebug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
@@ -213,6 +237,9 @@
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='LLVMRelease|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
@@ -237,6 +264,9 @@
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='LLVMDebug|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
@@ -251,6 +281,7 @@
     <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='AVX2Debug|x64'">$(SolutionDir)\..\bin\Debug\AVX2\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\</OutDir>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='LLVMDebug|x64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='AVX2LLVMDebug|x64'">$(SolutionDir)\..\bin\LLVMDebug\AVX2\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='LLVMDebug|ARM64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\</OutDir>
@@ -259,12 +290,14 @@
     <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='AVX2Release|x64'">$(SolutionDir)\..\bin\Release\AVX2\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\</OutDir>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='LLVMRelease|x64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='AVX2LLVMRelease|x64'">$(SolutionDir)\..\bin\LLVMRelease\AVX2\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='LLVMRelease|ARM64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\</OutDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\obj\$(ProjectName)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='AVX2Debug|x64'">$(SolutionDir)\..\bin\Debug\AVX2\obj\$(ProjectName)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\obj\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\obj\$(ProjectName)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='LLVMDebug|x64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\obj\$(ProjectName)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='AVX2LLVMDebug|x64'">$(SolutionDir)\..\bin\LLVMDebug\AVX2\obj\$(ProjectName)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='LLVMDebug|ARM64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\obj\$(ProjectName)\</IntDir>
@@ -273,6 +306,7 @@
     <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\obj\$(ProjectName)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='AVX2Release|x64'">$(SolutionDir)\..\bin\Release\AVX2\obj\$(ProjectName)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\obj\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\obj\$(ProjectName)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='LLVMRelease|x64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\obj\$(ProjectName)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='AVX2LLVMRelease|x64'">$(SolutionDir)\..\bin\LLVMRelease\AVX2\obj\$(ProjectName)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='LLVMRelease|ARM64'">$(SolutionDir)\..\bin\$(Configuration)\$(Platform)\obj\$(ProjectName)\</IntDir>
@@ -281,6 +315,7 @@
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='AVX2Debug|x64'">true</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">true</LinkIncremental>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">true</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='LLVMDebug|x64'">true</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='AVX2LLVMDebug|x64'">true</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='LLVMDebug|ARM64'">true</LinkIncremental>
@@ -289,6 +324,7 @@
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='AVX2Release|x64'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">false</LinkIncremental>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='LLVMRelease|x64'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='AVX2LLVMRelease|x64'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='LLVMRelease|ARM64'">false</LinkIncremental>
@@ -297,12 +333,14 @@
     <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</GenerateManifest>
     <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='AVX2Debug|x64'">false</GenerateManifest>
     <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">false</GenerateManifest>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">false</GenerateManifest>
     <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='LLVMDebug|x64'">false</GenerateManifest>
     <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='AVX2LLVMDebug|x64'">false</GenerateManifest>
     <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='LLVMDebug|ARM64'">false</GenerateManifest>
     <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</GenerateManifest>
     <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='AVX2Release|x64'">false</GenerateManifest>
     <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">false</GenerateManifest>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">false</GenerateManifest>
     <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='LLVMRelease|x64'">false</GenerateManifest>
     <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='AVX2LLVMRelease|x64'">false</GenerateManifest>
     <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='LLVMRelease|ARM64'">false</GenerateManifest>
@@ -322,6 +360,10 @@
     <RunCodeAnalysis>false</RunCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <RunCodeAnalysis>false</RunCodeAnalysis>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
     <RunCodeAnalysis>false</RunCodeAnalysis>
   </PropertyGroup>
@@ -444,6 +486,29 @@
       <PreprocessorDefinitions>_WIN64;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>..\..\scintilla\include;..\..\scintilla\lexlib;..\..\scintilla\src;..\..\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_DEBUG;WIN32;SCI_LEXER;NO_CXX11_REGEX;UNICODE;_UNICODE;_CRT_SECURE_NO_WARNINGS;_SCL_SECURE_NO_WARNINGS;_WIN32_WINNT=0x0602;WINVER=0x0602;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <WarningLevel>Level4</WarningLevel>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalOptions>/source-charset:utf-8 /wd4201 /wd4204 %(AdditionalOptions)</AdditionalOptions>
+      <DiagnosticsFormat>Caret</DiagnosticsFormat>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>gdi32.lib;comctl32.lib;comdlg32.lib;advapi32.lib;shell32.lib;shlwapi.lib;ole32.lib;oleaut32.lib;imm32.lib;uxtheme.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <MinimumRequiredVersion>6.02</MinimumRequiredVersion>
+    </Link>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='LLVMDebug|x64'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
@@ -475,7 +540,7 @@
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <WarningLevel>Level4</WarningLevel>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalOptions>/source-charset:utf-8 -mavx2 -mpopcnt -mlzcnt -mbmi -Wextra -Wshadow -Wimplicit-fallthrough -Wcomma -Wformat=2 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/source-charset:utf-8 -mavx2 -mpopcnt -mbmi -Wextra -Wshadow -Wimplicit-fallthrough -Wcomma -Wformat=2 %(AdditionalOptions)</AdditionalOptions>
       <DiagnosticsFormat>Caret</DiagnosticsFormat>
     </ClCompile>
     <Link>
@@ -688,6 +753,41 @@
       <PreprocessorDefinitions>_WIN64;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\..\scintilla\include;..\..\scintilla\lexlib;..\..\scintilla\src;..\..\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;SCI_LEXER;NO_CXX11_REGEX;NDEBUG;UNICODE;_UNICODE;_CRT_SECURE_NO_WARNINGS;_SCL_SECURE_NO_WARNINGS;_WIN32_WINNT=0x0602;WINVER=0x0602;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <WarningLevel>Level4</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <OmitFramePointers>true</OmitFramePointers>
+      <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
+      <StringPooling>true</StringPooling>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <AdditionalOptions>/source-charset:utf-8 /GA /wd4201 /wd4204 /wd26429 /wd26446 /wd26472 /wd26481 /wd26482 /wd26485 /wd26486 /wd26489 %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <DiagnosticsFormat>Caret</DiagnosticsFormat>
+      <EnablePREfast>false</EnablePREfast>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>gdi32.lib;comctl32.lib;comdlg32.lib;advapi32.lib;shell32.lib;shlwapi.lib;ole32.lib;oleaut32.lib;imm32.lib;uxtheme.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <LargeAddressAware>true</LargeAddressAware>
+      <MinimumRequiredVersion>6.02</MinimumRequiredVersion>
+    </Link>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='LLVMRelease|x64'">
     <ClCompile>
       <AdditionalIncludeDirectories>..\..\scintilla\include;..\..\scintilla\lexlib;..\..\scintilla\src;..\..\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -735,7 +835,7 @@
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
-      <AdditionalOptions>/source-charset:utf-8 /GA -mavx2 -mpopcnt -mlzcnt -mbmi -Wextra -Wshadow -Wimplicit-fallthrough -Wcomma -Wformat=2 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/source-charset:utf-8 /GA -mavx2 -mpopcnt -mbmi -Wextra -Wshadow -Wimplicit-fallthrough -Wcomma -Wformat=2 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <DiagnosticsFormat>Caret</DiagnosticsFormat>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
@@ -786,13 +886,45 @@
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\scintilla\lexers\LexAsm.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexAutoIt3.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexBash.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexBatch.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexCIL.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexCMake.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexConfig.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexCPP.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexCSS.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexDiff.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexFortran.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexFSharp.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexGraphViz.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexHTML.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexInno.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexJSON.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexKotlin.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexLaTeX.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexLisp.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexLLVM.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexLua.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexMakefile.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexMatlab.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexNSIS.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexNull.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexPascal.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexPerl.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexPowerShell.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexProps.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexPython.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexRuby.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexRust.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexSmali.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexSQL.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexTCL.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexTexinfo.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexVB.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexVerilog.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexVHDL.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexVim.cxx" />
     <ClCompile Include="..\..\scintilla\lexlib\Accessor.cxx" />
     <ClCompile Include="..\..\scintilla\lexlib\CharacterSet.cxx" />
@@ -835,48 +967,14 @@
     <ClCompile Include="..\..\scintilla\win32\HanjaDic.cxx" />
     <ClCompile Include="..\..\scintilla\win32\PlatWin.cxx" />
     <ClCompile Include="..\..\scintilla\win32\ScintillaWin.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexNull.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexAsm.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexAutoIt3.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexBash.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexBatch.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexCMake.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexConfig.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexCPP.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexCSS.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexDiff.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexFortran.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexFSharp.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexHTML.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexIni.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexInno.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexJSON.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexLaTeX.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexLua.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexMakefile.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexMatlab.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexPascal.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexPerl.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexPowerShell.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexPython.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexRuby.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexSQL.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexTCL.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexVB.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexVerilog.cxx" />
-    <ClCompile Include="..\..\scintilla\lexers\LexVHDL.cxx" />
+    <ClCompile Include="..\..\src\Bridge.cpp" />
     <ClCompile Include="..\..\src\Dialogs.c" />
     <ClCompile Include="..\..\src\Dlapi.c" />
     <ClCompile Include="..\..\src\Edit.c" />
     <ClCompile Include="..\..\src\EditAutoC.c" />
     <ClCompile Include="..\..\src\EditEncoding.c" />
-    <ClCompile Include="..\..\src\EditLexers\stlGradle.c" />
-    <ClCompile Include="..\..\src\EditLexers\stlLisp.c" />
-    <ClCompile Include="..\..\src\EditLexers\stlLLVM.c" />
-    <ClCompile Include="..\..\src\EditLexers\stlVim.c" />
     <ClCompile Include="..\..\src\Helpers.c" />
     <ClCompile Include="..\..\src\Notepad2.c" />
-    <ClCompile Include="..\..\src\Bridge.cpp" />
     <ClCompile Include="..\..\src\Styles.c" />
     <ClCompile Include="..\..\src\EditLexers\stlActionScript.c" />
     <ClCompile Include="..\..\src\EditLexers\stlAsm.c" />
@@ -895,6 +993,7 @@
     <ClCompile Include="..\..\src\EditLexers\stlFortran.c" />
     <ClCompile Include="..\..\src\EditLexers\stlFSharp.c" />
     <ClCompile Include="..\..\src\EditLexers\stlGo.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlGradle.c" />
     <ClCompile Include="..\..\src\EditLexers\stlGraphViz.c" />
     <ClCompile Include="..\..\src\EditLexers\stlGroovy.c" />
     <ClCompile Include="..\..\src\EditLexers\stlHaXe.c" />
@@ -905,7 +1004,10 @@
     <ClCompile Include="..\..\src\EditLexers\stlJavaScript.c" />
     <ClCompile Include="..\..\src\EditLexers\stlJSON.c" />
     <ClCompile Include="..\..\src\EditLexers\stlJulia.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlKotlin.c" />
     <ClCompile Include="..\..\src\EditLexers\stlLaTeX.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlLisp.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlLLVM.c" />
     <ClCompile Include="..\..\src\EditLexers\stlLua.c" />
     <ClCompile Include="..\..\src\EditLexers\stlMake.c" />
     <ClCompile Include="..\..\src\EditLexers\stlMATLAB.c" />
@@ -917,6 +1019,7 @@
     <ClCompile Include="..\..\src\EditLexers\stlPython.c" />
     <ClCompile Include="..\..\src\EditLexers\stlResource.c" />
     <ClCompile Include="..\..\src\EditLexers\stlRuby.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlRust.c" />
     <ClCompile Include="..\..\src\EditLexers\stlScala.c" />
     <ClCompile Include="..\..\src\EditLexers\stlSmali.c" />
     <ClCompile Include="..\..\src\EditLexers\stlSQL.c" />
@@ -925,6 +1028,7 @@
     <ClCompile Include="..\..\src\EditLexers\stlVBS.c" />
     <ClCompile Include="..\..\src\EditLexers\stlVerilog.c" />
     <ClCompile Include="..\..\src\EditLexers\stlVHDL.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlVim.c" />
     <ClCompile Include="..\..\src\EditLexers\stlXML.c" />
   </ItemGroup>
   <ItemGroup>

@@ -1,10 +1,9 @@
-// Lexer for Python.
+// This file is part of Notepad2.
+// See License.txt for details about distribution and modification.
+//! Lexer for Python.
 
-#include <cstring>
 #include <cassert>
-#include <cctype>
-
-#include <algorithm>
+#include <cstring>
 
 #include "ILexer.h"
 #include "Scintilla.h"
@@ -21,18 +20,6 @@ using namespace Scintilla;
 
 #define		LEX_PY		32	// Python
 #define		LEX_BOO		55	// Boo
-
-/*static const char *const pythonWordListDesc[] = {
-	"Keywords",
-	"Type Keywords",
-	"Built-in Constants",
-	"Decorator",
-	"Build-in Functions",
-	"Attribute",
-	"object Method"
-	"global class",
-	0
-};*/
 
 #define PY_DEF_CLASS 1
 #define PY_DEF_FUNC	2
@@ -350,13 +337,11 @@ static inline bool IsQuoteLine(Sci_Position line, const Accessor &styler) noexce
 	return IsPyTripleStyle(style);
 }
 
-
+// based on original folding code
 static void FoldPyDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
 	const Sci_Position maxPos = startPos + length;
-	const Sci_Position maxLines = (maxPos == styler.Length()) ? styler.GetLine(maxPos) : styler.GetLine(maxPos - 1);	// Requested last line
 	const Sci_Position docLines = styler.GetLine(styler.Length());	// Available last line
+	const Sci_Position maxLines = (maxPos == styler.Length()) ? docLines : styler.GetLine(maxPos - 1);	// Requested last line
 
 	// property fold.quotes.python
 	//	This option enables folding multi-line quoted strings when using the Python lexer.
@@ -390,7 +375,7 @@ static void FoldPyDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWor
 	// Process all characters to end of requested range or end of any triple quote
 	//that hangs over the end of the range.  Cap processing in all cases
 	// to end of document (in case of unclosed quote at end).
-	while ((lineCurrent <= docLines) && ((lineCurrent <= maxLines) || prevQuote)) {
+	while ((lineCurrent <= maxLines) || prevQuote) {
 
 		// Gather info
 		int lev = indentCurrent;
@@ -441,7 +426,7 @@ static void FoldPyDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWor
 		}
 
 		const int levelAfterComments = ((lineNext < docLines) ? indentNext & SC_FOLDLEVELNUMBERMASK : minCommentLevel);
-		const int levelBeforeComments = std::max(indentCurrentLevel, levelAfterComments);
+		const int levelBeforeComments = (indentCurrentLevel > levelAfterComments) ? indentCurrentLevel : levelAfterComments;
 
 		// Now set all the indent levels on the lines we skipped
 		// Do this from end to start.  Once we encounter one line

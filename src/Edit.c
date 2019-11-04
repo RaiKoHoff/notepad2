@@ -26,6 +26,7 @@
 #include <uxtheme.h>
 #include <vssym32.h>
 #endif
+#include <time.h>
 #include <stdio.h>
 #include <limits.h>
 #include <inttypes.h>
@@ -616,7 +617,6 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 		return FALSE;
 	}
 
-	// calculate buffer limit
 	LARGE_INTEGER fileSize;
 	fileSize.QuadPart = 0;
 	if (!GetFileSizeEx(hFile, &fileSize)) {
@@ -656,12 +656,9 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 	//     1. The buffers we allocated below or when saving file, depends on encoding.
 	//     2. Scintilla's content buffer and style buffer, see CellBuffer class. The style buffer can be disabled by using SCLEX_NULL and SC_DOCUMENTOPTION_STYLES_NONE.
 	//     3. Extra memory when moving gaps on editing, it may requires more than 2/3 physical memory.
-	// large file TODO:
-	// [x] [> 2 GiB] use SC_DOCUMENTOPTION_TEXT_LARGE somewhere or hard-coded in EditModel::EditModel().
+	// large file TODO: https://github.com/zufuliu/notepad2/issues/125
 	// [ ] [> 4 GiB] use SetFilePointerEx() and ReadFile()/WriteFile() to read/write file.
 	// [-] [> 2 GiB] fix encoding conversion with MultiByteToWideChar() and WideCharToMultiByte().
-	// [x] [> 4 GiB] fix sprintf(), wsprintf() for Sci_Position and Sci_Line, currently UINT is used.
-	// [x] [> 2 GiB] ensure Sci_PositionCR is same as Sci_Position, see Sci_Position.h
 	LONGLONG maxFileSize = INT64_C(0x100000000);
 #else
 	// 2 GiB: ptrdiff_t / Sci_Position used in Scintilla
@@ -669,10 +666,9 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 #endif
 
 	MEMORYSTATUSEX statex;
-	ULONGLONG maxMem = 0;
 	statex.dwLength = sizeof(statex);
 	if (GlobalMemoryStatusEx(&statex)) {
-		maxMem = statex.ullTotalPhys/3U;
+		ULONGLONG maxMem = statex.ullTotalPhys/3U;
 		if (maxMem < (ULONGLONG)maxFileSize) {
 			maxFileSize = (LONGLONG)maxMem;
 		}
@@ -3110,8 +3106,8 @@ void EditToggleLineComments(LPCWSTR pwszComment, BOOL bInsertAtStart) {
 		SciCall_GetTextRange(&tr);;
 
 		Sci_Position iCommentPos;
-		int ch;
 		if (_strnicmp(tchBuf, mszComment, cchComment) == 0) {
+			int ch;
 			switch (iAction) {
 			case 0:
 				iAction = 2;
@@ -3894,29 +3890,56 @@ typedef struct _SORTLINE {
 } SORTLINE;
 
 typedef int (__stdcall *FNSTRCMP)(LPCWSTR, LPCWSTR);
+typedef int (__cdecl *QSortCmp)(const void *, const void *);
 
-static int __cdecl CmpStd(const void *s1, const void *s2) {
-	const int cmp = StrCmp(((SORTLINE *)s1)->pwszSortEntry, ((SORTLINE *)s2)->pwszSortEntry);
-	return (cmp) ? cmp : StrCmp(((SORTLINE *)s1)->pwszLine, ((SORTLINE *)s2)->pwszLine);
+static int __cdecl CmpStd(const void *p1, const void *p2) {
+	const SORTLINE *s1 = (const SORTLINE *)p1;
+	const SORTLINE *s2 = (const SORTLINE *)p2;
+	const int cmp = StrCmpW(s1->pwszSortEntry, s2->pwszSortEntry);
+	return cmp ? cmp : StrCmpW(s1->pwszLine, s2->pwszLine);
 }
 
-static int __cdecl CmpStdRev(const void *s1, const void *s2) {
-	return CmpStd(s2, s1);
+static int __cdecl CmpIStd(const void *p1, const void *p2) {
+	const SORTLINE *s1 = (const SORTLINE *)p1;
+	const SORTLINE *s2 = (const SORTLINE *)p2;
+	const int cmp = StrCmpIW(s1->pwszSortEntry, s2->pwszSortEntry);
+	return cmp ? cmp : StrCmpIW(s1->pwszLine, s2->pwszLine);
 }
 
-static int __cdecl CmpLogical(const void *s1, const void *s2) {
-	int cmp = (int)StrCmpLogicalW(((SORTLINE *)s1)->pwszSortEntry, ((SORTLINE *)s2)->pwszSortEntry);
+static int __cdecl CmpStdRev(const void *p1, const void *p2) {
+	return CmpStd(p2, p1);
+}
+
+static int __cdecl CmpIStdRev(const void *p1, const void *p2) {
+	return CmpIStd(p2, p1);
+}
+
+static int __cdecl CmpLogical(const void *p1, const void *p2) {
+	const SORTLINE *s1 = (const SORTLINE *)p1;
+	const SORTLINE *s2 = (const SORTLINE *)p2;
+	int cmp = StrCmpLogicalW(s1->pwszSortEntry, s1->pwszSortEntry);
 	if (cmp == 0) {
-		cmp = (int)StrCmpLogicalW(((SORTLINE *)s1)->pwszLine, ((SORTLINE *)s2)->pwszLine);
+		cmp = StrCmpLogicalW(s2->pwszLine, s2->pwszLine);
 	}
-	if (cmp == 0) {
-		cmp = StrCmp(((SORTLINE *)s1)->pwszSortEntry, ((SORTLINE *)s2)->pwszSortEntry);
-	}
-	return (cmp) ? cmp : StrCmp(((SORTLINE *)s1)->pwszLine, ((SORTLINE *)s2)->pwszLine);
+	return cmp ? cmp : CmpStd(p1, p2);
 }
 
-static int __cdecl CmpLogicalRev(const void *s1, const void *s2) {
-	return CmpLogical(s2, s1);
+static int __cdecl CmpILogical(const void *p1, const void *p2) {
+	const SORTLINE *s1 = (const SORTLINE *)p1;
+	const SORTLINE *s2 = (const SORTLINE *)p2;
+	int cmp = StrCmpLogicalW(s1->pwszSortEntry, s1->pwszSortEntry);
+	if (cmp == 0) {
+		cmp = StrCmpLogicalW(s2->pwszLine, s2->pwszLine);
+	}
+	return cmp ? cmp : CmpIStd(p1, p2);
+}
+
+static int __cdecl CmpLogicalRev(const void *p1, const void *p2) {
+	return CmpLogical(p2, p1);
+}
+
+static int __cdecl CmpILogicalRev(const void *p1, const void *p2) {
+	return CmpILogical(p2, p1);
 }
 
 void EditSortLines(int iSortFlags) {
@@ -4032,11 +4055,10 @@ void EditSortLines(int iSortFlags) {
 	}
 
 	if (iSortFlags & SORT_DESCENDING) {
-		if ((iSortFlags & SORT_LOGICAL)) {
-			qsort(pLines, iLineCount, sizeof(SORTLINE), CmpLogicalRev);
-		} else {
-			qsort(pLines, iLineCount, sizeof(SORTLINE), CmpStdRev);
-		}
+		QSortCmp cmpFunc = (iSortFlags & SORT_LOGICAL)
+			? ((iSortFlags & SORT_NOCASE) ? CmpILogicalRev : CmpLogicalRev)
+			: ((iSortFlags & SORT_NOCASE) ? CmpIStdRev : CmpStdRev);
+		qsort(pLines, iLineCount, sizeof(SORTLINE), cmpFunc);
 	} else if (iSortFlags & SORT_SHUFFLE) {
 		srand(GetTickCount());
 		for (Sci_Line i = iLineCount - 1; i > 0; i--) {
@@ -4046,11 +4068,10 @@ void EditSortLines(int iSortFlags) {
 			pLines[j] = sLine;
 		}
 	} else {
-		if ((iSortFlags & SORT_LOGICAL)) {
-			qsort(pLines, iLineCount, sizeof(SORTLINE), CmpLogical);
-		} else {
-			qsort(pLines, iLineCount, sizeof(SORTLINE), CmpStd);
-		}
+		QSortCmp cmpFunc = (iSortFlags & SORT_LOGICAL)
+			? ((iSortFlags & SORT_NOCASE) ? CmpILogical : CmpLogical)
+			: ((iSortFlags & SORT_NOCASE) ? CmpIStd : CmpStd);
+		qsort(pLines, iLineCount, sizeof(SORTLINE), cmpFunc);
 	}
 
 	char *pmszResult = (char *)NP2HeapAlloc(cchTotal + 2 * iLineCount + 1);
@@ -5568,7 +5589,7 @@ static INT_PTR CALLBACK EditLineNumDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, 
 			iNewLine = iLine;
 
 			if (SendDlgItemMessage(hwnd, IDC_COLNUM, WM_GETTEXTLENGTH, 0, 0) > 0) {
-				GetDlgItemText(hwnd, IDC_LINENUM, tchLn, COUNTOF(tchLn));
+				GetDlgItemText(hwnd, IDC_COLNUM, tchLn, COUNTOF(tchLn));
 #if defined(_WIN64)
 				fTranslated2 = CRTStrToInt64(tchLn, &iLine);
 #else
@@ -6072,7 +6093,7 @@ static INT_PTR CALLBACK EditInsertTagDlgProc(HWND hwnd, UINT umsg, WPARAM wParam
 				}
 
 				if (bClear) {
-					SetDlgItemText(hwnd, IDC_MODIFY_LINE_PREFIX, L"");
+					SetDlgItemText(hwnd, IDC_MODIFY_LINE_APPEND, L"");
 				}
 				DString_Free(&wszOpen);
 			}
@@ -6108,6 +6129,96 @@ static INT_PTR CALLBACK EditInsertTagDlgProc(HWND hwnd, UINT umsg, WPARAM wParam
 //
 void EditInsertTagDlg(HWND hwnd) {
 	ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_INSERTTAG), hwnd, EditInsertTagDlgProc, 0);
+}
+
+void EditInsertDateTime(BOOL bShort) {
+	WCHAR tchDateTime[256];
+	WCHAR tchTemplate[256];
+
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+
+	if (IniGetString(INI_SECTION_NAME_FLAGS, bShort ? L"DateTimeShort" : L"DateTimeLong",
+					 L"", tchTemplate, COUNTOF(tchTemplate))) {
+		struct tm sst;
+		sst.tm_isdst	= -1;
+		sst.tm_sec		= (int)st.wSecond;
+		sst.tm_min		= (int)st.wMinute;
+		sst.tm_hour		= (int)st.wHour;
+		sst.tm_mday		= (int)st.wDay;
+		sst.tm_mon		= (int)st.wMonth - 1;
+		sst.tm_year		= (int)st.wYear - 1900;
+		sst.tm_wday		= (int)st.wDayOfWeek;
+		mktime(&sst);
+		wcsftime(tchDateTime, COUNTOF(tchDateTime), tchTemplate, &sst);
+	} else {
+		WCHAR tchDate[128];
+		WCHAR tchTime[128];
+		GetDateFormat(LOCALE_USER_DEFAULT, bShort ? DATE_SHORTDATE : DATE_LONGDATE,
+					  &st, NULL, tchDate, COUNTOF(tchDate));
+		GetTimeFormat(LOCALE_USER_DEFAULT, TIME_NOSECONDS, &st, NULL, tchTime, COUNTOF(tchTime));
+
+		wsprintf(tchDateTime, L"%s %s", tchTime, tchDate);
+	}
+
+	const UINT cpEdit = SciCall_GetCodePage();
+	char mszBuf[256 * kMaxMultiByteCount];
+	WideCharToMultiByte(cpEdit, 0, tchDateTime, -1, mszBuf, COUNTOF(mszBuf), NULL, NULL);
+	SciCall_ReplaceSel(mszBuf);
+}
+
+void EditUpdateTimestampMatchTemplate(HWND hwnd) {
+	WCHAR wchFind[256] = {0};
+	IniGetString(INI_SECTION_NAME_FLAGS, L"TimeStamp", L"\\$Date:[^\\$]+\\$ | $Date: %Y/%m/%d %H:%M:%S $", wchFind, COUNTOF(wchFind));
+
+	WCHAR wchTemplate[256] = {0};
+	WCHAR *pwchSep;
+	if ((pwchSep = StrChr(wchFind, L'|')) != NULL) {
+		lstrcpy(wchTemplate, pwchSep + 1);
+		*pwchSep = 0;
+	}
+
+	StrTrim(wchFind, L" ");
+	StrTrim(wchTemplate, L" ");
+
+	if (StrIsEmpty(wchFind) || StrIsEmpty(wchTemplate)) {
+		return;
+	}
+
+	SYSTEMTIME st;
+	struct tm sst;
+	GetLocalTime(&st);
+	sst.tm_isdst = -1;
+	sst.tm_sec	 = (int)st.wSecond;
+	sst.tm_min	 = (int)st.wMinute;
+	sst.tm_hour	 = (int)st.wHour;
+	sst.tm_mday	 = (int)st.wDay;
+	sst.tm_mon	 = (int)st.wMonth - 1;
+	sst.tm_year	 = (int)st.wYear - 1900;
+	sst.tm_wday	 = (int)st.wDayOfWeek;
+	mktime(&sst);
+
+	WCHAR wchReplace[256];
+	wcsftime(wchReplace, COUNTOF(wchReplace), wchTemplate, &sst);
+
+	const UINT cpEdit = SciCall_GetCodePage();
+#if NP2_USE_DESIGNATED_INITIALIZER
+	EDITFINDREPLACE efrTS = {
+		.hwnd = hwnd,
+		.fuFlags = SCFIND_REGEXP,
+	};
+#else
+	EDITFINDREPLACE efrTS = { "", "", "", "", hwnd, SCFIND_REGEXP };
+#endif
+
+	WideCharToMultiByte(cpEdit, 0, wchFind, -1, efrTS.szFind, COUNTOF(efrTS.szFind), NULL, NULL);
+	WideCharToMultiByte(cpEdit, 0, wchReplace, -1, efrTS.szReplace, COUNTOF(efrTS.szReplace), NULL, NULL);
+
+	if (!SciCall_IsSelectionEmpty()) {
+		EditReplaceAllInSelection(hwnd, &efrTS, TRUE);
+	} else {
+		EditReplaceAll(hwnd, &efrTS, TRUE);
+	}
 }
 
 typedef struct UnicodeControlCharacter {
@@ -6875,7 +6986,6 @@ BOOL FileVars_ParseStr(LPCSTR pszData, LPCSTR pszName, char *pszValue, int cchVa
 //
 // SciInitThemes()
 //
-extern BOOL bIsAppThemed;
 static WNDPROC pfnSciWndProc = NULL;
 
 static LRESULT CALLBACK SciThemedWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam);
@@ -6895,7 +7005,7 @@ LRESULT CALLBACK SciThemedWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lP
 	case WM_NCCALCSIZE:
 		if (wParam) {
 			const LRESULT lresult = CallWindowProc(pfnSciWndProc, hwnd, WM_NCCALCSIZE, wParam, lParam);
-			if (bIsAppThemed) {
+			if (IsAppThemed()) {
 				HTHEME hTheme = OpenThemeData(hwnd, L"edit");
 				if (hTheme) {
 					NCCALCSIZE_PARAMS *csp = (NCCALCSIZE_PARAMS *)lParam;
@@ -6926,7 +7036,7 @@ LRESULT CALLBACK SciThemedWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lP
 
 	case WM_NCPAINT: {
 		const LRESULT lresult = CallWindowProc(pfnSciWndProc, hwnd, WM_NCPAINT, wParam, lParam);
-		if (bIsAppThemed) {
+		if (IsAppThemed()) {
 			HTHEME hTheme = OpenThemeData(hwnd, L"edit");
 			if (hTheme) {
 				HDC hdc = GetWindowDC(hwnd);

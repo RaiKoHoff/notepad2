@@ -1,7 +1,9 @@
-// Lexer for LLVM.
+// This file is part of Notepad2.
+// See License.txt for details about distribution and modification.
+//! Lexer for LLVM.
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include "ILexer.h"
@@ -86,7 +88,7 @@ static void ColouriseLLVMDoc(Sci_PositionU startPos, Sci_Position length, int in
 			break;
 		case SCE_C_IDENTIFIER:
 			if (!iswordchar(ch)) {
-				buf[wordLen] = 0;
+				buf[wordLen] = '\0';
 				if (buf[0] == '@' || buf[0] == '%') {
 					if (strncmp(buf + 1, "llvm.", 5) == 0) {
 						styler.ColourTo(i - 1, SCE_C_DIRECTIVE);
@@ -115,7 +117,6 @@ static void ColouriseLLVMDoc(Sci_PositionU startPos, Sci_Position length, int in
 					styler.ColourTo(i - 1, SCE_C_LABEL);
 				}
 				state = SCE_C_DEFAULT;
-				wordLen = 0;
 			} else if (wordLen < MAX_WORD_LENGTH) {
 				buf[wordLen++] = static_cast<char>(ch);
 			}
@@ -175,7 +176,8 @@ static void ColouriseLLVMDoc(Sci_PositionU startPos, Sci_Position length, int in
 			} else if (iswordstart(ch) || ch == '@' || ch == '%') {
 				styler.ColourTo(i - 1, state);
 				state = SCE_C_IDENTIFIER;
-				buf[wordLen++] = static_cast<char>(ch);
+				buf[0] = static_cast<char>(ch);
+				wordLen = 1;
 			} else if (isoperator(ch)) {
 				styler.ColourTo(i - 1, state);
 				state = SCE_C_OPERATOR;
@@ -192,9 +194,7 @@ static void ColouriseLLVMDoc(Sci_PositionU startPos, Sci_Position length, int in
 }
 
 #define IsCommentLine(line)			IsLexCommentLine(line, styler, SCE_C_COMMENTLINE)
-static void FoldLLVMDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
+static void FoldLLVMDoc(Sci_PositionU startPos, Sci_Position length, int /*initStyle*/, LexerWordList, Accessor &styler) {
 	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
 	const bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;
 
@@ -208,12 +208,11 @@ static void FoldLLVMDoc(Sci_PositionU startPos, Sci_Position length, int initSty
 
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
-	int style = initStyle;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
 		const char ch = chNext;
 		chNext = styler.SafeGetCharAt(i + 1);
-		style = styleNext;
+		const int style = styleNext;
 		styleNext = styler.StyleAt(i + 1);
 		const bool atEOL = (ch == '\r' && chNext != '\n') || (ch == '\n');
 

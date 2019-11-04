@@ -8,6 +8,8 @@
 #include <cassert>
 #include <cctype>
 
+#include <algorithm>
+
 #include "ILexer.h"
 #include "LexAccessor.h"
 #include "CharacterSet.h"
@@ -17,13 +19,44 @@ using namespace Scintilla;
 namespace Scintilla {
 
 bool LexAccessor::MatchIgnoreCase(Sci_Position pos, const char *s) noexcept {
-	for (int i = 0; *s; i++) {
-		if (*s != MakeLowerCase(SafeGetCharAt(pos + i))) {
+	for (; *s; s++, pos++) {
+		if (*s != MakeLowerCase(SafeGetCharAt(pos))) {
 			return false;
 		}
-		s++;
 	}
 	return true;
+}
+
+void LexAccessor::GetRange(Sci_PositionU startPos_, Sci_PositionU endPos_, char *s, Sci_PositionU len) noexcept {
+	endPos_ = std::min(endPos_, startPos_ + len - 1);
+	if (startPos_ >= static_cast<Sci_PositionU>(startPos) && endPos_ <= static_cast<Sci_PositionU>(endPos)) {
+		const char *p = buf + startPos_ - startPos;
+		const char * const t = buf + endPos_ - startPos;
+		while (p < t) {
+			*s++ = *p++;
+		}
+	} else {
+		for (; startPos_ < endPos_; startPos_++) {
+			*s++ = (*this)[startPos_];
+		}
+	}
+	*s = '\0';
+}
+
+void LexAccessor::GetRangeLowered(Sci_PositionU startPos_, Sci_PositionU endPos_, char *s, Sci_PositionU len) noexcept {
+	endPos_ = std::min(endPos_, startPos_ + len - 1);
+	if (startPos_ >= static_cast<Sci_PositionU>(startPos) && endPos_ <= static_cast<Sci_PositionU>(endPos)) {
+		const char *p = buf + startPos_ - startPos;
+		const char * const t = buf + endPos_ - startPos;
+		while (p < t) {
+			*s++ = MakeLowerCase(*p++);
+		}
+	} else {
+		for (; startPos_ < endPos_; startPos_++) {
+			*s++ = MakeLowerCase((*this)[startPos_]);
+		}
+	}
+	*s = '\0';
 }
 
 Sci_Position LexLineSkipSpaceTab(Sci_Position line, LexAccessor &styler) noexcept {
@@ -92,7 +125,7 @@ bool IsLexCommentLine(Sci_Position line, LexAccessor &styler, int style) noexcep
 
 Sci_Position LexSkipWhiteSpace(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler) noexcept {
 	for (Sci_Position i = startPos; i < endPos; i++) {
-		if (!(isspacechar(styler.SafeGetCharAt(i)))) {
+		if (!(IsWhiteSpace(styler.SafeGetCharAt(i)))) {
 			return i;
 		}
 	}
@@ -101,7 +134,7 @@ Sci_Position LexSkipWhiteSpace(Sci_Position startPos, Sci_Position endPos, LexAc
 
 Sci_Position LexSkipWhiteSpace(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler, bool IsStreamCommentStyle(int)) noexcept {
 	for (Sci_Position i = startPos; i < endPos; i++) {
-		if (!(isspacechar(styler.SafeGetCharAt(i)) || IsStreamCommentStyle(styler.StyleAt(i)))) {
+		if (!(IsWhiteSpace(styler.SafeGetCharAt(i)) || IsStreamCommentStyle(styler.StyleAt(i)))) {
 			return i;
 		}
 	}
@@ -112,43 +145,11 @@ Sci_Position LexSkipWhiteSpace(Sci_Position startPos, Sci_Position endPos, LexAc
 	bool IsStreamCommentStyle(int), const CharacterSet &charSet) noexcept {
 	for (Sci_Position i = startPos; i < endPos; i++) {
 		const char ch = styler.SafeGetCharAt(i);
-		if (!(isspacechar(ch) || charSet.Contains(ch) || IsStreamCommentStyle(styler.StyleAt(i)))) {
+		if (!(IsWhiteSpace(ch) || charSet.Contains(ch) || IsStreamCommentStyle(styler.StyleAt(i)))) {
 			return i;
 		}
 	}
 	return endPos;
-}
-
-Sci_PositionU LexGetRange(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler, char *s, Sci_PositionU len) noexcept {
-	Sci_PositionU i = 0;
-	char ch = styler.SafeGetCharAt(startPos + i);
-	Sci_PositionU _endPos = endPos - startPos + 1;
-	if (_endPos > len - 1) {
-		_endPos = len - 1;
-	}
-	while (i < _endPos) {
-		s[i] = ch;
-		i++;
-		ch = styler.SafeGetCharAt(startPos + i);
-	}
-	s[i] = '\0';
-	return i;
-}
-
-Sci_PositionU LexGetRangeLowered(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler, char *s, Sci_PositionU len) noexcept {
-	Sci_PositionU i = 0;
-	char ch = MakeLowerCase(styler.SafeGetCharAt(startPos + i));
-	Sci_PositionU _endPos = endPos - startPos + 1;
-	if (_endPos > len - 1) {
-		_endPos = len - 1;
-	}
-	while (i < _endPos) {
-		s[i] = ch;
-		i++;
-		ch = MakeLowerCase(styler.SafeGetCharAt(startPos + i));
-	}
-	s[i] = '\0';
-	return i;
 }
 
 Sci_PositionU LexGetRange(Sci_Position startPos, LexAccessor &styler, bool IsWordChar(int), char *s, Sci_PositionU len) noexcept {

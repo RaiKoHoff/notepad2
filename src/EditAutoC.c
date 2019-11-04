@@ -551,7 +551,6 @@ static inline BOOL IsOperatorStyle(int style) {
 	case SCLEX_LISP:
 	case SCLEX_LLVM:
 	case SCLEX_NSIS:
-	case SCLEX_VIM:
 		return style == SCE_C_OPERATOR;
 	case SCLEX_CSS:
 		return style == SCE_CSS_OPERATOR;
@@ -563,6 +562,9 @@ static inline BOOL IsOperatorStyle(int style) {
 
 	case SCLEX_HTML:
 		return style == SCE_HPHP_OPERATOR || style == SCE_HJ_SYMBOLS || style == SCE_HJA_SYMBOLS;
+
+	case SCLEX_KOTLIN:
+		return style == SCE_KOTLIN_OPERATOR || style == SCE_KOTLIN_OPERATOR2;
 
 	case SCLEX_LATEX:
 	case SCLEX_TEXINFO:
@@ -586,6 +588,8 @@ static inline BOOL IsOperatorStyle(int style) {
 
 	case SCLEX_RUBY:
 		return style == SCE_RB_OPERATOR;
+	case SCLEX_RUST:
+		return style == SCE_RUST_OPERATOR;
 
 	case SCLEX_SMALI:
 		return style == SCE_SMALI_OPERATOR;
@@ -602,6 +606,8 @@ static inline BOOL IsOperatorStyle(int style) {
 		return style == SCE_V_OPERATOR;
 	case SCLEX_VHDL:
 		return style == SCE_VHDL_OPERATOR;
+	case SCLEX_VIM:
+		return style == SCE_VIM_OPERATOR;
 	}
 	return FALSE;
 }
@@ -811,6 +817,10 @@ void AutoC_AddDocWord(struct WordList *pWList, BOOL bIgnoreCase, char prefix) {
 			while (wordEnd < iDocLen) {
 				const int ch = SciCall_GetCharAt(wordEnd);
 				if (!(ch == ':' || ch == '.' || ch == '-')) {
+					if (ch == '!' && pLexCurrent->iLexer == SCLEX_RUST && style == SCE_RUST_MACRO) {
+						// macro: println!()
+						++wordEnd;
+					}
 					break;
 				}
 
@@ -965,9 +975,9 @@ void AutoC_AddKeyword(struct WordList *pWList, int iCurrentStyle) {
 #define AutoC_AddSpecWord_Keyword	2
 INT AutoC_AddSpecWord(struct WordList *pWList, int iCurrentStyle, int ch, int chPrev) {
 	if (pLexCurrent->iLexer == SCLEX_CPP && IsCppCommentStyle(iCurrentStyle) && np2_LexKeyword) {
-		if ((ch == '@' && (*np2_LexKeyword == kwJavaDoc || *np2_LexKeyword == kwPHPDoc || *np2_LexKeyword == kwDoxyDoc))
-				|| (ch == '\\' && *np2_LexKeyword == kwDoxyDoc)
-				|| ((ch == '<' || chPrev == '<') && *np2_LexKeyword == kwNETDoc)) {
+		if ((ch == '@' && (np2_LexKeyword == &kwJavaDoc || np2_LexKeyword == &kwPHPDoc || np2_LexKeyword == &kwDoxyDoc))
+				|| (ch == '\\' && np2_LexKeyword == &kwDoxyDoc)
+				|| ((ch == '<' || chPrev == '<') && np2_LexKeyword == &kwNETDoc)) {
 			WordList_AddList(pWList, (*np2_LexKeyword)[0]);
 			WordList_AddList(pWList, (*np2_LexKeyword)[1]);
 			WordList_AddList(pWList, (*np2_LexKeyword)[2]);
@@ -1333,7 +1343,7 @@ static BOOL CanAutoCloseSingleQuote(int chPrev, int iCurrentStyle) {
 	// someone's, don't
 	if (isalnum(chPrev)) {
 		// character prefix
-		if (pLexCurrent->rid == NP2LEX_CPP || pLexCurrent->rid == NP2LEX_RC || iLexer == SCLEX_PYTHON || iLexer == SCLEX_SQL) {
+		if (pLexCurrent->rid == NP2LEX_CPP || pLexCurrent->rid == NP2LEX_RC || iLexer == SCLEX_PYTHON || iLexer == SCLEX_SQL || iLexer == SCLEX_RUST) {
 			const int lower = chPrev | 0x20;
 			const int chPrev2 = SciCall_GetCharAt(SciCall_GetCurrentPos() - 3);
 			const BOOL bSubWord = chPrev2 >= 0x80 || isalnum(chPrev2);
@@ -1349,8 +1359,15 @@ static BOOL CanAutoCloseSingleQuote(int chPrev, int iCurrentStyle) {
 
 			case SCLEX_SQL:
 				return (lower == 'q' || lower == 'x' || lower == 'b') && !bSubWord;
+
+			case SCLEX_RUST:
+				return chPrev == 'b' && !bSubWord; // bytes
 			}
 		}
+		return FALSE;
+	}
+	if (iLexer == SCLEX_RUST) {
+		// lifetime
 		return FALSE;
 	}
 
@@ -1929,7 +1946,9 @@ void EditToggleCommentLine(void) {
 	case SCLEX_FSHARP:
 	case SCLEX_GRAPHVIZ:
 	case SCLEX_JSON:
+	case SCLEX_KOTLIN:
 	case SCLEX_PASCAL:
+	case SCLEX_RUST:
 	case SCLEX_VERILOG:
 		EditToggleLineComments(L"//", FALSE);
 		break;
@@ -2056,7 +2075,9 @@ void EditToggleCommentBlock(void) {
 	case SCLEX_CSS:
 	case SCLEX_GRAPHVIZ:
 	case SCLEX_JSON:
+	case SCLEX_KOTLIN:
 	case SCLEX_NSIS:
+	case SCLEX_RUST:
 	case SCLEX_SQL:
 	case SCLEX_VERILOG:
 	case SCLEX_VHDL:
@@ -2199,6 +2220,10 @@ void EditInsertScriptShebangLine(void) {
 		}
 		break;
 
+	//case SCLEX_KOTLIN:
+	//	name = "kotlin";
+	//	break;
+
 	case SCLEX_LUA:
 		name = "lua";
 		break;
@@ -2214,6 +2239,10 @@ void EditInsertScriptShebangLine(void) {
 	case SCLEX_RUBY:
 		name = "ruby";
 		break;
+
+	//case SCLEX_RUST:
+	//	name = "rust";
+	//	break;
 
 	case SCLEX_TCL:
 		name = "wish";

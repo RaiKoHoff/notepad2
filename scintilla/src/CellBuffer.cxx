@@ -102,9 +102,7 @@ public:
 	LineStartIndex(LineStartIndex &&) = delete;
 	void operator=(const LineStartIndex &) = delete;
 	void operator=(LineStartIndex &&) = delete;
-	virtual ~LineStartIndex() {
-		starts.DeleteAll();
-	}
+	virtual ~LineStartIndex() = default;
 	bool Allocate(Sci::Line lines) {
 		refCount++;
 		Sci::Position length = starts.PositionFromPartition(starts.Partitions());
@@ -146,7 +144,6 @@ class LineVector : public ILineVector {
 	LineStartIndex<POS> startsUTF32;
 public:
 	LineVector() : starts(256), perLine(nullptr) {
-		Init();
 	}
 	// Deleted so LineVector objects can not be copied.
 	LineVector(const LineVector &) = delete;
@@ -693,9 +690,7 @@ void CellBuffer::Allocate(Sci::Position newSize) {
 }
 
 void CellBuffer::SetUTF8Substance(bool utf8Substance_) noexcept {
-	if (utf8Substance != utf8Substance_) {
-		utf8Substance = utf8Substance_;
-	}
+	utf8Substance = utf8Substance_;
 }
 
 void CellBuffer::SetLineEndTypes(int utf8LineEnds_) {
@@ -871,10 +866,10 @@ void CellBuffer::ResetLineEnds() {
 	// Reinitialize line data -- too much work to preserve
 	plv->Init();
 
-	const Sci::Position position = 0;
+	constexpr Sci::Position position = 0;
 	const Sci::Position length = Length();
 	Sci::Line lineInsert = 1;
-	const bool atLineStart = true;
+	constexpr bool atLineStart = true;
 	plv->InsertText(lineInsert - 1, length);
 	unsigned char chBeforePrev = 0;
 	unsigned char chPrev = 0;
@@ -986,7 +981,7 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 	}
 
 	//ElapsedPeriod period;
-	unsigned char ch = ' ';
+	unsigned char ch;
 	if (utf8LineEnds || insertLength < 32) {
 		// s may not NULL-terminated, ensure *ptr == '\n' is valid.
 		const char * const end = s + insertLength - 1;
@@ -1098,8 +1093,11 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 				do {
 #if defined(__clang__) || defined(__GNUC__)
 					const int trailing = __builtin_ctz(maskLF);
-#else
+#elif defined(_MSC_VER)
 					const uint32_t trailing = _tzcnt_u32(maskLF);
+#else
+					unsigned long trailing;
+					_BitScanForward(&trailing, maskLF);
 #endif
 					maskLF >>= trailing;
 					//! shift 32 bit is undefined behavior: (0x80000000 >> 32) == 0x80000000.
@@ -1161,6 +1159,8 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 				do {
 #if defined(__clang__) || defined(__GNUC__)
 					const int trailing = __builtin_ctz(maskLF);
+#elif defined(_MSC_VER)
+					const uint32_t trailing = _tzcnt_u32(maskLF);
 #else
 					unsigned long trailing;
 					_BitScanForward(&trailing, maskLF);

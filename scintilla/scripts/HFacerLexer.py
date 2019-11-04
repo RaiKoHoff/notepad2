@@ -2,15 +2,16 @@
 # HFacer.py - regenerate the SciLexer.h file from the SciLexer.iface interface
 # definition file.
 # Implemented 2000 by Neil Hodgson neilh@scintilla.org
-# Requires Python 2.5 or later
 
-import sys
-import os
 import Face
 
-from FileGenerator import UpdateFile, Generate, Regenerate, UpdateLineInFile, lineEnd
+from FileGenerator import Regenerate
 
 def printLexHFile(f):
+	# StylesCommon in Scintilla.iface
+	STYLE_DEFAULT = 32
+	STYLE_LASTPREDEFINED = 39
+
 	out = []
 	lex = set()
 	for name in f.order:
@@ -24,7 +25,7 @@ def printLexHFile(f):
 					else:
 						lex.add(val)
 				else:
-					if val > 31 and val < 40:
+					if val >= STYLE_DEFAULT and val <= STYLE_LASTPREDEFINED:
 						raise Exception("Invalid Style Value: %s = %d" % (name, val))
 				out.append("#define " + name + " " + v["Value"])
 	return out

@@ -1037,6 +1037,18 @@ static LRESULT CALLBACK MultilineEditProc(HWND hwnd, UINT umsg, WPARAM wParam, L
 		}
 		break;
 
+	case WM_KEYDOWN:
+		if (wParam == VK_ESCAPE) {
+			SendMessage(GetParent(hwnd), WM_CLOSE, 0, 0);
+			return TRUE;
+		}
+		if (wParam == VK_TAB && KeyboardIsKeyDown(VK_SHIFT)) {
+			// focus on next control: GetNextDlgTabItem(GetParent(hwnd), hwnd)
+			// TODO: find first control when hwnd is last tab item on this dialog: GetNextDlgTabItem() returns hwnd
+			PostMessage(GetParent(hwnd), WM_NEXTDLGCTL, 0, FALSE);
+		}
+		break;
+
 	case WM_SETTEXT: {
 		const LRESULT result = DefSubclassProc(hwnd, umsg, wParam, lParam);
 		if (result) {
@@ -1762,8 +1774,8 @@ void PrepareFilterStr(LPWSTR lpFilter) {
 //
 void StrTab2Space(LPWSTR lpsz) {
 	WCHAR *c = lpsz;
-	while ((c = StrChr(lpsz, L'\t')) != NULL) {
-		*c = L' ';
+	while ((c = StrChr(c, L'\t')) != NULL) {
+		*c++ = L' ';
 	}
 }
 
@@ -1777,7 +1789,7 @@ void PathFixBackslashes(LPWSTR lpsz) {
 		if (*CharPrev(lpsz, c) == L':' && *CharNext(c) == L'/') {
 			c += 2;
 		} else {
-			*c = L'\\';
+			*c++ = L'\\';
 		}
 	}
 }
@@ -2230,7 +2242,7 @@ BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
 		NONCLIENTMETRICS ncm;
 		ZeroMemory(&ncm, sizeof(ncm));
 		ncm.cbSize = sizeof(NONCLIENTMETRICS);
-#if (WINVER >= _WIN32_WINNT_VISTA)
+#if (_WIN32_WINNT >= _WIN32_WINNT_VISTA)
 		if (!IsVistaAndAbove()) {
 			ncm.cbSize -= sizeof(ncm.iPaddedBorderWidth);
 		}

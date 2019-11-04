@@ -7,8 +7,8 @@
  ** Completely rewritten by Marko Njezic <sf@maxempire.com> October 2008
  **/
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include <string>
@@ -304,7 +304,7 @@ static void ClassifyPascalWordFoldPoint(int &levelCurrent, int &lineFoldStateCur
 	const CharacterSet setWordStart(CharacterSet::setAlpha, "_");
 	const CharacterSet setWord(CharacterSet::setAlphaNum, "_");
 
-	LexGetRangeLowered(lastStart, currentPos, styler, s, sizeof(s));
+	styler.GetRangeLowered(lastStart, currentPos + 1, s, sizeof(s));
 
 	if (strcmp(s, "record") == 0) {
 		lineFoldStateCurrent |= stateFoldInRecord;
@@ -399,8 +399,6 @@ static void ClassifyPascalWordFoldPoint(int &levelCurrent, int &lineFoldStateCur
 #define IsCommentLine(line)		IsLexCommentLine(line, styler, SCE_PAS_COMMENTLINE)
 
 static void FoldPascalDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
 	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
 	const bool foldPreprocessor = styler.GetPropertyInt("fold.preprocessor") != 0;
 	const bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;

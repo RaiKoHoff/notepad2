@@ -25,8 +25,11 @@ C/C++ Source
 	m				Objective C Source File
 	mm				Objective C++ Source File
 	xpm				X11 Pixmap Graphic
+	cu				CUDA Source File
 
 	*.h.in
+
+	[ ] rs			Android RenderScript
 
 C# Source
 	cs
@@ -242,6 +245,8 @@ GraphViz Dot
 	dot
 	gv
 
+	diag			blockdiag
+
 Groovy Script
 	groovy
 	gvy
@@ -283,6 +288,10 @@ Jamfile
 
 Julia Script
 	jl
+
+
+Kotlin
+	kt
 
 
 LaTeX File
@@ -379,6 +388,8 @@ Resource Script
 	rh
 	dlg
 
+Rust Source
+	rs
 
 Scala Script
 	scala

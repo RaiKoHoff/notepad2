@@ -1,5 +1,9 @@
-#include <cstring>
+// This file is part of Notepad2.
+// See License.txt for details about distribution and modification.
+//! Lexer for GNU Texinfo.
+
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include "ILexer.h"
@@ -65,7 +69,7 @@ static void ColouriseTexiDoc(Sci_PositionU startPos, Sci_Position length, int in
 			continue;
 		case SCE_L_COMMAND:
 			if (!IsAlpha(ch)) {
-				buf[wordLen] = 0;
+				buf[wordLen] = '\0';
 				if (strcmp(buf, "@c") == 0 || strcmp(buf, "@comment") == 0) {
 					state = SCE_L_COMMENT;
 				} else if (strcmp(buf, "@end") == 0) {
@@ -91,7 +95,6 @@ static void ColouriseTexiDoc(Sci_PositionU startPos, Sci_Position length, int in
 					styler.ColourTo(i - 1, state);
 					state = SCE_L_DEFAULT;
 				}
-				wordLen = 0;
 			} else if (wordLen < MAX_WORD_LENGTH) {
 				buf[wordLen++] = static_cast<char>(ch);
 			}
@@ -120,7 +123,8 @@ static void ColouriseTexiDoc(Sci_PositionU startPos, Sci_Position length, int in
 		if (state == SCE_L_DEFAULT) {
 			if (lineCurrent == 0 && i == 0 && ch == '\\' && chNext == 'i') { // \input texinfo.tex
 				state = SCE_L_COMMAND;
-				buf[wordLen++] = static_cast<char>(ch);
+				buf[0] = static_cast<char>(ch);
+				wordLen = 1;
 			} else if (ch == '@') {
 				if (IsTexiSpec(chNext)) {
 					styler.ColourTo(i - 1, state);
@@ -128,7 +132,8 @@ static void ColouriseTexiDoc(Sci_PositionU startPos, Sci_Position length, int in
 				} else if (IsAlpha(chNext)) {
 					styler.ColourTo(i - 1, state);
 					state = SCE_L_COMMAND;
-					buf[wordLen++] = static_cast<char>(ch);
+					buf[0] = static_cast<char>(ch);
+					wordLen = 1;
 				}
 			} else if (ch == '@' || ch == '{' || ch == '}' ||
 				(ch == '-' && !IsAlpha(chPrev) && !IsAlpha(chNext))) {

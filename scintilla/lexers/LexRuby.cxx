@@ -5,8 +5,8 @@
 // Copyright 2001- by Clemens Wyss <wys@helbling.ch>
 // The License.txt file describes the conditions under which this software may be distributed.
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include "ILexer.h"
@@ -185,14 +185,14 @@ static constexpr char opposite(char ch) noexcept {
 // Null transitions when we see we've reached the end
 // and need to relex the curr char.
 
-static void redo_char(Sci_Position &i, char &ch, char &chNext, char &chNext2, int &state) noexcept {
+static void redo_char(Sci_Position &i, char ch, char &chNext, char &chNext2, int &state) noexcept {
 	i--;
 	chNext2 = chNext;
 	chNext = ch;
 	state = SCE_RB_DEFAULT;
 }
 
-static void advance_char(Sci_Position &i, char &ch, char &chNext, char &chNext2) noexcept {
+static void advance_char(Sci_Position &i, char &ch, char &chNext, char chNext2) noexcept {
 	i++;
 	ch = chNext;
 	chNext = chNext2;
@@ -404,8 +404,8 @@ static bool sureThisIsNotHeredoc(Sci_Position lt2StartPos, Accessor &styler) {
 	const Sci_Position lineStart = styler.GetLine(lt2StartPos);
 	const Sci_Position lineStartPosn = styler.LineStart(lineStart);
 	styler.Flush();
-	const bool definitely_not_a_here_doc = true;
-	const bool looks_like_a_here_doc = false;
+	constexpr bool definitely_not_a_here_doc = true;
+	constexpr bool looks_like_a_here_doc = false;
 
 	// find the expression start rather than the line start
 	const Sci_Position exprStartPosn = findExpressionStart(lt2StartPos, lineStartPosn, styler);
@@ -1634,8 +1634,6 @@ static bool keywordDoStartsLoop(Sci_Position pos, Accessor &styler) {
 #define IsCommentLine(line)	IsLexCommentLine(line, styler, SCE_RB_COMMENTLINE)
 
 static void FoldRbDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
 	const bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;
 	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
 

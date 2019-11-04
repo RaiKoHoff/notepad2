@@ -5,8 +5,8 @@
 // Copyright 1998-2005 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include <string>
@@ -35,12 +35,8 @@ namespace {
 enum script_type { eScriptNone = 0, eScriptJS, eScriptVBS, eScriptPython, eScriptPHP, eScriptXML, eScriptSGML, eScriptSGMLblock, eScriptComment };
 enum script_mode { eHtml = 0, eNonHtmlScript, eNonHtmlPreProc, eNonHtmlScriptPreProc };
 
-void GetTextSegment(Accessor &styler, Sci_PositionU start, Sci_PositionU end, char *s, size_t len) noexcept {
-	Sci_PositionU i = 0;
-	for (; (i < end - start + 1) && (i < len - 1); i++) {
-		s[i] = MakeLowerCase(styler[start + i]);
-	}
-	s[i] = '\0';
+inline void GetTextSegment(Accessor &styler, Sci_PositionU start, Sci_PositionU end, char *s, size_t len) noexcept {
+	styler.GetRangeLowered(start, end + 1, s, len);
 }
 
 const char *GetNextWord(Accessor &styler, Sci_PositionU start, char *s, size_t sLen) noexcept {
@@ -227,8 +223,8 @@ void classifyAttribHTML(Sci_PositionU start, Sci_PositionU end, const WordList &
 
 // https://html.spec.whatwg.org/multipage/custom-elements.html#custom-elements-core-concepts
 bool isHTMLCustomElement(const char *tag, size_t length) noexcept {
-	// HTML custom element name: starts with an ASCII lower alpha and contains hyphen.
-	if (length < 2 || !IsLowerCase(tag[0])) {
+	// HTML custom element name: starts with an ASCII alpha and contains hyphen.
+	if (length < 2 || !IsAlpha(tag[0])) {
 		return false;
 	}
 	if (strchr(tag, '-') == nullptr) {
@@ -255,8 +251,7 @@ int classifyTagHTML(Sci_PositionU start, Sci_PositionU end,
 		for (Sci_PositionU cPos = start; cPos <= end && i < sizeof(withSpace) - 2; cPos++) {
 			const char ch = styler[cPos];
 			if ((ch != '<') && (ch != '/')) {
-				const char chTmp = MakeLowerCase(ch);
-				withSpace[i++] = chTmp;
+				withSpace[i++] = MakeLowerCase(ch);
 			}
 		}
 	}
@@ -290,7 +285,9 @@ int classifyTagHTML(Sci_PositionU start, Sci_PositionU end,
 		customElement = true;
 		chAttr = SCE_H_TAG;
 	}
-	styler.ColourTo(end, chAttr);
+	if (chAttr != SCE_H_TAGUNKNOWN) {
+		styler.ColourTo(end, chAttr);
+	}
 	if (chAttr == SCE_H_TAG && !customElement) {
 		if (allowScripts && 0 == strcmp(tag, "script")) {
 			// check to see if this is a self-closing tag by sniffing ahead
@@ -676,6 +673,11 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 	//	The default is off.
 	const bool foldHeredoc = fold && styler.GetPropertyInt("fold.hypertext.heredoc", 0) != 0;
 
+	// property fold.xml.at.tag.open
+	//	Enable folding for XML at the start of open tag.
+	//	The default is on.
+	const bool foldXmlAtTagOpen = isXml && fold && styler.GetPropertyInt("fold.xml.at.tag.open", 1) != 0;
+
 	// property html.tags.case.sensitive
 	//	For XML and HTML, setting this property to 1 will make tags match in a case
 	//	sensitive way which is the expected behaviour for XML and XHTML.
@@ -737,7 +739,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 		const int chNext2 = static_cast<unsigned char>(styler.SafeGetCharAt(i + 2));
 
 		// Handle DBCS codepages
-		if (styler.IsLeadByte(static_cast<char>(ch))) {
+		if (styler.IsLeadByte(static_cast<unsigned char>(ch))) {
 			chPrev = ' ';
 			i += 1;
 			continue;
@@ -909,6 +911,9 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				i += 2;
 				visibleChars += 2;
 				tagClosing = true;
+				if (foldXmlAtTagOpen) {
+					--levelCurrent;
+				}
 				continue;
 			}
 		}
@@ -1235,10 +1240,10 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				// in HTML, fold on tag open and unfold on tag close
 				tagOpened = true;
 				tagClosing = (chNext == '/');
-				if (isXml && !(chNext == '/' || chNext == '?' || chNext == '!' || chNext == '-' || chNext == '%')) {
+				if (foldXmlAtTagOpen && !(chNext == '/' || chNext == '?' || chNext == '!' || chNext == '-' || chNext == '%')) {
 					levelCurrent++;
 				}
-				if (isXml && chNext == '/') {
+				if (foldXmlAtTagOpen && chNext == '/') {
 					levelCurrent--;
 				}
 				styler.ColourTo(i - 1, StateToPrint);
@@ -1437,7 +1442,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 						state = SCE_H_DEFAULT;
 					}
 					tagOpened = false;
-					if (!(isXml || tagDontFold)) {
+					if (!(foldXmlAtTagOpen || tagDontFold)) {
 						if (tagClosing) {
 							levelCurrent--;
 						} else {
@@ -1456,7 +1461,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 					ch = chNext;
 					state = SCE_H_DEFAULT;
 					tagOpened = false;
-					if (isXml) {
+					if (foldXmlAtTagOpen) {
 						levelCurrent--;
 					}
 				} else {
@@ -1466,6 +1471,9 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 						} else {
 							state = SCE_H_OTHER;
 						}
+					} else if (true) {
+						styler.ColourTo(i - 1, eClass);
+						state = SCE_H_OTHER;
 					}
 				}
 			}
@@ -1488,7 +1496,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 						state = SCE_H_DEFAULT;
 					}
 					tagOpened = false;
-					if (!(isXml || tagDontFold)) {
+					if (!(foldXmlAtTagOpen || tagDontFold)) {
 						if (tagClosing) {
 							levelCurrent--;
 						} else {
@@ -1514,7 +1522,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 					state = SCE_H_DEFAULT;
 				}
 				tagOpened = false;
-				if (!(isXml || tagDontFold)) {
+				if (!(foldXmlAtTagOpen || tagDontFold)) {
 					if (tagClosing) {
 						levelCurrent--;
 					} else {
@@ -1538,7 +1546,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				ch = chNext;
 				state = SCE_H_DEFAULT;
 				tagOpened = false;
-				if (isXml) {
+				if (foldXmlAtTagOpen) {
 					levelCurrent--;
 				}
 			} else if (ch == '?' && chNext == '>') {

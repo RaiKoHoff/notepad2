@@ -1,7 +1,9 @@
-// Lexer for GraphViz/Dot.
+// This file is part of Notepad2.
+// See License.txt for details about distribution and modification.
+//! Lexer for GraphViz/Dot.
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include "ILexer.h"
@@ -43,6 +45,7 @@ static void ColouriseGraphDoc(Sci_PositionU startPos, Sci_Position length, int i
 	char buf[MAX_WORD_LENGTH + 1] = "";
 	int wordLen = 0;
 	int chPrevNonWhite = 0;
+	int visibleChars = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
 		const int chPrev = ch;
@@ -53,6 +56,9 @@ static void ColouriseGraphDoc(Sci_PositionU startPos, Sci_Position length, int i
 
 		const bool atEOL = (ch == '\r' && chNext != '\n') || (ch == '\n');
 		const bool atLineStart = i == static_cast<Sci_PositionU>(styler.LineStart(lineCurrent));
+		if (atLineStart) {
+			visibleChars = 0;
+		}
 		if (atEOL || i == endPos - 1) {
 			if (fold) {
 				const int levelUse = levelCurrent;
@@ -80,7 +86,7 @@ static void ColouriseGraphDoc(Sci_PositionU startPos, Sci_Position length, int i
 			break;
 		case SCE_C_IDENTIFIER:
 			if (!(iswordstart(ch) || ch == '-')) {
-				buf[wordLen] = 0;
+				buf[wordLen] = '\0';
 				Sci_PositionU pos = i;
 				while (IsASpace(styler.SafeGetCharAt(pos++)));
 				if (styler[pos - 1] == '=') {
@@ -89,7 +95,6 @@ static void ColouriseGraphDoc(Sci_PositionU startPos, Sci_Position length, int i
 					styler.ColourTo(i - 1, SCE_C_WORD);
 				}
 				state = SCE_C_DEFAULT;
-				wordLen = 0;
 			} else if (wordLen < MAX_WORD_LENGTH) {
 				buf[wordLen++] = static_cast<char>(ch);
 			}
@@ -147,7 +152,7 @@ static void ColouriseGraphDoc(Sci_PositionU startPos, Sci_Position length, int i
 		}
 
 		if (state == SCE_C_DEFAULT) {
-			if (ch == '/' && chNext == '/') {
+			if ((ch == '/' && chNext == '/') || (visibleChars == 0 && ch == '#')) {
 				styler.ColourTo(i - 1, state);
 				state = SCE_C_COMMENTLINE;
 			} else if (ch == '/' && chNext == '*') {
@@ -175,7 +180,8 @@ static void ColouriseGraphDoc(Sci_PositionU startPos, Sci_Position length, int i
 			} else if (iswordstart(ch)) {
 				styler.ColourTo(i - 1, state);
 				state = SCE_C_IDENTIFIER;
-				buf[wordLen++] = static_cast<char>(ch);
+				buf[0] = static_cast<char>(ch);
+				wordLen = 1;
 			} else if (ch == '>' && !(chPrevNonWhite == '-' || chPrevNonWhite == '>')) {
 				styler.ColourTo(i, SCE_C_DIRECTIVE);
 			} else if (IsGraphOp(ch)) {
@@ -188,6 +194,8 @@ static void ColouriseGraphDoc(Sci_PositionU startPos, Sci_Position length, int i
 				}
 			}
 		}
+
+		visibleChars = visibleChars || !isspacechar(ch);
 	}
 
 	// Colourise remaining document

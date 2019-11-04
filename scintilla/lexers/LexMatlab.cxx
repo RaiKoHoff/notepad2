@@ -1,7 +1,9 @@
-// Lexer for Matlab, Octave, Scilab and Gnuplot (treated as same as Octave).
+// This file is part of Notepad2.
+// See License.txt for details about distribution and modification.
+//! Lexer for Matlab, Octave, Scilab and Gnuplot (treated as same as Octave).
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include "ILexer.h"
@@ -385,8 +387,6 @@ static constexpr bool IsSripleStringStyle(int style) noexcept {
 #define StrEqu(str1, str2)		(strcmp(str1, str2) == 0)
 
 static void FoldMatlabDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
 	const int lexType = styler.GetPropertyInt("lexer.lang.type", LEX_MATLAB);
 	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
 	const bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;

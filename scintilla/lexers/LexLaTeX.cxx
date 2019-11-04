@@ -1,7 +1,9 @@
-// Lexer for LaTeX.
+// This file is part of Notepad2.
+// See License.txt for details about distribution and modification.
+//! Lexer for LaTeX.
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include "ILexer.h"
@@ -261,9 +263,7 @@ static bool IsLEnd(Sci_Position line, Accessor &styler) noexcept {
 #define IsSubsubsection(line)	IsLBegin(line, styler, "subsubsection", 13)
 #define IsEndDoc(line)			IsLEnd(line, styler)
 
-static void FoldLatexDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
+static void FoldLatexDoc(Sci_PositionU startPos, Sci_Position length, int /*initStyle*/, LexerWordList, Accessor &styler) {
 	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
 	const bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;
 
@@ -277,7 +277,6 @@ static void FoldLatexDoc(Sci_PositionU startPos, Sci_Position length, int initSt
 
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
-	int style = initStyle;
 
 	bool isChapter = false;
 	bool isSection = false;
@@ -286,8 +285,7 @@ static void FoldLatexDoc(Sci_PositionU startPos, Sci_Position length, int initSt
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
 		const char ch = chNext;
 		chNext = styler.SafeGetCharAt(i + 1);
-		//int stylePrev = style;
-		style = styleNext;
+		const int style = styleNext;
 		styleNext = styler.StyleAt(i + 1);
 		const bool atEOL = (ch == '\r' && chNext != '\n') || (ch == '\n');
 

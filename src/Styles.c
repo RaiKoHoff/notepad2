@@ -84,6 +84,8 @@ extern EDITLEXER lexINNO;
 extern EDITLEXER lexJAM;
 extern EDITLEXER lexJulia;
 
+extern EDITLEXER lexKotlin;
+
 extern EDITLEXER lexLaTeX;
 extern EDITLEXER lexLisp;
 extern EDITLEXER lexLLVM;
@@ -100,6 +102,7 @@ extern EDITLEXER lexPerl;
 extern EDITLEXER lexPS1;
 
 extern EDITLEXER lexRC;
+extern EDITLEXER lexRust;
 
 extern EDITLEXER lexScala;
 extern EDITLEXER lexBash;
@@ -167,6 +170,8 @@ static const PEDITLEXER pLexArray[ALL_LEXER_COUNT] = {
 	&lexJAM,
 	&lexJulia,
 
+	&lexKotlin,
+
 	&lexLaTeX,
 	&lexLisp,
 	&lexLLVM,
@@ -183,6 +188,7 @@ static const PEDITLEXER pLexArray[ALL_LEXER_COUNT] = {
 	&lexPS1,
 
 	&lexRC,
+	&lexRust,
 
 	&lexScala,
 	&lexBash,
@@ -462,7 +468,7 @@ static inline void FindSystemDefaultTextFont(void) {
 		NONCLIENTMETRICS ncm;
 		ZeroMemory(&ncm, sizeof(ncm));
 		ncm.cbSize = sizeof(ncm);
-#if (WINVER >= _WIN32_WINNT_VISTA)
+#if (_WIN32_WINNT >= _WIN32_WINNT_VISTA)
 		if (!IsVistaAndAbove()) {
 			ncm.cbSize -= sizeof(ncm.iPaddedBorderWidth);
 		}
@@ -978,6 +984,10 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 	case NP2LEX_BATCH:
 		attr[6] = KeywordAttr_NoLexer;		// Upper Case Keyword
 		break;
+	case NP2LEX_CMAKE:
+		attr[6] = KeywordAttr_NoLexer;		// long properties
+		attr[7] = KeywordAttr_NoLexer;		// long variables
+		break;
 	case NP2LEX_CPP:
 		attr[2] = KeywordAttr_NoAutoComp;	// Preprocessor
 		attr[3] = KeywordAttr_NoAutoComp;	// Directive
@@ -1011,6 +1021,11 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[10] = KeywordAttr_NoLexer;		// Property
 		attr[11] = KeywordAttr_NoLexer;		// Method
 		break;
+	case NP2LEX_KOTLIN:
+		attr[4] = KeywordAttr_NoLexer;		// annotation
+		attr[5] = KeywordAttr_NoLexer;		// function
+		attr[6] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;		// kdoc
+		break;
 	case NP2LEX_NSIS:
 		attr[0] = KeywordAttr_MakeLower;
 		break;
@@ -1040,6 +1055,13 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[10] = KeywordAttr_NoLexer;		// Method
 		attr[11] = KeywordAttr_NoLexer;		// Constant
 		attr[12] = KeywordAttr_NoLexer;		// Attribute
+		break;
+	case NP2LEX_RUST:
+		attr[1] = KeywordAttr_NoAutoComp;	// reserved keywords
+		attr[8] = KeywordAttr_NoLexer;		// attribute
+		attr[9] = KeywordAttr_NoLexer;		// macro
+		attr[10] = KeywordAttr_NoLexer;		// module
+		attr[11] = KeywordAttr_NoLexer;		// function
 		break;
 	case NP2LEX_SQL:
 		attr[6] = KeywordAttr_NoLexer;		// Upper Case Keyword
@@ -1209,7 +1231,6 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 
 		// Code folding
 		SciCall_SetProperty("fold", "1");
-		SciCall_SetProperty("fold.foldsyntaxbased", "1");
 		SciCall_SetProperty("fold.comment", "1");
 		SciCall_SetProperty("fold.preprocessor", "1");
 		SciCall_SetProperty("fold.compact", "0");
@@ -1532,8 +1553,13 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	// update style font, color, etc. don't need colorizing (analyzing whole document) again,
 	// thus we not call SciCall_ClearDocumentStyle() in previous block.
 	if (bLexerChanged) {
+#if 0
+		// profile lexer performance
+		SciCall_ColouriseAll();
+#else
 		// idle styling
 		SciCall_StartStyling(0);
+#endif
 
 		// Save current lexer
 		pLexCurrent = pLexNew;
@@ -1621,6 +1647,9 @@ PEDITLEXER Style_SniffShebang(char *pchText) {
 			if (!strncmp(name, "ruby", 4)) {
 				return &lexRuby;
 			}
+			//if (!strncmp(name, "rust", 4)) {
+			//	return &lexRust;
+			//}
 			if (!strncmp(name, "gawk", 4) || !strncmp(name, "nawk", 4)) {
 				return &lexAwk;
 			}

@@ -30,6 +30,7 @@
 #include <time.h>
 #include <inttypes.h>
 #include "SciCall.h"
+#include "VectorISA.h"
 #include "Helpers.h"
 #include "Notepad2.h"
 #include "Edit.h"
@@ -409,6 +410,15 @@ static inline void UpdateStatusBarCache_OVRMode(BOOL force) {
 // temporary fix for issue #77: force InvalidateStyleRedraw().
 static inline void InvalidateStyleRedraw(void) {
 	SciCall_SetViewEOL(bViewEOLs);
+}
+
+// temporary fix for issue #134: Direct2D on arm32
+static inline int GetDefualtRenderingTechnology(void) {
+#if NP2_TARGET_ARM32
+	return SC_TECHNOLOGY_DIRECTWRITERETAIN;
+#else
+	return IsVistaAndAbove()? SC_TECHNOLOGY_DIRECTWRITE : SC_TECHNOLOGY_DEFAULT;
+#endif
 }
 
 //=============================================================================
@@ -3327,46 +3337,9 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_EDIT_INSERT_SHORTDATE:
-	case IDM_EDIT_INSERT_LONGDATE: {
-		WCHAR tchDateTime[256];
-		WCHAR tchTemplate[256];
-
-		SYSTEMTIME st;
-		GetLocalTime(&st);
-
-		if (IniGetString(INI_SECTION_NAME_FLAGS,
-						 (LOWORD(wParam) == IDM_EDIT_INSERT_SHORTDATE) ? L"DateTimeShort" : L"DateTimeLong",
-						 L"", tchTemplate, COUNTOF(tchTemplate))) {
-			struct tm sst;
-			sst.tm_isdst	= -1;
-			sst.tm_sec		= (int)st.wSecond;
-			sst.tm_min		= (int)st.wMinute;
-			sst.tm_hour		= (int)st.wHour;
-			sst.tm_mday		= (int)st.wDay;
-			sst.tm_mon		= (int)st.wMonth - 1;
-			sst.tm_year		= (int)st.wYear - 1900;
-			sst.tm_wday		= (int)st.wDayOfWeek;
-			mktime(&sst);
-			wcsftime(tchDateTime, COUNTOF(tchDateTime), tchTemplate, &sst);
-		} else {
-			WCHAR tchDate[128];
-			WCHAR tchTime[128];
-			GetDateFormat(LOCALE_USER_DEFAULT, (
-							  LOWORD(wParam) == IDM_EDIT_INSERT_SHORTDATE) ? DATE_SHORTDATE : DATE_LONGDATE,
-						  &st, NULL, tchDate, COUNTOF(tchDate));
-			GetTimeFormat(LOCALE_USER_DEFAULT, TIME_NOSECONDS, &st, NULL, tchTime, COUNTOF(tchTime));
-
-			wsprintf(tchDateTime, L"%s %s", tchTime, tchDate);
-		}
-
-		const UINT cpEdit = SciCall_GetCodePage();
-		char mszBuf[256 * kMaxMultiByteCount];
-		WideCharToMultiByte(cpEdit, 0, tchDateTime, -1, mszBuf, COUNTOF(mszBuf), NULL, NULL);
-		//const Sci_Position iSelStart = SciCall_GetSelectionStart();
-		SciCall_ReplaceSel(mszBuf);
-		//SciCall_SetAnchor(iSelStart);
-	}
-	break;
+	case IDM_EDIT_INSERT_LONGDATE:
+		EditInsertDateTime(LOWORD(wParam) == IDM_EDIT_INSERT_SHORTDATE);
+		break;
 
 	case IDM_EDIT_INSERT_LOC_DATE:
 	case IDM_EDIT_INSERT_LOC_DATETIME: {
@@ -4444,60 +4417,9 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		Style_SetLexerByLangIndex(LOWORD(wParam));
 		break;
 
-	case CMD_TIMESTAMPS: {
-		WCHAR wchFind[256] = {0};
-		IniGetString(INI_SECTION_NAME_FLAGS, L"TimeStamp", L"\\$Date:[^\\$]+\\$ | $Date: %Y/%m/%d %H:%M:%S $", wchFind, COUNTOF(wchFind));
-
-		WCHAR wchTemplate[256] = {0};
-		WCHAR *pwchSep;
-		if ((pwchSep = StrChr(wchFind, L'|')) != NULL) {
-			lstrcpy(wchTemplate, pwchSep + 1);
-			*pwchSep = 0;
-		}
-
-		StrTrim(wchFind, L" ");
-		StrTrim(wchTemplate, L" ");
-
-		if (StrIsEmpty(wchFind) || StrIsEmpty(wchTemplate)) {
-			break;
-		}
-
-		SYSTEMTIME st;
-		struct tm sst;
-		GetLocalTime(&st);
-		sst.tm_isdst = -1;
-		sst.tm_sec	 = (int)st.wSecond;
-		sst.tm_min	 = (int)st.wMinute;
-		sst.tm_hour	 = (int)st.wHour;
-		sst.tm_mday	 = (int)st.wDay;
-		sst.tm_mon	 = (int)st.wMonth - 1;
-		sst.tm_year	 = (int)st.wYear - 1900;
-		sst.tm_wday	 = (int)st.wDayOfWeek;
-		mktime(&sst);
-
-		WCHAR wchReplace[256];
-		wcsftime(wchReplace, COUNTOF(wchReplace), wchTemplate, &sst);
-
-		const UINT cpEdit = SciCall_GetCodePage();
-#if NP2_USE_DESIGNATED_INITIALIZER
-		EDITFINDREPLACE efrTS = {
-			.hwnd = hwndEdit,
-			.fuFlags = SCFIND_REGEXP,
-		};
-#else
-		EDITFINDREPLACE efrTS = { "", "", "", "", hwnd, SCFIND_REGEXP };
-#endif
-
-		WideCharToMultiByte(cpEdit, 0, wchFind, -1, efrTS.szFind, COUNTOF(efrTS.szFind), NULL, NULL);
-		WideCharToMultiByte(cpEdit, 0, wchReplace, -1, efrTS.szReplace, COUNTOF(efrTS.szReplace), NULL, NULL);
-
-		if (!SciCall_IsSelectionEmpty()) {
-			EditReplaceAllInSelection(hwndEdit, &efrTS, TRUE);
-		} else {
-			EditReplaceAll(hwndEdit, &efrTS, TRUE);
-		}
-	}
-	break;
+	case CMD_TIMESTAMPS:
+		EditUpdateTimestampMatchTemplate(hwndEdit);
+		break;
 
 	case CMD_OPEN_PATH_OR_LINK:
 		EditOpenSelection(0);
@@ -5339,7 +5261,7 @@ void LoadSettings(void) {
 	bEditLayoutRTL = IniSectionGetBool(pIniSection, L"EditLayoutRTL", 0);
 	bWindowLayoutRTL = IniSectionGetBool(pIniSection, L"WindowLayoutRTL", 0);
 
-	iValue = IniSectionGetInt(pIniSection, L"RenderingTechnology", (IsVistaAndAbove()? SC_TECHNOLOGY_DIRECTWRITE : SC_TECHNOLOGY_DEFAULT));
+	iValue = IniSectionGetInt(pIniSection, L"RenderingTechnology", GetDefualtRenderingTechnology());
 	iValue = clamp_i(iValue, SC_TECHNOLOGY_DEFAULT, SC_TECHNOLOGY_DIRECTWRITEDC);
 	iRenderingTechnology = iValue;
 	bEditLayoutRTL = bEditLayoutRTL && iValue == SC_TECHNOLOGY_DEFAULT;
@@ -5628,7 +5550,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBoolEx(pIniSection, L"FindReplaceTransparentMode", bFindReplaceTransparentMode, 1);
 	IniSectionSetBoolEx(pIniSection, L"EditLayoutRTL", bEditLayoutRTL, 0);
 	IniSectionSetBoolEx(pIniSection, L"WindowLayoutRTL", bWindowLayoutRTL, 0);
-	IniSectionSetIntEx(pIniSection, L"RenderingTechnology", iRenderingTechnology, (IsVistaAndAbove()? SC_TECHNOLOGY_DIRECTWRITE : SC_TECHNOLOGY_DEFAULT));
+	IniSectionSetIntEx(pIniSection, L"RenderingTechnology", iRenderingTechnology, GetDefualtRenderingTechnology());
 	IniSectionSetIntEx(pIniSection, L"Bidirectional", iBidirectional, SC_BIDIRECTIONAL_DISABLED);
 	IniSectionSetIntEx(pIniSection, L"FontQuality", iFontQuality, SC_EFF_QUALITY_LCD_OPTIMIZED);
 	IniSectionSetIntEx(pIniSection, L"CaretStyle", iCaretStyle + iOvrCaretStyle*10 + bBlockCaretOutSelection*100, 1);
@@ -6663,7 +6585,9 @@ BOOL CreateIniFileEx(LPCWSTR lpszIniFile) {
 						   NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 		dwLastIOError = GetLastError();
 		if (hFile != INVALID_HANDLE_VALUE) {
-			if (GetFileSize(hFile, NULL) == 0) {
+			LARGE_INTEGER fileSize;
+			fileSize.QuadPart = 0;
+			if (GetFileSizeEx(hFile, &fileSize) && fileSize.QuadPart < 2) {
 				DWORD dw;
 				WriteFile(hFile, (LPCVOID)L"\xFEFF[Notepad2]\r\n", 26, &dw, NULL);
 			}

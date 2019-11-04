@@ -34,17 +34,27 @@
 #if !defined(DISABLE_D2D)
 #define USE_D2D 1
 #endif
+#ifndef _WIN32_WINNT_WIN7
+#define _WIN32_WINNT_WIN7					0x0601
+#endif
 
 #if defined(USE_D2D)
+#if defined(_MSC_BUILD) && (VER_PRODUCTVERSION_W <= _WIN32_WINNT_WIN7)
+#pragma warning(push)
+#pragma warning(disable: 4458)
+#endif
 #include <d2d1.h>
 #include <dwrite.h>
+#if defined(_MSC_BUILD) && (VER_PRODUCTVERSION_W <= _WIN32_WINNT_WIN7)
+#pragma warning(pop)
+#endif
 #endif
 
 #include "Platform.h"
 #include "Scintilla.h"
 #include "XPM.h"
-#include "UniConversion.h"
 #include "CharClassify.h"
+#include "UniConversion.h"
 #include "FontQuality.h"
 
 #include "PlatWin.h"
@@ -57,6 +67,9 @@
 #define LOAD_LIBRARY_SEARCH_SYSTEM32 0x00000800
 #endif
 
+#ifndef _WIN32_WINNT_VISTA
+#define _WIN32_WINNT_VISTA					0x0600
+#endif
 #ifndef _WIN32_WINNT_WIN8
 #define _WIN32_WINNT_WIN8					0x0602
 #endif
@@ -65,6 +78,12 @@
 #endif
 #ifndef _WIN32_WINNT_WIN10
 #define _WIN32_WINNT_WIN10					0x0A00
+#endif
+
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+#define USE_SRW_LOCK	0
+#else
+#define USE_SRW_LOCK	1
 #endif
 
 #if _WIN32_WINNT < _WIN32_WINNT_WIN8
@@ -241,7 +260,11 @@ inline void SetWindowPointer(HWND hWnd, void *ptr) noexcept {
 	::SetWindowLongPtr(hWnd, 0, reinterpret_cast<LONG_PTR>(ptr));
 }
 
+#if USE_SRW_LOCK
+SRWLOCK crPlatformLock = SRWLOCK_INIT;
+#else
 CRITICAL_SECTION crPlatformLock;
+#endif
 HINSTANCE hinstPlatformRes {};
 
 HCURSOR reverseArrowCursor {};
@@ -377,7 +400,7 @@ FontID CreateFontFromParameters(const FontParameters &fp) {
 			hr = pIDWriteFactory->CreateTextLayout(L"X", 1, pTextFormat,
 				100.0f, 100.0f, &pTextLayout);
 			if (SUCCEEDED(hr)) {
-				const int maxLines = 2;
+				constexpr int maxLines = 2;
 				DWRITE_LINE_METRICS lineMetrics[maxLines]{};
 				UINT32 lineCount = 0;
 				hr = pTextLayout->GetLineMetrics(lineMetrics, maxLines, &lineCount);
@@ -449,7 +472,7 @@ public:
 	}
 };
 
-const int stackBufferLength = 1000;
+constexpr int stackBufferLength = 1000;
 class TextWide : public VarBuffer<wchar_t, stackBufferLength> {
 public:
 	int tlen;	// Using int instead of size_t as most Win32 APIs take int.
@@ -2024,7 +2047,7 @@ void SurfaceD2D::MeasureWidths(const Font &font_, std::string_view text, XYPOSIT
 	if (!SUCCEEDED(hrCreate)) {
 		return;
 	}
-	const int clusters = stackBufferLength;
+	constexpr int clusters = stackBufferLength;
 	DWRITE_CLUSTER_METRICS clusterMetrics[clusters];
 	UINT32 count = 0;
 	const HRESULT hrGetCluster = pTextLayout->GetClusterMetrics(clusterMetrics, clusters, &count);
@@ -2117,7 +2140,7 @@ XYPOSITION SurfaceD2D::AverageCharWidth(const Font &font_) {
 		// Create a layout
 		IDWriteTextLayout *pTextLayout = nullptr;
 		const WCHAR wszAllAlpha[] = L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-		const size_t lenAllAlpha = (sizeof(wszAllAlpha) / sizeof(WCHAR)) - 1;
+		constexpr size_t lenAllAlpha = (sizeof(wszAllAlpha) / sizeof(WCHAR)) - 1;
 		const HRESULT hr = pIDWriteFactory->CreateTextLayout(wszAllAlpha, static_cast<UINT32>(lenAllAlpha),
 			pTextFormat, 1000.0, 1000.0, &pTextLayout);
 		if (SUCCEEDED(hr)) {
@@ -2289,7 +2312,11 @@ HCURSOR GetReverseArrowCursor() noexcept {
 	if (reverseArrowCursor)
 		return reverseArrowCursor;
 
+#if USE_SRW_LOCK
+	::AcquireSRWLockExclusive(&crPlatformLock);
+#else
 	::EnterCriticalSection(&crPlatformLock);
+#endif
 	HCURSOR cursor = reverseArrowCursor;
 	if (!cursor) {
 		cursor = ::LoadCursor(nullptr, IDC_ARROW);
@@ -2312,7 +2339,11 @@ HCURSOR GetReverseArrowCursor() noexcept {
 				::DeleteObject(info.hbmColor);
 		}
 	}
+#if USE_SRW_LOCK
+	::ReleaseSRWLockExclusive(&crPlatformLock);
+#else
 	::LeaveCriticalSection(&crPlatformLock);
+#endif
 	return cursor;
 }
 
@@ -3477,7 +3508,9 @@ void Platform::Assert(const char *, const char *, int) noexcept {
 #endif
 
 void Platform_Initialise(void *hInstance) noexcept {
+#if !USE_SRW_LOCK
 	::InitializeCriticalSection(&crPlatformLock);
+#endif
 	hinstPlatformRes = static_cast<HINSTANCE>(hInstance);
 	ListBoxX_Register();
 }
@@ -3518,7 +3551,9 @@ void Platform_Finalise(bool fromDllMain) noexcept {
 	if (reverseArrowCursor)
 		::DestroyCursor(reverseArrowCursor);
 	ListBoxX_Unregister();
+#if !USE_SRW_LOCK
 	::DeleteCriticalSection(&crPlatformLock);
+#endif
 }
 
 }

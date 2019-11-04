@@ -1,8 +1,10 @@
-// Lexer for C, C++, C#, Java, Rescouce Script, Asymptote, D, Objective C/C++, PHP
-// JavaScript, JScript, ActionScript, haXe, Groovy, Scala, Jamfile, AWK, IDL/ODL/AIDL
+// This file is part of Notepad2.
+// See License.txt for details about distribution and modification.
+//! Lexer for C, C++, C#, Java, Rescouce Script, Asymptote, D, Objective C/C++, PHP
+//! JavaScript, JScript, ActionScript, haXe, Groovy, Scala, Jamfile, AWK, IDL/ODL/AIDL
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include <string>
@@ -199,6 +201,10 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 	}
 
 	StyleContext sc(startPos, length, initStyle, styler);
+	if (startPos == 0 && sc.Match('#', '!')) {
+		// Shell Shebang at beginning of file
+		sc.SetState(SCE_C_COMMENTLINE);
+	}
 
 	for (; sc.More(); sc.Forward()) {
 
@@ -378,7 +384,7 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 					|| sc.ch == '*' || sc.ch == '&' || sc.ch == ':')) {
 					bool is_class = false;
 					Sci_PositionU pos = sc.currentPos;
-					const int next_char = IsASpace(sc.ch) ? nextChar : sc.ch;
+					const int next_char = nextChar;
 
 					if (sc.ch == ':' && sc.chNext == ':') { // C++, Java, PHP
 						is_class = true;
@@ -882,7 +888,6 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 						}
 						sc.Forward();
 					} else if ((!(_sharpComment(lexType)) && sc.Match('/', '/'))
-						|| (lineCurrent == 0 && sc.Match('#', '!'))
 						|| ((_sharpComment(lexType) || lexType == LEX_PHP) && sc.ch == '#')) {
 						if (visibleChars == 0 && ((sc.Match("///") && !sc.Match("////")) || sc.Match("//!")))
 							sc.SetState(SCE_C_COMMENTLINEDOC);
@@ -1215,8 +1220,6 @@ static bool IsOpenBraceLine(Sci_Position line, LexAccessor &styler) noexcept {
 }
 
 static void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
 	const bool foldComment = styler.GetPropertyInt("fold.comment", 1) != 0;
 	const bool foldPreprocessor = styler.GetPropertyInt("fold.preprocessor", 1) != 0;
 	//const bool foldAtElse = styler.GetPropertyInt("fold.at.else", 0) != 0;

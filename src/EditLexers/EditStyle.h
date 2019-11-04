@@ -33,6 +33,7 @@
 #define NP2STYLE_XMLSGML			63150
 #define NP2STYLE_XMLCDATA			63151
 //63161-63300 Web
+#define NP2STYLE_Value				63309
 //63301-63320 CSS
 #define NP2STYLE_Class				63320
 #define NP2STYLE_Struct				63321
@@ -69,17 +70,22 @@
 //63441-63450 Tcl
 //63451-63460 Lua
 //63461-63470 Python
+#define NP2STYLE_Bytes				63461
+#define NP2STYLE_RawBytes			63462
 //63471-63480 Ruby
 //63481-63490 PowerShell
 //63491-63500 AutoIt3
 //63501-63510 Inno
+#define NP2STYLE_Parameter			63503
 //63511-63520 Ini
+#define NP2STYLE_Section			63511
 //63521-63530 Apache
 //63531-63540 Bash
 //63541-63550 Diff
 //63551-63560 Asm
 //63561-63570 PHP
 //63571-63580 LaTeX
+#define NP2STYLE_Option				63574
 //63581-63590 VHDL
 // Misc.
 #define NP2STYLE_DelimitedString	63591	// D
@@ -89,7 +95,7 @@
 #define NP2STYLE_Callback			63595	// Matlab
 #define NP2STYLE_Target				63596	// Makefile
 #define NP2STYLE_BuildinRule		63597	// Jamfile
-#define NP2STYLE_BlobHex			63598	// SQL
+#define NP2STYLE_BlobHex			63598	// SQL, Vim
 #define NP2STYLE_BitField			63599	// SQL - MySQL
 
 #endif // end of EditStyle.h
