@@ -35,12 +35,6 @@ struct EscapeSequence {
 	}
 };
 
-constexpr bool IsRustNumber(int chPrev, int ch, int chNext) noexcept {
-	return IsIdentifierChar(ch)
-		|| ((ch == '+' || ch == '-') && (chPrev == 'E' || chPrev == 'e'))
-		|| (ch == '.' && chNext != '.');
-}
-
 bool IsRustRawString(LexAccessor &styler, Sci_PositionU pos, bool start, int &hashCount) noexcept {
 	int count = 0;
 	while (styler.SafeGetCharAt(pos) == '#') {
@@ -103,7 +97,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			break;
 
 		case SCE_RUST_NUMBER:
-			if (!IsRustNumber(sc.chPrev, sc.ch, sc.chNext)) {
+			if (!IsDecimalNumber(sc.chPrev, sc.ch, sc.chNext)) {
 				sc.SetState(SCE_RUST_DEFAULT);
 			}
 			break;
@@ -123,7 +117,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 						if (strcmp(s, "struct") == 0) {
 							kwType = SCE_RUST_STRUCT;
 						} else if (strcmp(s, "fn") == 0) {
-							kwType = SCE_RUST_FUNCTION;
+							kwType = SCE_RUST_FUNCTION_DEFINE;
 						} else if (strcmp(s, "trait") == 0) {
 							kwType = SCE_RUST_TRAIT;
 						} else if (strcmp(s, "enum") == 0) {
@@ -161,7 +155,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					} else {
 						const int chNext = sc.GetNextNSChar();
 						if (chNext == '(') {
-							sc.ChangeState(SCE_RUST_FUNCTION);
+							sc.ChangeState((kwType == SCE_RUST_FUNCTION_DEFINE)? kwType : SCE_RUST_FUNCTION);
 						} else if (chNext == '!') {
 							sc.ChangeState(SCE_RUST_MACRO);
 						} else if (kwType != SCE_RUST_DEFAULT) {
@@ -432,7 +426,7 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 	int levelNext = levelCurrent;
 	FoldLineState foldCurrent(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) -1;
+	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
 
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
@@ -494,9 +488,10 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 			if (lev != styler.LevelAt(lineCurrent)) {
 				styler.SetLevel(lineCurrent, lev);
 			}
+
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) -1;
+			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
 			levelCurrent = levelNext;
 			foldPrev = foldCurrent;
 			foldCurrent = foldNext;

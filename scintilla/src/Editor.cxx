@@ -594,8 +594,11 @@ void Editor::SetRectangularRange() {
 		const Sci::Line lineCaret =
 			pdoc->SciLineFromPosition(sel.Rectangular().caret.Position());
 		const int increment = (lineCaret > lineAnchorRect) ? 1 : -1;
+		AutoSurface surface(this);
 		for (Sci::Line line = lineAnchorRect; line != lineCaret + increment; line += increment) {
-			SelectionRange range(SPositionFromLineX(line, xCaret), SPositionFromLineX(line, xAnchor));
+			SelectionRange range(
+				view.SPositionFromLineX(surface, *this, line, xCaret, vs),
+				view.SPositionFromLineX(surface, *this, line, xAnchor, vs));
 			if ((virtualSpaceOptions & SCVS_RECTANGULARSELECTION) == 0)
 				range.ClearVirtualSpace();
 			if (line == lineAnchorRect)
@@ -3101,10 +3104,16 @@ void Editor::NewLine() {
 		sel.Range(r).ClearVirtualSpace();
 		const char *eol = StringFromEOLMode(pdoc->eolMode);
 		const Sci::Position positionInsert = sel.Range(r).caret.Position();
+		const Sci::Line lineDoc = pdoc->SciLineFromPosition(positionInsert);
+		const bool expanded = pcs->GetExpanded(lineDoc);
 		const Sci::Position insertLength = pdoc->InsertString(positionInsert, eol, strlen(eol));
 		if (insertLength > 0) {
 			sel.Range(r) = SelectionRange(positionInsert + insertLength);
 			countInsertions++;
+			if (!expanded) {
+				pcs->SetExpanded(lineDoc, true);
+				pcs->SetExpanded(lineDoc + 1, false);
+			}
 		}
 	}
 

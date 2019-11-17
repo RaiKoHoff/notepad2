@@ -5,12 +5,25 @@ import re
 from enum import IntFlag
 from FileGenerator import Regenerate
 
+AllKeywordAttrList = {}
+
 # see EditLexer.h
 class KeywordAttr(IntFlag):
 	Default = 0
 	NoLexer = 1
 	MakeLower = 2
 	NoAutoComp = 4
+
+	@staticmethod
+	def get_c_expr(flags):
+		if flags.name:
+			return 'KeywordAttr_' + flags.name
+
+		comb = []
+		for value in KeywordAttr.__members__.values():
+			if flags & value:
+				comb.append('KeywordAttr_' + value.name)
+		return ' | '.join(comb)
 
 def MakeKeywordGroups(items, maxLineLength=120, prefixLen=1):
 	items = list(sorted(items))
@@ -82,8 +95,9 @@ def RemoveDuplicateKeyword(keywordMap, orderedKeys):
 			unique |= items
 		keywordMap[key] = items
 
-def BuildKeywordContent(keywordList, keywordCount=16):
+def BuildKeywordContent(rid, keywordList, keywordCount=16):
 	output = []
+	nonzero = []
 	for index, item in enumerate(keywordList):
 		comment, items, attr = item
 		lines = MakeKeywordLines(items)
@@ -95,14 +109,18 @@ def BuildKeywordContent(keywordList, keywordCount=16):
 			output.append('NULL')
 		if index + 1 < keywordCount:
 			output.append("")
+		if attr != KeywordAttr.Default:
+			nonzero.append((index, attr, comment))
 
 	count = keywordCount - len(keywordList)
 	if count:
 		output.append(", NULL" * count)
+	if nonzero:
+		AllKeywordAttrList[rid] = nonzero
 	return output
 
-def UpdateKeywordFile(path, keywordList):
-	output = BuildKeywordContent(keywordList)
+def UpdateKeywordFile(rid, path, keywordList):
+	output = BuildKeywordContent(rid, keywordList)
 	Regenerate(path, '//', output)
 
 def read_api_file(path, comment):
@@ -233,7 +251,64 @@ def parse_cmake_api_file(path):
 
 def update_cmake_keyword():
 	keywordList = parse_cmake_api_file('lang/CMake.cmake')
-	UpdateKeywordFile('../src/EditLexers/stlCMake.c', keywordList)
+	UpdateKeywordFile('NP2LEX_CMAKE', '../src/EditLexers/stlCMake.c', keywordList)
+
+# Julia
+def parse_julia_api_file(path):
+	sections = read_api_file(path, '#')
+	keywordMap = {}
+	for key, doc in sections:
+		if key in ('core', 'modules'):
+			items = re.findall(r'^\s*module\s+([\w.]+)', doc, re.MULTILINE)
+			modules = []
+			for item in items:
+				modules.extend(item.split('.'))
+			keywordMap.setdefault('module', set()).update(modules)
+
+			items = re.findall(r'^\s+const\s+(\w+)', doc, re.MULTILINE)
+			keywordMap.setdefault('constant', set()).update(items)
+
+			items = re.findall(r'^\s+([A-Z]\w+)', doc, re.MULTILINE)
+			keywordMap.setdefault('type', set()).update(items)
+
+			items = re.findall(r'^\s+@([a-z]\w+)', doc, re.MULTILINE)
+			keywordMap.setdefault('macro', set()).update(items)
+
+			items = re.findall(r'^\s+([a-z]\w+!?\()', doc, re.MULTILINE)
+			if key == 'core':
+				keywordMap['basic function'] = set(items)
+			else:
+				keywordMap['function'] = set(items)
+		else:
+			keywordMap[key] = set(doc.split())
+
+	codeFold = keywordMap['code fold']
+	keywordMap['keywords'] |= codeFold
+	codeFold.remove('end')
+	codeFold.add('type')
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'constant',
+		'type',
+		'module',
+		'function',
+	])
+	keywordList = [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('code fold', codeFold, KeywordAttr.NoAutoComp),
+		('type', keywordMap['type'], KeywordAttr.Default),
+		('constant', keywordMap['constant'], KeywordAttr.Default),
+		('basic function', keywordMap['basic function'], KeywordAttr.Default),
+		('module', keywordMap['module'], KeywordAttr.NoLexer),
+		('macro', keywordMap['macro'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
+		('function', keywordMap['function'], KeywordAttr.NoLexer),
+	]
+	return keywordList
+
+def update_julia_keyword():
+	keywordList = parse_julia_api_file('lang/Julia.jl')
+	UpdateKeywordFile('NP2LEX_JULIA', '../src/EditLexers/stlJulia.c', keywordList)
 
 # Kotlin
 def parse_kotlin_api_file(path):
@@ -285,14 +360,45 @@ def parse_kotlin_api_file(path):
 		('enum', keywordMap['enum'], KeywordAttr.Default),
 		('annotation', keywordMap['annotation'], KeywordAttr.NoLexer),
 		('function', keywordMap['function'], KeywordAttr.NoLexer),
-		#('KDoc', keywordMap['kdoc'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
-		('KDoc', [], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
+		('KDoc', keywordMap['kdoc'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
 	]
 	return keywordList
 
 def update_kotlin_keyword():
 	keywordList = parse_kotlin_api_file('lang/Kotlin.kt')
-	UpdateKeywordFile('../src/EditLexers/stlKotlin.c', keywordList)
+	UpdateKeywordFile('NP2LEX_KOTLIN', '../src/EditLexers/stlKotlin.c', keywordList)
+
+# LLVM IR
+def parse_llvm_api_file(path):
+	sections = read_api_file(path, ';')
+	keywordMap = {}
+	for key, doc in sections:
+		if key in ('keywords', 'type'):
+			keywordMap[key] = doc.split()
+		elif key == 'attribute':
+			items = re.findall(r'^\s*([\w\-]+\(?)', doc, re.MULTILINE)
+			keywordMap[key] = items
+		elif key == 'instruction':
+			items = re.findall(r'^\s*(\w+)', doc, re.MULTILINE)
+			keywordMap[key] = items
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'type',
+		'attribute',
+		'instruction',
+	])
+	keywordList = [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('type', keywordMap['type'], KeywordAttr.Default),
+		('attribute', keywordMap['attribute'], KeywordAttr.Default),
+		('instruction', keywordMap['instruction'], KeywordAttr.Default),
+	]
+	return keywordList
+
+def update_llvm_keyword():
+	keywordList = parse_llvm_api_file('lang/LLVM.ll')
+	UpdateKeywordFile('NP2LEX_LLVM', '../src/EditLexers/stlLLVM.c', keywordList)
 
 # Rust
 def parse_rust_api_file(path):
@@ -394,7 +500,7 @@ def parse_rust_api_file(path):
 
 def update_rust_keyword():
 	keywordList = parse_rust_api_file('lang/Rust.rs')
-	UpdateKeywordFile('../src/EditLexers/stlRust.c', keywordList)
+	UpdateKeywordFile('NP2LEX_RUST', '../src/EditLexers/stlRust.c', keywordList)
 
 # Vim
 def parse_vim_api_file(path):
@@ -416,11 +522,34 @@ def parse_vim_api_file(path):
 
 def update_vim_keyword():
 	keywordList = parse_vim_api_file('lang/Vim.vim')
-	UpdateKeywordFile('../src/EditLexers/stlVim.c', keywordList)
+	UpdateKeywordFile('NP2LEX_VIM', '../src/EditLexers/stlVim.c', keywordList)
+
+# Style_UpdateLexerKeywordAttr()
+def update_lexer_keyword_attr():
+	output = []
+	for rid, nonzero in sorted(AllKeywordAttrList.items()):
+		output.append(f'\tcase {rid}:')
+		tab_width = 4
+		max_width = 36
+		for index, attr, comment in nonzero:
+			expr = KeywordAttr.get_c_expr(attr)
+			line = f'attr[{index}] = {expr};'
+			if '|' in line:
+				padding = 1
+			else:
+				padding = (max_width - len(line) + tab_width - 1) // tab_width
+			padding = '\t'*padding
+			output.append(f'\t\t{line}{padding}// {comment}')
+		output.append('\t\tbreak;')
+
+	Regenerate('../src/Styles.c', '//', output)
 
 # update all keywords in order
 def update_all_keyword():
 	update_cmake_keyword()
+	update_julia_keyword()
 	update_kotlin_keyword()
+	update_llvm_keyword()
 	update_rust_keyword()
 	update_vim_keyword()
+	update_lexer_keyword_attr()

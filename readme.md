@@ -73,12 +73,13 @@ Or build from source, see the [Wiki](https://github.com/zufuliu/notepad2/wiki/Bu
 		* JavaDoc
 	* [JavaScript](../master/tools/lang/JavaScript.js), up to ECMAScript 2018, 9ed.
 	* JSON and JSON5 Document
-	* [Julia Script](https://julialang.org/), up to 1.0. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#julia)
-	* [Kotlin](../master/tools/lang/Kotlin.kt)
+	* Julia Script, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#julia)
+		* [Julia Base and Standard Library](../master/tools/lang/Julia.jl), up to 1.2.
+	* [Kotlin](../master/tools/lang/Kotlin.kt), up to Kotlin 1.3
 	* LaTeX
 	* Lisp Script
 		* Common Lisp
-	* LLVM IR
+	* [LLVM IR](../master/tools/lang/LLVM.ll), up to LLVM 10.
 	* Lua Script
 	* Makefile, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#makefile)
 		* nmake

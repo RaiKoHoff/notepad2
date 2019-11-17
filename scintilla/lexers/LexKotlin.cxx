@@ -5,6 +5,8 @@
 #include <cassert>
 #include <cstring>
 
+#include <vector>
+
 #include "ILexer.h"
 #include "Scintilla.h"
 #include "SciLexer.h"
@@ -15,6 +17,7 @@
 #include "StyleContext.h"
 #include "CharacterSet.h"
 #include "LexerModule.h"
+#include "LexerUtils.h"
 
 using namespace Scintilla;
 
@@ -39,27 +42,53 @@ struct EscapeSequence {
 	}
 };
 
-constexpr bool IsKotlinNumber(int chPrev, int ch, int chNext) noexcept {
-	return IsIdentifierChar(ch)
-		|| ((ch == '+' || ch == '-') && (chPrev == 'E' || chPrev == 'e'))
-		|| (ch == '.' && chNext != '.');
+enum {
+	MaxKotlinNestedStateCount = 4,
+	KotlinLineStateMaskLineComment = (1 << 14), // line comment
+	KotlinLineStateMaskImport = (1 << 15), // import
+};
+
+constexpr int PackState(int state) noexcept {
+	switch (state) {
+	case SCE_KOTLIN_STRING:
+		return 1;
+	case SCE_KOTLIN_RAWSTRING:
+		return 2;
+	default:
+		return 0;
+	}
 }
 
-enum {
-	KotlinLineStateMaskLineComment = (1 << 24), // line comment
-	KotlinLineStateMaskImport = (1 << 25), // import
-};
+constexpr int UnpackState(int state) noexcept  {
+	switch (state) {
+	case 1:
+		return SCE_KOTLIN_STRING;
+	case 2:
+		return SCE_KOTLIN_RAWSTRING;
+	default:
+		return SCE_KOTLIN_DEFAULT;
+	}
+}
+
+int PackNestedState(const std::vector<int>& nestedState) {
+	return PackLineState<2, MaxKotlinNestedStateCount, PackState>(nestedState) << 16;
+}
+
+void UnpackNestedState(int lineState, int count, std::vector<int>& nestedState) {
+	UnpackLineState<2, MaxKotlinNestedStateCount, UnpackState>(lineState, count, nestedState);
+}
 
 void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	int lineStateLineComment = 0;
 	int lineStateImport = 0;
+	int commentLevel = 0;	// nested block comment level
 
 	int kwType = SCE_KOTLIN_DEFAULT;
 	int chBeforeIdentifier = 0;
 
-	int commentLevel = 0;	// nested block comment level
-	int stringTemplate = SCE_KOTLIN_DEFAULT;
 	int curlyBrace = 0; // "${}"
+	int variableOuter = SCE_KOTLIN_DEFAULT;	// variable inside string
+	std::vector<int> nestedState;
 
 	int visibleChars = 0;
 	EscapeSequence escSeq;
@@ -67,10 +96,17 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 	StyleContext sc(startPos, lengthDoc, initStyle, styler);
 	if (sc.currentLine > 0) {
 		const int lineState = styler.GetLineState(sc.currentLine - 1);
+		/*
+		8: curlyBrace
+		6: commentLevel
+		1: lineStateLineComment
+		1: lineStateImport
+		8: nestedState
+		*/
 		curlyBrace = lineState & 0xff;
-		commentLevel = (lineState >> 8) & 0xff;
+		commentLevel = (lineState >> 8) & 0x3f;
 		if (curlyBrace) {
-			stringTemplate = SCE_KOTLIN_RAWSTRING;
+			UnpackNestedState((lineState >> 16) & 0xff, curlyBrace, nestedState);
 		}
 	}
 	if (startPos == 0 && sc.Match('#', '!')) {
@@ -87,7 +123,7 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 			break;
 
 		case SCE_KOTLIN_NUMBER:
-			if (!IsKotlinNumber(sc.chPrev, sc.ch, sc.chNext)) {
+			if (!IsDecimalNumber(sc.chPrev, sc.ch, sc.chNext)) {
 				sc.SetState(SCE_KOTLIN_DEFAULT);
 			}
 			break;
@@ -197,40 +233,40 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 			break;
 
 		case SCE_KOTLIN_STRING:
-			if (sc.atLineStart) {
+		case SCE_KOTLIN_RAWSTRING:
+			if (sc.state == SCE_KOTLIN_STRING && sc.atLineStart) {
 				sc.SetState(SCE_KOTLIN_DEFAULT);
-			} else if (sc.ch == '\\') {
+			} else if (sc.state == SCE_KOTLIN_STRING && sc.ch == '\\') {
 				if (escSeq.resetEscapeState(sc.state, sc.chNext)) {
 					sc.SetState(SCE_KOTLIN_ESCAPECHAR);
 					sc.Forward();
 				}
+			} else if (sc.ch == '$' && IsIdentifierStartEx(sc.chNext)) {
+				variableOuter = sc.state;
+				sc.SetState(SCE_KOTLIN_VARIABLE);
 			} else if (sc.Match('$', '{')) {
-				stringTemplate = sc.state;
-				curlyBrace = 1;
+				++curlyBrace;
+				nestedState.push_back(sc.state);
 				sc.SetState(SCE_KOTLIN_OPERATOR2);
 				sc.Forward();
-			} else if (sc.ch == '$' && IsIdentifierStartEx(sc.chNext)) {
-				stringTemplate = sc.state;
-				sc.SetState(SCE_KOTLIN_VARIABLE);
-			} else if (sc.ch == '\"') {
+			} else if (curlyBrace && sc.ch == '}') {
+				const int outerState = nestedState.empty()? SCE_KOTLIN_DEFAULT : nestedState.back();
+				if (!nestedState.empty()) {
+					nestedState.pop_back();
+				}
+				--curlyBrace;
+				sc.SetState(SCE_KOTLIN_OPERATOR2);
+				sc.ForwardSetState(outerState);
+				continue;
+			} else if (sc.ch == '\"' && (sc.state == SCE_KOTLIN_STRING || sc.Match(R"(""")"))) {
+				if (sc.state == SCE_KOTLIN_RAWSTRING) {
+					sc.Forward(2);
+					sc.SetState(SCE_KOTLIN_RAWSTRINGEND);
+				}
 				sc.ForwardSetState(SCE_KOTLIN_DEFAULT);
 			}
 			break;
-		case SCE_KOTLIN_RAWSTRING:
-			if (sc.Match('$', '{')) {
-				stringTemplate = sc.state;
-				curlyBrace = 1;
-				sc.SetState(SCE_KOTLIN_OPERATOR2);
-				sc.Forward();
-			} else if (sc.ch == '$' && IsIdentifierStartEx(sc.chNext)) {
-				stringTemplate = sc.state;
-				sc.SetState(SCE_KOTLIN_VARIABLE);
-			} else if (sc.Match(R"(""")")) {
-				sc.Forward(2);
-				sc.SetState(SCE_KOTLIN_RAWSTRINGEND);
-				sc.ForwardSetState(SCE_KOTLIN_DEFAULT);
-			}
-			break;
+
 		case SCE_KOTLIN_CHARACTER:
 			if (sc.atLineStart) {
 				sc.SetState(SCE_KOTLIN_DEFAULT);
@@ -265,8 +301,7 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 			break;
 		case SCE_KOTLIN_VARIABLE:
 			if (!IsIdentifierCharEx(sc.ch)) {
-				sc.SetState(stringTemplate);
-				stringTemplate = SCE_KOTLIN_DEFAULT;
+				sc.SetState(variableOuter);
 				continue;
 			}
 			break;
@@ -311,19 +346,19 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 				chBeforeIdentifier = sc.chPrev;
 				sc.SetState(SCE_KOTLIN_IDENTIFIER);
 			} else if (isoperator(sc.ch)) {
-				if (stringTemplate == SCE_KOTLIN_DEFAULT) {
-					sc.SetState(SCE_KOTLIN_OPERATOR);
-				} else {
-					sc.SetState(SCE_KOTLIN_OPERATOR2);
+				sc.SetState(curlyBrace ? SCE_KOTLIN_OPERATOR2 : SCE_KOTLIN_OPERATOR);
+				if (curlyBrace) {
 					if (sc.ch == '{') {
 						++curlyBrace;
+						nestedState.push_back(SCE_KOTLIN_DEFAULT);
 					} else if (sc.ch == '}') {
 						--curlyBrace;
-						if (curlyBrace == 0) {
-							sc.ForwardSetState(stringTemplate);
-							stringTemplate = SCE_KOTLIN_DEFAULT;
-							continue;
+						const int outerState = nestedState.empty() ? SCE_KOTLIN_DEFAULT: nestedState.back();
+						if (!nestedState.empty()) {
+							nestedState.pop_back();
 						}
+						sc.ForwardSetState(outerState);
+						continue;
 					}
 				}
 			}
@@ -333,13 +368,10 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 			visibleChars++;
 		}
 		if (sc.atLineEnd) {
-			if (curlyBrace != 0 && stringTemplate == SCE_KOTLIN_STRING) {
-				curlyBrace = 0;
-				stringTemplate = SCE_KOTLIN_DEFAULT;
-				sc.SetState(SCE_KOTLIN_STRING);
+			int lineState = curlyBrace | (commentLevel << 8) | lineStateLineComment | lineStateImport;
+			if (curlyBrace) {
+				lineState |= PackNestedState(nestedState);
 			}
-
-			const int lineState = curlyBrace | (commentLevel << 8) | lineStateLineComment | lineStateImport;
 			styler.SetLineState(sc.currentLine, lineState);
 			lineStateLineComment = 0;
 			lineStateImport = 0;
@@ -380,7 +412,7 @@ void FoldKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initSty
 	int levelNext = levelCurrent;
 	FoldLineState foldCurrent(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) -1;
+	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
 
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
@@ -437,9 +469,10 @@ void FoldKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initSty
 			if (lev != styler.LevelAt(lineCurrent)) {
 				styler.SetLevel(lineCurrent, lev);
 			}
+
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) -1;
+			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
 			levelCurrent = levelNext;
 			foldPrev = foldCurrent;
 			foldCurrent = foldNext;

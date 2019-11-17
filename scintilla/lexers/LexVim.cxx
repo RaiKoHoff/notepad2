@@ -71,7 +71,7 @@ void ColouriseVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			sc.SetState(SCE_VIM_DEFAULT);
 			break;
 		case SCE_VIM_NUMBER:
-			if (!(iswordchar(sc.ch) || ((sc.ch == '+' || sc.ch == '-') && IsADigit(sc.chNext)))) {
+			if (!IsDecimalNumber(sc.chPrev, sc.ch, sc.chNext)) {
 				sc.SetState(SCE_VIM_DEFAULT);
 			}
 			break;
@@ -238,7 +238,7 @@ void FoldVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*
 	int levelNext = levelCurrent;
 	FoldLineState foldCurrent(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) -1;
+	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
 
 	int styleNext = styler.StyleAt(startPos);
 
@@ -290,9 +290,10 @@ void FoldVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*
 			if (lev != styler.LevelAt(lineCurrent)) {
 				styler.SetLevel(lineCurrent, lev);
 			}
+
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) -1;
+			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
 			levelCurrent = levelNext;
 			foldPrev = foldCurrent;
 			foldCurrent = foldNext;
