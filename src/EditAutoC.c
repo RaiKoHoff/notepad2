@@ -126,7 +126,7 @@ struct WordNode {
 // TODO: since the tree is sorted, nodes greater than some level can be deleted to reduce total words.
 // or only limit word count in WordList_GetList().
 
-// Andersson Tree, source from http://www.eternallyconfuzzled.com/tuts/datastructures/jsw_tut_andersson.aspx
+// Andersson Tree, source from https://www.eternallyconfuzzled.com/tuts/datastructures/jsw_tut_andersson.aspx
 // see also https://en.wikipedia.org/wiki/AA_tree
 #define aa_tree_skew(t) \
 	if ((t)->level && (t)->left && (t)->level == (t)->left->level) {\
@@ -516,6 +516,7 @@ BOOL IsDocWordChar(int ch) {
 		return (ch == '$' || ch == '@');
 
 	case NP2LEX_LLVM:
+	case NP2LEX_WASM:
 		return (ch == '@' || ch == '%' || ch == '$' || ch == '-');
 
 	case NP2LEX_MAKE:
@@ -604,6 +605,8 @@ static inline BOOL IsOperatorStyle(int style) {
 
 	case SCLEX_TCL:
 		return style == SCE_TCL_OPERATOR;
+	case SCLEX_TOML:
+		return style == SCE_TOML_OPERATOR;
 
 	case SCLEX_VB:
 	case SCLEX_VBSCRIPT:
@@ -614,6 +617,12 @@ static inline BOOL IsOperatorStyle(int style) {
 		return style == SCE_VHDL_OPERATOR;
 	case SCLEX_VIM:
 		return style == SCE_VIM_OPERATOR;
+
+	case SCLEX_WASM:
+		return style == SCE_WASM_OPERATOR;
+
+	case SCLEX_YAML:
+		return style == SCE_YAML_OPERATOR;
 	}
 	return FALSE;
 }
@@ -726,10 +735,13 @@ static inline BOOL NeedSpaceAfterKeyword(const char *word, Sci_Position length) 
 #define HTML_TEXT_BLOCK_PHP		5
 #define HTML_TEXT_BLOCK_CSS		6
 
-static int GetCurrentHtmlTextBlock(void) {
-	const Sci_Position iCurrentPos = SciCall_GetCurrentPos();
-	const int iCurrentStyle = SciCall_GetStyleAt(iCurrentPos);
+extern EDITLEXER lexCSS;
+extern EDITLEXER lexJS;
+extern EDITLEXER lexPHP;
+extern EDITLEXER lexPython;
+extern EDITLEXER lexVBS;
 
+static int GetCurrentHtmlTextBlockEx(int iCurrentStyle) {
 	if (iCurrentStyle == SCE_H_CDATA) {
 		return HTML_TEXT_BLOCK_CDATA;
 	}
@@ -745,13 +757,16 @@ static int GetCurrentHtmlTextBlock(void) {
 		|| (iCurrentStyle >= SCE_HPA_START && iCurrentStyle <= SCE_HPA_IDENTIFIER)) {
 		return HTML_TEXT_BLOCK_PYTHON;
 	}
-	if ((iCurrentStyle >= SCE_HPHP_DEFAULT && iCurrentStyle <= SCE_HPHP_OPERATOR)
-		|| iCurrentStyle == SCE_HPHP_HEREDOC
-		|| iCurrentStyle == SCE_HPHP_NOWDOC
-		|| iCurrentStyle == SCE_HPHP_COMPLEX_VARIABLE) {
+	if ((iCurrentStyle >= SCE_HPHP_DEFAULT && iCurrentStyle <= SCE_HPHP_COMPLEX_VARIABLE)) {
 		return HTML_TEXT_BLOCK_PHP;
 	}
 	return HTML_TEXT_BLOCK_TAG;
+}
+
+static int GetCurrentHtmlTextBlock(void) {
+	const Sci_Position iCurrentPos = SciCall_GetCurrentPos();
+	const int iCurrentStyle = SciCall_GetStyleAt(iCurrentPos);
+	return GetCurrentHtmlTextBlockEx(iCurrentStyle);
 }
 
 static void EscapeRegex(LPSTR pszOut, LPCSTR pszIn) {
@@ -988,6 +1003,37 @@ void AutoC_AddKeyword(struct WordList *pWList, int iCurrentStyle) {
 		WordList_AddList(pWList, (*np2_LexKeyword)[1]);
 		WordList_AddList(pWList, (*np2_LexKeyword)[2]);
 		WordList_AddList(pWList, (*np2_LexKeyword)[3]);
+	}
+
+	// embedded script
+	if (pLexCurrent->rid == NP2LEX_HTML) {
+		const int block = GetCurrentHtmlTextBlockEx(iCurrentStyle);
+		PEDITLEXER pLex = NULL;
+		switch (block) {
+		case HTML_TEXT_BLOCK_JS:
+			pLex = &lexJS;
+			break;
+		case HTML_TEXT_BLOCK_VBS:
+			pLex = &lexVBS;
+			break;
+		case HTML_TEXT_BLOCK_PYTHON:
+			pLex = &lexPython;
+			break;
+		case HTML_TEXT_BLOCK_PHP:
+			pLex = &lexPHP;
+			break;
+		case HTML_TEXT_BLOCK_CSS:
+			pLex = &lexCSS;
+			break;
+		}
+		if (pLex != NULL) {
+			for (int i = 0; i < NUMKEYWORD; i++) {
+				const char *pKeywords = pLex->pKeyWords->pszKeyWords[i];
+				if (StrNotEmptyA(pKeywords)) {
+					WordList_AddListEx(pWList, pKeywords);
+				}
+			}
+		}
 	}
 }
 
@@ -2015,9 +2061,16 @@ void EditToggleCommentLine(void) {
 	case SCLEX_CMAKE:
 	case SCLEX_CONF:
 	case SCLEX_JULIA:
+	case SCLEX_MAKEFILE:
+	case SCLEX_NSIS:
 	case SCLEX_PERL:
 	case SCLEX_POWERSHELL:
+	case SCLEX_PYTHON:
+	case SCLEX_RUBY:
+	case SCLEX_SMALI:
 	case SCLEX_TCL:
+	case SCLEX_TOML:
+	case SCLEX_YAML:
 		EditToggleLineComments(L"#", FALSE);
 		break;
 
@@ -2067,14 +2120,6 @@ void EditToggleCommentLine(void) {
 		EditToggleLineComments(L"--", FALSE);
 		break;
 
-	case SCLEX_MAKEFILE:
-	case SCLEX_NSIS:
-	case SCLEX_PYTHON:
-	case SCLEX_RUBY:
-	case SCLEX_SMALI:
-		EditToggleLineComments(L"#", FALSE);
-		break;
-
 	case SCLEX_MATLAB:
 		if (pLexCurrent->rid == NP2LEX_SCILAB || np2LexLangIndex == IDM_LANG_SCILAB) {
 			EditToggleLineComments(L"//", FALSE);
@@ -2098,6 +2143,10 @@ void EditToggleCommentLine(void) {
 
 	case SCLEX_VIM:
 		EditToggleLineComments(L"\"", FALSE);
+		break;
+
+	case SCLEX_WASM:
+		EditToggleLineComments(L";;", FALSE);
 		break;
 	}
 }
@@ -2227,6 +2276,10 @@ void EditToggleCommentBlock(void) {
 	case SCLEX_TCL:
 		EditEncloseSelectionNewLine(L"if (0) {", L"}");
 		break;
+
+	case SCLEX_WASM:
+		EditEncloseSelection(L"(;", L";)");
+		break;
 	}
 }
 
@@ -2341,5 +2394,3 @@ void EditShowCallTips(Sci_Position position) {
 	NP2HeapFree(pLine);
 	NP2HeapFree(text);
 }
-
-// End of EditAutoC.c

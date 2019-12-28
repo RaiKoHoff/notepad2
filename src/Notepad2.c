@@ -461,6 +461,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 		fprintf(stdout, "\n%s:%d %s\n", __FILE__, __LINE__, __FUNCTION__);
 	}
 #endif
+#if 0 && defined(__clang__)
+	SetEnvironmentVariable(L"UBSAN_OPTIONS", L"log_path=" WC_NOTEPAD2 L"-UBSan.log");
+#endif
 
 	// Set global variable g_hInstance
 	g_hInstance = hInstance;
@@ -1779,10 +1782,10 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	pFileMRU = MRU_Create(MRU_KEY_RECENT_FILES, MRU_NOCASE, MRU_MAX_RECENT_FILES);
 	MRU_Load(pFileMRU);
 
-	mruFind = MRU_Create(MRU_KEY_RECENT_FIND, MRU_UTF8, MRU_MAX_RECENT_FIND);
+	mruFind = MRU_Create(MRU_KEY_RECENT_FIND, MRU_DEFAULT, MRU_MAX_RECENT_FIND);
 	MRU_Load(mruFind);
 
-	mruReplace = MRU_Create(MRU_KEY_RECENT_REPLACE, MRU_UTF8, MRU_MAX_RECENT_REPLACE);
+	mruReplace = MRU_Create(MRU_KEY_RECENT_REPLACE, MRU_DEFAULT, MRU_MAX_RECENT_REPLACE);
 	MRU_Load(mruReplace);
 
 	if (bInFullScreenMode) {
@@ -8106,5 +8109,3 @@ void CALLBACK PasteBoardTimer(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTi
 		dwLastCopyTime = 0;
 	}
 }
-
-// End of Notepad2.c

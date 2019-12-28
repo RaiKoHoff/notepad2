@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2010 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef LEXACCESSOR_H
-#define LEXACCESSOR_H
+#pragma once
 
 namespace Scintilla {
 
@@ -243,14 +241,14 @@ inline Sci_Position LexSkipSpaceTab(Sci_Position startPos, Sci_Position endPos, 
 }
 
 Sci_Position LexSkipWhiteSpace(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler) noexcept;
-Sci_Position LexSkipWhiteSpace(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler, bool IsStreamCommentStyle(int)) noexcept;
+Sci_Position LexSkipWhiteSpace(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler, bool IsStreamCommentStyle(int) noexcept) noexcept;
 Sci_Position LexSkipWhiteSpace(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler,
 	bool IsStreamCommentStyle(int), const CharacterSet &charSet) noexcept;
 bool IsLexSpaceToEOL(LexAccessor &styler, Sci_Position startPos) noexcept;
 bool IsLexEmptyLine(LexAccessor &styler, Sci_Position line) noexcept;
 
-Sci_PositionU LexGetRange(Sci_Position startPos, LexAccessor &styler, bool IsWordChar(int), char *s, Sci_PositionU len) noexcept;
-Sci_PositionU LexGetRangeLowered(Sci_Position startPos, LexAccessor &styler, bool IsWordChar(int), char *s, Sci_PositionU len) noexcept;
+Sci_PositionU LexGetRange(Sci_Position startPos, LexAccessor &styler, bool IsWordChar(int) noexcept, char *s, Sci_PositionU len) noexcept;
+Sci_PositionU LexGetRangeLowered(Sci_Position startPos, LexAccessor &styler, bool IsWordChar(int) noexcept, char *s, Sci_PositionU len) noexcept;
 Sci_PositionU LexGetRange(Sci_Position startPos, LexAccessor &styler, const CharacterSet &charSet, char *s, Sci_PositionU len) noexcept;
 Sci_PositionU LexGetRangeLowered(Sci_Position startPos, LexAccessor &styler, const CharacterSet &charSet, char *s, Sci_PositionU len) noexcept;
 
@@ -274,6 +272,15 @@ inline char LexGetNextChar(Sci_Position startPos, LexAccessor &styler) noexcept 
 	} while (true);
 }
 
+inline char LexGetNextChar(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler) noexcept {
+	while (startPos < endPos) {
+		const char ch = styler[startPos];
+		if (!IsWhiteSpace(ch)) {
+			return ch;
+		}
+		++startPos;
+	}
+	return '\0';
 }
 
-#endif
+}

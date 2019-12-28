@@ -54,7 +54,7 @@ Used by VSCode, Atom etc.
 #define USE_D2D 1
 #endif
 #ifndef _WIN32_WINNT_WIN7
-#define _WIN32_WINNT_WIN7					0x0601
+#define _WIN32_WINNT_WIN7				0x0601
 #endif
 
 #if defined(USE_D2D)
@@ -116,27 +116,27 @@ Used by VSCode, Atom etc.
 #include "HanjaDic.h"
 
 #ifndef _WIN32_WINNT_WIN8
-#define _WIN32_WINNT_WIN8					0x0602
+#define _WIN32_WINNT_WIN8				0x0602
 #endif
 
 #ifndef SPI_GETWHEELSCROLLLINES
-#define SPI_GETWHEELSCROLLLINES   104
+#define SPI_GETWHEELSCROLLLINES			104
 #endif
 
 #ifndef WM_UNICHAR
-#define WM_UNICHAR                      0x0109
+#define WM_UNICHAR						0x0109
 #endif
 
 #ifndef UNICODE_NOCHAR
-#define UNICODE_NOCHAR                  0xFFFF
+#define UNICODE_NOCHAR					0xFFFF
 #endif
 
 #ifndef IS_HIGH_SURROGATE
-#define IS_HIGH_SURROGATE(x)            ((x) >= SURROGATE_LEAD_FIRST && (x) <= SURROGATE_LEAD_LAST)
+#define IS_HIGH_SURROGATE(x)			((x) >= SURROGATE_LEAD_FIRST && (x) <= SURROGATE_LEAD_LAST)
 #endif
 
 #ifndef IS_LOW_SURROGATE
-#define IS_LOW_SURROGATE(x)             ((x) >= SURROGATE_TRAIL_FIRST && (x) <= SURROGATE_TRAIL_LAST)
+#define IS_LOW_SURROGATE(x)				((x) >= SURROGATE_TRAIL_FIRST && (x) <= SURROGATE_TRAIL_LAST)
 #endif
 
 #ifndef MK_ALT
@@ -352,18 +352,18 @@ public:
 		return hIMC != nullptr;
 	}
 
-	LONG GetImeCaretPos() noexcept {
+	LONG GetImeCaretPos() const noexcept {
 		return ImmGetCompositionStringW(hIMC, GCS_CURSORPOS, nullptr, 0);
 	}
 
-	std::vector<BYTE> GetImeAttributes() {
+	std::vector<BYTE> GetImeAttributes() const {
 		const LONG attrLen = ::ImmGetCompositionStringW(hIMC, GCS_COMPATTR, nullptr, 0);
 		std::vector<BYTE> attr(attrLen, 0);
 		::ImmGetCompositionStringW(hIMC, GCS_COMPATTR, attr.data(), static_cast<DWORD>(attr.size()));
 		return attr;
 	}
 
-	std::wstring GetCompositionString(DWORD dwIndex) {
+	std::wstring GetCompositionString(DWORD dwIndex) const {
 		const LONG byteLen = ::ImmGetCompositionStringW(hIMC, dwIndex, nullptr, 0);
 		std::wstring wcs(byteLen / sizeof(wchar_t), 0);
 		::ImmGetCompositionStringW(hIMC, dwIndex, wcs.data(), byteLen);
@@ -940,14 +940,14 @@ std::wstring StringMapCase(const std::wstring_view wsv, DWORD mapFlags) {
 // Returns the target converted to UTF8.
 // Return the length in bytes.
 Sci::Position ScintillaWin::TargetAsUTF8(char *text) const {
-	const Sci::Position targetLength = targetEnd - targetStart;
+	const Sci::Position targetLength = targetRange.Length();
 	if (IsUnicodeMode()) {
 		if (text) {
-			pdoc->GetCharRange(text, targetStart, targetLength);
+			pdoc->GetCharRange(text, targetRange.start.Position(), targetLength);
 		}
 	} else {
 		// Need to convert
-		const std::string s = RangeText(targetStart, targetEnd);
+		const std::string s = RangeText(targetRange.start.Position(), targetRange.end.Position());
 		const std::wstring characters = StringDecode(s, CodePageOfDocument());
 		const int utf8Len = MultiByteLenFromWideChar(CP_UTF8, characters);
 		if (text) {

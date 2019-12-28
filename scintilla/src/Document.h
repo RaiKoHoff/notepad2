@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2011 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef DOCUMENT_H
-#define DOCUMENT_H
+#pragma once
 
 namespace Scintilla {
 
@@ -558,7 +556,7 @@ public:
 	int IndentSize() const noexcept {
 		return actualIndentInChars;
 	}
-	Sci::Position BraceMatch(Sci::Position position, Sci::Position maxReStyle) noexcept;
+	Sci::Position BraceMatch(Sci::Position position, Sci::Position maxReStyle) const noexcept;
 
 	bool IsAutoCompletionWordCharacter(unsigned int ch) const noexcept {
 		return WordCharacterClass(ch) == CharClassify::ccWord;
@@ -658,5 +656,3 @@ public:
 };
 
 }
-
-#endif

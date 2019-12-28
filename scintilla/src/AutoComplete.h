@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2003 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef AUTOCOMPLETE_H
-#define AUTOCOMPLETE_H
+#pragma once
 
 namespace Scintilla {
 
@@ -78,16 +76,14 @@ public:
 	/// Return the value of an item in the list
 	std::string GetValue(int item) const;
 
-	void Show(bool show);
+	void Show(bool show) const;
 	void Cancel() noexcept;
 
 	/// Move the current list element by delta, scrolling appropriately
-	void Move(int delta);
+	void Move(int delta) const;
 
 	/// Select a list element that starts with word as the current element
 	void Select(const char *word);
 };
 
 }
-
-#endif

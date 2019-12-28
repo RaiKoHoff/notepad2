@@ -425,7 +425,7 @@
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <WarningLevel>Level4</WarningLevel>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalOptions>/source-charset:utf-8 /wd4201 /wd4204 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/source-charset:utf-8 /wd4201 /wd4204 /FS %(AdditionalOptions)</AdditionalOptions>
       <DiagnosticsFormat>Caret</DiagnosticsFormat>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -923,10 +923,13 @@
     <ClCompile Include="..\..\scintilla\lexers\LexSQL.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexTCL.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexTexinfo.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexTOML.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexVB.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexVerilog.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexVHDL.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexVim.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexWASM.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexYAML.cxx" />
     <ClCompile Include="..\..\scintilla\lexlib\Accessor.cxx" />
     <ClCompile Include="..\..\scintilla\lexlib\CharacterSet.cxx" />
     <ClCompile Include="..\..\scintilla\lexlib\DefaultLexer.cxx" />
@@ -1025,12 +1028,15 @@
     <ClCompile Include="..\..\src\EditLexers\stlSmali.c" />
     <ClCompile Include="..\..\src\EditLexers\stlSQL.c" />
     <ClCompile Include="..\..\src\EditLexers\stlTcl.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlTOML.c" />
     <ClCompile Include="..\..\src\EditLexers\stlVB.c" />
     <ClCompile Include="..\..\src\EditLexers\stlVBS.c" />
     <ClCompile Include="..\..\src\EditLexers\stlVerilog.c" />
     <ClCompile Include="..\..\src\EditLexers\stlVHDL.c" />
     <ClCompile Include="..\..\src\EditLexers\stlVim.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlWASM.c" />
     <ClCompile Include="..\..\src\EditLexers\stlXML.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlYAML.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\scintilla\include\ILexer.h" />
@@ -1098,6 +1104,7 @@
     <ClInclude Include="..\..\src\Edit.h" />
     <ClInclude Include="..\..\src\EditLexer.h" />
     <ClInclude Include="..\..\src\EditLexers/EditStyle.h" />
+    <ClInclude Include="..\..\src\EditLexers/EditStyleX.h" />
     <ClInclude Include="..\..\src\Helpers.h" />
     <ClInclude Include="..\..\src\Notepad2.h" />
     <ClInclude Include="..\..\src\Resource.h" />

@@ -17,13 +17,11 @@
 *
 *
 ******************************************************************************/
-
-#ifndef NOTEPAD2_STYLES_H_
-#define NOTEPAD2_STYLES_H_
+#pragma once
 
 #include "EditLexer.h"
 // Number of Lexers in pLexArray
-#define NUMLEXERS 60
+#define NUMLEXERS	63
 
 // all schemes with "All Files (*.*)"
 #define MAX_OPEN_SAVE_FILE_DIALOG_FILTER_SIZE	((NUMLEXERS + 1) * 128)
@@ -103,7 +101,3 @@ void	Style_SetStyles(int iStyle, LPCWSTR lpszStyle);
 int 	Style_GetLexerIconId(LPCEDITLEXER pLex);
 void	Style_ConfigDlg(HWND hwnd);
 void	Style_SelectLexerDlg(HWND hwnd);
-
-#endif // NOTEPAD2_STYLES_H_
-
-// End of Style.h

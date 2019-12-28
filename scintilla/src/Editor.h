@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2011 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef EDITOR_H
-#define EDITOR_H
+#pragma once
 
 namespace Scintilla {
 
@@ -226,8 +224,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	Sci::Position wordSelectAnchorStartPos;
 	Sci::Position wordSelectAnchorEndPos;
 	Sci::Position wordSelectInitialCaretPos;
-	Sci::Position targetStart;
-	Sci::Position targetEnd;
+	SelectionSegment targetRange;
 	int searchFlags;
 	Sci::Line topLine;
 	Sci::Position posTopLine;
@@ -704,5 +701,3 @@ public:
 };
 
 }
-
-#endif

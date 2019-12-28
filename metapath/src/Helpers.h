@@ -17,9 +17,8 @@
 *
 *
 ******************************************************************************/
+#pragma once
 
-#ifndef METAPATH_HELPERS_H_
-#define METAPATH_HELPERS_H_
 #include "compiler.h"
 
 NP2_inline int min_i(int x, int y) {
@@ -420,9 +419,9 @@ BOOL History_CanBack(LCPHISTORY ph);
 void History_UpdateToolbar(LCPHISTORY ph, HWND hwnd, int cmdBack, int cmdForward);
 
 //==== MRU Functions ==========================================================
-#define MRU_MAXITEMS 24
-#define MRU_NOCASE    1
-#define MRU_UTF8      2
+#define MRU_MAXITEMS	24
+#define MRU_DEFAULT		0
+#define MRU_NOCASE		1
 
 #define MRU_MAX_COPY_MOVE_HISTORY	24
 // MRU_MAXITEMS * (MAX_PATH + 4)
@@ -430,8 +429,8 @@ void History_UpdateToolbar(LCPHISTORY ph, HWND hwnd, int cmdBack, int cmdForward
 
 typedef struct _mrulist {
 	LPCWSTR szRegKey;
-	int   iFlags;
-	int   iSize;
+	int		iFlags;
+	int		iSize;
 	LPWSTR pszItems[MRU_MAXITEMS];
 } MRULIST, *PMRULIST, *LPMRULIST;
 
@@ -480,7 +479,3 @@ INT_PTR ThemedDialogBoxParam(HINSTANCE hInstance, LPCWSTR lpTemplate, HWND hWndP
 BOOL GetDoAnimateMinimize(void);
 void MinimizeWndToTray(HWND hwnd);
 void RestoreWndFromTray(HWND hwnd);
-
-#endif // METAPATH_HELPERS_H_
-
-///   End of Helpers.h

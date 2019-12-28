@@ -135,6 +135,12 @@ bool WordList::Set(const char *s) {
 	return true;
 }
 
+/** Threshold for linear search.
+ * Because of cache locality and other metrics, linear search is faster than binary search
+ * when word list contains few words.
+ */
+static constexpr int WordListLinearSearchThreshold = 5;
+
 /** Check whether a string is in the list.
  * List elements are either exact matches or prefixes.
  * Prefix elements start with '^' and match all strings that start with the rest of the element
@@ -151,7 +157,7 @@ bool WordList::InList(const char *s) const noexcept {
 	Range r = ranges[firstChar];
 	if (r.end) {
 		int count = r.end - r.start;
-		if (count < 5) {
+		if (count < WordListLinearSearchThreshold) {
 			for (int j = r.start; j < r.end; j++) {
 				const char *a = words[j] + 1;
 				const char *b = s + 1;
@@ -166,7 +172,7 @@ bool WordList::InList(const char *s) const noexcept {
 		} else {
 			int j = r.start;
 			do {
-				const int step = count/2;
+				const int step = count >> 1;
 				const int mid = j + step;
 				const char *a = words[mid] + 1;
 				const char *b = s + 1;
@@ -184,7 +190,7 @@ bool WordList::InList(const char *s) const noexcept {
 				} else {
 					count = step;
 				}
-			} while (count > 0);
+			} while (count != 0);
 		}
 	}
 
@@ -222,7 +228,7 @@ bool WordList::InListPrefixed(const char *s, const char marker) const noexcept {
 	Range r = ranges[firstChar];
 	if (r.end) {
 		int count = r.end - r.start;
-		if (count < 5) {
+		if (count < WordListLinearSearchThreshold) {
 			for (int j = r.start; j < r.end; j++) {
 				const char *a = words[j] + 1;
 				const char *b = s + 1;
@@ -237,7 +243,7 @@ bool WordList::InListPrefixed(const char *s, const char marker) const noexcept {
 		} else {
 			int j = r.start;
 			do {
-				const int step = count/2;
+				const int step = count >> 1;
 				const int mid = j + step;
 				const char *a = words[mid] + 1;
 				const char *b = s + 1;
@@ -255,7 +261,7 @@ bool WordList::InListPrefixed(const char *s, const char marker) const noexcept {
 				} else {
 					count = step;
 				}
-			} while (count > 0);
+			} while (count != 0);
 		}
 	}
 
@@ -397,4 +403,3 @@ bool WordList::InListAbridged(const char *s, const char marker) const noexcept {
 const char *WordList::WordAt(int n) const noexcept {
 	return words[n];
 }
-

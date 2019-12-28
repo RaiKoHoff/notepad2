@@ -77,8 +77,7 @@ Or build from source, see the [Wiki](https://github.com/zufuliu/notepad2/wiki/Bu
 		* [Julia Base and Standard Library](../master/tools/lang/Julia.jl), up to 1.2.
 	* [Kotlin](../master/tools/lang/Kotlin.kt), up to Kotlin 1.3
 	* LaTeX
-	* Lisp Script
-		* Common Lisp
+	* Lisp Script (Common Lisp, Clojure, Scheme, etc.)
 	* [LLVM IR](../master/tools/lang/LLVM.ll), up to LLVM 10.
 	* Lua Script
 	* Makefile, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#makefile)
@@ -104,7 +103,7 @@ Or build from source, see the [Wiki](https://github.com/zufuliu/notepad2/wiki/Bu
 	* PHP Script, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#php)
 		* PHPDoc
 	* Windows Rescouce Script
-	* Ruby, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#ruby)
+	* [Ruby](../master/tools/lang/Ruby.rb), [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#ruby)
 	* Rust, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#rust)
 		* [Rust Standard Library](../master/tools/lang/Rust.rs), up to 1.38.
 	* Scala Script
@@ -120,6 +119,7 @@ Or build from source, see the [Wiki](https://github.com/zufuliu/notepad2/wiki/Bu
 		* [SQLite3](../master/tools/lang/SQLite3.sql)
 	* TCL, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#tcl)
 	* Texinfo
+	* TOML File
 	* Visual Basic
 		* VB6
 		* VB.NET
@@ -127,6 +127,7 @@ Or build from source, see the [Wiki](https://github.com/zufuliu/notepad2/wiki/Bu
 	* VHDL
 	* Verilog HDL
 	* [Vim Script](../master/tools/lang/Vim.vim)
+	* WebAssembly
 	* XML Document, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#xml)
 		* XML Schema
 		* XML Stylesheet
@@ -145,6 +146,7 @@ Or build from source, see the [Wiki](https://github.com/zufuliu/notepad2/wiki/Bu
 		* Spring Beans
 		* Apple Property List
 		* Android Manifest
+	* YAML Document
 	* ANSI Art
 	* Many Others
 * Toggle fold for specific level, shortcuts: <kbd>Alt</kbd>+<kbd>Number</kbd>
@@ -179,8 +181,8 @@ Or build from source, see the [Wiki](https://github.com/zufuliu/notepad2/wiki/Bu
 
 ## Contributors:
 * [XhmikosR](https://xhmikosr.github.io/notepad2-mod/)
-* [Kai Liu](http://code.kliu.org/misc/notepad2/)
-* [RL Vision](http://www.rlvision.com/notepad2/about.asp)
+* [Kai Liu](https://code.kliu.org/misc/notepad2/)
+* [RL Vision](https://www.rlvision.com/notepad2/about.asp)
 * Aleksandar Lekov
 * Bruno Barbieri
 * Homam

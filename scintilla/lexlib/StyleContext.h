@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2004 by Neil Hodgson <neilh@scintilla.org>
 // This file is in the public domain.
-
-#ifndef STYLECONTEXT_H
-#define STYLECONTEXT_H
+#pragma once
 
 namespace Scintilla {
 
@@ -75,7 +73,7 @@ public:
 	chNext(0),
 	width(0),
 	widthNext(1) {
-		// lexer need enable useUnicode if it wants to detect Unicode identifier (http://www.unicode.org/reports/tr31/)
+		// lexer need enable useUnicode if it wants to detect Unicode identifier (https://www.unicode.org/reports/tr31/)
 		// or operator. e.g. using functions from CharacterCategory.
 		if ((useUnicode && styler.Encoding() == encUnicode) || styler.Encoding() == encDBCS) {
 			multiByteAccess = styler.MultiByteAccess();
@@ -232,5 +230,3 @@ public:
 };
 
 }
-
-#endif

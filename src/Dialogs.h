@@ -17,9 +17,7 @@
 *
 *
 ******************************************************************************/
-
-#ifndef NOTEPAD2_DIALOGS_H_
-#define NOTEPAD2_DIALOGS_H_
+#pragma once
 
 #define MBINFO			0
 #define MBWARN			1
@@ -27,11 +25,6 @@
 #define MBYESNOWARN		3
 #define MBYESNOCANCEL	4
 #define MBOKCANCEL		8
-
-/**
- * App message used to center MessageBox to the window of the program.
- */
-#define APPM_CENTER_MESSAGE_BOX		(WM_APP + 1)
 
 extern BOOL bWindowLayoutRTL;
 NP2_inline void InitWindowCommon(HWND hwnd) {
@@ -66,7 +59,3 @@ BOOL	GetZoomLevelComboBoxValue(HWND hwnd, int nCtrId, int *zoomLevel);
 void	ZoomLevelDlg(HWND hwnd, BOOL bBottom);
 BOOL	AutoCompletionSettingsDlg(HWND hwnd);
 INT_PTR InfoBox(int iType, LPCWSTR lpstrSetting, UINT uidMessage, ...);
-
-#endif // NOTEPAD2_DIALOGS_H_
-
-// End of Dialogs.h

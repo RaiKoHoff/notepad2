@@ -68,10 +68,10 @@ extern LPMRULIST mruFind;
 extern LPMRULIST mruReplace;
 extern WCHAR szCurFile[MAX_PATH + 40];
 
-static DString wchPrefixSelection;
-static DString wchAppendSelection;
-static DString wchPrefixLines;
-static DString wchAppendLines;
+static DStringW wchPrefixSelection;
+static DStringW wchAppendSelection;
+static DStringW wchPrefixLines;
+static DStringW wchAppendLines;
 
 #define MAX_NON_UTF8_SIZE	(UINT_MAX/2 - 16)
 
@@ -82,10 +82,10 @@ static struct EditMarkAllStatus {
 } editMarkAllStatus;
 
 void Edit_ReleaseResources(void) {
-	DString_Free(&wchPrefixSelection);
-	DString_Free(&wchAppendSelection);
-	DString_Free(&wchPrefixLines);
-	DString_Free(&wchAppendLines);
+	DStringW_Free(&wchPrefixSelection);
+	DStringW_Free(&wchAppendSelection);
+	DStringW_Free(&wchPrefixLines);
+	DStringW_Free(&wchAppendLines);
 	if (editMarkAllStatus.pszText) {
 		NP2HeapFree(editMarkAllStatus.pszText);
 	}
@@ -270,8 +270,6 @@ char* EditGetClipboardText(HWND hwnd) {
 	const int wlen = lstrlen(pwch);
 
 	const UINT cpEdit = SciCall_GetCodePage();
-	const int iEOLMode = SciCall_GetEOLMode();
-
 	const int mlen = WideCharToMultiByte(cpEdit, 0, pwch, wlen + 1, NULL, 0, NULL, NULL) - 1;
 	char *pmch = (char *)LocalAlloc(LPTR, mlen + 1);
 	char *ptmp = (char *)NP2HeapAlloc(mlen * 4 + 1);
@@ -282,6 +280,7 @@ char* EditGetClipboardText(HWND hwnd) {
 
 		WideCharToMultiByte(cpEdit, 0, pwch, wlen + 1, pmch, mlen + 1, NULL, NULL);
 
+		const int iEOLMode = SciCall_GetEOLMode();
 		for (int i = 0; (i < mlen) && (*s != 0); i++) {
 			if (*s == '\n' || *s == '\r') {
 				if (iEOLMode == SC_EOL_CR) {
@@ -313,6 +312,50 @@ char* EditGetClipboardText(HWND hwnd) {
 	CloseClipboard();
 
 	return pmch;
+}
+
+LPWSTR EditGetClipboardTextW(void) {
+	if (!IsClipboardFormatAvailable(CF_UNICODETEXT) || !OpenClipboard(hwndMain)) {
+		return NULL;
+	}
+
+	HANDLE hmem = GetClipboardData(CF_UNICODETEXT);
+	LPCWSTR pwch = (LPCWSTR)GlobalLock(hmem);
+	const int wlen = lstrlen(pwch);
+	LPWSTR ptmp = (LPWSTR)NP2HeapAlloc((2*wlen + 1)*sizeof(WCHAR));
+
+	if (pwch && ptmp) {
+		LPCWSTR s = pwch;
+		LPWSTR d = ptmp;
+
+		const int iEOLMode = SciCall_GetEOLMode();
+		for (int i = 0; (i < wlen) && (*s != 0); i++) {
+			if (*s == '\n' || *s == '\r') {
+				if (iEOLMode == SC_EOL_CR) {
+					*d++ = '\r';
+				} else if (iEOLMode == SC_EOL_LF) {
+					*d++ = '\n';
+				} else { // iEOLMode == SC_EOL_CRLF
+					*d++ = '\r';
+					*d++ = '\n';
+				}
+				if ((*s == '\r') && (i + 1 < wlen) && (*(s + 1) == '\n')) {
+					i++;
+					s++;
+				}
+				s++;
+			} else {
+				*d++ = *s++;
+			}
+		}
+
+		*d++ = 0;
+	}
+
+	GlobalUnlock(hmem);
+	CloseClipboard();
+
+	return ptmp;
 }
 
 //=============================================================================
@@ -4377,6 +4420,45 @@ void EditSelectLine(void) {
 	SciCall_ChooseCaretX();
 }
 
+static LRESULT CALLBACK AddBackslashEditProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+	UNREFERENCED_PARAMETER(uIdSubclass);
+	UNREFERENCED_PARAMETER(dwRefData);
+
+	switch (umsg) {
+	case WM_PASTE: {
+		BOOL done = FALSE;
+		LPWSTR lpsz = EditGetClipboardTextW();
+		if (StrNotEmpty(lpsz)) {
+			const int len = lstrlen(lpsz);
+			LPWSTR lpszEsc = (LPWSTR)NP2HeapAlloc((2*len + 1)*sizeof(WCHAR));
+			if (lpszEsc != NULL) {
+				AddBackslashW(lpszEsc, lpsz);
+				SendMessage(hwnd, EM_REPLACESEL, TRUE, (LPARAM)(lpszEsc));
+				NP2HeapFree(lpszEsc);
+				done = TRUE;
+			}
+		}
+		if (lpsz != NULL) {
+			NP2HeapFree(lpsz);
+		}
+		if (done) {
+			return TRUE;
+		}
+	} break;
+	}
+
+	return DefSubclassProc(hwnd, umsg, wParam, lParam);
+}
+
+void AddBackslashComboBoxSetup(HWND hwndDlg, int nCtlId) {
+	HWND hwnd = GetDlgItem(hwndDlg, nCtlId);
+	COMBOBOXINFO info;
+	info.cbSize = sizeof(COMBOBOXINFO);
+	if (GetComboBoxInfo(hwnd, &info)) {
+		SetWindowSubclass(info.hwndItem, AddBackslashEditProc, 0, 0);
+	}
+}
+
 extern BOOL bFindReplaceTransparentMode;
 extern int iFindReplaceOpacityLevel;
 //=============================================================================
@@ -4397,6 +4479,7 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 
 		SetWindowLongPtr(hwnd, DWLP_USER, lParam);
 		ResizeDlg_InitX(hwnd, cxFindReplaceDlg, IDC_RESIZEGRIP2);
+		AddBackslashComboBoxSetup(hwnd, IDC_FINDTEXT);
 
 		LPEDITFINDREPLACE lpefr = (LPEDITFINDREPLACE)lParam;
 		// Get the current code page for Unicode conversion
@@ -4406,11 +4489,6 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 		for (int i = 0; i < MRU_GetCount(mruFind); i++) {
 			MRU_Enum(mruFind, i, tch, COUNTOF(tch));
 			SendDlgItemMessage(hwnd, IDC_FINDTEXT, CB_ADDSTRING, 0, (LPARAM)tch);
-		}
-
-		for (int i = 0; i < MRU_GetCount(mruReplace); i++) {
-			MRU_Enum(mruReplace, i, tch, COUNTOF(tch));
-			SendDlgItemMessage(hwnd, IDC_REPLACETEXT, CB_ADDSTRING, 0, (LPARAM)tch);
 		}
 
 		if (!bSwitchedFindReplace) {
@@ -4440,7 +4518,7 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 				//	*lpsz = '\0';
 				//}
 				char *lpszEscSel = (char *)NP2HeapAlloc((2 * NP2_FIND_REPLACE_LIMIT));
-				lpefr->bTransformBS = AddBackslash(lpszEscSel, lpszSelection);
+				lpefr->bTransformBS = AddBackslashA(lpszEscSel, lpszSelection);
 
 				SetDlgItemTextA2W(cpEdit, hwnd, IDC_FINDTEXT, lpszEscSel);
 				NP2HeapFree(lpszSelection);
@@ -4456,6 +4534,12 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 		}
 
 		if (GetDlgItem(hwnd, IDC_REPLACETEXT)) {
+			AddBackslashComboBoxSetup(hwnd, IDC_REPLACETEXT);
+			for (int i = 0; i < MRU_GetCount(mruReplace); i++) {
+				MRU_Enum(mruReplace, i, tch, COUNTOF(tch));
+				SendDlgItemMessage(hwnd, IDC_REPLACETEXT, CB_ADDSTRING, 0, (LPARAM)tch);
+			}
+
 			SendDlgItemMessage(hwnd, IDC_REPLACETEXT, CB_LIMITTEXT, NP2_FIND_REPLACE_LIMIT, 0);
 			SendDlgItemMessage(hwnd, IDC_REPLACETEXT, CB_SETEXTENDEDUI, TRUE, 0);
 			SetDlgItemTextA2W(CP_UTF8, hwnd, IDC_REPLACETEXT, lpefr->szReplaceUTF8);
@@ -4678,13 +4762,13 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 				if (StrNotEmptyA(lpefr->szFind)) {
 					if (GetDlgItemTextA2W(CP_UTF8, hwnd, IDC_FINDTEXT, lpefr->szFindUTF8, COUNTOF(lpefr->szFindUTF8))) {
 						GetDlgItemText(hwnd, IDC_FINDTEXT, tch, COUNTOF(tch));
-						MRU_Add(mruFind, tch);
+						MRU_AddMultiline(mruFind, tch);
 					}
 				}
 				if (StrNotEmptyA(lpefr->szReplace)) {
 					if (GetDlgItemTextA2W(CP_UTF8, hwnd, IDC_REPLACETEXT, lpefr->szReplaceUTF8, COUNTOF(lpefr->szReplaceUTF8))) {
 						GetDlgItemText(hwnd, IDC_REPLACETEXT, tch, COUNTOF(tch));
-						MRU_Add(mruReplace, tch);
+						MRU_AddMultiline(mruReplace, tch);
 					}
 				} else {
 					strcpy(lpefr->szReplaceUTF8, "");
@@ -4971,7 +5055,7 @@ BOOL EditFindNext(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection) {
 	BOOL bSuppressNotFound = FALSE;
 
 	if (iPos == -1 && ttf.chrg.cpMin > 0 && !lpefr->bNoFindWrap && !fExtendSelection) {
-		if (!lpefr->bNoFindWrap || (IDOK == InfoBox(MBOKCANCEL, L"MsgFindWrap1", IDS_FIND_WRAPFW))) {
+		if (IDOK == InfoBox(MBOKCANCEL, L"MsgFindWrap1", IDS_FIND_WRAPFW)) {
 			ttf.chrg.cpMin = 0;
 			iPos = SciCall_FindText(lpefr->fuFlags, &ttf);
 		} else {
@@ -5035,7 +5119,7 @@ BOOL EditFindPrev(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection) {
 	BOOL bSuppressNotFound = FALSE;
 
 	if (iPos == -1 && ttf.chrg.cpMin < iLength && !lpefr->bNoFindWrap && !fExtendSelection) {
-		if (!lpefr->bNoFindWrap || (IDOK == InfoBox(MBOKCANCEL, L"MsgFindWrap2", IDS_FIND_WRAPRE))) {
+		if (IDOK == InfoBox(MBOKCANCEL, L"MsgFindWrap2", IDS_FIND_WRAPRE)) {
 			ttf.chrg.cpMin = (Sci_PositionCR)iLength;
 			iPos = SciCall_FindText(lpefr->fuFlags, &ttf);
 		} else {
@@ -5847,8 +5931,8 @@ static INT_PTR CALLBACK EditModifyLinesDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 	case WM_COMMAND:
 		switch (LOWORD(wParam)) {
 		case IDOK: {
-			DString_GetDlgItemText(&wchPrefixLines, hwnd, IDC_MODIFY_LINE_PREFIX);
-			DString_GetDlgItemText(&wchAppendLines, hwnd, IDC_MODIFY_LINE_APPEND);
+			DStringW_GetDlgItemText(&wchPrefixLines, hwnd, IDC_MODIFY_LINE_PREFIX);
+			DStringW_GetDlgItemText(&wchAppendLines, hwnd, IDC_MODIFY_LINE_APPEND);
 
 			EditModifyLines(wchPrefixLines.buffer, wchAppendLines.buffer);
 			EndDialog(hwnd, IDOK);
@@ -5964,8 +6048,8 @@ static INT_PTR CALLBACK EditEncloseSelectionDlgProc(HWND hwnd, UINT umsg, WPARAM
 	case WM_COMMAND:
 		switch (LOWORD(wParam)) {
 		case IDOK: {
-			DString_GetDlgItemText(&wchPrefixSelection, hwnd, IDC_MODIFY_LINE_PREFIX);
-			DString_GetDlgItemText(&wchAppendSelection, hwnd, IDC_MODIFY_LINE_APPEND);
+			DStringW_GetDlgItemText(&wchPrefixSelection, hwnd, IDC_MODIFY_LINE_PREFIX);
+			DStringW_GetDlgItemText(&wchAppendSelection, hwnd, IDC_MODIFY_LINE_APPEND);
 
 			EditEncloseSelection(wchPrefixSelection.buffer, wchAppendSelection.buffer);
 			EndDialog(hwnd, IDOK);
@@ -6041,10 +6125,10 @@ static INT_PTR CALLBACK EditInsertTagDlgProc(HWND hwnd, UINT umsg, WPARAM wParam
 		switch (LOWORD(wParam)) {
 		case IDC_MODIFY_LINE_PREFIX: {
 			if (HIWORD(wParam) == EN_CHANGE) {
-				DString wszOpen = { NULL, 0 };
+				DStringW wszOpen = DSTRINGW_INIT;
 				BOOL bClear = TRUE;
 
-				DString_GetDlgItemText(&wszOpen, hwnd, IDC_MODIFY_LINE_PREFIX);
+				DStringW_GetDlgItemText(&wszOpen, hwnd, IDC_MODIFY_LINE_PREFIX);
 				const int len = lstrlen(wszOpen.buffer);
 				if (len >= 3) {
 					LPCWSTR pwsz1 = StrChr(wszOpen.buffer, L'<');
@@ -6095,20 +6179,20 @@ static INT_PTR CALLBACK EditInsertTagDlgProc(HWND hwnd, UINT umsg, WPARAM wParam
 				if (bClear) {
 					SetDlgItemText(hwnd, IDC_MODIFY_LINE_APPEND, L"");
 				}
-				DString_Free(&wszOpen);
+				DStringW_Free(&wszOpen);
 			}
 		}
 		break;
 
 		case IDOK: {
-			DString wszOpen = { NULL, 0 };
-			DString wszClose = { NULL, 0 };
-			DString_GetDlgItemText(&wszOpen, hwnd, IDC_MODIFY_LINE_PREFIX);
-			DString_GetDlgItemText(&wszClose, hwnd, IDC_MODIFY_LINE_APPEND);
+			DStringW wszOpen = DSTRINGW_INIT;
+			DStringW wszClose = DSTRINGW_INIT;
+			DStringW_GetDlgItemText(&wszOpen, hwnd, IDC_MODIFY_LINE_PREFIX);
+			DStringW_GetDlgItemText(&wszClose, hwnd, IDC_MODIFY_LINE_APPEND);
 
 			EditEncloseSelection(wszOpen.buffer, wszClose.buffer);
-			DString_Free(&wszOpen);
-			DString_Free(&wszClose);
+			DStringW_Free(&wszOpen);
+			DStringW_Free(&wszClose);
 			EndDialog(hwnd, IDOK);
 		}
 		break;
@@ -6227,7 +6311,7 @@ typedef struct UnicodeControlCharacter {
 } UnicodeControlCharacter;
 
 // https://en.wikipedia.org/wiki/Unicode_control_characters
-// http://www.unicode.org/charts/PDF/U2000.pdf
+// https://www.unicode.org/charts/PDF/U2000.pdf
 // scintilla/scripts/GenerateCharTable.py
 static const UnicodeControlCharacter kUnicodeControlCharacterTable[] = {
 	{ "\xe2\x80\x8e", "LRM" },	// U+200E	LRM		Left-to-right mark
@@ -7112,6 +7196,7 @@ static void EditFoldStack_Push(struct EditFoldStack *foldStack, int level) {
 
 static inline BOOL IsFoldIndentationBased(int iLexer) {
 	return iLexer == SCLEX_PYTHON
+		|| iLexer == SCLEX_YAML
 		|| iLexer == SCLEX_NULL;
 }
 
@@ -7452,5 +7537,3 @@ void FoldAltArrow(int key, int mode) {
 		}
 	}
 }
-
-// End of Edit.c

@@ -147,6 +147,9 @@
     <ClCompile Include="..\..\scintilla\lexers\LexTexinfo.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexTOML.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\scintilla\lexers\LexVB.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
@@ -157,6 +160,12 @@
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\lexers\LexVim.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexWASM.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexYAML.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\lexlib\Accessor.cxx">
@@ -453,6 +462,9 @@
     <ClCompile Include="..\..\src\EditLexers\stlTcl.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\EditLexers\stlTOML.c">
+      <Filter>Source Files\EditLexers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlVB.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
@@ -468,7 +480,13 @@
     <ClCompile Include="..\..\src\EditLexers\stlVim.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\EditLexers\stlWASM.c">
+      <Filter>Source Files\EditLexers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlXML.c">
+      <Filter>Source Files\EditLexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\EditLexers\stlYAML.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
   </ItemGroup>
@@ -666,6 +684,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\EditLexers/EditStyle.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\EditLexers/EditStyleX.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\Helpers.h">

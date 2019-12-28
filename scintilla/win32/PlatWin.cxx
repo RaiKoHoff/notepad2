@@ -35,7 +35,7 @@
 #define USE_D2D 1
 #endif
 #ifndef _WIN32_WINNT_WIN7
-#define _WIN32_WINNT_WIN7					0x0601
+#define _WIN32_WINNT_WIN7				0x0601
 #endif
 
 #if defined(USE_D2D)
@@ -64,20 +64,20 @@
 #endif
 
 #ifndef LOAD_LIBRARY_SEARCH_SYSTEM32
-#define LOAD_LIBRARY_SEARCH_SYSTEM32 0x00000800
+#define LOAD_LIBRARY_SEARCH_SYSTEM32	0x00000800
 #endif
 
 #ifndef _WIN32_WINNT_VISTA
-#define _WIN32_WINNT_VISTA					0x0600
+#define _WIN32_WINNT_VISTA				0x0600
 #endif
 #ifndef _WIN32_WINNT_WIN8
-#define _WIN32_WINNT_WIN8					0x0602
+#define _WIN32_WINNT_WIN8				0x0602
 #endif
 #ifndef _WIN32_WINNT_WINBLUE
-#define _WIN32_WINNT_WINBLUE				0x0603
+#define _WIN32_WINNT_WINBLUE			0x0603
 #endif
 #ifndef _WIN32_WINNT_WIN10
-#define _WIN32_WINNT_WIN10					0x0A00
+#define _WIN32_WINNT_WIN10				0x0A00
 #endif
 
 #if _WIN32_WINNT < _WIN32_WINNT_VISTA
@@ -127,11 +127,20 @@ bool LoadD2D() noexcept {
 		if (hDLLD2D) {
 			D2D1CFSig fnD2DCF = reinterpret_cast<D2D1CFSig>(::GetProcAddress(hDLLD2D, "D2D1CreateFactory"));
 			if (fnD2DCF) {
+#ifdef NDEBUG
 				// A single threaded factory as Scintilla always draw on the GUI thread
 				fnD2DCF(D2D1_FACTORY_TYPE_SINGLE_THREADED,
 					__uuidof(ID2D1Factory),
 					nullptr,
 					reinterpret_cast<IUnknown**>(&pD2DFactory));
+#else
+				D2D1_FACTORY_OPTIONS options = {};
+				options.debugLevel = D2D1_DEBUG_LEVEL_INFORMATION;
+				fnD2DCF(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+					__uuidof(ID2D1Factory),
+					&options,
+					reinterpret_cast<IUnknown**>(&pD2DFactory));
+#endif
 			}
 		}
 		hDLLDWrite = ::LoadLibraryEx(L"DWRITE.DLL", nullptr, kSystemLibraryLoadFlags);
@@ -1173,7 +1182,10 @@ void SurfaceD2D::Clear() noexcept {
 			clipsActive--;
 		}
 		if (ownRenderTarget) {
+			[[maybe_unused]] const HRESULT hr = pRenderTarget->EndDraw();
+			PLATFORM_ASSERT(hr == S_OK);
 			pRenderTarget->Release();
+			ownRenderTarget = false;
 		}
 		pRenderTarget = nullptr;
 	}
@@ -1437,7 +1449,7 @@ void SurfaceD2D::AlphaRectangle(PRectangle rc, int cornerSize, ColourDesired fil
 			const float cornerSizeF = static_cast<float>(cornerSize);
 			D2D1_ROUNDED_RECT roundedRectFill = {
 				D2D1::RectF(std::round(rc.left) + 1.0f, rc.top + 1.0f, std::round(rc.right) - 1.0f, rc.bottom - 1.0f),
-				cornerSizeF, cornerSizeF };
+				cornerSizeF - 1.0f, cornerSizeF - 1.0f };
 			D2DPenColour(fill, alphaFill);
 			pRenderTarget->FillRoundedRectangle(roundedRectFill, pBrush);
 

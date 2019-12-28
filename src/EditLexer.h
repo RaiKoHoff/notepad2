@@ -1,12 +1,10 @@
-#ifndef NOTEPAD2_EDITLEXER_H_
-#define NOTEPAD2_EDITLEXER_H_
-
+#pragma once
+#ifndef RC_INVOKED
 #include <stdlib.h>
 #include "compiler.h"
 #include "Scintilla.h"
 #include "SciLexer.h"
 
-#define	MULTI_STYLE(a, b, c, d)	((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
 #define	NUMKEYWORD				(KEYWORDSET_MAX + 1)
 
 #define MAX_EDITSTYLE_VALUE_SIZE	256
@@ -32,8 +30,8 @@ typedef unsigned char BYTE;
 
 typedef struct _editstyle {
 	const int iStyle;
-	const int rid;
 	struct {
+		const int rid;
 		const int iNameLen;
 		LPCWSTR const pszName;
 		LPWSTR szValue;
@@ -41,9 +39,6 @@ typedef struct _editstyle {
 	LPCWSTR const pszDefault;
 } EDITSTYLE, *PEDITSTYLE;
 
-#define EDITSTYLE_HOLE(name)	{ CSTRLEN(name), (name), NULL }
-#define EDITSTYLE_DEFAULT 		{ STYLE_DEFAULT, NP2STYLE_Default, EDITSTYLE_HOLE(L"Default"), L"" }
-//#define EDITSTYLE_SENTINEL 		{ 0, 0, { 0, NULL, NULL }, NULL }
 #define EDITSTYLE_BufferSize(iStyleCount)	((iStyleCount) * MAX_EDITSTYLE_VALUE_SIZE * sizeof(WCHAR))
 
 // Not used by Scintilla lexer, listed for auto completion.
@@ -78,8 +73,7 @@ typedef struct _editlexer {
 
 typedef const EDITLEXER *LPCEDITLEXER;
 
-#define EDITLEXER_HOLE(name, style)	{ StyleTheme_Default, 0, 1, 1, COUNTOF(style), CSTRLEN(name), (name), NULL, NULL }
-#define EDITLEXER_TEXT(name, style)	{ StyleTheme_Default, 0, 0, 0, COUNTOF(style), CSTRLEN(name), (name), NULL, NULL }
+#endif  // !RC_INVOKED
 
 // NP2LEX_, rid for EDITLEXER
 #define NP2LEX_TEXTFILE	63000	// SCLEX_NULL		Text File
@@ -146,12 +140,11 @@ typedef const EDITLEXER *LPCEDITLEXER;
 #define NP2LEX_JULIA	63066	// SCLEX_JULIA		Julia Script
 #define NP2LEX_RUST		63067	// SCLEX_RUST		Rust Source
 #define NP2LEX_KOTLIN	63068	// SCLEX_KOTLIN		Kotlin Source
+#define NP2LEX_YAML		63069	// SCLEX_YAML		YAML Document
+#define NP2LEX_WASM		63070	// SCLEX_WASM		WebAssembly
+#define NP2LEX_TOML		63071	// SCLEX_TOML		TOML File
 
 #define NP2LEX_2NDTEXTFILE	63097	// SCLEX_NULL		2nd Text File
 #define NP2LEX_2NDGLOBAL	63098	// SCLEX_NULL		2nd Global Styles
 #define NP2LEX_ANSI			63099	// SCLEX_NULL		ANSI Art
 #define NP2LEX_GLOBAL		63100	// SCLEX_NULL		Global Styles
-
-#endif // NOTEPAD2_EDITLEXER_H_
-
-// end of EditLexer.h

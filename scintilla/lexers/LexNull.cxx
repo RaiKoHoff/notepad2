@@ -61,7 +61,6 @@ void FoldNullDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /* initStyl
 	// to end of document (in case of unclosed quote at end).
 	while (lineCurrent <= maxLines) {
 		// Gather info
-		int lev = indentCurrent;
 		Sci_Position lineNext = lineCurrent + 1;
 		int indentNext = indentCurrent;
 		if (lineNext <= docLines) {
@@ -79,27 +78,8 @@ void FoldNullDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /* initStyl
 			indentNext = styler.IndentAmount(lineNext, &spaceFlags, nullptr);
 		}
 
-		const int levelAfterBlank = indentNext & SC_FOLDLEVELNUMBERMASK;
-		const int levelBeforeBlank = (indentCurrentLevel > levelAfterBlank) ? indentCurrentLevel : levelAfterBlank;
-
-		// Now set all the indent levels on the lines we skipped
-		// Do this from end to start. Once we encounter one line
-		// which is indented more than the line after the end of
-		// the blank-block, use the level of the block before
-
-		Sci_Position skipLine = lineNext;
-		int skipLevel = levelAfterBlank;
-
-		while (--skipLine > lineCurrent) {
-			const int skipLineIndent = styler.IndentAmount(skipLine, &spaceFlags, nullptr);
-			if ((skipLineIndent & SC_FOLDLEVELNUMBERMASK) > levelAfterBlank &&
-				!(skipLineIndent & SC_FOLDLEVELWHITEFLAG)) {
-				skipLevel = levelBeforeBlank;
-			}
-			styler.SetLevel(skipLine, skipLevel);
-		}
-
 		// Set fold header
+		int lev = indentCurrent;
 		if (!(indentCurrent & SC_FOLDLEVELWHITEFLAG)) {
 			if ((indentCurrent & SC_FOLDLEVELNUMBERMASK) < (indentNext & SC_FOLDLEVELNUMBERMASK)) {
 				lev |= SC_FOLDLEVELHEADERFLAG;
@@ -108,8 +88,21 @@ void FoldNullDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /* initStyl
 
 		// Set fold level for this line and move to next line
 		styler.SetLevel(lineCurrent, lev & ~SC_FOLDLEVELWHITEFLAG);
+		lineCurrent++;
 		indentCurrent = indentNext;
-		lineCurrent = lineNext;
+
+		const int levelAfterBlank = indentNext & SC_FOLDLEVELNUMBERMASK;
+		const int skipLevel = levelAfterBlank;
+
+		// Now set all the indent levels on the lines we skipped
+		// [ignore following comment: only blank block is skipped]
+		// Do this from end to start. Once we encounter one line
+		// which is indented more than the line after the end of
+		// the blank-block, use the level of the block before
+
+		for (; lineCurrent < lineNext; lineCurrent++) {
+			styler.SetLevel(lineCurrent, skipLevel);
+		}
 	}
 
 	// NOTE: Cannot set level of last line here because indentCurrent doesn't have

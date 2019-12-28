@@ -17,9 +17,8 @@
 *
 *
 ******************************************************************************/
+#pragma once
 
-#ifndef NOTEPAD2_HELPERS_H_
-#define NOTEPAD2_HELPERS_H_
 #include <stdint.h>
 #include "compiler.h"
 
@@ -418,20 +417,22 @@ NP2_inline void IniSectionSetBoolEx(IniSectionOnSave *section, LPCWSTR key, BOOL
 	}
 }
 
-typedef struct DString {
+typedef struct DStringW {
 	LPWSTR buffer;
 	INT capacity;
-} DString;
+} DStringW;
 
-static inline void DString_Free(DString *s) {
+#define DSTRINGW_INIT	{ NULL, 0 };
+
+NP2_inline void DStringW_Free(DStringW *s) {
 	if (s->buffer) {
 		NP2HeapFree(s->buffer);
 	}
 }
 
-int DString_GetWindowText(DString *s, HWND hwnd);
-NP2_inline int DString_GetDlgItemText(DString *s, HWND hwndDlg, int nCtlId) {
-	return DString_GetWindowText(s, GetDlgItem(hwndDlg, nCtlId));
+int DStringW_GetWindowText(DStringW *s, HWND hwnd);
+NP2_inline int DStringW_GetDlgItemText(DStringW *s, HWND hwndDlg, int nCtlId) {
+	return DStringW_GetWindowText(s, GetDlgItem(hwndDlg, nCtlId));
 }
 
 NP2_inline BOOL KeyboardIsKeyDown(int key) {
@@ -548,7 +549,7 @@ NP2_inline void SendWMCommandOrBeep(HWND hwnd, UINT id) {
 	if (IsCmdEnabled(hwnd, id)) {
 		SendWMCommand(hwnd, id);
 	} else {
-		MessageBeep(0);
+		MessageBeep(MB_OK);
 	}
 }
 
@@ -604,14 +605,14 @@ UINT CodePageFromCharSet(UINT uCharSet);
 
 //==== MRU Functions ==========================================================
 #define MRU_MAXITEMS	32
+#define MRU_DEFAULT		0
 #define MRU_NOCASE		1
-#define MRU_UTF8		2
 
 // MRU_MAXITEMS * (MAX_PATH + 4)
 #define MAX_INI_SECTION_SIZE_MRU	(8 * 1024)
 
 typedef struct _mrulist {
-	LPCWSTR	szRegKey;
+	LPCWSTR szRegKey;
 	int		iFlags;
 	int		iSize;
 	LPWSTR pszItems[MRU_MAXITEMS];
@@ -622,6 +623,7 @@ typedef const MRULIST * LPCMRULIST;
 LPMRULIST MRU_Create(LPCWSTR pszRegKey, int iFlags, int iSize);
 BOOL	MRU_Destroy(LPMRULIST pmru);
 BOOL	MRU_Add(LPMRULIST pmru, LPCWSTR pszNew);
+BOOL	MRU_AddMultiline(LPMRULIST pmru, LPCWSTR pszNew);
 BOOL	MRU_AddFile(LPMRULIST pmru, LPCWSTR pszFile, BOOL bRelativePath, BOOL bUnexpandMyDocs);
 BOOL	MRU_Delete(LPMRULIST pmru, int iIndex);
 BOOL	MRU_DeleteFileFromStore(LPCMRULIST pmru, LPCWSTR pszFile);
@@ -661,13 +663,10 @@ HWND	CreateThemedDialogParam(HINSTANCE hInstance, LPCWSTR lpTemplate, HWND hWndP
 
 //==== UnSlash Functions ======================================================
 void TransformBackslashes(char *pszInput, BOOL bRegEx, UINT cpEdit);
-BOOL AddBackslash(char *pszOut, const char *pszInput);
+BOOL AddBackslashA(char *pszOut, const char *pszInput);
+BOOL AddBackslashW(LPWSTR pszOut, LPCWSTR pszInput);
 
 //==== MinimizeToTray Functions - see comments in Helpers.c ===================
 BOOL GetDoAnimateMinimize(void);
 void MinimizeWndToTray(HWND hwnd);
 void RestoreWndFromTray(HWND hwnd);
-
-#endif // NOTEPAD2_HELPERS_H_
-
-// End of Helpers.h

@@ -17,9 +17,7 @@
 *
 *
 ******************************************************************************/
-
-#ifndef METAPATH_H_
-#define METAPATH_H_
+#pragma once
 
 //==== Main Window ============================================================
 #define WC_METAPATH L"metapath"
@@ -83,8 +81,12 @@
 //==== Timer for Change Notifications =========================================
 #define ID_TIMER 0xA000
 
+/**
+ * App message used to center MessageBox to the window of the program.
+ */
+#define APPM_CENTER_MESSAGE_BOX		(WM_APP + 1)
 //==== Callback Message from System Tray ======================================
-#define APPM_TRAYMESSAGE	(WM_APP + 4)
+#define APPM_TRAYMESSAGE			(WM_APP + 4)
 
 #define INI_SECTION_NAME_METAPATH			L"metapath"
 #define INI_SECTION_NAME_SETTINGS			L"Settings"
@@ -142,7 +144,3 @@ void MsgSize(HWND hwnd, WPARAM wParam, LPARAM lParam);
 void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam);
 LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam);
 LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam);
-
-#endif // METAPATH_H_
-
-///   End of metapath.h

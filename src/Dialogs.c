@@ -85,7 +85,7 @@ int MsgBox(int iType, UINT uIdMsg, ...) {
 	WCHAR szTitle[64];
 	GetString(IDS_APPTITLE, szTitle, COUNTOF(szTitle));
 
-	int iIcon = 0;
+	int iIcon = MB_OK;
 	switch (iType) {
 	case MBINFO:
 		iIcon = MB_ICONINFORMATION;
@@ -627,7 +627,7 @@ static INT_PTR CALLBACK OpenWithDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPA
 			if (lpdli->ntype != DLE_NONE) {
 				EndDialog(hwnd, IDOK);
 			} else {
-				MessageBeep(0);
+				MessageBeep(MB_OK);
 			}
 		}
 		break;
@@ -805,7 +805,7 @@ static INT_PTR CALLBACK FavoritesDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LP
 			if (lpdli->ntype != DLE_NONE) {
 				EndDialog(hwnd, IDOK);
 			} else {
-				MessageBeep(0);
+				MessageBeep(MB_OK);
 			}
 		}
 		break;
@@ -2361,5 +2361,3 @@ INT_PTR InfoBox(int iType, LPCWSTR lpstrSetting, UINT uidMessage, ...) {
 	MessageBeep(MB_ICONEXCLAMATION);
 	return ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(idDlg), hwnd, InfoBoxDlgProc, (LPARAM)&ib);
 }
-
-// End of Dialogs.c

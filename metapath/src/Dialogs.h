@@ -17,15 +17,9 @@
 *
 *
 ******************************************************************************/
+#pragma once
 
-#ifndef METAPATH_DIALOGS_H_
-#define METAPATH_DIALOGS_H_
 #include "compiler.h"
-
-/**
- * App message used to center MessageBox to the window of the program.
- */
-#define APPM_CENTER_MESSAGE_BOX		(WM_APP + 1)
 
 extern BOOL bWindowLayoutRTL;
 NP2_inline void InitWindowCommon(HWND hwnd) {
@@ -52,7 +46,3 @@ BOOL OpenWithDlg(HWND hwnd, LPCDLITEM lpdliParam);
 BOOL NewDirDlg(HWND hwnd, LPWSTR pszNewDir);
 
 INT_PTR CALLBACK FindTargetDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam);
-
-#endif // METAPATH_DIALOGS_H_
-
-// End of Dialogs.h

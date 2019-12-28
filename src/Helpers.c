@@ -102,11 +102,15 @@ BOOL IniSectionParseArray(IniSection *section, LPWSTR lpCachedIniSection) {
 	do {
 		IniKeyValueNode *node = &section->nodeList[count];
 		LPWSTR v = StrChr(p, L'=');
-		*v++ = L'\0';
-		node->key = p;
-		node->value = v;
-		++count;
-		p = StrEnd(v) + 1;
+		if (v != NULL) {
+			*v++ = L'\0';
+			node->key = p;
+			node->value = v;
+			++count;
+			p = StrEnd(v) + 1;
+		} else {
+			p = StrEnd(p) + 1;
+		}
 	} while (*p && count < capacity);
 
 	section->count = count;
@@ -126,13 +130,17 @@ BOOL IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection) {
 	do {
 		IniKeyValueNode *node = &section->nodeList[count];
 		LPWSTR v = StrChr(p, L'=');
-		*v++ = L'\0';
-		const UINT keyLen = (UINT)(v - p - 1);
-		node->hash = keyLen | (p[0] << 8) | (p[1] << 16);
-		node->key = p;
-		node->value = v;
-		++count;
-		p = StrEnd(v) + 1;
+		if (v != NULL) {
+			*v++ = L'\0';
+			const UINT keyLen = (UINT)(v - p - 1);
+			node->hash = keyLen | (p[0] << 8) | (p[1] << 16);
+			node->key = p;
+			node->value = v;
+			++count;
+			p = StrEnd(v) + 1;
+		} else {
+			p = StrEnd(p) + 1;
+		}
 	} while (*p && count < capacity);
 
 	section->count = count;
@@ -235,7 +243,7 @@ void IniSectionSetString(IniSectionOnSave *section, LPCWSTR key, LPCWSTR value) 
 	section->next = p;
 }
 
-int DString_GetWindowText(DString *s, HWND hwnd) {
+int DStringW_GetWindowText(DStringW *s, HWND hwnd) {
 	int len = GetWindowTextLength(hwnd);
 	if (len == 0) {
 		if (s->buffer != NULL) {
@@ -1405,8 +1413,6 @@ BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath, int cchResPath) {
 
 		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (void **)(&ppf)))) {
 			WCHAR wsz[MAX_PATH];
-
-			/*MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pszLnkFile, -1, wsz, MAX_PATH);*/
 			lstrcpy(wsz, pszLnkFile);
 
 			if (SUCCEEDED(ppf->Load(wsz, STGM_READ))) {
@@ -1426,8 +1432,6 @@ BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath, int cchResPath) {
 
 		if (SUCCEEDED(psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void **)(&ppf)))) {
 			WCHAR wsz[MAX_PATH];
-
-			/*MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pszLnkFile, -1, wsz, MAX_PATH);*/
 			lstrcpy(wsz, pszLnkFile);
 
 			if (SUCCEEDED(ppf->lpVtbl->Load(ppf, wsz, STGM_READ))) {
@@ -1521,8 +1525,6 @@ BOOL PathCreateDeskLnk(LPCWSTR pszDocument) {
 
 		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (void **)(&ppf)))) {
 			WCHAR wsz[MAX_PATH];
-
-			/*MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, tchLnkFileName, -1, wsz, MAX_PATH);*/
 			lstrcpy(wsz, tchLnkFileName);
 
 			psl->SetPath(tchExeFile);
@@ -1542,8 +1544,6 @@ BOOL PathCreateDeskLnk(LPCWSTR pszDocument) {
 
 		if (SUCCEEDED(psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void **)(&ppf)))) {
 			WCHAR wsz[MAX_PATH];
-
-			/*MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, tchLnkFileName, -1, wsz, MAX_PATH);*/
 			lstrcpy(wsz, tchLnkFileName);
 
 			psl->lpVtbl->SetPath(psl, tchExeFile);
@@ -1594,8 +1594,6 @@ BOOL PathCreateFavLnk(LPCWSTR pszName, LPCWSTR pszTarget, LPCWSTR pszDir) {
 
 		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (void **)(&ppf)))) {
 			WCHAR wsz[MAX_PATH];
-
-			/*MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, tchLnkFileName, -1, wsz, MAX_PATH);*/
 			lstrcpy(wsz, tchLnkFileName);
 
 			psl->SetPath(pszTarget);
@@ -1614,8 +1612,6 @@ BOOL PathCreateFavLnk(LPCWSTR pszName, LPCWSTR pszTarget, LPCWSTR pszDir) {
 
 		if (SUCCEEDED(psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void **)(&ppf)))) {
 			WCHAR wsz[MAX_PATH];
-
-			/*MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, tchLnkFileName, -1, wsz, MAX_PATH);*/
 			lstrcpy(wsz, tchLnkFileName);
 
 			psl->lpVtbl->SetPath(psl, pszTarget);
@@ -1916,13 +1912,13 @@ BOOL SetDlgItemIntEx(HWND hwnd, int nIdItem, UINT uValue) {
 // A2W: Convert Dialog Item Text form Unicode to UTF-8 and vice versa
 //
 UINT GetDlgItemTextA2W(UINT uCP, HWND hDlg, int nIDDlgItem, LPSTR lpString, int nMaxCount) {
-	DString wsz = { NULL, 0 };
-	const int iRet = DString_GetDlgItemText(&wsz, hDlg, nIDDlgItem);
+	DStringW wsz = DSTRINGW_INIT;
+	const int iRet = DStringW_GetDlgItemText(&wsz, hDlg, nIDDlgItem);
 	ZeroMemory(lpString, nMaxCount);
 	if (iRet) {
 		WideCharToMultiByte(uCP, 0, wsz.buffer, -1, lpString, nMaxCount - 2, NULL, NULL);
 	}
-	DString_Free(&wsz);
+	DStringW_Free(&wsz);
 	return iRet;
 }
 
@@ -2001,6 +1997,15 @@ BOOL MRU_Add(LPMRULIST pmru, LPCWSTR pszNew) {
 		pmru->pszItems[i] = pmru->pszItems[i - 1];
 	}
 	pmru->pszItems[0] = StrDup(pszNew);
+	return TRUE;
+}
+
+BOOL MRU_AddMultiline(LPMRULIST pmru, LPCWSTR pszNew) {
+	const int len = lstrlen(pszNew);
+	LPWSTR lpszEsc = (LPWSTR)NP2HeapAlloc((2*len + 1)*sizeof(WCHAR));
+	AddBackslashW(lpszEsc, pszNew);
+	MRU_Add(pmru, lpszEsc);
+	NP2HeapFree(lpszEsc);
 	return TRUE;
 }
 
@@ -2129,13 +2134,6 @@ BOOL MRU_Load(LPMRULIST pmru) {
 		const IniKeyValueNode *node = &pIniSection->nodeList[i];
 		LPCWSTR tchItem = node->value;
 		if (StrNotEmpty(tchItem)) {
-			/*if (pmru->iFlags & MRU_UTF8) {
-				WCHAR wchItem[1024];
-				int cbw = MultiByteToWideChar(CP_UTF7, 0, tchItem, -1, wchItem, COUNTOF(wchItem));
-				WideCharToMultiByte(CP_UTF8, 0, wchItem, cbw, tchItem, COUNTOF(tchItem), NULL, NULL);
-				pmru->pszItems[n++] = StrDup(tchItem);
-			}
-			else*/
 			pmru->pszItems[n++] = StrDup(tchItem);
 		}
 	}
@@ -2163,14 +2161,6 @@ BOOL MRU_Save(LPCMRULIST pmru) {
 	for (int i = 0; i < pmru->iSize; i++) {
 		if (StrNotEmpty(pmru->pszItems[i])) {
 			wsprintf(tchName, L"%02i", i + 1);
-			/*if (pmru->iFlags & MRU_UTF8) {
-				WCHAR	 tchItem[1024];
-				WCHAR wchItem[1024];
-				int cbw = MultiByteToWideChar(CP_UTF8, 0, pmru->pszItems[i], -1, wchItem, COUNTOF(wchItem));
-				WideCharToMultiByte(CP_UTF7, 0, wchItem, cbw, tchItem, COUNTOF(tchItem), NULL, NULL);
-				IniSectionSetString(pIniSection, tchName, tchItem);
-			}
-			else*/
 			IniSectionSetString(pIniSection, tchName, pmru->pszItems[i]);
 		}
 	}
@@ -2525,7 +2515,7 @@ void TransformBackslashes(char *pszInput, BOOL bRegEx, UINT cpEdit) {
 	}
 }
 
-BOOL AddBackslash(char *pszOut, const char *pszInput) {
+BOOL AddBackslashA(char *pszOut, const char *pszInput) {
 	BOOL hasEscapeChar = FALSE;
 	BOOL hasSlash = FALSE;
 	char *lpszEsc = pszOut;
@@ -2586,6 +2576,71 @@ BOOL AddBackslash(char *pszOut, const char *pszInput) {
 
 	if (hasSlash && !hasEscapeChar) {
 		strcpy(pszOut, pszInput);
+	}
+	return hasEscapeChar;
+}
+
+BOOL AddBackslashW(LPWSTR pszOut, LPCWSTR pszInput) {
+	BOOL hasEscapeChar = FALSE;
+	BOOL hasSlash = FALSE;
+	LPWSTR lpszEsc = pszOut;
+	LPCWSTR lpsz = pszInput;
+	while (*lpsz) {
+		switch (*lpsz) {
+		case '\n':
+			*lpszEsc++ = '\\';
+			*lpszEsc++ = 'n';
+			hasEscapeChar = TRUE;
+			break;
+		case '\r':
+			*lpszEsc++ = '\\';
+			*lpszEsc++ = 'r';
+			hasEscapeChar = TRUE;
+			break;
+		case '\t':
+			*lpszEsc++ = '\\';
+			*lpszEsc++ = 't';
+			hasEscapeChar = TRUE;
+			break;
+		case '\\':
+			*lpszEsc++ = '\\';
+			*lpszEsc++ = '\\';
+			hasSlash = TRUE;
+			break;
+		case '\f':
+			*lpszEsc++ = '\\';
+			*lpszEsc++ = 'f';
+			hasEscapeChar = TRUE;
+			break;
+		case '\v':
+			*lpszEsc++ = '\\';
+			*lpszEsc++ = 'v';
+			hasEscapeChar = TRUE;
+			break;
+		case '\a':
+			*lpszEsc++ = '\\';
+			*lpszEsc++ = 'b';
+			hasEscapeChar = TRUE;
+			break;
+		case '\b':
+			*lpszEsc++ = '\\';
+			*lpszEsc++ = 'a';
+			hasEscapeChar = TRUE;
+			break;
+		case '\x1B':
+			*lpszEsc++ = '\\';
+			*lpszEsc++ = 'e';
+			hasEscapeChar = TRUE;
+			break;
+		default:
+			*lpszEsc++ = *lpsz;
+			break;
+		}
+		lpsz++;
+	}
+
+	if (hasSlash && !hasEscapeChar) {
+		lstrcpy(pszOut, pszInput);
 	}
 	return hasEscapeChar;
 }
@@ -2775,5 +2830,3 @@ void RestoreWndFromTray(HWND hwnd) {
 	// call to DrawAnimatedRects, or the taskbar will not refresh itself
 	// properly until DAR finished
 }
-
-// End of Helpers.c

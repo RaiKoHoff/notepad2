@@ -75,11 +75,15 @@ BOOL IniSectionParseArray(IniSection *section, LPWSTR lpCachedIniSection) {
 	do {
 		IniKeyValueNode *node = &section->nodeList[count];
 		LPWSTR v = StrChr(p, L'=');
-		*v++ = L'\0';
-		node->key = p;
-		node->value = v;
-		++count;
-		p = StrEnd(v) + 1;
+		if (v != NULL) {
+			*v++ = L'\0';
+			node->key = p;
+			node->value = v;
+			++count;
+			p = StrEnd(v) + 1;
+		} else {
+			p = StrDup(p) + 1;
+		}
 	} while (*p && count < capacity);
 
 	section->count = count;
@@ -99,13 +103,17 @@ BOOL IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection) {
 	do {
 		IniKeyValueNode *node = &section->nodeList[count];
 		LPWSTR v = StrChr(p, L'=');
-		*v++ = L'\0';
-		const UINT keyLen = (UINT)(v - p - 1);
-		node->hash = keyLen | (p[0] << 8) | (p[1] << 16);
-		node->key = p;
-		node->value = v;
-		++count;
-		p = StrEnd(v) + 1;
+		if (v != NULL) {
+			*v++ = L'\0';
+			const UINT keyLen = (UINT)(v - p - 1);
+			node->hash = keyLen | (p[0] << 8) | (p[1] << 16);
+			node->key = p;
+			node->value = v;
+			++count;
+			p = StrEnd(v) + 1;
+		} else {
+			p = StrEnd(p) + 1;
+		}
 	} while (*p && count < capacity);
 
 	section->count = count;
@@ -931,8 +939,6 @@ BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath, int cchResPath) {
 
 		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (void **)(&ppf)))) {
 			WCHAR wsz[MAX_PATH];
-
-			/*MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pszLnkFile, -1, wsz, MAX_PATH);*/
 			lstrcpy(wsz, pszLnkFile);
 
 			if (SUCCEEDED(ppf->Load(wsz, STGM_READ))) {
@@ -952,8 +958,6 @@ BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath, int cchResPath) {
 
 		if (SUCCEEDED(psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void **)(&ppf)))) {
 			WCHAR wsz[MAX_PATH];
-
-			/*MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pszLnkFile, -1, wsz, MAX_PATH);*/
 			lstrcpy(wsz, pszLnkFile);
 
 			if (SUCCEEDED(ppf->lpVtbl->Load(ppf, wsz, STGM_READ))) {
@@ -1029,7 +1033,6 @@ BOOL PathCreateLnk(LPCWSTR pszLnkDir, LPCWSTR pszPath) {
 
 		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (void **)(&ppf)))) {
 			WCHAR wsz[MAX_PATH];
-			/*MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, tchLnkFileName, -1, wsz, MAX_PATH);*/
 			lstrcpy(wsz, tchLnkFileName);
 
 			if (NOERROR == psl->SetPath(pszPath) && SUCCEEDED(ppf->Save(wsz, TRUE))) {
@@ -1046,7 +1049,6 @@ BOOL PathCreateLnk(LPCWSTR pszLnkDir, LPCWSTR pszPath) {
 
 		if (SUCCEEDED(psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void **)(&ppf)))) {
 			WCHAR wsz[MAX_PATH];
-			/*MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, tchLnkFileName, -1, wsz, MAX_PATH);*/
 			lstrcpy(wsz, tchLnkFileName);
 
 			if (NOERROR == psl->lpVtbl->SetPath(psl, pszPath) && SUCCEEDED(ppf->lpVtbl->Save(ppf, wsz, TRUE))) {
@@ -1711,13 +1713,6 @@ BOOL MRU_Load(LPMRULIST pmru) {
 		const IniKeyValueNode *node = &pIniSection->nodeList[i];
 		LPCWSTR tchItem = node->value;
 		if (StrNotEmpty(tchItem)) {
-			/*if (pmru->iFlags & MRU_UTF8) {
-				WCHAR wchItem[1024];
-				int cbw = MultiByteToWideChar(CP_UTF7, 0, tchItem, -1, wchItem, COUNTOF(wchItem));
-				WideCharToMultiByte(CP_UTF8, 0, wchItem, cbw, tchItem, COUNTOF(tchItem), NULL, NULL);
-				pmru->pszItems[n++] = StrDup(tchItem);
-			}
-			else*/
 			pmru->pszItems[n++] = StrDup(tchItem);
 		}
 	}
@@ -1745,14 +1740,6 @@ BOOL MRU_Save(LPCMRULIST pmru) {
 	for (int i = 0; i < pmru->iSize; i++) {
 		if (StrNotEmpty(pmru->pszItems[i])) {
 			wsprintf(tchName, L"%02i", i + 1);
-			/*if (pmru->iFlags & MRU_UTF8) {
-				WCHAR  tchItem[1024];
-				WCHAR wchItem[1024];
-				int cbw = MultiByteToWideChar(CP_UTF8, 0, pmru->pszItems[i], -1, wchItem, COUNTOF(wchItem));
-				WideCharToMultiByte(CP_UTF7, 0, wchItem, cbw, tchItem, COUNTOF(tchItem), NULL, NULL);
-				IniSectionSetString(pIniSection, tchName, tchItem);
-			}
-			else*/
 			IniSectionSetString(pIniSection, tchName, pmru->pszItems[i]);
 		}
 	}
@@ -2140,5 +2127,3 @@ void RestoreWndFromTray(HWND hwnd) {
 	// call to DrawAnimatedRects, or the taskbar will not refresh itself
 	// properly until DAR finished
 }
-
-///   End of Helpers.c

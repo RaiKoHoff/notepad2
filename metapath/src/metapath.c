@@ -221,6 +221,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 		fprintf(stdout, "\n%s:%d %s\n", __FILE__, __LINE__, __FUNCTION__);
 	}
 #endif
+#if 0 && defined(__clang__)
+	SetEnvironmentVariable(L"UBSAN_OPTIONS", L"log_path=" WC_METAPATH L"-UBSan.log");
+#endif
 
 	// Set global variable g_hInstance
 	g_hInstance = hInstance;
@@ -594,8 +597,6 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 		}
 
 		HMENU hmenu = LoadMenu(g_hInstance, MAKEINTRESOURCE(IDR_MAINWND));
-		SetMenuDefaultItem(GetSubMenu(hmenu, IDP_POPUP_SUBMENU_PATH), IDM_FILE_OPENSAME, FALSE);
-		SetMenuDefaultItem(GetSubMenu(hmenu, IDP_POPUP_SUBMENU_PATH), IDM_FILE_OPENNEW, FALSE);
 
 		int imenu = 0;
 		switch (nID) {
@@ -622,12 +623,13 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 		pt.x = GET_X_LPARAM(lParam);
 		pt.y = GET_Y_LPARAM(lParam);
 
-		TrackPopupMenuEx(GetSubMenu(hmenu, imenu),
+		HMENU hMenuPopup = GetSubMenu(hmenu, imenu);
+		if (imenu == IDP_POPUP_SUBMENU_PATH) {
+			SetMenuDefaultItem(hMenuPopup, iDefaultOpenMenu, FALSE);
+		}
+		TrackPopupMenuEx(hMenuPopup,
 						 TPM_LEFTBUTTON | TPM_RIGHTBUTTON,
 						 pt.x + 1, pt.y + 1, hwnd, NULL);
-		if (imenu == IDP_POPUP_SUBMENU_PATH) {
-			SetMenuDefaultItem(GetSubMenu(hmenu, IDP_POPUP_SUBMENU_PATH), iDefaultOpenMenu, TRUE);
-		}
 		DestroyMenu(hmenu);
 	}
 	break;
@@ -1222,7 +1224,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_FILE_LAUNCH: {
 		if (!DirList_IsFileSelected(hwndDirList)) {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 			return 0;
 		}
 
@@ -1249,7 +1251,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_FILE_QUICKVIEW: {
 		if (!DirList_IsFileSelected(hwndDirList)) {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 			return 0;
 		}
 
@@ -1290,7 +1292,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_FILE_OPENWITH: {
 		if (!ListView_GetSelectedCount(hwndDirList)) {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 			return 0;
 		}
 
@@ -1395,7 +1397,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_FILE_SAVEAS: {
 		if (!DirList_IsFileSelected(hwndDirList)) {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 			return 0;
 		}
 
@@ -1462,7 +1464,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		if (ListView_GetSelectedCount(hwndDirList)) {
 			CopyMoveDlg(hwnd, &wFuncCopyMove);
 		} else {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 		}
 		break;
 
@@ -1516,13 +1518,13 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		if (ListView_GetSelectedCount(hwndDirList)) {
 			RenameFileDlg(hwnd);
 		} else {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 		}
 		break;
 
 	case IDM_FILE_PROPERTIES:
 		if (!ListView_GetSelectedCount(hwndDirList)) {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 		} else {
 			DirList_PropertyDlg(hwndDirList, -1);
 		}
@@ -1876,7 +1878,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				ErrorMessage(2, IDS_ERR_CD);
 			}
 		} else {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 		}
 		History_UpdateToolbar(&mHistory, hwndToolbar, IDT_HISTORY_BACK, IDT_HISTORY_FORWARD);
 		break;
@@ -1889,7 +1891,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				ErrorMessage(2, IDS_ERR_CD);
 			}
 		} else {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 		}
 		History_UpdateToolbar(&mHistory, hwndToolbar, IDT_HISTORY_BACK, IDT_HISTORY_FORWARD);
 		break;
@@ -1900,7 +1902,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				ErrorMessage(2, IDS_ERR_CD);
 			}
 		} else {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 		}
 	}
 	break;
@@ -1911,7 +1913,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				ErrorMessage(2, IDS_ERR_CD);
 			}
 		} else {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 		}
 	}
 	break;
@@ -1951,7 +1953,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			ListView_Update(hwndDirList, i);
 			SendWMCommand(hwnd, iDefaultOpenMenu);
 		} else {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 		}
 	}
 	break;
@@ -1988,7 +1990,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			ListView_Update(hwndDirList, i);
 			SendWMCommand(hwnd, iDefaultOpenMenu);
 		} else {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 		}
 	}
 	break;
@@ -2001,7 +2003,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		if (DirList_IsFileSelected(hwndDirList)) {
 			SendWMCommand(hwnd, IDM_FILE_QUICKVIEW);
 		} else {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 		}
 		break;
 
@@ -2009,7 +2011,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		if (DirList_IsFileSelected(hwndDirList)) {
 			SendWMCommand(hwnd, IDM_FILE_SAVEAS);
 		} else {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 		}
 		break;
 
@@ -2017,7 +2019,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		if (ListView_GetSelectedCount(hwndDirList)) {
 			SendWMCommand(hwnd, IDM_FILE_COPYMOVE);
 		} else {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 		}
 		break;
 
@@ -2028,7 +2030,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			SendWMCommand(hwnd, IDM_FILE_DELETE);
 			fUseRecycleBin = fUseRecycleBin2;
 		} else {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 		}
 		break;
 
@@ -2036,7 +2038,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		if (ListView_GetSelectedCount(hwndDirList)) {
 			SendWMCommand(hwnd, IDM_FILE_DELETE2);
 		} else {
-			MessageBeep(0);
+			MessageBeep(MB_OK);
 		}
 		break;
 
@@ -3682,5 +3684,3 @@ void SnapToDefaultPos(HWND hwnd) {
 
 	SetWindowPlacement(hwnd, &wndpl);
 }
-
-///  End of metapath.c

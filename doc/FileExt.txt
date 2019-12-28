@@ -25,6 +25,7 @@ C/C++ Source
 	m				Objective C Source File
 	mm				Objective C++ Source File
 	xpm				X11 Pixmap Graphic
+	cl				OpenCL Source File
 	cu				CUDA Source File
 
 	*.h.in
@@ -61,11 +62,15 @@ JSON Document
 	ipynb			Jupyter Notebook
 	wxcp			CodeLite wxCrafter Resource
 	jshintrc		JSHint Configuration File
-	eslintrc		ESLint Configuration File
-	jsonld			JSON for Linked Data
+	eslintrc		ESLint Configuration File, https://eslint.org/
+	babelrc			Babel Configuration File, https://babeljs.io/
+	prettierrc		Prettier Configuration File, https://prettier.io/
+	stylelintrc		Stylelint Configuration File, https://stylelint.io/
+	jsonld			JSON for Linked Data, https://json-ld.org/
+	jsonc			JSON with Comments, https://code.visualstudio.com/docs/languages/json#_json-with-comments
 	arcconfig		Phabricator Arcanist
 	arclint			Phabricator Arcanist
-	jscop			JSCoP File, http://polly.llvm.org/documentation/passes.html
+	jscop			JSCoP File, https://polly.llvm.org/documentation/passes.html
 
 PHP Script
 	php
@@ -272,7 +277,7 @@ Ini Config File
 	sed
 	theme
 	clw
-	toml			https://github.com/toml-lang/toml
+	abnf			ABNF, https://www.ietf.org/rfc/rfc5234.txt
 
 	LLVMBuild.txt
 
@@ -314,8 +319,9 @@ Lisp Script
 	lisp
 	el				Emacs Lisp
 	lsp
-	clj				Common Lisp
+	clj				Common Lisp, ClojureScript
 	cljs			Common Lisp
+	scm				Scheme
 
 LLVM IR
 	ll
@@ -402,8 +408,10 @@ Shell Script
 	zsh				Z Shell
 	bash
 	tcsh			C Shell
+
 	m4				M4 Macro
 	in				automake / autoconf
+	ac				Autoconf
 
 	.bash*
 	.profile
@@ -419,6 +427,11 @@ Texinfo File
 	texi
 	texinfo
 	txi
+
+TOML File
+	toml			https://github.com/toml-lang/toml
+
+	Cargo.lock		Rust Cargo
 
 
 VBScript
@@ -445,6 +458,20 @@ Visual Basic
 	pag				Visual Basic Property Page
 	dsr				Visual Basic Active Designer File
 	dob				Visual Basic User Document
+
+
+WebAssembly
+	wat
+	wast
+
+YAML Document
+	yml
+	yaml
+	clang-format	clang-format Configuration File
+	clang-tidy		clang-tidy Configuration File
+	mir				LLVM Machine IR, https://llvm.org/docs/MIRLangRef.html
+	apinotes		Swift API Notes
+	ifs				LLVM IFS (Interface Stubs)
 
 ANSI Art
 	nfo				System Information File
