@@ -1133,10 +1133,11 @@ static inline BOOL DidLexerHasBlockComment(int iLexer, int rid) {
 	);
 }
 
+// Python like indentation based code folding that can use SC_IV_LOOKFORWARD
 static inline BOOL IsPythonLikeFolding(int iLexer) {
-	return iLexer == SCLEX_PYTHON
-		|| iLexer == SCLEX_YAML
-		|| iLexer == SCLEX_NULL;
+	return iLexer == SCLEX_NULL
+		|| iLexer == SCLEX_PYTHON
+		|| iLexer == SCLEX_YAML;
 }
 
 static void Style_Parse(struct DetailStyle *style, LPCWSTR lpszStyle);
@@ -2006,6 +2007,7 @@ PEDITLEXER Style_DetectObjCAndMatlab(void) {
 	return NULL;
 }
 
+// auto detect file type from content.
 PEDITLEXER Style_AutoDetect(BOOL bDotFile) {
 	char tchText[4096] = ""; // maybe contains header comments
 	SciCall_GetText(COUNTOF(tchText), tchText);
@@ -2016,55 +2018,71 @@ PEDITLEXER Style_AutoDetect(BOOL bDotFile) {
 	int sharpCount = 0;
 	BOOL maybeIni = FALSE;
 	BOOL maybeJson = FALSE;
-	BOOL maybeYAML = FALSE;
+	BOOL notJson = FALSE;
 
 	while (*p) {
 		if (*p == '[') {
+			// bracket at line beginning
 			maybeIni = TRUE;
+		} else if (*p == '-' && p[1] == '-' && p[2] == '-' && IsASpace(p[3])) {
+			// `---` at line beginning
+			p += 3;
+			while (*p == ' ' || *p == '\t') {
+				++p;
+			}
+			if (IsASpace(*p) || *p == '#' || *p == '%') {
+				return &lexYAML;
+			}
 		} else {
-			while (IsASpace(*p)) {
+			// skip leading space
+			while (*p == ' ' || *p == '\t') {
 				++p;
 			}
-		}
-		switch (*p) {
-		case '#': // C/C++ preprocessor, comment
-			if (!(p == tchText && shebang)) {
-				++p;
-				while (*p == ' ' || *p == '\t') {
+			switch (*p) {
+			case '#': // C/C++ preprocessor, comment
+				if (!(p == tchText && shebang)) {
 					++p;
+					while (*p == ' ' || *p == '\t') {
+						++p;
+					}
+					if (MatchCPPKeyword(p, 2)) {
+						++cppCount;
+					} else {
+						++sharpCount;
+					}
 				}
-				if (MatchCPPKeyword(p, 2)) {
+				break;
+			case '/': // C/C++ style comment
+				++p;
+				if (*p == '/' || *p == '*') {
 					++cppCount;
-				} else {
-					++sharpCount;
+					if (!sharpCount) {
+						return &lexCPP;
+					}
 				}
-			}
-			break;
-		case '/': // C/C++ style comment
-			++p;
-			if (*p == '/' || *p == '*') {
-				return &lexCPP;
-			}
-			break;
+				break;
 
-		case '{':
-		case '}':
-		case ']':
-			maybeJson = TRUE;
-			break;
-		case '\"':
-			maybeJson |= maybeIni;
-			break;
+			case '{':
+			case '}':
+			case ']':
+				maybeJson |= TRUE;
+				break;
+			case '\"':
+				maybeJson |= maybeIni;
+				break;
 
-		case '-':
-			++p;
-			if (*p == '-'  && p[1] == '-' && IsASpace(p[2])) {
-				maybeYAML = TRUE;
+			default:
+				// not a normal JSON file: line not starts with any of `{}[]"`, possible JSON with unquoted keys, which is rare.
+				notJson |= *p;
+				break;
 			}
-			break;
 		}
+
 		// skip to next line
 		while (*p && !(*p == '\r' || *p == '\n')) {
+			++p;
+		}
+		while (*p == '\r' || *p == '\n') {
 			++p;
 		}
 	}
@@ -2075,10 +2093,7 @@ PEDITLEXER Style_AutoDetect(BOOL bDotFile) {
 	if (sharpCount) {
 		return shebang ? &lexBash : &lexCONF;
 	}
-	if (maybeYAML) {
-		return &lexYAML;
-	}
-	if (maybeJson) {
+	if (maybeJson && !notJson) {
 		return &lexJSON;
 	}
 	if (maybeIni) {
@@ -2086,6 +2101,10 @@ PEDITLEXER Style_AutoDetect(BOOL bDotFile) {
 	}
 	if (bDotFile) {
 		return &lexCONF;
+	}
+	if (maybeJson) {
+		// for braces and brackets
+		return &lexCPP;
 	}
 	return NULL;
 }
