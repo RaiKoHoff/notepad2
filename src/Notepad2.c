@@ -200,7 +200,7 @@ static BOOL bShowStatusbar;
 static BOOL bInFullScreenMode;
 static int iFullScreenMode;
 
-typedef struct _wi {
+typedef struct WININFO {
 	int x;
 	int y;
 	int cx;
@@ -1233,10 +1233,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 
 		HMENU hmenu = LoadMenu(g_hInstance, MAKEINTRESOURCE(IDR_POPUPMENU));
 		//SetMenuDefaultItem(GetSubMenu(hmenu, IDP_POPUP_SUBMENU_BAR), 0, FALSE);
-
-		POINT pt;
-		pt.x = GET_X_LPARAM(lParam);
-		pt.y = GET_Y_LPARAM(lParam);
+		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 
 		int imenu = 0;
 		switch (nID) {
@@ -1987,6 +1984,7 @@ void MsgDPIChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	Style_OnDPIChanged();
 	SciCall_GotoPos(pos);
 	UpdateToolbar();
+	UpdateStatusbar();
 }
 
 //=============================================================================
@@ -3377,8 +3375,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		char mszBuf[32];
 		FILETIME ft;
 		// Windows timestamp in 100-nanosecond
+#if _WIN32_WINNT < _WIN32_WINNT_WIN8
 		GetSystemTimeAsFileTime(&ft);
-		//GetSystemTimePreciseAsFileTime(&ft); // Win8 and above
+#else
+		GetSystemTimePreciseAsFileTime(&ft);
+#endif
 		uint64_t timestamp = (((uint64_t)(ft.dwHighDateTime)) << 32) | ft.dwLowDateTime;
 		// Between Jan 1, 1601 and Jan 1, 1970 there are 11644473600 seconds
 		timestamp -= UINT64_C(11644473600) * 1000 * 1000 * 10;

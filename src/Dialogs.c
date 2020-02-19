@@ -934,7 +934,7 @@ extern BOOL bSaveRecentFiles;
 extern int cxFileMRUDlg;
 extern int cyFileMRUDlg;
 
-typedef struct tagIconThreadInfo {
+typedef struct ICONTHREADINFO {
 	HWND hwnd;					// HWND of ListView Control
 	HANDLE hExitThread;			// Flag is set when Icon Thread should terminate
 	HANDLE hTerminatedThread;	// Flag is set when Icon Thread has terminated
@@ -1665,7 +1665,7 @@ BOOL TabSettingsDlg(HWND hwnd) {
 // SelectDefEncodingDlgProc()
 //
 //
-typedef struct encodedlg {
+typedef struct ENCODEDLG {
 	BOOL bRecodeOnly;
 	int  idEncoding;
 	int  cxDlg;
@@ -2028,7 +2028,7 @@ void InitZoomLevelComboBox(HWND hwnd, int nCtlId, int zoomLevel) {
 	WCHAR tch[16];
 	int selIndex = -1;
 	const int levelList[] = {
-		500, 450, 350, 300, 250,
+		500, 450, 400, 350, 300, 250,
 		200, 175, 150, 125, 100, 75, 50, 25,
 	};
 
@@ -2270,7 +2270,7 @@ BOOL AutoCompletionSettingsDlg(HWND hwnd) {
 // InfoBoxDlgProc()
 //
 //
-typedef struct _infobox {
+typedef struct INFOBOX {
 	LPWSTR lpstrMessage;
 	LPWSTR lpstrSetting;
 	LPCWSTR idiIcon;

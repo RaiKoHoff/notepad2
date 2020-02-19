@@ -25,7 +25,7 @@ using namespace Scintilla;
 static const char styleSubable[] = { 0 };
 
 DefaultLexer::DefaultLexer(const char *languageName_, int language_,
-	const LexicalClass *lexClasses_, size_t nClasses_) :
+	const LexicalClass *lexClasses_, size_t nClasses_) noexcept :
 	languageName(languageName_),
 	language(language_),
 	lexClasses(lexClasses_),
@@ -62,7 +62,7 @@ const char * SCI_METHOD DefaultLexer::DescribeWordListSets() const noexcept {
 	return "";
 }
 
-Sci_Position SCI_METHOD DefaultLexer::WordListSet(int, const char *) {
+Sci_Position SCI_METHOD DefaultLexer::WordListSet(int, bool, const char *) {
 	return -1;
 }
 

@@ -18,7 +18,7 @@ class DefaultLexer : public ILexer5 {
 	size_t nClasses;
 public:
 	DefaultLexer(const char *languageName_, int language_,
-		const LexicalClass *lexClasses_ = nullptr, size_t nClasses_ = 0);
+		const LexicalClass *lexClasses_ = nullptr, size_t nClasses_ = 0) noexcept;
 	virtual ~DefaultLexer();
 	void SCI_METHOD Release() noexcept override;
 	int SCI_METHOD Version() const noexcept override;
@@ -27,7 +27,7 @@ public:
 	const char * SCI_METHOD DescribeProperty(const char *name) const override;
 	Sci_Position SCI_METHOD PropertySet(const char *key, const char *val) override;
 	const char * SCI_METHOD DescribeWordListSets() const noexcept override;
-	Sci_Position SCI_METHOD WordListSet(int n, const char *wl) override;
+	Sci_Position SCI_METHOD WordListSet(int n, bool toLower, const char *wl) override;
 	void SCI_METHOD Lex(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, IDocument *pAccess) override = 0;
 	void SCI_METHOD Fold(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, IDocument *pAccess) override;
 	void *SCI_METHOD PrivateCall(int operation, void *pointer) override;

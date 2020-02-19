@@ -35,6 +35,10 @@ namespace {
 enum script_type { eScriptNone = 0, eScriptJS, eScriptVBS, eScriptPython, eScriptPHP, eScriptXML, eScriptSGML, eScriptSGMLblock, eScriptComment };
 enum script_mode { eHtml = 0, eNonHtmlScript, eNonHtmlPreProc, eNonHtmlScriptPreProc };
 
+constexpr bool IsEmpty(const char *text) noexcept {
+	return *text == '\0';
+}
+
 inline void GetTextSegment(Accessor &styler, Sci_PositionU start, Sci_PositionU end, char *s, size_t len) noexcept {
 	styler.GetRangeLowered(start, end + 1, s, len);
 }
@@ -392,6 +396,10 @@ constexpr int StateForScript(script_type scriptLanguage) noexcept {
 	}
 }
 
+constexpr int defaultStateForSGML(script_type scriptLanguage) noexcept {
+	return (scriptLanguage == eScriptSGMLblock)? SCE_H_SGML_BLOCK_DEFAULT : SCE_H_SGML_DEFAULT;
+}
+
 bool issgmlwordchar(int ch) noexcept {
 	return !IsASCII(ch) ||
 		(isalnum(ch) || ch == '.' || ch == '_' || ch == ':' || ch == '!' || ch == '#' || ch == '[');
@@ -415,7 +423,7 @@ constexpr bool IsScriptCommentState(const int state) noexcept {
 }
 
 bool isMakoBlockEnd(const int ch, const int chNext, const char *blockType) noexcept {
-	if (strlen(blockType) == 0) {
+	if (IsEmpty(blockType)) {
 		return ((ch == '%') && (chNext == '>'));
 	} else if ((0 == strcmp(blockType, "inherit")) ||
 		(0 == strcmp(blockType, "namespace")) ||
@@ -435,7 +443,7 @@ bool isMakoBlockEnd(const int ch, const int chNext, const char *blockType) noexc
 }
 
 bool isDjangoBlockEnd(const int ch, const int chNext, const char *blockType) noexcept {
-	if (strlen(blockType) == 0) {
+	if (IsEmpty(blockType)) {
 		return false;
 	} else if (0 == strcmp(blockType, "%")) {
 		return ((ch == '%') && (chNext == '}'));
@@ -842,8 +850,8 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			default :
 				// check if the closing tag is a script tag
 				if (const char *tag =
-						state == SCE_HJ_COMMENTLINE || isXml ? "script" :
-						state == SCE_H_COMMENT ? "comment" : nullptr) {
+						(state == SCE_HJ_COMMENTLINE || isXml) ? "script" :
+						((state == SCE_H_COMMENT) ? "comment" : nullptr)) {
 					Sci_Position j = i + 2;
 					char chr;
 					do {
@@ -1265,18 +1273,10 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 		case SCE_H_SGML_1ST_PARAM:
 			// wait for the beginning of the word
 			if ((ch == '-') && (chPrev == '-')) {
-				if (scriptLanguage == eScriptSGMLblock) {
-					styler.ColourTo(i - 2, SCE_H_SGML_BLOCK_DEFAULT);
-				} else {
-					styler.ColourTo(i - 2, SCE_H_SGML_DEFAULT);
-				}
+				styler.ColourTo(i - 2, defaultStateForSGML(scriptLanguage));
 				state = SCE_H_SGML_1ST_PARAM_COMMENT;
 			} else if (issgmlwordchar(ch)) {
-				if (scriptLanguage == eScriptSGMLblock) {
-					styler.ColourTo(i - 1, SCE_H_SGML_BLOCK_DEFAULT);
-				} else {
-					styler.ColourTo(i - 1, SCE_H_SGML_DEFAULT);
-				}
+				styler.ColourTo(i - 1, defaultStateForSGML(scriptLanguage));
 				// find the length of the word
 				int size = 1;
 				while (setHTMLWord.Contains(static_cast<unsigned char>(styler.SafeGetCharAt(i + size))))
@@ -1285,18 +1285,20 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				i += size - 1;
 				visibleChars += size - 1;
 				ch = static_cast<unsigned char>(styler.SafeGetCharAt(i));
-				if (scriptLanguage == eScriptSGMLblock) {
-					state = SCE_H_SGML_BLOCK_DEFAULT;
-				} else {
-					state = SCE_H_SGML_DEFAULT;
-				}
+				state = defaultStateForSGML(scriptLanguage);
 				continue;
+			} else if (ch == '\"' || ch == '\'') {
+				styler.ColourTo(i - 1, defaultStateForSGML(scriptLanguage));
+				state = (ch == '\"')? SCE_H_SGML_DOUBLESTRING : SCE_H_SGML_SIMPLESTRING;
 			}
 			break;
 		case SCE_H_SGML_ERROR:
 			if ((ch == '-') && (chPrev == '-')) {
 				styler.ColourTo(i - 2, StateToPrint);
 				state = SCE_H_SGML_COMMENT;
+			} else if (ch == '\"' || ch == '\'') {
+				styler.ColourTo(i - 1, defaultStateForSGML(scriptLanguage));
+				state = (ch == '\"')? SCE_H_SGML_DOUBLESTRING : SCE_H_SGML_SIMPLESTRING;
 			}
 			break;
 		case SCE_H_SGML_DOUBLESTRING:
@@ -1948,7 +1950,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				} else if (styler.Match(i, "<<<")) {
 					int heardocQuotes = 0;
 					i = FindPhpStringDelimiter(phpStringDelimiter, sizeof(phpStringDelimiter), i + 3, lengthDoc, styler, heardocQuotes);
-					if (strlen(phpStringDelimiter)) {
+					if (!IsEmpty(phpStringDelimiter)) {
 						state = ((heardocQuotes == 1) ? SCE_HPHP_NOWDOC : SCE_HPHP_HEREDOC);
 						if (foldHeredoc) levelCurrent++;
 					}
@@ -2071,7 +2073,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			} else if (styler.Match(i, "<<<")) {
 				int heardocQuotes = 0;
 				i = FindPhpStringDelimiter(phpStringDelimiter, sizeof(phpStringDelimiter), i + 3, lengthDoc, styler, heardocQuotes);
-				if (strlen(phpStringDelimiter)) {
+				if (!IsEmpty(phpStringDelimiter)) {
 					state = ((heardocQuotes == 1) ? SCE_HPHP_NOWDOC : SCE_HPHP_HEREDOC);
 					if (foldHeredoc) levelCurrent++;
 				}

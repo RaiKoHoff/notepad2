@@ -3,7 +3,7 @@
 
 static KEYWORDLIST Keywords_HTML = {{
 // Tag
-"!doctype !DOCTYPE a abbr address area article aside audio b base bdi bdo "
+"a abbr address area article aside audio b base bdi bdo "
 "blockquote body br button canvas caption cite code col colgroup command datalist "
 "data dd del details dfn dialog div dl dt em embed fieldset figcaption figure footer "
 "form h1 h2 h3 h4 h5 h6 head header hgroup hr html i iframe img input ins kbd "
@@ -56,8 +56,13 @@ NULL
 //
 "__CLASS__ __DIR__ __FILE__ __FUNCTION__ __LINE__ __METHOD__ __NAMESPACE__ __TRAIT__ "
 
-, // 5 SGML DTD
-NULL
+, // 5 SGML/DTD
+"doctype DOCTYPE PUBLIC SYSTEM "
+"ELEMENT ATTLIST ENTITY "
+"ANY CDATA EMPT ENTITIES ID IDREF IDREFS NDATA NOTATION NMTOKEN NMTOKENS "
+"IMPLIED FIXED PCDATA REQUIRED "
+
+"SGML "
 
 , // 6 Attribute
 // Attribute
@@ -67,7 +72,7 @@ NULL
 "defer dir dirname disabled download draggable dropzone enctype enterkeyhint for form formaction "
 "formenctype formmethod formnovalidate formtarget headers height hidden inputmode high href hreflang "
 "http-equiv icon id imagesrcset imagesizes integrity is ismap itemid itemprop itemref itemscope itemtype "
-"keytype kind label lang list longdesc loop low nonce minlength manifest max "
+"keytype kind label lang list loading longdesc loop low nonce minlength manifest max "
 "maxlength media mediagroup method min multiple muted name nomodule novalidate open "
 "optimum pattern placeholder playsinline poster preload radiogroup readonly referrerpolicy rel required "
 "rev reversed rows rowspan sandbox sizes spellcheck scope scoped seamless selected shape size span "
@@ -134,9 +139,8 @@ NULL
 "allow-forms allow-popups allow-same-origin allow-scripts allow-top-navigation "
 "row col rowgroup colgroup any "
 "command context toolbar soft hard "
-, NULL
 
-, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+,NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 }};
 
 static EDITSTYLE Styles_HTML[] = {
@@ -145,14 +149,14 @@ static EDITSTYLE Styles_HTML[] = {
 	{ SCE_H_TAGUNKNOWN, NP2StyleX_HTMLUnknownTag, L"fore:#C80000" },
 	{ SCE_H_ATTRIBUTE, NP2StyleX_HTMLAttribute, L"fore:#FF4000" },
 	{ SCE_H_ATTRIBUTEUNKNOWN, NP2StyleX_HTMLUnknownAttribute, L"fore:#C80000" },
-	{ SCE_H_VALUE, NP2StyleX_HTMLValue, L"fore:#3A6EA5" },
-	{ MULTI_STYLE(SCE_H_DOUBLESTRING, SCE_H_SINGLESTRING, 0, 0), NP2StyleX_HTMLString, L"fore:#3A6EA5" },
-	{ SCE_H_OTHER, NP2StyleX_HTMLOtherTag, L"fore:#3A6EA5" },
-	{ MULTI_STYLE(SCE_H_COMMENT, SCE_H_XCCOMMENT, 0, 0), NP2StyleX_HTMLComment, L"fore:#608060" },
-	{ SCE_H_ENTITY, NP2StyleX_HTMLEntity, L"fore:#B000B0" },
+	{ MULTI_STYLE(SCE_H_VALUE, SCE_H_SGML_SPECIAL, 0, 0), NP2StyleX_HTMLValue, L"fore:#3A6EA5" },
+	{ MULTI_STYLE(SCE_H_DOUBLESTRING, SCE_H_SINGLESTRING, SCE_H_SGML_DOUBLESTRING, SCE_H_SGML_SIMPLESTRING), NP2StyleX_HTMLString, L"fore:#3A6EA5" },
+	{ MULTI_STYLE(SCE_H_OTHER, SCE_H_SGML_1ST_PARAM, 0, 0), NP2StyleX_HTMLOtherTag, L"fore:#0080C0" },
+	{ MULTI_STYLE(SCE_H_COMMENT, SCE_H_XCCOMMENT, SCE_H_SGML_COMMENT, SCE_H_SGML_1ST_PARAM_COMMENT), NP2StyleX_HTMLComment, L"fore:#608060" },
+	{ MULTI_STYLE(SCE_H_ENTITY, SCE_H_SGML_ENTITY, SCE_H_SGML_ERROR, 0), NP2StyleX_HTMLEntity, L"fore:#A46000" },
 	{ SCE_H_DEFAULT, NP2StyleX_HTMLElementText, L"" },
-	{ MULTI_STYLE(SCE_H_XMLSTART, SCE_H_XMLEND, 0, 0), NP2StyleX_XMLIdentifier, L"bold; fore:#881280" },
-	{ SCE_H_SGML_DEFAULT, NP2StyleX_XMLSGML, L"fore:#881280" },
+	{ MULTI_STYLE(SCE_H_XMLSTART, SCE_H_XMLEND, SCE_H_SGML_COMMAND, 0), NP2StyleX_XMLIdentifier, L"bold; fore:#881280" },
+	{ MULTI_STYLE(SCE_H_SGML_DEFAULT, SCE_H_SGML_BLOCK_DEFAULT, 0, 0), NP2StyleX_XMLSGML, L"fore:#881280" },
 	{ SCE_H_CDATA, NP2StyleX_XMLCDATA, L"fore:#646464" },
 	{ MULTI_STYLE(SCE_H_ASP, SCE_H_ASPAT, 0, 0), NP2StyleX_ASPTag, L"bold; fore:#8B008B" },
 	//{ SCE_H_SCRIPT, EDITSTYLE_HOLE(L"Script"), L"" },

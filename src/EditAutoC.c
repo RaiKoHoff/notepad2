@@ -734,6 +734,7 @@ static inline BOOL NeedSpaceAfterKeyword(const char *word, Sci_Position length) 
 #define HTML_TEXT_BLOCK_PYTHON	4
 #define HTML_TEXT_BLOCK_PHP		5
 #define HTML_TEXT_BLOCK_CSS		6
+#define HTML_TEXT_BLOCK_SGML	7
 
 extern EDITLEXER lexCSS;
 extern EDITLEXER lexJS;
@@ -759,6 +760,9 @@ static int GetCurrentHtmlTextBlockEx(int iCurrentStyle) {
 	}
 	if ((iCurrentStyle >= SCE_HPHP_DEFAULT && iCurrentStyle <= SCE_HPHP_COMPLEX_VARIABLE)) {
 		return HTML_TEXT_BLOCK_PHP;
+	}
+	if ((iCurrentStyle >= SCE_H_SGML_DEFAULT && iCurrentStyle <= SCE_H_SGML_BLOCK_DEFAULT)) {
+		return HTML_TEXT_BLOCK_SGML;
 	}
 	return HTML_TEXT_BLOCK_TAG;
 }
@@ -1053,10 +1057,8 @@ INT AutoC_AddSpecWord(struct WordList *pWList, int iCurrentStyle, int ch, int ch
 	}
 	else if ((pLexCurrent->rid == NP2LEX_HTML || pLexCurrent->rid == NP2LEX_XML || pLexCurrent->rid == NP2LEX_CONF)
 			   && ((ch == '<') || (chPrev == '<' && ch == '/'))) {
-		if (pLexCurrent->rid == NP2LEX_HTML || pLexCurrent->rid == NP2LEX_CONF) { // HTML Tag
-			WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[0]);// HTML Tag
-		} else {
-			WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[3]);// XML Tag
+		WordList_AddListEx(pWList, pLexCurrent->pKeyWords->pszKeyWords[0]);// Tag
+		if (pLexCurrent->rid == NP2LEX_XML) {
 			if (np2_LexKeyword) { // XML Tag
 				WordList_AddList(pWList, (*np2_LexKeyword)[0]);
 			}
@@ -2236,6 +2238,12 @@ void EditToggleCommentBlock(void) {
 		case HTML_TEXT_BLOCK_PHP:
 		case HTML_TEXT_BLOCK_CSS:
 			EditEncloseSelection(L"/*", L"*/");
+			break;
+
+		case HTML_TEXT_BLOCK_SGML:
+			// A brief SGML tutorial
+			// https://www.w3.org/TR/WD-html40-970708/intro/sgmltut.html
+			EditEncloseSelection(L"--", L"--");
 			break;
 		}
 	} break;
