@@ -2,9 +2,11 @@
 # Script to generate line breaking data from
 # https://www.unicode.org/Public/UCD/latest/ucd/LineBreak.txt
 
-import platform, unicodedata
+import platform
+import unicodedata
 from enum import IntFlag
 import re
+
 from FileGenerator import Regenerate
 from GenerateCharacterCategory import *
 
@@ -93,12 +95,17 @@ def readLineBreakFile(filename='LineBreak.txt'):
 	global kUnicodeLineBreak, kUnicodeLineBreakVersion
 
 	data = ['XX'] * UnicodeCharacterCount	# @missing
+	# ID: Ideographic (B/A)
+	# The unassigned code points in the following blocks default to ID:
 	setRange(data, 0x3400, 0x4DBF, 'ID')	# CJK Unified Ideographs Extension A
 	setRange(data, 0x4E00, 0x9FFF, 'ID')	# CJK Unified Ideographs
 	setRange(data, 0xF900, 0xFAFF, 'ID')	# CJK Compatibility Ideographs
 	setRange(data, 0x20000, 0x2FFFD, 'ID')	# Plane 2
 	setRange(data, 0x30000, 0x3FFFD, 'ID')	# Plane 3
 	setRange(data, 0x1F000, 0x1FFFD, 'ID')	# Plane 1 range
+	setRange(data, 0x3130, 0x318F, 'ID')	# Hangul Compatibility Jamo
+	# PR: Prefix Numeric (XA)
+	# 22.1 Currency Symbols
 	setRange(data, 0x20A0, 0x20CF, 'PR')	# Currency Symbols
 
 	version = ''

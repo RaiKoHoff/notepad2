@@ -70,9 +70,10 @@ extern EDITLEXER lexDIFF;
 extern EDITLEXER lexFSharp;
 extern EDITLEXER lexFortran;
 
+extern EDITLEXER lexGN;
+extern EDITLEXER lexGo;
 extern EDITLEXER lexGradle;
 extern EDITLEXER lexDOT;
-extern EDITLEXER lexGo;
 extern EDITLEXER lexGroovy;
 
 extern EDITLEXER lexHaXe;
@@ -162,9 +163,10 @@ static const PEDITLEXER pLexArray[ALL_LEXER_COUNT] = {
 	&lexFSharp,
 	&lexFortran,
 
+	&lexGN,
+	&lexGo,
 	&lexGradle,
 	&lexDOT,
-	&lexGo,
 	&lexGroovy,
 
 	&lexHaXe,
@@ -262,7 +264,7 @@ static const COLORREF defaultCustomColor[MAX_CUSTOM_COLOR_COUNT] = {
 	RGB(0x00, 0x80, 0x80),	// String, Verbatim String
 	RGB(0xFF, 0x00, 0x80),	// Backticks, Basic Function
 	RGB(0x40, 0x80, 0x40),	// Doc Comment
-	RGB(0x00, 0x80, 0xC0),	// Build-in Function
+	RGB(0x00, 0x80, 0xC0),	// Built-in Function
 	//RGB(0x00, 0x3C, 0xE6),	// Variable
 	//RGB(0x00, 0x7F, 0x7F),	// Class, Trait
 };
@@ -1076,6 +1078,10 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[6] = KeywordAttr_NoLexer;		// long properties
 		attr[7] = KeywordAttr_NoLexer;		// long variables
 		break;
+	case NP2LEX_GN:
+		attr[3] = KeywordAttr_NoLexer;		// target variables
+		attr[4] = KeywordAttr_NoLexer;		// placeholders
+		break;
 	case NP2LEX_JULIA:
 		attr[1] = KeywordAttr_NoAutoComp;	// code fold
 		attr[5] = KeywordAttr_NoLexer;		// module
@@ -1120,6 +1126,7 @@ static inline BOOL DidLexerHasBlockComment(int iLexer, int rid) {
 		|| iLexer == SCLEX_BATCH
 		|| iLexer == SCLEX_CONF
 		|| iLexer == SCLEX_DIFF
+		|| iLexer == SCLEX_GN
 		|| iLexer == SCLEX_LLVM
 		|| iLexer == SCLEX_MAKEFILE
 		|| iLexer == SCLEX_PERL

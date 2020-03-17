@@ -481,6 +481,7 @@ BOOL IsDocWordChar(int ch) {
 	case NP2LEX_BASH:
 	case NP2LEX_BATCH:
 	case NP2LEX_HTML:
+	case NP2LEX_GN:
 	case NP2LEX_PHP:
 	case NP2LEX_PS1:
 		return (ch == '-' || ch == '$');
@@ -562,6 +563,9 @@ static inline BOOL IsOperatorStyle(int style) {
 	case SCLEX_FSHARP:
 		return style == SCE_FSHARP_OPERATOR;
 
+	case SCLEX_GN:
+		return style == SCE_GN_OPERATOR;
+
 	case SCLEX_HTML:
 		return style == SCE_HPHP_OPERATOR || style == SCE_HJ_SYMBOLS || style == SCE_HJA_SYMBOLS;
 
@@ -642,8 +646,8 @@ static inline BOOL IsWordStyleToIgnore(int style) {
 	case SCLEX_PYTHON:
 		return style == SCE_PY_WORD
 			|| style == SCE_PY_WORD2
-			|| style == SCE_PY_BUILDIN_CONST
-			|| style == SCE_PY_BUILDIN_FUNC
+			|| style == SCE_PY_BUILTIN_CONST
+			|| style == SCE_PY_BUILTIN_FUNC
 			|| style == SCE_PY_ATTR
 			|| style == SCE_PY_OBJ_FUNC;
 
@@ -2064,6 +2068,7 @@ void EditToggleCommentLine(void) {
 
 	case SCLEX_CMAKE:
 	case SCLEX_CONF:
+	case SCLEX_GN:
 	case SCLEX_JULIA:
 	case SCLEX_MAKEFILE:
 	case SCLEX_NSIS:

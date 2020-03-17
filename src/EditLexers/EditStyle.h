@@ -32,7 +32,7 @@
 #define NP2STYLE_Regex					63135
 #define NP2STYLE_Attribute				63136
 #define NP2STYLE_Directive				63137
-// 63138
+#define NP2STYLE_Identifier				63138
 #define NP2STYLE_DocComment				63139
 #define NP2STYLE_DocCommentTag			63140
 #define NP2STYLE_XMLTag					63141
@@ -147,6 +147,7 @@
 #define NP2STYLE_DocCommentTagHTML		63350
 #define NP2STYLE_ReservedWord			63351
 #define NP2STYLE_EscapeSequence			63352
+#define NP2STYLE_Placeholder			63353
 
 #define NP2STYLE_BracketArgument		63361
 
@@ -187,9 +188,9 @@
 #define NP2STYLE_TripleQuotedBytes		63463
 #define NP2STYLE_Lifetime				63464
 #define NP2STYLE_Decorator				63465
-#define NP2STYLE_BuildinFunction		63466
+#define NP2STYLE_BuiltInFunction		63466
 #define NP2STYLE_objectMethod			63467
-#define NP2STYLE_BuildinConstant		63468
+#define NP2STYLE_BuiltInConstant		63468
 #define NP2STYLE_FormattedString		63469
 #define NP2STYLE_TripleQuotedFString	63470
 #define NP2STYLE_Module					63471
@@ -236,7 +237,7 @@
 #define NP2STYLE_DateTime				63566
 #define NP2STYLE_Action					63567
 #define NP2STYLE_ModuleDirective		63568
-#define NP2STYLE_Reference				63569
+#define NP2STYLE_Anchor					63569
 #define NP2STYLE_TextBlock				63570
 #define NP2STYLE_Math					63571
 #define NP2STYLE_SpecialCharacter		63572
@@ -264,6 +265,6 @@
 #define NP2STYLE_InlineAsm				63594
 #define NP2STYLE_Callback				63595
 #define NP2STYLE_Target					63596
-#define NP2STYLE_BuildinRule			63597
+#define NP2STYLE_BuiltInRule			63597
 #define NP2STYLE_BlobHex				63598
 #define NP2STYLE_BitField				63599

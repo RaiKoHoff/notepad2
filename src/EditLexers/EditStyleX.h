@@ -40,7 +40,7 @@
 #define NP2StyleX_Regex					EDITSTYLE_HOLE(Regex, L"Regex")
 #define NP2StyleX_Attribute				EDITSTYLE_HOLE(Attribute, L"Attribute")
 #define NP2StyleX_Directive				EDITSTYLE_HOLE(Directive, L"Directive")
-
+#define NP2StyleX_Identifier			EDITSTYLE_HOLE(Identifier, L"Identifier")
 #define NP2StyleX_DocComment			EDITSTYLE_HOLE(DocComment, L"Doc Comment")
 #define NP2StyleX_DocCommentTag			EDITSTYLE_HOLE(DocCommentTag, L"Doc Comment Tag")
 #define NP2StyleX_XMLTag				EDITSTYLE_HOLE(XMLTag, L"XML Tag")
@@ -155,6 +155,7 @@
 #define NP2StyleX_DocCommentTagHTML		EDITSTYLE_HOLE(DocCommentTagHTML, L"Doc Comment HTML Tag")
 #define NP2StyleX_ReservedWord			EDITSTYLE_HOLE(ReservedWord, L"Reserved Word")
 #define NP2StyleX_EscapeSequence		EDITSTYLE_HOLE(EscapeSequence, L"Escape Sequence")
+#define NP2StyleX_Placeholder			EDITSTYLE_HOLE(Placeholder, L"Placeholder")
 
 #define NP2StyleX_BracketArgument		EDITSTYLE_HOLE(BracketArgument, L"Bracket Argument")
 
@@ -195,9 +196,9 @@
 #define NP2StyleX_TripleQuotedBytes		EDITSTYLE_HOLE(TripleQuotedBytes, L"Triple Quoted Bytes")
 #define NP2StyleX_Lifetime				EDITSTYLE_HOLE(Lifetime, L"Lifetime")
 #define NP2StyleX_Decorator				EDITSTYLE_HOLE(Decorator, L"Decorator")
-#define NP2StyleX_BuildinFunction		EDITSTYLE_HOLE(BuildinFunction, L"Build-in Function")
+#define NP2StyleX_BuiltInFunction		EDITSTYLE_HOLE(BuiltInFunction, L"Built-in Function")
 #define NP2StyleX_objectMethod			EDITSTYLE_HOLE(objectMethod, L"object Method")
-#define NP2StyleX_BuildinConstant		EDITSTYLE_HOLE(BuildinConstant, L"Build-in Constant")
+#define NP2StyleX_BuiltInConstant		EDITSTYLE_HOLE(BuiltInConstant, L"Built-in Constant")
 #define NP2StyleX_FormattedString		EDITSTYLE_HOLE(FormattedString, L"Formatted String")
 #define NP2StyleX_TripleQuotedFString	EDITSTYLE_HOLE(TripleQuotedFString, L"Triple Quoted Formatted String")
 #define NP2StyleX_Module				EDITSTYLE_HOLE(Module, L"Module")
@@ -244,7 +245,7 @@
 #define NP2StyleX_DateTime				EDITSTYLE_HOLE(DateTime, L"DateTime")
 #define NP2StyleX_Action				EDITSTYLE_HOLE(Action, L"Action")
 #define NP2StyleX_ModuleDirective		EDITSTYLE_HOLE(ModuleDirective, L"Module Directive")
-#define NP2StyleX_Reference				EDITSTYLE_HOLE(Reference, L"Reference")
+#define NP2StyleX_Anchor				EDITSTYLE_HOLE(Anchor, L"Anchor")
 #define NP2StyleX_TextBlock				EDITSTYLE_HOLE(TextBlock, L"Text Block")
 #define NP2StyleX_Math					EDITSTYLE_HOLE(Math, L"Math")
 #define NP2StyleX_SpecialCharacter		EDITSTYLE_HOLE(SpecialCharacter, L"Special Character")
@@ -272,7 +273,7 @@
 #define NP2StyleX_InlineAsm				EDITSTYLE_HOLE(InlineAsm, L"Inline Asm")
 #define NP2StyleX_Callback				EDITSTYLE_HOLE(Callback, L"Callback")
 #define NP2StyleX_Target				EDITSTYLE_HOLE(Target, L"Target")
-#define NP2StyleX_BuildinRule			EDITSTYLE_HOLE(BuildinRule, L"Build-in Rule")
+#define NP2StyleX_BuiltInRule			EDITSTYLE_HOLE(BuiltInRule, L"Built-in Rule")
 #define NP2StyleX_BlobHex				EDITSTYLE_HOLE(BlobHex, L"Blob Hex")
 #define NP2StyleX_BitField				EDITSTYLE_HOLE(BitField, L"Bit Field")
 
