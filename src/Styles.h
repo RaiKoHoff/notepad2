@@ -23,6 +23,9 @@
 // Number of Lexers in pLexArray
 #define NUMLEXERS	64
 
+// localization, get lexer and style name from resuorce
+#define NP2_GET_LEXER_STYLE_NAME_FROM_RES	0
+
 // all schemes with "All Files (*.*)"
 #define MAX_OPEN_SAVE_FILE_DIALOG_FILTER_SIZE	((NUMLEXERS + 1) * 128)
 
@@ -31,13 +34,6 @@
 #define INI_SECTION_NAME_CUSTOM_COLORS		L"Custom Colors"
 
 #define MAX_INI_SECTION_SIZE_STYLES			(8 * 1024)
-
-/**
- * used in ParseCommandLine() for option /d, /h and /x.
- */
-#define EditLexer_Default	0
-#define EditLexer_HTML		1
-#define EditLexer_XML		2
 
 extern PEDITLEXER pLexCurrent;
 extern int np2LexLangIndex;
@@ -62,8 +58,8 @@ BOOL	Style_SetLexerFromFile(LPCWSTR lpszFile);
 void	Style_SetLexerFromName(LPCWSTR lpszFile, LPCWSTR lpszName);
 BOOL	Style_MaybeBinaryFile(LPCWSTR lpszFile);
 BOOL	Style_CanOpenFile(LPCWSTR lpszFile);
-void	Style_SetLexerFromID(int id);
-int		Style_GetEditLexerId(int lexer);
+void	Style_SetLexerFromID(int rid);
+int		Style_GetMatchLexerIndex(int rid);
 
 int		Style_GetDocTypeLanguage(void);
 void	Style_UpdateLexerKeywords(LPCEDITLEXER pLexNew);
@@ -100,4 +96,4 @@ void	Style_SetStyles(int iStyle, LPCWSTR lpszStyle);
 
 int 	Style_GetLexerIconId(LPCEDITLEXER pLex);
 void	Style_ConfigDlg(HWND hwnd);
-void	Style_SelectLexerDlg(HWND hwnd);
+void	Style_SelectLexerDlg(HWND hwnd, BOOL favorite);

@@ -10,9 +10,6 @@
 #define MAX_EDITSTYLE_VALUE_SIZE	256
 #define MAX_EDITLEXER_EXT_SIZE		512
 #define MAX_LEXER_STYLE_EDIT_SIZE	512
-
-// localization, get lexer and style name from resuorce
-#define NP2_GET_LEXER_STYLE_NAME_FROM_RES	0
 #define MAX_EDITLEXER_NAME_SIZE		128
 #define MAX_EDITSTYLE_NAME_SIZE		128
 
@@ -25,7 +22,7 @@ enum {
 #ifndef _INC_WINDOWS
 typedef wchar_t * LPWSTR;
 typedef const wchar_t * LPCWSTR;
-typedef unsigned char BYTE;
+typedef int BOOL;
 #endif
 
 typedef struct EDITSTYLE {
@@ -56,10 +53,10 @@ typedef struct EDITLEXER {
 	const int iLexer;
 	const int rid;
 	struct {
-		BYTE bStyleTheme;
-		BYTE bStyleChanged;
-		BYTE bUseDefaultCodeStyle;
-		const BYTE bUseDefaultCodeStyle_Default;
+		int iStyleTheme;
+		BOOL bStyleChanged;
+		BOOL bUseDefaultCodeStyle;
+		int iFavoriteOrder;
 		const unsigned int iStyleCount;
 		const int iNameLen;
 		LPCWSTR const pszName;
@@ -85,7 +82,7 @@ typedef const EDITLEXER *LPCEDITLEXER;
 //#define NP2LEX_IDL		63006	// SCLEX_CPP		Interface Definition Language
 #define NP2LEX_D			63007	// SCLEX_CPP		D Source
 #define NP2LEX_ASY			63008	// SCLEX_CPP		Asymptote Code
-#define NP2LEX_CIL			63009	// SCLEX_CIL		.NET IL
+#define NP2LEX_CIL			63009	// SCLEX_CIL		CIL Assembly
 //#define NP2LEX_OBJC		63010	// SCLEX_CPP		Objective C/C++
 #define NP2LEX_AS			63011	// SCLEX_CPP		ActionScript
 #define NP2LEX_HAXE			63012	// SCLEX_CPP		HaXe Script
@@ -146,6 +143,6 @@ typedef const EDITLEXER *LPCEDITLEXER;
 #define NP2LEX_GN			63072	// SCLEX_GN			GN Build Script
 
 #define NP2LEX_2NDTEXTFILE	63097	// SCLEX_NULL		2nd Text File
-#define NP2LEX_2NDGLOBAL	63098	// SCLEX_NULL		2nd Global Styles
-#define NP2LEX_ANSI			63099	// SCLEX_NULL		ANSI Art
+#define NP2LEX_ANSI			63098	// SCLEX_NULL		ANSI Art
+#define NP2LEX_2NDGLOBAL	63099	// SCLEX_NULL		2nd Global Styles
 #define NP2LEX_GLOBAL		63100	// SCLEX_NULL		Global Styles

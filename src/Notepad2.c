@@ -69,7 +69,7 @@ static BOOL bInitDone = FALSE;
 #define TAB_WIDTH_NOTIFICATION		8
 
 #define TOOLBAR_COMMAND_BASE	IDT_FILE_NEW
-#define DefaultToolbarButtons	L"22 3 0 1 2 0 4 18 19 0 5 6 0 7 8 9 20 0 10 11 0 12 0 24 0 13 14 0 15 16 17 0"
+#define DefaultToolbarButtons	L"22 3 0 1 2 0 4 18 19 0 5 6 0 7 8 9 20 0 10 11 0 12 0 24 0 13 14 0 15 16 0 17"
 static TBBUTTON tbbMainWnd[] = {
 	{0, 	0, 					0, 				 TBSTYLE_SEP, {0}, 0, 0},
 	{0, 	IDT_FILE_NEW, 		TBSTATE_ENABLED, TBSTYLE_BUTTON, {0}, 0, 0},
@@ -888,7 +888,7 @@ HWND InitInstance(HINSTANCE hInstance, int nCmdShow) {
 		if (lpSchemeArg) {
 			Style_SetLexerFromName(szCurFile, lpSchemeArg);
 			LocalFree(lpSchemeArg);
-		} else if (iInitialLexer >= 0 && iInitialLexer < NUMLEXERS) {
+		} else {
 			Style_SetLexerFromID(iInitialLexer);
 		}
 		flagLexerSpecified = 0;
@@ -1188,11 +1188,11 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 					}
 
 					if (params->flagLexerSpecified) {
-						if (params->iInitialLexer < 0) {
+						if (params->iInitialLexer <= 0) {
 							WCHAR wchExt[32] = L".";
 							lstrcpyn(CharNext(wchExt), StrEnd(&params->wchData) + 1, 30);
 							Style_SetLexerFromName(&params->wchData, wchExt);
-						} else if (params->iInitialLexer >= 0 && params->iInitialLexer < NUMLEXERS) {
+						} else {
 							Style_SetLexerFromID(params->iInitialLexer);
 						}
 					}
@@ -3746,7 +3746,12 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_VIEW_SCHEME:
-		Style_SelectLexerDlg(hwndEdit);
+	case IDM_VIEW_SCHEME_FAVORITE:
+		Style_SelectLexerDlg(hwndEdit, LOWORD(wParam) == IDM_VIEW_SCHEME_FAVORITE);
+		break;
+
+	case IDM_VIEW_SCHEME_CONFIG:
+		Style_ConfigDlg(hwndEdit);
 		break;
 
 	case IDM_VIEW_USE2NDGLOBALSTYLE:
@@ -3760,10 +3765,6 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_VIEW_STYLE_THEME_DEFAULT:
 	case IDM_VIEW_STYLE_THEME_DARK:
 		OnStyleThemeChanged(LOWORD(wParam) - IDM_VIEW_STYLE_THEME_DEFAULT);
-		break;
-
-	case IDM_VIEW_SCHEMECONFIG:
-		Style_ConfigDlg(hwndEdit);
 		break;
 
 	case IDM_VIEW_DEFAULT_CODE_FONT:
@@ -4661,7 +4662,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDT_VIEW_SCHEMECONFIG:
-		SendWMCommandOrBeep(hwnd, IDM_VIEW_SCHEMECONFIG);
+		SendWMCommandOrBeep(hwnd, IDM_VIEW_SCHEME_CONFIG);
 		break;
 
 	case IDT_FILE_EXIT:
@@ -5734,7 +5735,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 				LocalFree(lpSchemeArg);
 				lpSchemeArg = NULL;
 			}
-			iInitialLexer = Style_GetEditLexerId(EditLexer_Default);
+			iInitialLexer = NP2LEX_TEXTFILE;
 			flagLexerSpecified = 1;
 			state = 1;
 			break;
@@ -5784,7 +5785,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 				LocalFree(lpSchemeArg);
 				lpSchemeArg = NULL;
 			}
-			iInitialLexer = Style_GetEditLexerId(EditLexer_HTML);
+			iInitialLexer = NP2LEX_HTML;
 			flagLexerSpecified = 1;
 			state = 1;
 			break;
@@ -5859,7 +5860,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 				LocalFree(lpSchemeArg);
 				lpSchemeArg = NULL;
 			}
-			iInitialLexer = Style_GetEditLexerId(EditLexer_XML);
+			iInitialLexer = NP2LEX_XML;
 			flagLexerSpecified = 1;
 			state = 1;
 			break;
@@ -7449,7 +7450,7 @@ BOOL ActivatePrevInst(void) {
 				params->flagLexerSpecified = flagLexerSpecified;
 				if (flagLexerSpecified && lpSchemeArg) {
 					lstrcpy(StrEnd(&params->wchData) + 1, lpSchemeArg);
-					params->iInitialLexer = -1;
+					params->iInitialLexer = 0;
 				} else {
 					params->iInitialLexer = iInitialLexer;
 				}
@@ -7536,7 +7537,7 @@ BOOL ActivatePrevInst(void) {
 				params->flagLexerSpecified = flagLexerSpecified;
 				if (flagLexerSpecified && lpSchemeArg) {
 					lstrcpy(StrEnd(&params->wchData) + 1, lpSchemeArg);
-					params->iInitialLexer = -1;
+					params->iInitialLexer = 0;
 				} else {
 					params->iInitialLexer = iInitialLexer;
 				}
