@@ -19,6 +19,7 @@
 ******************************************************************************/
 
 #include <windows.h>
+#include <windowsx.h>
 #include <shlwapi.h>
 #include <shlobj.h>
 #include <commctrl.h>
@@ -922,7 +923,7 @@ BOOL DriveBox_Init(HWND hwnd) {
 int DriveBox_Fill(HWND hwnd) {
 	// Init ComboBox
 	SendMessage(hwnd, WM_SETREDRAW, 0, 0);
-	SendMessage(hwnd, CB_RESETCONTENT, 0, 0);
+	ComboBox_ResetContent(hwnd);
 
 	COMBOBOXEXITEM cbei;
 	ZeroMemory(&cbei, sizeof(COMBOBOXEXITEM));
@@ -1065,7 +1066,7 @@ int DriveBox_Fill(HWND hwnd) {
 
 	SendMessage(hwnd, WM_SETREDRAW, 1, 0);
 	// Return number of items added to combo box
-	return (int)SendMessage(hwnd, CB_GETCOUNT, 0, 0);
+	return ComboBox_GetCount(hwnd);
 }
 
 //=============================================================================
@@ -1073,7 +1074,7 @@ int DriveBox_Fill(HWND hwnd) {
 // DriveBox_GetSelDrive
 //
 BOOL DriveBox_GetSelDrive(HWND hwnd, LPWSTR lpszDrive, int nDrive, BOOL fNoSlash) {
-	const int i = (int)SendMessage(hwnd, CB_GETCURSEL, 0, 0);
+	const int i = ComboBox_GetCurSel(hwnd);
 	// CB_ERR means no Selection
 	if (i == CB_ERR) {
 		return FALSE;
@@ -1102,7 +1103,7 @@ BOOL DriveBox_GetSelDrive(HWND hwnd, LPWSTR lpszDrive, int nDrive, BOOL fNoSlash
 // DriveBox_SelectDrive
 //
 BOOL DriveBox_SelectDrive(HWND hwnd, LPCWSTR lpszPath) {
-	const int cbItems = (int)SendMessage(hwnd, CB_GETCOUNT, 0, 0);
+	const int cbItems = ComboBox_GetCount(hwnd);
 	// No Drives in Combo Box
 	if (!cbItems) {
 		return FALSE;
@@ -1125,13 +1126,13 @@ BOOL DriveBox_SelectDrive(HWND hwnd, LPCWSTR lpszPath) {
 		// Compare Root Directory with Path
 		if (PathIsSameRoot(lpszPath, szRoot)) {
 			// Select matching Drive
-			SendMessage(hwnd, CB_SETCURSEL, i, 0);
+			ComboBox_SetCurSel(hwnd, i);
 			return TRUE;
 		}
 	}
 
 	// Don't select anything
-	SendMessage(hwnd, CB_SETCURSEL, (WPARAM)(-1), 0);
+	ComboBox_SetCurSel(hwnd, -1);
 	return FALSE;
 }
 
@@ -1144,7 +1145,7 @@ BOOL DriveBox_SelectDrive(HWND hwnd, LPCWSTR lpszPath) {
 BOOL DriveBox_PropertyDlg(HWND hwnd) {
 	static const char *lpVerb = "properties";
 
-	const int iItem = (int)SendMessage(hwnd, CB_GETCURSEL, 0, 0);
+	const int iItem = ComboBox_GetCurSel(hwnd);
 	if (iItem == CB_ERR) {
 		return FALSE;
 	}

@@ -23,9 +23,6 @@
 // Number of Lexers in pLexArray
 #define NUMLEXERS	64
 
-// localization, get lexer and style name from resuorce
-#define NP2_GET_LEXER_STYLE_NAME_FROM_RES	0
-
 // all schemes with "All Files (*.*)"
 #define MAX_OPEN_SAVE_FILE_DIALOG_FILTER_SIZE	((NUMLEXERS + 1) * 128)
 
@@ -64,9 +61,7 @@ int		Style_GetMatchLexerIndex(int rid);
 int		Style_GetDocTypeLanguage(void);
 void	Style_UpdateLexerKeywords(LPCEDITLEXER pLexNew);
 void	Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew);
-#if NP2_GET_LEXER_STYLE_NAME_FROM_RES
 LPCWSTR Style_GetCurrentLexerDisplayName(LPWSTR lpszName, int cchName);
-#endif
 LPCWSTR Style_GetCurrentLexerName(void);
 void	Style_SetLexerByLangIndex(int lang);
 void	Style_UpdateSchemeMenu(HMENU hmenu);
@@ -82,18 +77,36 @@ void	Style_ToggleUseDefaultCodeStyle(void);
 BOOL	Style_GetOpenDlgFilterStr(LPWSTR lpszFilter, int cchFilter);
 
 BOOL	Style_StrGetFontEx(LPCWSTR lpszStyle, LPWSTR lpszFont, int cchFont, BOOL bDefaultStyle);
-BOOL	Style_StrGetCharSet(LPCWSTR lpszStyle, int *i);
+BOOL	Style_StrGetCharSet(LPCWSTR lpszStyle, int *charset);
 BOOL	Style_StrGetLocale(LPCWSTR lpszStyle, LPWSTR lpszLocale, int cchLocale);
-BOOL	Style_StrGetFontSize(LPCWSTR lpszStyle, int *i);
-BOOL	Style_StrGetRawSize(LPCWSTR lpszStyle, int *i);
-BOOL	Style_StrGetFontWeight(LPCWSTR lpszStyle, int *i);
-BOOL	Style_StrGetColor(BOOL bFore, LPCWSTR lpszStyle, int *rgb);
-BOOL	Style_StrGetCase(LPCWSTR lpszStyle, int *i);
-BOOL	Style_StrGetAlpha(LPCWSTR lpszStyle, int *i);
+BOOL	Style_StrGetFontSize(LPCWSTR lpszStyle, int *size);
+BOOL	Style_StrGetRawSize(LPCWSTR lpszStyle, int *size);
+BOOL	Style_StrGetFontWeight(LPCWSTR lpszStyle, int *weight);
+BOOL	Style_StrGetColor(BOOL bFore, LPCWSTR lpszStyle, COLORREF *rgb);
+
+NP2_inline BOOL Style_StrGetForeColor(LPCWSTR lpszStyle, COLORREF *rgb) {
+	return Style_StrGetColor(TRUE, lpszStyle, rgb);
+}
+
+NP2_inline BOOL Style_StrGetBackColor(LPCWSTR lpszStyle, COLORREF *rgb) {
+	return Style_StrGetColor(FALSE, lpszStyle, rgb);
+}
+
+BOOL	Style_StrGetCase(LPCWSTR lpszStyle, int *forceCase);
+BOOL	Style_StrGetAlphaEx(BOOL outline, LPCWSTR lpszStyle, int *alpha);
+
+NP2_inline BOOL Style_StrGetAlpha(LPCWSTR lpszStyle, int *alpha) {
+	return Style_StrGetAlphaEx(FALSE, lpszStyle, alpha);
+}
+
+NP2_inline BOOL Style_StrGetOutlineAlpha(LPCWSTR lpszStyle, int *alpha) {
+	return Style_StrGetAlphaEx(TRUE, lpszStyle, alpha);
+}
+
 BOOL	Style_SelectFont(HWND hwnd, LPWSTR lpszStyle, int cchStyle, BOOL bDefaultStyle);
 BOOL	Style_SelectColor(HWND hwnd, BOOL bFore, LPWSTR lpszStyle, int cchStyle);
 void	Style_SetStyles(int iStyle, LPCWSTR lpszStyle);
 
-int 	Style_GetLexerIconId(LPCEDITLEXER pLex);
+int 	Style_GetLexerIconId(LPCEDITLEXER pLex, DWORD iconFlags);
 void	Style_ConfigDlg(HWND hwnd);
 void	Style_SelectLexerDlg(HWND hwnd, BOOL favorite);

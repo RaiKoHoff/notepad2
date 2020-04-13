@@ -11,6 +11,7 @@
   </VirtualDirectory>
   <VirtualDirectory Name="Header Files">
     <File Name="../../metapath/src/compiler.h"/>
+    <File Name="../../metapath/src/config.h"/>
     <File Name="../../metapath/src/Dialogs.h"/>
     <File Name="../../metapath/src/Dlapi.h"/>
     <File Name="../../metapath/src/DropSource.h"/>
@@ -28,7 +29,7 @@
     <File Name="../../metapath/res/Goto.ico"/>
     <File Name="../../metapath/res/Items.ico"/>
     <File Name="../../metapath/res/metapath.ico"/>
-    <File Name="../../metapath/res/Open.bmp"/>
+    <File Name="../../metapath/res/OpenFolder.bmp"/>
     <File Name="../../metapath/res/Options.ico"/>
     <File Name="../../metapath/res/Options2.ico"/>
     <File Name="../../metapath/res/Progs.ico"/>

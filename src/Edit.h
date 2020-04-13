@@ -195,7 +195,16 @@ void	EditPrintSetup(HWND hwnd);
 
 enum {
 	MarkerNumber_Bookmark = 0,
-	IndicatorNumber_MarkOccurrences = 1,
+
+	// [0, INDICATOR_CONTAINER) are reserved for lexer.
+	IndicatorNumber_MarkOccurrence = INDICATOR_CONTAINER + 0,
+	IndicatorNumber_MatchBrace = INDICATOR_CONTAINER + 1,
+	IndicatorNumber_MatchBraceError = INDICATOR_CONTAINER + 2,
+	// [INDICATOR_IME, INDICATOR_IME_MAX] are reserved for IME.
+
+	MarginNumber_LineNumber = 0,
+	MarginNumber_Bookmark = 1,
+	MarginNumber_CodeFolding = 2,
 
 	MarkerBitmask_Bookmark  = 1 << MarkerNumber_Bookmark,
 };
@@ -409,5 +418,5 @@ void FoldToggleLevel(int lev, FOLD_ACTION action);
 void FoldToggleCurrentBlock(FOLD_ACTION action);
 void FoldToggleCurrentLevel(FOLD_ACTION action);
 void FoldToggleDefault(FOLD_ACTION action);
-void FoldClick(Sci_Line ln, int mode);
+void FoldClickAt(Sci_Position pos, int mode);
 void FoldAltArrow(int key, int mode);

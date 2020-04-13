@@ -21,6 +21,7 @@
 ******************************************************************************/
 
 #include <windows.h>
+#include <windowsx.h>
 #include <shlwapi.h>
 #include <commctrl.h>
 #include <commdlg.h>
@@ -435,6 +436,7 @@ static UINT_PTR CALLBACK PageSetupHook(HWND hwnd, UINT uiMsg, WPARAM wParam, LPA
 		InitZoomLevelComboBox(hwnd, IDC_PAGESETUP_ZOOMLEVEL, iPrintZoom);
 
 		// Set header options
+		HWND hwndCtl = GetDlgItem(hwnd, IDC_PAGESETUP_HEADER_LIST);
 		WCHAR tch[512];
 		GetString(IDS_PRINT_HEADER, tch, COUNTOF(tch));
 		lstrcat(tch, L"|");
@@ -443,42 +445,47 @@ static UINT_PTR CALLBACK PageSetupHook(HWND hwnd, UINT uiMsg, WPARAM wParam, LPA
 		while ((p2 = StrChr(p1, L'|')) != nullptr) {
 			*p2++ = L'\0';
 			if (*p1) {
-				SendDlgItemMessage(hwnd, IDC_PAGESETUP_HEADER_LIST, CB_ADDSTRING, 0, (LPARAM)p1);
+				ComboBox_AddString(hwndCtl, p1);
 			}
 			p1 = p2;
 		}
-		SendDlgItemMessage(hwnd, IDC_PAGESETUP_HEADER_LIST, CB_SETCURSEL, iPrintHeader, 0);
+
+		ComboBox_SetCurSel(hwndCtl, iPrintHeader);
+		ComboBox_SetExtendedUI(hwndCtl, TRUE);
 
 		// Set footer options
+		hwndCtl = GetDlgItem(hwnd, IDC_PAGESETUP_FOOTER_LIST);
 		GetString(IDS_PRINT_FOOTER, tch, COUNTOF(tch));
 		lstrcat(tch, L"|");
 		p1 = tch;
 		while ((p2 = StrChr(p1, L'|')) != nullptr) {
 			*p2++ = L'\0';
 			if (*p1) {
-				SendDlgItemMessage(hwnd, IDC_PAGESETUP_FOOTER_LIST, CB_ADDSTRING, 0, (LPARAM)p1);
+				ComboBox_AddString(hwndCtl, p1);
 			}
 			p1 = p2;
 		}
-		SendDlgItemMessage(hwnd, IDC_PAGESETUP_FOOTER_LIST, CB_SETCURSEL, iPrintFooter, 0);
+
+		ComboBox_SetCurSel(hwndCtl, iPrintFooter);
+		ComboBox_SetExtendedUI(hwndCtl, TRUE);
 
 		// Set color options
+		hwndCtl = GetDlgItem(hwnd, IDC_PAGESETUP_COLOR_MODE_LIST);
 		GetString(IDS_PRINT_COLOR, tch, COUNTOF(tch));
 		lstrcat(tch, L"|");
 		p1 = tch;
 		while ((p2 = StrChr(p1, L'|')) != nullptr) {
 			*p2++ = L'\0';
 			if (*p1) {
-				SendDlgItemMessage(hwnd, IDC_PAGESETUP_COLOR_MODE_LIST, CB_ADDSTRING, 0, (LPARAM)p1);
+				ComboBox_AddString(hwndCtl, p1);
 			}
 			p1 = p2;
 		}
-		SendDlgItemMessage(hwnd, IDC_PAGESETUP_COLOR_MODE_LIST, CB_SETCURSEL, iPrintColor, 0);
 
-		// Make combos handier
-		SendDlgItemMessage(hwnd, IDC_PAGESETUP_HEADER_LIST, CB_SETEXTENDEDUI, TRUE, 0);
-		SendDlgItemMessage(hwnd, IDC_PAGESETUP_FOOTER_LIST, CB_SETEXTENDEDUI, TRUE, 0);
-		SendDlgItemMessage(hwnd, IDC_PAGESETUP_COLOR_MODE_LIST, CB_SETEXTENDEDUI, TRUE, 0);
+		ComboBox_SetCurSel(hwndCtl, iPrintColor);
+		ComboBox_SetExtendedUI(hwndCtl, TRUE);
+
+		// Make combox handier
 		SendDlgItemMessage(hwnd, IDC_PAGESETUP_SOURCE_LIST, CB_SETEXTENDEDUI, TRUE, 0);
 		SendDlgItemMessage(hwnd, IDC_PAGESETUP_ORIENTATION_LIST, CB_SETEXTENDEDUI, TRUE, 0);
 	}

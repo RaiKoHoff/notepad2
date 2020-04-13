@@ -223,14 +223,6 @@ HFONT FormatAndMetrics::HFont() const noexcept {
 
 namespace {
 
-inline void *PointerFromWindow(HWND hWnd) noexcept {
-	return reinterpret_cast<void *>(::GetWindowLongPtr(hWnd, 0));
-}
-
-inline void SetWindowPointer(HWND hWnd, void *ptr) noexcept {
-	::SetWindowLongPtr(hWnd, 0, reinterpret_cast<LONG_PTR>(ptr));
-}
-
 HINSTANCE hinstPlatformRes {};
 
 HCURSOR reverseArrowCursor {};
@@ -1035,8 +1027,8 @@ class SurfaceD2D : public Surface {
 	ID2D1SolidColorBrush *pBrush;
 
 	int logPixelsY;
-	float dpiScaleX;
-	float dpiScaleY;
+	//float dpiScaleX;
+	//float dpiScaleY;
 
 	void Clear() noexcept;
 	void SetFont(const Font &font_) noexcept;
@@ -1121,8 +1113,8 @@ SurfaceD2D::SurfaceD2D() noexcept :
 	pBrush = nullptr;
 
 	logPixelsY = 72;
-	dpiScaleX = 1.0;
-	dpiScaleY = 1.0;
+	//dpiScaleX = 1.0;
+	//dpiScaleY = 1.0;
 }
 
 SurfaceD2D::~SurfaceD2D() noexcept {
@@ -1156,8 +1148,8 @@ void SurfaceD2D::Release() noexcept {
 void SurfaceD2D::SetScale() noexcept {
 	HDC hdcMeasure = ::CreateCompatibleDC({});
 	logPixelsY = ::GetDeviceCaps(hdcMeasure, LOGPIXELSY);
-	dpiScaleX = ::GetDeviceCaps(hdcMeasure, LOGPIXELSX) / 96.0f;
-	dpiScaleY = logPixelsY / 96.0f;
+	//dpiScaleX = ::GetDeviceCaps(hdcMeasure, LOGPIXELSX) / 96.0f;
+	//dpiScaleY = logPixelsY / 96.0f;
 	::DeleteDC(hdcMeasure);
 }
 
@@ -2190,7 +2182,7 @@ RECT RectFromMonitor(HMONITOR hMonitor) noexcept {
 }
 
 void Window::SetPositionRelative(PRectangle rc, const Window *relativeTo) noexcept {
-	const LONG style = ::GetWindowLong(HwndFromWindowID(wid), GWL_STYLE);
+	const DWORD style = GetWindowStyle(HwndFromWindowID(wid));
 	if (style & WS_POPUP) {
 		POINT ptOther = { 0, 0 };
 		::ClientToScreen(HwndFromWindow(*relativeTo), &ptOther);
@@ -2324,7 +2316,7 @@ PRectangle Window::GetMonitorRect(Point pt) const noexcept {
 
 	const RECT rcWork = RectFromMonitor(hMonitor);
 	if (rcWork.left < rcWork.right) {
-		PRectangle rcMonitor(
+		const PRectangle rcMonitor(
 			rcWork.left - rcPosition.left,
 			rcWork.top - rcPosition.top,
 			rcWork.right - rcPosition.left,
@@ -2351,7 +2343,7 @@ public:
 		data.clear();
 	}
 
-	ListItemData Get(size_t index) const {
+	ListItemData Get(size_t index) const noexcept {
 		if (index < data.size()) {
 			return data[index];
 		} else {
@@ -2462,7 +2454,7 @@ public:
 	void Select(int n) override;
 	int GetSelection() const noexcept override;
 	int Find(const char *prefix) const noexcept override;
-	void GetValue(int n, char *value, int len) const override;
+	void GetValue(int n, char *value, int len) const noexcept override;
 	void RegisterImage(int type, const char *xpm_data) override;
 	void RegisterRGBAImage(int type, int width, int height, const unsigned char *pixelsImage) override;
 	void ClearRegisteredImages() noexcept override;
@@ -2601,7 +2593,7 @@ int ListBoxX::CaretFromEdge() const {
 }
 
 void ListBoxX::Clear() noexcept {
-	::SendMessage(lb, LB_RESETCONTENT, 0, 0);
+	ListBox_ResetContent(lb);
 	maxItemCharacters = 0;
 	widestItem = nullptr;
 	lti.Clear();
@@ -2622,13 +2614,13 @@ void ListBoxX::Select(int n) {
 	// selected states
 	SetRedraw(false);
 	CentreItem(n);
-	::SendMessage(lb, LB_SETCURSEL, n, 0);
+	ListBox_SetCurSel(lb, n);
 	OnSelChange();
 	SetRedraw(true);
 }
 
 int ListBoxX::GetSelection() const noexcept {
-	return static_cast<int>(::SendMessage(lb, LB_GETCURSEL, 0, 0));
+	return ListBox_GetCurSel(lb);
 }
 
 // This is not actually called at present
@@ -2636,7 +2628,7 @@ int ListBoxX::Find(const char *) const noexcept {
 	return LB_ERR;
 }
 
-void ListBoxX::GetValue(int n, char *value, int len) const {
+void ListBoxX::GetValue(int n, char *value, int len) const noexcept {
 	const ListItemData item = lti.Get(n);
 	strncpy(value, item.text, len);
 	value[len - 1] = '\0';
@@ -2788,8 +2780,8 @@ void ListBoxX::SetList(const char *list, const char separator, const char typese
 	// Finally populate the listbox itself with the correct number of items
 	const int count = lti.Count();
 	::SendMessage(lb, LB_INITSTORAGE, count, 0);
-	for (int j = 0; j < count; j++) {
-		::SendMessage(lb, LB_ADDSTRING, 0, j + 1);
+	for (intptr_t j = 0; j < count; j++) {
+		ListBox_AddItemData(lb, j + 1);
 	}
 	SetRedraw(true);
 }
@@ -3033,10 +3025,10 @@ void ListBoxX::CentreItem(int n) {
 		const POINT extent = GetClientExtent();
 		const int visible = extent.y / ItemHeight();
 		if (visible < Length()) {
-			const LRESULT top = ::SendMessage(lb, LB_GETTOPINDEX, 0, 0);
+			const int top = ListBox_GetTopIndex(lb);
 			const int half = (visible - 1) / 2;
 			if (n > (top + half))
-				::SendMessage(lb, LB_SETTOPINDEX, n - half, 0);
+				ListBox_SetTopIndex(lb, n - half);
 		}
 	}
 }
@@ -3089,7 +3081,7 @@ LRESULT CALLBACK ListBoxX::ControlWndProc(HWND hWnd, UINT iMessage, WPARAM wPara
 			const LRESULT lResult = ::SendMessage(hWnd, LB_ITEMFROMPOINT, 0, lParam);
 			const int item = LOWORD(lResult);
 			if (HIWORD(lResult) == 0 && item >= 0) {
-				::SendMessage(hWnd, LB_SETCURSEL, item, 0);
+				ListBox_SetCurSel(hWnd, item);
 				if (lbx) {
 					lbx->OnSelChange();
 				}
@@ -3169,7 +3161,7 @@ LRESULT ListBoxX::WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam
 
 	case WM_DESTROY:
 		lb = nullptr;
-		::SetWindowLong(hWnd, 0, 0);
+		SetWindowPointer(hWnd, nullptr);
 		return ::DefWindowProc(hWnd, iMessage, wParam, lParam);
 
 	case WM_ERASEBKGND:
@@ -3275,11 +3267,11 @@ LRESULT ListBoxX::WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam
 				linesToScroll = 3;
 			}
 			linesToScroll *= (wheelDelta / WHEEL_DELTA);
-			LRESULT top = ::SendMessage(lb, LB_GETTOPINDEX, 0, 0) + linesToScroll;
+			int top = ListBox_GetTopIndex(lb) + linesToScroll;
 			if (top < 0) {
 				top = 0;
 			}
-			::SendMessage(lb, LB_SETTOPINDEX, top, 0);
+			ListBox_SetTopIndex(lb, top);
 			// update wheel delta residue
 			if (wheelDelta >= 0)
 				wheelDelta = wheelDelta % WHEEL_DELTA;

@@ -25,6 +25,7 @@
 #include <shlobj.h>
 #include <shellapi.h>
 #include <commdlg.h>
+#include <uxtheme.h>
 #include "Helpers.h"
 #include "metapath.h"
 #include "Dlapi.h"
@@ -173,18 +174,19 @@ INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) 
 	switch (umsg) {
 	case WM_INITDIALOG: {
 		ResizeDlg_InitX(hwnd, cxRunDlg, IDC_RESIZEGRIP3);
-		MakeBitmapButton(hwnd, IDC_SEARCHEXE, g_hInstance, IDB_OPEN);
+		MakeBitmapButton(hwnd, IDC_SEARCHEXE, g_hInstance, IDB_OPEN_FOLDER);
 
+		HWND hwndCtl = GetDlgItem(hwnd, IDC_COMMANDLINE);
 		DLITEM dli;
 		dli.mask = DLI_FILENAME;
 		if (DirList_GetItem(hwndDirList, -1, &dli) != -1) {
 			LPWSTR psz = GetFilenameStr(dli.szFileName);
 			QuotateFilenameStr(psz);
-			SetDlgItemText(hwnd, IDC_COMMANDLINE, psz);
+			Edit_SetText(hwndCtl, psz);
 		}
 
-		SendDlgItemMessage(hwnd, IDC_COMMANDLINE, EM_LIMITTEXT, MAX_PATH - 1, 0);
-		SHAutoComplete(GetDlgItem(hwnd, IDC_COMMANDLINE), SHACF_FILESYSTEM);
+		Edit_LimitText(hwndCtl, MAX_PATH - 1);
+		SHAutoComplete(hwndCtl, SHACF_FILESYSTEM);
 		CenterDlgInParent(hwnd);
 	}
 	return TRUE;
@@ -338,16 +340,16 @@ INT_PTR CALLBACK GotoDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 		ResizeDlg_InitX(hwnd, cxGotoDlg, IDC_RESIZEGRIP);
 
 		HWND hwndGoto = GetDlgItem(hwnd, IDC_GOTO);
-		SendMessage(hwndGoto, CB_LIMITTEXT, MAX_PATH - 1, 0);
-		SendMessage(hwndGoto, CB_SETEXTENDEDUI, TRUE, 0);
+		ComboBox_LimitText(hwndGoto, MAX_PATH - 1);
+		ComboBox_SetExtendedUI(hwndGoto, TRUE);
 
 		for (int i = 0; i < HISTORY_ITEMS; i++) {
 			if (mHistory.psz[i]) {
-				const int iItem = (int)SendMessage(hwndGoto, CB_FINDSTRINGEXACT, (WPARAM)(-1), (LPARAM)mHistory.psz[i]);
-				if (iItem != LB_ERR) {
-					SendMessage(hwndGoto, CB_DELETESTRING, iItem, 0);
+				const int iItem = ComboBox_FindStringExact(hwndGoto, -1, mHistory.psz[i]);
+				if (iItem != CB_ERR) {
+					ComboBox_DeleteString(hwndGoto, iItem);
 				}
-				SendMessage(hwndGoto, CB_INSERTSTRING, 0, (LPARAM)mHistory.psz[i]);
+				ComboBox_InsertString(hwndGoto, 0, mHistory.psz[i]);
 			}
 		}
 
@@ -389,29 +391,26 @@ INT_PTR CALLBACK GotoDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 
 	case WM_COMMAND:
 		switch (LOWORD(wParam)) {
-		case IDC_GOTO:
-			EnableWindow(GetDlgItem(hwnd, IDOK),
-						 (GetWindowTextLength(GetDlgItem(hwnd, IDC_GOTO)) ||
-						  CB_ERR != SendDlgItemMessage(hwnd, IDC_GOTO, CB_GETCURSEL, 0, 0)));
+		case IDC_GOTO: {
+			HWND hwndGoto = GetDlgItem(hwnd, IDC_GOTO);
+			EnableWindow(GetDlgItem(hwnd, IDOK), ComboBox_HasText(hwndGoto));
 
 			if (HIWORD(wParam) == CBN_CLOSEUP) {
-				LONG lSelEnd = 0;
-				SendDlgItemMessage(hwnd, IDC_GOTO, CB_GETEDITSEL, 0, (LPARAM)&lSelEnd);
-				SendDlgItemMessage(hwnd, IDC_GOTO, CB_SETEDITSEL, 0, MAKELPARAM(lSelEnd, lSelEnd));
+				const DWORD lSelEnd = ComboBox_GetEditSelEnd(hwndGoto);
+				ComboBox_SetEditSel(hwndGoto, lSelEnd, lSelEnd);
 			}
-			break;
+		}
+		break;
 
 		case IDOK: {
 			WCHAR tch[MAX_PATH];
-
-			if (GetDlgItemText(hwnd, IDC_GOTO, tch, MAX_PATH)) {
+			HWND hwndGoto = GetDlgItem(hwnd, IDC_GOTO);
+			if (ComboBox_GetText(hwndGoto, tch, MAX_PATH)) {
 				EndDialog(hwnd, IDOK);
 				PathUnquoteSpaces(tch);
 				DisplayPath(tch, IDS_ERR_CMDLINE);
 			} else {
-				EnableWindow(GetDlgItem(hwnd, IDOK),
-							 (GetWindowTextLength(GetDlgItem(hwnd, IDC_GOTO)) ||
-							  CB_ERR != SendDlgItemMessage(hwnd, IDC_GOTO, CB_GETCURSEL, 0, 0)));
+				EnableWindow(GetDlgItem(hwnd, IDOK), ComboBox_HasText(hwndGoto));
 			}
 		}
 		break;
@@ -899,8 +898,8 @@ static INT_PTR CALLBACK ItemsPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARA
 static INT_PTR CALLBACK ProgPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) {
 	switch (umsg) {
 	case WM_INITDIALOG: {
-		MakeBitmapButton(hwnd, IDC_BROWSE_Q, g_hInstance, IDB_OPEN);
-		MakeBitmapButton(hwnd, IDC_BROWSE_F, g_hInstance, IDB_OPEN);
+		MakeBitmapButton(hwnd, IDC_BROWSE_Q, g_hInstance, IDB_OPEN_FOLDER);
+		MakeBitmapButton(hwnd, IDC_BROWSE_F, g_hInstance, IDB_OPEN_FOLDER);
 
 		WCHAR tch[MAX_PATH];
 		lstrcpy(tch, szQuickview);
@@ -909,13 +908,16 @@ static INT_PTR CALLBACK ProgPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM
 			StrCatBuff(tch, L" ", COUNTOF(tch));
 			StrCatBuff(tch, szQuickviewParams, COUNTOF(tch));
 		}
-		SendDlgItemMessage(hwnd, IDC_QUICKVIEW, EM_LIMITTEXT, MAX_PATH - 2, 0);
-		SetDlgItemText(hwnd, IDC_QUICKVIEW, tch);
-		SHAutoComplete(GetDlgItem(hwnd, IDC_QUICKVIEW), SHACF_FILESYSTEM);
 
-		SendDlgItemMessage(hwnd, IDC_FAVORITES, EM_LIMITTEXT, MAX_PATH - 2, 0);
-		SetDlgItemText(hwnd, IDC_FAVORITES, tchFavoritesDir);
-		SHAutoComplete(GetDlgItem(hwnd, IDC_FAVORITES), SHACF_FILESYSTEM);
+		HWND hwndCtl = GetDlgItem(hwnd, IDC_QUICKVIEW);
+		Edit_LimitText(hwndCtl, MAX_PATH - 2);
+		Edit_SetText(hwndCtl, tch);
+		SHAutoComplete(hwndCtl, SHACF_FILESYSTEM);
+
+		hwndCtl = GetDlgItem(hwnd, IDC_FAVORITES);
+		Edit_LimitText(hwndCtl, MAX_PATH - 2);
+		Edit_SetText(hwndCtl, tchFavoritesDir);
+		SHAutoComplete(hwndCtl, SHACF_FILESYSTEM);
 	}
 	return TRUE;
 
@@ -1126,8 +1128,9 @@ INT_PTR CALLBACK GetFilterDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lP
 		ResizeDlg_InitX(hwnd, cxFileFilterDlg, IDC_RESIZEGRIP3);
 		MakeBitmapButton(hwnd, IDC_BROWSEFILTER, NULL, OBM_COMBO);
 
-		SendDlgItemMessage(hwnd, IDC_FILTER, EM_LIMITTEXT, COUNTOF(tchFilter) - 1, 0);
-		SetDlgItemText(hwnd, IDC_FILTER, tchFilter);
+		HWND hwndCtl = GetDlgItem(hwnd, IDC_FILTER);
+		Edit_LimitText(hwndCtl, COUNTOF(tchFilter) - 1);
+		Edit_SetText(hwndCtl, tchFilter);
 
 		CheckDlgButton(hwnd, IDC_NEGFILTER, bNegFilter);
 
@@ -1303,9 +1306,11 @@ INT_PTR CALLBACK RenameFileDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 		const LPCFILEOPDLGDATA lpfod = (LPCFILEOPDLGDATA)lParam;
 
 		SetDlgItemText(hwnd, IDC_OLDNAME, lpfod->szSource);
-		SetDlgItemText(hwnd, IDC_NEWNAME, lpfod->szSource);
-		SendDlgItemMessage(hwnd, IDC_NEWNAME, EM_LIMITTEXT, MAX_PATH - 1, 0);
-		SendDlgItemMessage(hwnd, IDC_NEWNAME, EM_SETMODIFY, 0, 0);
+
+		HWND hwndCtl = GetDlgItem(hwnd, IDC_NEWNAME);
+		Edit_SetText(hwndCtl, lpfod->szSource);
+		Edit_LimitText(hwndCtl, MAX_PATH - 1);
+		Edit_SetModify(hwndCtl, FALSE);
 
 		CenterDlgInParent(hwnd);
 	}
@@ -1339,15 +1344,17 @@ INT_PTR CALLBACK RenameFileDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 			EnableWindow(GetDlgItem(hwnd, IDOK), GetWindowTextLength(GetDlgItem(hwnd, IDC_NEWNAME)));
 			break;
 
-		case IDOK:
-			if (!SendDlgItemMessage(hwnd, IDC_NEWNAME, EM_GETMODIFY, 0, 0)) {
+		case IDOK: {
+			HWND hwndCtl = GetDlgItem(hwnd, IDC_NEWNAME);
+			if (!Edit_GetModify(hwndCtl)) {
 				EndDialog(hwnd, IDCANCEL);
 			} else {
 				LPFILEOPDLGDATA lpfod = (LPFILEOPDLGDATA)GetWindowLongPtr(hwnd, DWLP_USER);
-				GetDlgItemText(hwnd, IDC_NEWNAME, lpfod->szDestination, COUNTOF(lpfod->szDestination) - 1);
+				Edit_GetText(hwndCtl, lpfod->szDestination, COUNTOF(lpfod->szDestination) - 1);
 				EndDialog(hwnd, IDOK);
 			}
-			break;
+		}
+		break;
 
 		case IDCANCEL:
 			EndDialog(hwnd, IDCANCEL);
@@ -1426,17 +1433,16 @@ INT_PTR CALLBACK CopyMoveDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lPa
 		SetWindowLongPtr(hwnd, DWLP_USER, lParam);
 
 		ResizeDlg_InitX(hwnd, cxCopyMoveDlg, IDC_RESIZEGRIP5);
-		MakeBitmapButton(hwnd, IDC_BROWSEDESTINATION, g_hInstance, IDB_OPEN);
+		MakeBitmapButton(hwnd, IDC_BROWSEDESTINATION, g_hInstance, IDB_OPEN_FOLDER);
 
 		const LPCFILEOPDLGDATA lpfod = (LPCFILEOPDLGDATA)lParam;
+		SetDlgItemText(hwnd, IDC_SOURCE, lpfod->szSource);
+
 		HWND hwndDest = GetDlgItem(hwnd, IDC_DESTINATION);
 		MRU_LoadToCombobox(hwndDest, MRU_KEY_COPY_MOVE_HISTORY);
-		SendMessage(hwndDest, CB_SETCURSEL, 0, 0);
-
-		SetDlgItemText(hwnd, IDC_SOURCE, lpfod->szSource);
-		SendMessage(hwndDest, CB_LIMITTEXT, MAX_PATH - 1, 0);
-
-		SendMessage(hwndDest, CB_SETEXTENDEDUI, TRUE, 0);
+		ComboBox_SetCurSel(hwndDest, 0);
+		ComboBox_LimitText(hwndDest, MAX_PATH - 1);
+		ComboBox_SetExtendedUI(hwndDest, TRUE);
 
 		if (lpfod->wFunc == FO_COPY) {
 			CheckRadioButton(hwnd, IDC_FUNCCOPY, IDC_FUNCMOVE, IDC_FUNCCOPY);
@@ -1483,20 +1489,21 @@ INT_PTR CALLBACK CopyMoveDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lPa
 		LPNMHDR pnmhdr = (LPNMHDR)lParam;
 		if (pnmhdr->idFrom == IDC_EMPTY_MRU && (pnmhdr->code == NM_CLICK || pnmhdr->code == NM_RETURN)) {
 			WCHAR tch[MAX_PATH];
-			GetDlgItemText(hwnd, IDC_DESTINATION, tch, COUNTOF(tch));
-			MRU_ClearCombobox(GetDlgItem(hwnd, IDC_DESTINATION), MRU_KEY_COPY_MOVE_HISTORY);
-			SetDlgItemText(hwnd, IDC_DESTINATION, tch);
+			HWND hwndDest = GetDlgItem(hwnd, IDC_DESTINATION);
+			ComboBox_GetText(hwndDest, tch, COUNTOF(tch));
+			MRU_ClearCombobox(hwndDest, MRU_KEY_COPY_MOVE_HISTORY);
+			ComboBox_SetText(hwndDest, tch);
 		}
 	}
 	return TRUE;
 
 	case WM_COMMAND:
 		switch (LOWORD(wParam)) {
-		case IDC_DESTINATION:
-			EnableWindow(GetDlgItem(hwnd, IDOK),
-						 (GetWindowTextLength(GetDlgItem(hwnd, IDC_DESTINATION)) ||
-						  CB_ERR != SendDlgItemMessage(hwnd, IDC_DESTINATION, CB_GETCURSEL, 0, 0)));
-			break;
+		case IDC_DESTINATION: {
+			HWND hwndDest = GetDlgItem(hwnd, IDC_DESTINATION);
+			EnableWindow(GetDlgItem(hwnd, IDOK), ComboBox_HasText(hwndDest));
+		}
+		break;
 
 		case IDC_BROWSEDESTINATION: {
 			WCHAR tch[MAX_PATH];
@@ -1512,13 +1519,12 @@ INT_PTR CALLBACK CopyMoveDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lPa
 		case IDOK: {
 			/*text*/
 			LPFILEOPDLGDATA lpfod = (LPFILEOPDLGDATA)GetWindowLongPtr(hwnd, DWLP_USER);
-			if (GetDlgItemText(hwnd, IDC_DESTINATION, lpfod->szDestination, COUNTOF(lpfod->szDestination) - 1)) {
+			HWND hwndDest = GetDlgItem(hwnd, IDC_DESTINATION);
+			if (ComboBox_GetText(hwndDest, lpfod->szDestination, COUNTOF(lpfod->szDestination) - 1)) {
 				lpfod->wFunc = IsButtonChecked(hwnd, IDC_FUNCCOPY) ? FO_COPY : FO_MOVE;
 				EndDialog(hwnd, IDOK);
 			} else {
-				EnableWindow(GetDlgItem(hwnd, IDOK),
-							 (GetWindowTextLength(GetDlgItem(hwnd, IDC_DESTINATION)) ||
-							  CB_ERR != SendDlgItemMessage(hwnd, IDC_DESTINATION, CB_GETCURSEL, 0, 0)));
+				EnableWindow(GetDlgItem(hwnd, IDOK), ComboBox_HasText(hwndDest));
 			}
 		}
 		break;
@@ -1633,7 +1639,7 @@ INT_PTR CALLBACK OpenWithDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lPa
 		DirList_StartIconThread(hwndLV);
 		ListView_SetItemState(hwndLV, 0, LVIS_FOCUSED, LVIS_FOCUSED);
 
-		MakeBitmapButton(hwnd, IDC_GETOPENWITHDIR, g_hInstance, IDB_OPEN);
+		MakeBitmapButton(hwnd, IDC_GETOPENWITHDIR, g_hInstance, IDB_OPEN_FOLDER);
 
 		CenterDlgInParent(hwnd);
 	}
@@ -1972,7 +1978,7 @@ static INT_PTR CALLBACK FindWinDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 			GetCursorPos(&pt);
 
 			HWND hwndFind = WindowFromPoint(pt);
-			while (GetWindowLongPtr(hwndFind, GWL_STYLE) & WS_CHILD) {
+			while (GetWindowStyle(hwndFind) & WS_CHILD) {
 				hwndFind = GetParent(hwndFind);
 			}
 
@@ -2012,7 +2018,8 @@ static INT_PTR CALLBACK FindWinDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 				lstrcpyn(pTargetWndClassBuf, tch, COUNTOF(tch));
 			}
 			EndDialog(hwnd, IDOK);
-		} break;
+		}
+		break;
 
 		case IDCANCEL:
 			EndDialog(hwnd, IDCANCEL);
@@ -2091,12 +2098,13 @@ INT_PTR CALLBACK FindTargetDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 		//}
 
 		// Bitmap for the Browse button
-		MakeBitmapButton(hwnd, IDC_BROWSE, g_hInstance, IDB_OPEN);
+		MakeBitmapButton(hwnd, IDC_BROWSE, g_hInstance, IDB_OPEN_FOLDER);
 		//MakeBitmapButton(hwnd, IDC_FINDWIN, g_hInstance, IDB_BROWSE);
 
 		// initialize edit controls
-		SendDlgItemMessage(hwnd, IDC_TARGETPATH, EM_LIMITTEXT, MAX_PATH - 1, 0);
-		SHAutoComplete(GetDlgItem(hwnd, IDC_TARGETPATH), SHACF_FILESYSTEM | SHACF_URLMRU);
+		HWND hwndCtl = GetDlgItem(hwnd, IDC_TARGETPATH);
+		Edit_LimitText(hwndCtl, MAX_PATH - 1);
+		SHAutoComplete(hwndCtl, SHACF_FILESYSTEM | SHACF_URLMRU);
 
 		SendDlgItemMessage(hwnd, IDC_DDEMSG, EM_LIMITTEXT, 128, 0);
 		SendDlgItemMessage(hwnd, IDC_DDEAPP, EM_LIMITTEXT, 128, 0);

@@ -76,6 +76,14 @@ inline HWND HwndFromWindow(const Window &w) noexcept {
 	return HwndFromWindowID(w.GetID());
 }
 
+inline void *PointerFromWindow(HWND hWnd) noexcept {
+	return reinterpret_cast<void *>(::GetWindowLongPtr(hWnd, 0));
+}
+
+inline void SetWindowPointer(HWND hWnd, void *ptr) noexcept {
+	::SetWindowLongPtr(hWnd, 0, reinterpret_cast<LONG_PTR>(ptr));
+}
+
 #if defined(USE_D2D)
 extern bool LoadD2D() noexcept;
 extern ID2D1Factory *pD2DFactory;

@@ -965,6 +965,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\metapath\src\compiler.h" />
+    <ClInclude Include="..\..\metapath\src\config.h" />
     <ClInclude Include="..\..\metapath\src\Dialogs.h" />
     <ClInclude Include="..\..\metapath\src\Dlapi.h" />
     <ClInclude Include="..\..\metapath\src\DropSource.h" />
@@ -988,7 +989,7 @@
     <None Include="..\..\metapath\res\Goto.ico" />
     <None Include="..\..\metapath\res\Items.ico" />
     <None Include="..\..\metapath\res\metapath.ico" />
-    <None Include="..\..\metapath\res\Open.bmp" />
+    <None Include="..\..\metapath\res\OpenFolder.bmp" />
     <None Include="..\..\metapath\res\Options.ico" />
     <None Include="..\..\metapath\res\Options2.ico" />
     <None Include="..\..\metapath\res\Progs.ico" />

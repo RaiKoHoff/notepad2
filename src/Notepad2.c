@@ -31,6 +31,7 @@
 #include <inttypes.h>
 #include "SciCall.h"
 #include "VectorISA.h"
+#include "config.h"
 #include "Helpers.h"
 #include "Notepad2.h"
 #include "Edit.h"
@@ -38,14 +39,11 @@
 #include "Dialogs.h"
 #include "resource.h"
 
-// show fold level
-#define NP2_DEBUG_FOLD_LEVEL	0
-// enable the .LOG feature
-#define NP2_ENABLE_DOT_LOG_FEATURE	0
-// enable CallTips (currently not yet implemented)
+//! show fold level
+#define NP2_DEBUG_FOLD_LEVEL		0
+
+//! Enable CallTips (not yet implemented)
 #define NP2_ENABLE_SHOW_CALLTIPS	0
-// enable customize toolbar labels
-#define NP2_ENABLE_CUSTOMIZE_TOOLBAR_LABELS		0
 
 /******************************************************************************
 *
@@ -62,9 +60,6 @@ static HWND hwndNextCBChain = NULL;
 HWND	hDlgFindReplace = NULL;
 static BOOL bInitDone = FALSE;
 
-#define MARGIN_LINE_NUMBER	0	// line number
-#define MARGIN_SELECTION	1	// bookmark and selection margin
-#define MARGIN_FOLD_INDEX	2	// folding index
 // tab width for notification text
 #define TAB_WIDTH_NOTIFICATION		8
 
@@ -125,6 +120,7 @@ BOOL	bWordWrapSelectSubLine;
 static BOOL bShowUnicodeControlCharacter;
 static BOOL bMatchBraces;
 static BOOL bShowIndentGuides;
+static BOOL bHighlightCurrentBlock;
 BOOL	bHighlightCurrentSubLine;
 INT		iHighlightCurrentLine;
 BOOL	bTabsAsSpaces;
@@ -142,16 +138,13 @@ int		iLongLinesLimit;
 int		iLongLinesLimitG;
 int		iLongLineMode;
 int		iWrapCol = 0;
-BOOL	bShowSelectionMargin;
+BOOL	bShowBookmarkMargin;
 static BOOL bShowLineNumbers;
 static BOOL bMarkOccurrences;
 static BOOL bMarkOccurrencesMatchCase;
 static BOOL bMarkOccurrencesMatchWords;
 struct EditAutoCompletionConfig autoCompletionConfig;
-#define	ShowCodeFolding_Default		(1 | (1 << 2)) // show + ellipsis
 static BOOL bShowCodeFolding;
-static BOOL bShowFoldingLine;
-static BOOL bFoldDisplayText;
 #if NP2_ENABLE_SHOW_CALLTIPS
 static BOOL bShowCallTips = TRUE;
 static int iCallTipsWaitTime = 500; // 500 ms
@@ -196,6 +189,7 @@ static int iRenderingTechnology;
 static BOOL bUseInlineIME;
 static int iBidirectional;
 static BOOL bShowToolbar;
+static BOOL bAutoScaleToolbar;
 static BOOL bShowStatusbar;
 static BOOL bInFullScreenMode;
 static int iFullScreenMode;
@@ -321,7 +315,7 @@ struct CachedStatusItem {
 	LPCWSTR pszOvrMode;
 	WCHAR tchZoom[8];
 
-#if NP2_GET_LEXER_STYLE_NAME_FROM_RES
+#if NP2_ENABLE_LEXER_NAME_LOCALIZATION
 	WCHAR tchLexerName[MAX_EDITLEXER_NAME_SIZE];
 #endif
 	WCHAR tchDocPosFmt[96];
@@ -1440,24 +1434,17 @@ static inline void UpdateDocumentModificationStatus(void) {
 	UpdateToolbar();
 }
 
-void UpdateSelectionMarginWidth(void) {
-	// fixed width to put arrow cursor.
-	// 16px for bookmark symbol.
-	const int width = bShowSelectionMargin ? max_i(GetSystemMetricsEx(SM_CXCURSOR) / 2, 16) : 0;
-	SciCall_SetMarginWidth(MARGIN_SELECTION, width);
+void UpdateBookmarkMarginWidth(void) {
+	// see LineMarker::Draw() for minDim.
+	const int width = bShowBookmarkMargin ? SciCall_TextHeight() - 2 : 0;
+	// 16px for XPM bookmark symbol.
+	//const int width = bShowBookmarkMargin ? max_i(SciCall_TextHeight() - 2, 16) : 0;
+	SciCall_SetMarginWidth(MarginNumber_Bookmark, width);
 }
 
 void UpdateFoldMarginWidth(void) {
-	if (bShowCodeFolding) {
-		const int iLineMarginWidthNow = SciCall_GetMarginWidth(MARGIN_FOLD_INDEX);
-		const int iLineMarginWidthFit = SciCall_TextWidth(STYLE_LINENUMBER, "+_");
-
-		if (iLineMarginWidthNow != iLineMarginWidthFit) {
-			SciCall_SetMarginWidth(MARGIN_FOLD_INDEX, iLineMarginWidthFit);
-		}
-	} else {
-		SciCall_SetMarginWidth(MARGIN_FOLD_INDEX, 0);
-	}
+	const int width = bShowCodeFolding ? SciCall_TextWidth(STYLE_LINENUMBER, "+_") : 0;
+	SciCall_SetMarginWidth(MarginNumber_CodeFolding, width);
 }
 
 void SetWrapStartIndent(void) {
@@ -1540,7 +1527,7 @@ void SetWrapVisualFlags(void) {
 
 static void EditFrameOnThemeChanged(void) {
 	if (IsAppThemed()) {
-		SetWindowLongPtr(hwndEdit, GWL_EXSTYLE, GetWindowLongPtr(hwndEdit, GWL_EXSTYLE) & ~WS_EX_CLIENTEDGE);
+		SetWindowExStyle(hwndEdit, GetWindowExStyle(hwndEdit) & ~WS_EX_CLIENTEDGE);
 		SetWindowPos(hwndEdit, NULL, 0, 0, 0, 0, SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE);
 
 		if (IsVistaAndAbove()) {
@@ -1557,7 +1544,7 @@ static void EditFrameOnThemeChanged(void) {
 			cyEditFrame = ((rc2.bottom - rc2.top) - (rc.bottom - rc.top)) / 2;
 		}
 	} else {
-		SetWindowLongPtr(hwndEdit, GWL_EXSTYLE, WS_EX_CLIENTEDGE | GetWindowLongPtr(hwndEdit, GWL_EXSTYLE));
+		SetWindowExStyle(hwndEdit, GetWindowExStyle(hwndEdit) | WS_EX_CLIENTEDGE);
 		SetWindowPos(hwndEdit, NULL, 0, 0, 0, 0, SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
 
 		cxEditFrame = 0;
@@ -1656,10 +1643,11 @@ HWND EditCreate(HWND hwndParent) {
 	SciCall_SetEdgeColumn(iLongLinesLimit);
 
 	// Margins
-	UpdateSelectionMarginWidth();
-	SciCall_SetMarginType(MARGIN_FOLD_INDEX, SC_MARGIN_SYMBOL);
-	SciCall_SetMarginMask(MARGIN_FOLD_INDEX, SC_MASK_FOLDERS);
-	SciCall_SetMarginSensitive(MARGIN_FOLD_INDEX, TRUE);
+	SciCall_SetMarginSensitive(MarginNumber_Bookmark, TRUE);
+	SciCall_SetMarginCursor(MarginNumber_Bookmark, SC_CURSORARROW);
+	SciCall_SetMarginType(MarginNumber_CodeFolding, SC_MARGIN_SYMBOL);
+	SciCall_SetMarginMask(MarginNumber_CodeFolding, SC_MASK_FOLDERS);
+	SciCall_SetMarginSensitive(MarginNumber_CodeFolding, TRUE);
 	// only select sub line of wrapped line
 	SciCall_SetMarginOptions(bWordWrapSelectSubLine ? SC_MARGINOPTION_SUBLINESELECT : SC_MARGINOPTION_NONE);
 	// Code folding, Box tree
@@ -1670,17 +1658,19 @@ HWND EditCreate(HWND hwndParent) {
 	SciCall_MarkerDefine(SC_MARKNUM_FOLDEREND, SC_MARK_BOXPLUSCONNECTED);
 	SciCall_MarkerDefine(SC_MARKNUM_FOLDEROPENMID, SC_MARK_BOXMINUSCONNECTED);
 	SciCall_MarkerDefine(SC_MARKNUM_FOLDERMIDTAIL, SC_MARK_TCORNER);
-#if !NP2_DEBUG_FOLD_LEVEL
-	// Draw folding line below when collapsed
-	SciCall_SetFoldFlags(bShowFoldingLine ? SC_FOLDFLAG_LINEAFTER_CONTRACTED : 0);
-#else
+#if NP2_DEBUG_FOLD_LEVEL
 	SciCall_SetFoldFlags(SC_FOLDFLAG_LEVELNUMBERS);
+#else
+	// Don't draw folding line below when collapsed.
+	SciCall_SetFoldFlags(0);
 #endif
-	SciCall_FoldDisplayTextSetStyle((bFoldDisplayText ? SC_FOLDDISPLAYTEXT_BOXED : SC_FOLDDISPLAYTEXT_HIDDEN));
+	SciCall_FoldDisplayTextSetStyle(SC_FOLDDISPLAYTEXT_BOXED);
 	const char *text = GetFoldDisplayEllipsis(SC_CP_UTF8, 0); // internal default encoding
 	SciCall_SetDefaultFoldDisplayText(text);
 	// highlight current folding block
-	SciCall_MarkerEnableHighlight(TRUE);
+	SciCall_MarkerEnableHighlight(bHighlightCurrentBlock);
+	SciCall_BraceHighlightIndicator(TRUE, IndicatorNumber_MatchBrace);
+	SciCall_BraceBadLightIndicator(TRUE, IndicatorNumber_MatchBraceError);
 
 	// CallTips
 	SciCall_CallTipUseStyle(TAB_WIDTH_NOTIFICATION);
@@ -1724,6 +1714,8 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	Style_DetectBaseFontSize(hwnd);
 
 	// Setup edit control
+	// create edit control and frame with zero size to avoid
+	// a white/black window fades out on startup when using Direct2D.
 	hwndEdit = EditCreate(hwnd);
 	efrData.hwnd = hwndEdit;
 
@@ -1732,7 +1724,7 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 						WC_LISTVIEW,
 						NULL,
 						WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
-						0, 0, 100, 100,
+						0, 0, 0, 0,
 						hwnd,
 						(HMENU)IDC_EDITFRAME,
 						hInstance,
@@ -1817,7 +1809,9 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 	} else {
 		hbmp = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(IDR_MAINWND), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
 	}
-	hbmp = ResizeImageForCurrentDPI(hbmp);
+	if (bAutoScaleToolbar) {
+		hbmp = ResizeToolbarImageForCurrentDPI(hbmp);
+	}
 	HBITMAP hbmpCopy = NULL;
 	if (!bExternalBitmap) {
 		hbmpCopy = (HBITMAP)CopyImage(hbmp, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
@@ -1834,7 +1828,9 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 	if (tchToolbarBitmapHot != NULL) {
 		hbmp = LoadBitmapFile(tchToolbarBitmapHot);
 		if (hbmp != NULL) {
-			hbmp = ResizeImageForCurrentDPI(hbmp);
+			if (bAutoScaleToolbar) {
+				hbmp = ResizeToolbarImageForCurrentDPI(hbmp);
+			}
 			GetObject(hbmp, sizeof(BITMAP), &bmp);
 			himl = ImageList_Create(bmp.bmHeight, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 0, 0);
 			ImageList_AddMasked(himl, hbmp, CLR_DEFAULT);
@@ -1847,7 +1843,9 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 	if (tchToolbarBitmapDisabled != NULL) {
 		hbmp = LoadBitmapFile(tchToolbarBitmapDisabled);
 		if (hbmp != NULL) {
-			hbmp = ResizeImageForCurrentDPI(hbmp);
+			if (bAutoScaleToolbar) {
+				hbmp = ResizeToolbarImageForCurrentDPI(hbmp);
+			}
 			GetObject(hbmp, sizeof(BITMAP), &bmp);
 			himl = ImageList_Create(bmp.bmHeight, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 0, 0);
 			ImageList_AddMasked(himl, hbmp, CLR_DEFAULT);
@@ -1904,7 +1902,7 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 
 	IniSectionFree(pIniSection);
 	NP2HeapFree(pIniSectionBuf);
-#endif
+#endif // NP2_ENABLE_CUSTOMIZE_TOOLBAR_LABELS
 
 	SendMessage(hwndToolbar, TB_SETEXTENDEDSTYLE, 0,
 				SendMessage(hwndToolbar, TB_GETEXTENDEDSTYLE, 0, 0) | TBSTYLE_EX_MIXEDBUTTONS);
@@ -1955,6 +1953,16 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 	cyReBarFrame = bIsAppThemed ? 0 : 2;
 }
 
+void RecreateBars(HWND hwnd, HINSTANCE hInstance) {
+	cachedStatusItem.updateMask = UINT_MAX;
+	Toolbar_GetButtons(hwndToolbar, TOOLBAR_COMMAND_BASE, tchToolbarButtons, COUNTOF(tchToolbarButtons));
+
+	DestroyWindow(hwndToolbar);
+	DestroyWindow(hwndReBar);
+	DestroyWindow(hwndStatus);
+	CreateBars(hwnd, hInstance);
+}
+
 //=============================================================================
 //
 // MsgDPIChanged() - Handle WM_DPICHANGED
@@ -1969,17 +1977,12 @@ void MsgDPIChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	sprintf(buf, "WM_DPICHANGED: dpi=%u, %u\n", g_uCurrentDPI, g_uDefaultDPI);
 	SciCall_InsertText(0, buf);
 #endif
+
 	// recreate toolbar and statusbar
-	Toolbar_GetButtons(hwndToolbar, TOOLBAR_COMMAND_BASE, tchToolbarButtons, COUNTOF(tchToolbarButtons));
-	DestroyWindow(hwndToolbar);
-	DestroyWindow(hwndReBar);
-	DestroyWindow(hwndStatus);
-	CreateBars(hwnd, g_hInstance);
+	RecreateBars(hwnd, g_hInstance);
 	SetWindowPos(hwnd, NULL, rc->left, rc->top, rc->right - rc->left, rc->bottom - rc->top, SWP_NOZORDER | SWP_NOACTIVATE);
 
-	cachedStatusItem.updateMask = UINT_MAX;
 	Style_DetectBaseFontSize(hwnd);
-	UpdateSelectionMarginWidth();
 	UpdateStatusBarWidth();
 	Style_OnDPIChanged();
 	SciCall_GotoPos(pos);
@@ -1996,23 +1999,18 @@ void MsgThemeChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	UNREFERENCED_PARAMETER(wParam);
 	UNREFERENCED_PARAMETER(lParam);
 
-	HINSTANCE hInstance = (HINSTANCE)(INT_PTR)GetWindowLongPtr(hwnd, GWLP_HINSTANCE);
+	HINSTANCE hInstance = GetWindowInstance(hwnd);
 
 	// reinitialize edit frame
 	EditFrameOnThemeChanged();
 
 	// recreate toolbar and statusbar
-	Toolbar_GetButtons(hwndToolbar, TOOLBAR_COMMAND_BASE, tchToolbarButtons, COUNTOF(tchToolbarButtons));
-
-	DestroyWindow(hwndToolbar);
-	DestroyWindow(hwndReBar);
-	DestroyWindow(hwndStatus);
-	CreateBars(hwnd, hInstance);
-	UpdateToolbar();
+	RecreateBars(hwnd, hInstance);
 
 	RECT rc;
 	GetClientRect(hwnd, &rc);
 	SendMessage(hwnd, WM_SIZE, SIZE_RESTORED, MAKELPARAM(rc.right, rc.bottom));
+	UpdateToolbar();
 	UpdateStatusbar();
 }
 
@@ -2084,7 +2082,7 @@ void MsgSize(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 void UpdateStatusBarCache(int item) {
 	switch (item) {
 	case STATUS_LEXER:
-#if NP2_GET_LEXER_STYLE_NAME_FROM_RES
+#if NP2_ENABLE_LEXER_NAME_LOCALIZATION
 		cachedStatusItem.pszLexerName = Style_GetCurrentLexerDisplayName(cachedStatusItem.tchLexerName, MAX_EDITLEXER_NAME_SIZE);
 #else
 		cachedStatusItem.pszLexerName = Style_GetCurrentLexerName();
@@ -2171,6 +2169,7 @@ void MsgNotifyZoom(void) {
 
 	UpdateStatusBarCache(STATUS_DOCZOOM);
 	UpdateLineNumberWidth();
+	UpdateBookmarkMarginWidth();
 	UpdateFoldMarginWidth();
 	UpdateStatusbar();
 }
@@ -2390,8 +2389,6 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	//EnableCmd(hmenu, IDM_VIEW_FOLD_LEVEL9, i && bShowCodeFolding);
 	//EnableCmd(hmenu, IDM_VIEW_FOLD_LEVEL10, i && bShowCodeFolding);
 	CheckCmd(hmenu, IDM_VIEW_SHOW_FOLDING, bShowCodeFolding);
-	CheckCmd(hmenu, IDM_VIEW_SHOW_FOLDING_LINE, bShowFoldingLine);
-	CheckCmd(hmenu, IDM_VIEW_FOLD_DISPALY_TEXT, bFoldDisplayText);
 
 	CheckCmd(hmenu, IDM_VIEW_USE2NDGLOBALSTYLE, bUse2ndGlobalStyle);
 	CheckCmd(hmenu, IDM_VIEW_USEDEFAULT_CODESTYLE, pLexCurrent->bUseDefaultCodeStyle);
@@ -2410,7 +2407,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	CheckCmd(hmenu, IDM_VIEW_TABSASSPACES, bTabsAsSpaces);
 	CheckCmd(hmenu, IDM_VIEW_SHOWINDENTGUIDES, bShowIndentGuides);
 	CheckCmd(hmenu, IDM_VIEW_LINENUMBERS, bShowLineNumbers);
-	CheckCmd(hmenu, IDM_VIEW_MARGIN, bShowSelectionMargin);
+	CheckCmd(hmenu, IDM_VIEW_MARGIN, bShowBookmarkMargin);
 	EnableCmd(hmenu, IDM_EDIT_COMPLETEWORD, i);
 	CheckCmd(hmenu, IDM_VIEW_AUTOCOMPLETION_IGNORECASE, autoCompletionConfig.bIgnoreCase);
 
@@ -2427,15 +2424,17 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 #if NP2_ENABLE_SHOW_CALLTIPS
 	CheckCmd(hmenu, IDM_VIEW_SHOWCALLTIPS, bShowCallTips);
 #endif
-	CheckCmd(hmenu, IDM_VIEW_MATCHBRACES, bMatchBraces);
 	CheckCmd(hmenu, IDM_VIEW_TOOLBAR, bShowToolbar);
-	EnableCmd(hmenu, IDM_VIEW_CUSTOMIZETB, bShowToolbar);
+	EnableCmd(hmenu, IDM_VIEW_CUSTOMIZE_TOOLBAR, bShowToolbar);
+	CheckCmd(hmenu, IDM_VIEW_AUTO_SCALE_TOOLBAR, bAutoScaleToolbar);
 	CheckCmd(hmenu, IDM_VIEW_STATUSBAR, bShowStatusbar);
 
 	CheckCmd(hmenu, IDM_VIEW_FULLSCREEN_ON_START, iFullScreenMode & FullScreenMode_OnStartup);
 	CheckCmd(hmenu, IDM_VIEW_FULLSCREEN_HIDE_TITLE, iFullScreenMode & FullScreenMode_HideCaption);
 	CheckCmd(hmenu, IDM_VIEW_FULLSCREEN_HIDE_MENU, iFullScreenMode & FullScreenMode_HideMenu);
 
+	CheckCmd(hmenu, IDM_VIEW_MATCHBRACES, bMatchBraces);
+	CheckCmd(hmenu, IDM_VIEW_HIGHLIGHTCURRENT_BLOCK, bHighlightCurrentBlock);
 	i = IDM_VIEW_HIGHLIGHTCURRENTLINE_NONE + iHighlightCurrentLine;
 	CheckMenuRadioItem(hmenu, IDM_VIEW_HIGHLIGHTCURRENTLINE_NONE, IDM_VIEW_HIGHLIGHTCURRENTLINE_FRAME, i, MF_BYCOMMAND);
 	CheckCmd(hmenu, IDM_VIEW_HIGHLIGHTCURRENTLINE_SUBLINE, bHighlightCurrentSubLine);
@@ -2518,6 +2517,20 @@ static void ConvertLineEndings(int iNewEOLMode) {
 	UpdateToolbar();
 	UpdateStatusbar();
 	UpdateWindowTitle();
+}
+
+void EditToggleBookmarkAt(Sci_Position iPos) {
+	const Sci_Line iLine = SciCall_LineFromPosition(iPos);
+
+	const Sci_MarkerMask bitmask = SciCall_MarkerGet(iLine);
+	if (bitmask & MarkerBitmask_Bookmark) {
+		// unset
+		SciCall_MarkerDelete(iLine, MarkerNumber_Bookmark);
+	} else {
+		Style_SetBookmark();
+		// set
+		SciCall_MarkerAdd(iLine, MarkerNumber_Bookmark);
+	}
 }
 
 //=============================================================================
@@ -3625,21 +3638,9 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	}
 	break;
 
-	case BME_EDIT_BOOKMARKTOGGLE: {
-		const Sci_Position iPos = SciCall_GetCurrentPos();
-		const Sci_Line iLine = SciCall_LineFromPosition(iPos);
-
-		const Sci_MarkerMask bitmask = SciCall_MarkerGet(iLine);
-		if (bitmask & MarkerBitmask_Bookmark) {
-			// unset
-			SciCall_MarkerDelete(iLine, MarkerNumber_Bookmark);
-		} else {
-			Style_SetBookmark();
-			// set
-			SciCall_MarkerAdd(iLine, MarkerNumber_Bookmark);
-		}
-	}
-	break;
+	case BME_EDIT_BOOKMARKTOGGLE:
+		EditToggleBookmarkAt(SciCall_GetCurrentPos());
+		break;
 
 	case BME_EDIT_BOOKMARKCLEAR:
 		SciCall_MarkerDeleteAll(MarkerNumber_Bookmark);
@@ -3847,8 +3848,8 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_VIEW_MARGIN:
-		bShowSelectionMargin = !bShowSelectionMargin;
-		UpdateSelectionMarginWidth();
+		bShowBookmarkMargin = !bShowBookmarkMargin;
+		UpdateBookmarkMarginWidth();
 		Style_SetBookmark();
 		break;
 
@@ -3894,16 +3895,6 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		if (!bShowCodeFolding) {
 			FoldToggleAll(FOLD_ACTION_EXPAND);
 		}
-		break;
-
-	case IDM_VIEW_SHOW_FOLDING_LINE:
-		bShowFoldingLine = !bShowFoldingLine;
-		SciCall_SetFoldFlags(bShowFoldingLine ? SC_FOLDFLAG_LINEAFTER_CONTRACTED : 0);
-		break;
-
-	case IDM_VIEW_FOLD_DISPALY_TEXT:
-		bFoldDisplayText = !bFoldDisplayText;
-		SciCall_FoldDisplayTextSetStyle((bFoldDisplayText ? SC_FOLDDISPLAYTEXT_BOXED : SC_FOLDDISPLAYTEXT_HIDDEN));
 		break;
 
 	case IDM_VIEW_FOLD_DEFAULT:
@@ -3987,6 +3978,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		}
 		break;
 
+	case IDM_VIEW_HIGHLIGHTCURRENT_BLOCK:
+		bHighlightCurrentBlock = !bHighlightCurrentBlock;
+		SciCall_MarkerEnableHighlight(bHighlightCurrentBlock);
+		break;
+
 	case IDM_VIEW_HIGHLIGHTCURRENTLINE_NONE:
 	case IDM_VIEW_HIGHLIGHTCURRENTLINE_BACK:
 	case IDM_VIEW_HIGHLIGHTCURRENTLINE_FRAME:
@@ -4025,8 +4021,15 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		SendWMSize(hwnd);
 		break;
 
-	case IDM_VIEW_CUSTOMIZETB:
+	case IDM_VIEW_CUSTOMIZE_TOOLBAR:
 		SendMessage(hwndToolbar, TB_CUSTOMIZE, 0, 0);
+		break;
+
+	case IDM_VIEW_AUTO_SCALE_TOOLBAR:
+		bAutoScaleToolbar = !bAutoScaleToolbar;
+		if (g_uCurrentDPI > USER_DEFAULT_SCREEN_DPI) {
+			MsgThemeChanged(hwnd, 0, 0);
+		}
 		break;
 
 	case IDM_VIEW_STATUSBAR:
@@ -4367,58 +4370,58 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 #endif
 
-	case IDM_LANG_TEXTFILE:
-	case IDM_LANG_2NDTEXTFILE:
-	case IDM_LANG_APACHE:
-	case IDM_LANG_WEB:
-	case IDM_LANG_PHP:
-	case IDM_LANG_JSP:
-	case IDM_LANG_ASPX_CS:
-	case IDM_LANG_ASPX_VB:
-	case IDM_LANG_ASP_VBS:
-	case IDM_LANG_ASP_JS:
-	case IDM_LANG_XML:
-	case IDM_LANG_XSD:
-	case IDM_LANG_XSLT:
-	case IDM_LANG_DTD:
+	case IDM_LEXER_TEXTFILE:
+	case IDM_LEXER_2NDTEXTFILE:
+	case IDM_LEXER_APACHE:
+	case IDM_LEXER_WEB:
+	case IDM_LEXER_PHP:
+	case IDM_LEXER_JSP:
+	case IDM_LEXER_ASPX_CS:
+	case IDM_LEXER_ASPX_VB:
+	case IDM_LEXER_ASP_VBS:
+	case IDM_LEXER_ASP_JS:
+	case IDM_LEXER_XML:
+	case IDM_LEXER_XSD:
+	case IDM_LEXER_XSLT:
+	case IDM_LEXER_DTD:
 
-	case IDM_LANG_ANT_BUILD:
-	case IDM_LANG_MAVEN_POM:
-	case IDM_LANG_MAVEN_SETTINGS:
-	case IDM_LANG_IVY_MODULE:
-	case IDM_LANG_IVY_SETTINGS:
-	case IDM_LANG_PMD_RULESET:
-	case IDM_LANG_CHECKSTYLE:
+	case IDM_LEXER_ANT_BUILD:
+	case IDM_LEXER_MAVEN_POM:
+	case IDM_LEXER_MAVEN_SETTINGS:
+	case IDM_LEXER_IVY_MODULE:
+	case IDM_LEXER_IVY_SETTINGS:
+	case IDM_LEXER_PMD_RULESET:
+	case IDM_LEXER_CHECKSTYLE:
 
-	case IDM_LANG_TOMCAT:
-	case IDM_LANG_WEB_JAVA:
-	case IDM_LANG_STRUTS:
-	case IDM_LANG_HIB_CFG:
-	case IDM_LANG_HIB_MAP:
-	case IDM_LANG_SPRING_BEANS:
-	case IDM_LANG_JBOSS:
+	case IDM_LEXER_TOMCAT:
+	case IDM_LEXER_WEB_JAVA:
+	case IDM_LEXER_STRUTS:
+	case IDM_LEXER_HIB_CFG:
+	case IDM_LEXER_HIB_MAP:
+	case IDM_LEXER_SPRING_BEANS:
+	case IDM_LEXER_JBOSS:
 
-	case IDM_LANG_WEB_NET:
-	case IDM_LANG_RESX:
-	case IDM_LANG_XAML:
+	case IDM_LEXER_WEB_NET:
+	case IDM_LEXER_RESX:
+	case IDM_LEXER_XAML:
 
-	case IDM_LANG_PROPERTY_LIST:
-	case IDM_LANG_ANDROID_MANIFEST:
-	case IDM_LANG_ANDROID_LAYOUT:
-	case IDM_LANG_SVG:
+	case IDM_LEXER_PROPERTY_LIST:
+	case IDM_LEXER_ANDROID_MANIFEST:
+	case IDM_LEXER_ANDROID_LAYOUT:
+	case IDM_LEXER_SVG:
 
-	case IDM_LANG_BASH:
-	case IDM_LANG_CSHELL:
-	case IDM_LANG_M4:
+	case IDM_LEXER_BASH:
+	case IDM_LEXER_CSHELL:
+	case IDM_LEXER_M4:
 
-	case IDM_LANG_MATLAB:
-	case IDM_LANG_OCTAVE:
-	case IDM_LANG_SCILAB:
+	case IDM_LEXER_MATLAB:
+	case IDM_LEXER_OCTAVE:
+	case IDM_LEXER_SCILAB:
 
-	case IDM_LANG_CSS:
-	case IDM_LANG_SCSS:
-	case IDM_LANG_LESS:
-	case IDM_LANG_HSS:
+	case IDM_LEXER_CSS:
+	case IDM_LEXER_SCSS:
+	case IDM_LEXER_LESS:
+	case IDM_LEXER_HSS:
 		Style_SetLexerByLangIndex(LOWORD(wParam));
 		break;
 
@@ -4882,8 +4885,13 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			break;
 
 		case SCN_MARGINCLICK:
-			if (scn->margin == MARGIN_FOLD_INDEX) {
-				FoldClick(SciCall_LineFromPosition(scn->position), scn->modifiers);
+			switch (scn->margin) {
+			case MarginNumber_CodeFolding:
+				FoldClickAt(scn->position, scn->modifiers);
+				break;
+			case MarginNumber_Bookmark:
+				EditToggleBookmarkAt(scn->position);
+				break;
 			}
 			break;
 
@@ -4904,7 +4912,8 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			if (MultiByteToWideChar(CP_UTF8, 0, scn->text, -1, szBuf, COUNTOF(szBuf)) > 0) {
 				OnDropOneFile(hwnd, szBuf);
 			}
-		} break;
+		}
+		break;
 
 		case SCN_CODEPAGECHANGED:
 			EditOnCodePageChanged(scn->oldCodePage);
@@ -5057,7 +5066,7 @@ void LoadSettings(void) {
 	LoadIniSection(INI_SECTION_NAME_SETTINGS, pIniSectionBuf, cchIniSection);
 	IniSectionParse(pIniSection, pIniSectionBuf);
 
-	const int iSettingsVersion = IniSectionGetInt(pIniSection, L"SettingsVersion", NP2SettingsVersion_None);
+	const int iSettingsVersion = IniSectionGetInt(pIniSection, L"SettingsVersion", NP2SettingsVersion_Current);
 	bSaveSettings = IniSectionGetBool(pIniSection, L"SaveSettings", 1);
 	bSaveRecentFiles = IniSectionGetBool(pIniSection, L"SaveRecentFiles", 0);
 	bSaveFindReplace = IniSectionGetBool(pIniSection, L"SaveFindReplace", 0);
@@ -5119,6 +5128,7 @@ void LoadSettings(void) {
 	bShowUnicodeControlCharacter = IniSectionGetBool(pIniSection, L"ShowUnicodeControlCharacter", 0);
 
 	bMatchBraces = IniSectionGetBool(pIniSection, L"MatchBraces", 1);
+	bHighlightCurrentBlock = IniSectionGetBool(pIniSection, L"HighlightCurrentBlock", 1);
 	iValue = IniSectionGetInt(pIniSection, L"HighlightCurrentLine", 12);
 	iValue = (iSettingsVersion < NP2SettingsVersion_V1) ? 12 : iValue;
 	bHighlightCurrentSubLine = iValue > 10;
@@ -5187,12 +5197,9 @@ void LoadSettings(void) {
 	iValue = IniSectionGetInt(pIniSection, L"LongLineMode", EDGE_LINE);
 	iLongLineMode = clamp_i(iValue, EDGE_LINE, EDGE_BACKGROUND);
 
-	bShowSelectionMargin = IniSectionGetBool(pIniSection, L"ShowSelectionMargin", 0);
+	bShowBookmarkMargin = IniSectionGetBool(pIniSection, L"ShowBookmarkMargin", 0);
 	bShowLineNumbers = IniSectionGetBool(pIniSection, L"ShowLineNumbers", 1);
-	iValue = IniSectionGetInt(pIniSection, L"ShowCodeFolding", ShowCodeFolding_Default);
-	bShowCodeFolding = iValue & 1;
-	bShowFoldingLine = (iValue >> 1) & 1;
-	bFoldDisplayText = (iValue >> 2) & 1;
+	bShowCodeFolding = IniSectionGetBool(pIniSection, L"ShowCodeFolding", 1);
 
 	bMarkOccurrences = IniSectionGetBool(pIniSection, L"MarkOccurrences", 1);
 	bMarkOccurrencesMatchCase = IniSectionGetBool(pIniSection, L"MarkOccurrencesMatchCase", 0);
@@ -5293,6 +5300,7 @@ void LoadSettings(void) {
 	}
 
 	bShowToolbar = IniSectionGetBool(pIniSection, L"ShowToolbar", 1);
+	bAutoScaleToolbar = IniSectionGetBool(pIniSection, L"AutoScaleToolbar", 1);
 	bShowStatusbar = IniSectionGetBool(pIniSection, L"ShowStatusbar", 1);
 
 	iValue = IniSectionGetInt(pIniSection, L"FullScreenMode", FullScreenMode_Default);
@@ -5487,6 +5495,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBoolEx(pIniSection, L"WordWrapSelectSubLine", bWordWrapSelectSubLine, 0);
 	IniSectionSetBoolEx(pIniSection, L"ShowUnicodeControlCharacter", bShowUnicodeControlCharacter, 0);
 	IniSectionSetBoolEx(pIniSection, L"MatchBraces", bMatchBraces, 1);
+	IniSectionSetBoolEx(pIniSection, L"HighlightCurrentBlock", bHighlightCurrentBlock, 1);
 	IniSectionSetIntEx(pIniSection, L"HighlightCurrentLine", iHighlightCurrentLine + (bHighlightCurrentSubLine ? 10 : 0), 12);
 	IniSectionSetBoolEx(pIniSection, L"ShowIndentGuides", bShowIndentGuides, 0);
 
@@ -5516,9 +5525,9 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBoolEx(pIniSection, L"MarkLongLines", bMarkLongLines, 0);
 	IniSectionSetIntEx(pIniSection, L"LongLinesLimit", iLongLinesLimitG, 80);
 	IniSectionSetIntEx(pIniSection, L"LongLineMode", iLongLineMode, EDGE_LINE);
-	IniSectionSetBoolEx(pIniSection, L"ShowSelectionMargin", bShowSelectionMargin, 0);
+	IniSectionSetBoolEx(pIniSection, L"ShowBookmarkMargin", bShowBookmarkMargin, 0);
 	IniSectionSetBoolEx(pIniSection, L"ShowLineNumbers", bShowLineNumbers, 1);
-	IniSectionSetIntEx(pIniSection, L"ShowCodeFolding", bShowCodeFolding | (bShowFoldingLine << 1) | (bFoldDisplayText << 2), ShowCodeFolding_Default);
+	IniSectionSetBoolEx(pIniSection, L"ShowCodeFolding", bShowCodeFolding, 1);
 	IniSectionSetBoolEx(pIniSection, L"MarkOccurrences", bMarkOccurrences, 1);
 	IniSectionSetBoolEx(pIniSection, L"MarkOccurrencesMatchCase", bMarkOccurrencesMatchCase, 0);
 	IniSectionSetBoolEx(pIniSection, L"MarkOccurrencesMatchWholeWords", bMarkOccurrencesMatchWords, 0);
@@ -5564,6 +5573,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	Toolbar_GetButtons(hwndToolbar, TOOLBAR_COMMAND_BASE, tchToolbarButtons, COUNTOF(tchToolbarButtons));
 	IniSectionSetStringEx(pIniSection, L"ToolbarButtons", tchToolbarButtons, DefaultToolbarButtons);
 	IniSectionSetBoolEx(pIniSection, L"ShowToolbar", bShowToolbar, 1);
+	IniSectionSetBoolEx(pIniSection, L"AutoScaleToolbar", bAutoScaleToolbar, 1);
 	IniSectionSetBoolEx(pIniSection, L"ShowStatusbar", bShowStatusbar, 1);
 	IniSectionSetIntEx(pIniSection, L"FullScreenMode", iFullScreenMode, FullScreenMode_Default);
 
@@ -6760,7 +6770,11 @@ void UpdateStatusbar(void) {
 //
 //
 void UpdateLineNumberWidth(void) {
+	int width = 0;
 	if (bShowLineNumbers) {
+#if NP2_DEBUG_FOLD_LEVEL
+		width = RoundToCurrentDPI(100);
+#else
 		char tchLines[32];
 
 		const Sci_Line iLines = SciCall_GetLineCount();
@@ -6768,20 +6782,10 @@ void UpdateLineNumberWidth(void) {
 		tchLines[0] = '_';
 		tchLines[1] = '_';
 
-		const int iLineMarginWidthNow = SciCall_GetMarginWidth(MARGIN_LINE_NUMBER);
-		const int iLineMarginWidthFit = SciCall_TextWidth(STYLE_LINENUMBER, tchLines);
-
-		if (iLineMarginWidthNow != iLineMarginWidthFit) {
-#if !NP2_DEBUG_FOLD_LEVEL
-			SciCall_SetMarginWidth(MARGIN_LINE_NUMBER, iLineMarginWidthFit);
-
-#else
-			SciCall_SetMarginWidth(MARGIN_LINE_NUMBER, RoundToCurrentDPI(100));
+		width = SciCall_TextWidth(STYLE_LINENUMBER, tchLines);
 #endif
-		}
-	} else {
-		SciCall_SetMarginWidth(MARGIN_LINE_NUMBER, 0);
 	}
+	SciCall_SetMarginWidth(MarginNumber_LineNumber, width);
 }
 
 // based on SciTEWin::FullScreenToggle()
@@ -6789,7 +6793,7 @@ void ToggleFullScreenMode(void) {
 	static BOOL bSaved;
 	static WINDOWPLACEMENT wndpl;
 	static RECT rcWorkArea;
-	static LONG_PTR exStyle;
+	static DWORD exStyle;
 
 	HWND wTaskBar = FindWindow(L"Shell_TrayWnd", L"");
 	HWND wStartButton = FindWindow(L"Button", NULL);
@@ -6800,7 +6804,7 @@ void ToggleFullScreenMode(void) {
 			SystemParametersInfo(SPI_GETWORKAREA, 0, &rcWorkArea, 0);
 			wndpl.length = sizeof(WINDOWPLACEMENT);
 			GetWindowPlacement(hwndMain, &wndpl);
-			exStyle = GetWindowLongPtr(hwndEdit, GWL_EXSTYLE);
+			exStyle = GetWindowExStyle(hwndEdit);
 		}
 
 		HMONITOR hMonitor = MonitorFromWindow(hwndMain, MONITOR_DEFAULTTONEAREST);
@@ -6830,7 +6834,7 @@ void ToggleFullScreenMode(void) {
 		}
 		ShowWindow(wTaskBar, SW_HIDE);
 
-		SetWindowLongPtr(hwndEdit, GWL_EXSTYLE, 0);
+		SetWindowExStyle(hwndEdit, 0);
 		SetWindowPos(hwndMain, (IsTopMost() ? HWND_TOPMOST : HWND_TOP), x - cx, y - top, x + w + 2 * cx , y + h + top + cy, 0);
 	} else {
 		bSaved = FALSE;
@@ -6838,7 +6842,7 @@ void ToggleFullScreenMode(void) {
 		if (wStartButton) {
 			ShowWindow(wStartButton, SW_SHOW);
 		}
-		SetWindowLongPtr(hwndEdit, GWL_EXSTYLE, exStyle);
+		SetWindowExStyle(hwndEdit, exStyle);
 		if (!IsTopMost()) {
 			SetWindowPos(hwndMain, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 		}

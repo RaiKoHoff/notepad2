@@ -686,6 +686,9 @@
     <ClInclude Include="..\..\src\compiler.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\src\Dialogs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -739,7 +742,7 @@
     <None Include="..\..\res\Notepad2.ico">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="..\..\res\Open.bmp">
+    <None Include="..\..\res\OpenFolder.bmp">
       <Filter>Resource Files</Filter>
     </None>
     <None Include="..\..\res\Pick.bmp">

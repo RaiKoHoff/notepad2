@@ -19,6 +19,7 @@
 ******************************************************************************/
 
 #include <windows.h>
+#include <windowsx.h>
 #include <shlwapi.h>
 #include <shlobj.h>
 #include <commctrl.h>
@@ -323,15 +324,6 @@ BOOL Is32bitExe(LPCWSTR lpszExeName) {
 
 //=============================================================================
 //
-//  SetTheme()
-//
-BOOL SetTheme(HWND hwnd, LPCWSTR lpszTheme) {
-	const HRESULT hr = SetWindowTheme(hwnd, lpszTheme, NULL);
-	return hr == S_OK;
-}
-
-//=============================================================================
-//
 //  BitmapMergeAlpha()
 //  Merge alpha channel into color channel
 //
@@ -560,7 +552,8 @@ void ResizeDlg_InitEx(HWND hwnd, int cxFrame, int cyFrame, int nIdGrip, int iDir
 	pm->cxClient = rc.right - rc.left;
 	pm->cyClient = rc.bottom - rc.top;
 
-	AdjustWindowRectEx(&rc, GetWindowLong(hwnd, GWL_STYLE) | WS_THICKFRAME, FALSE, 0);
+	const DWORD style = GetWindowStyle(hwnd) | WS_THICKFRAME;
+	AdjustWindowRectEx(&rc, style, FALSE, 0);
 	pm->mmiPtMinX = rc.right - rc.left;
 	pm->mmiPtMinY = rc.bottom - rc.top;
 	// only one direction
@@ -581,7 +574,7 @@ void ResizeDlg_InitEx(HWND hwnd, int cxFrame, int cyFrame, int nIdGrip, int iDir
 
 	SetWindowPos(hwnd, NULL, rc.left, rc.top, cxFrame, cyFrame, SWP_NOZORDER);
 
-	SetWindowLongPtr(hwnd, GWL_STYLE, GetWindowLongPtr(hwnd, GWL_STYLE) | WS_THICKFRAME);
+	SetWindowStyle(hwnd, style);
 	SetWindowPos(hwnd, NULL, 0, 0, 0, 0, SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
 
 	WCHAR wch[64];
@@ -590,7 +583,7 @@ void ResizeDlg_InitEx(HWND hwnd, int cxFrame, int cyFrame, int nIdGrip, int iDir
 	InsertMenu(GetSystemMenu(hwnd, FALSE), SC_CLOSE, MF_BYCOMMAND | MF_SEPARATOR, 0, NULL);
 
 	HWND hwndCtl = GetDlgItem(hwnd, nIdGrip);
-	SetWindowLongPtr(hwndCtl, GWL_STYLE, GetWindowLongPtr(hwndCtl, GWL_STYLE) | SBS_SIZEGRIP | WS_CLIPSIBLINGS);
+	SetWindowStyle(hwndCtl, GetWindowStyle(hwndCtl) | SBS_SIZEGRIP | WS_CLIPSIBLINGS);
 	const int cGrip = GetSystemMetrics(SM_CXHTHUMB);
 	SetWindowPos(hwndCtl, NULL, pm->cxClient - cGrip, pm->cyClient - cGrip, cGrip, cGrip, SWP_NOZORDER);
 }
@@ -679,7 +672,7 @@ void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, WORD wBmpId) {
 	DeleteObject(hBmp);
 	SetRect(&bi.margin, 0, 0, 0, 0);
 	bi.uAlign = BUTTON_IMAGELIST_ALIGN_CENTER;
-	SendMessage(hwndCtl, BCM_SETIMAGELIST, 0, (LPARAM)&bi);
+	Button_SetImageList(hwndCtl, &bi);
 }
 
 //=============================================================================
@@ -689,7 +682,7 @@ void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, WORD wBmpId) {
 void DeleteBitmapButton(HWND hwnd, int nCtlId) {
 	HWND hwndCtl = GetDlgItem(hwnd, nCtlId);
 	BUTTON_IMAGELIST bi;
-	if (SendMessage(hwndCtl, BCM_GETIMAGELIST, 0, (LPARAM)&bi)) {
+	if (Button_GetImageList(hwndCtl, &bi)) {
 		ImageList_Destroy(bi.himl);
 	}
 }
@@ -699,22 +692,22 @@ void DeleteBitmapButton(HWND hwnd, int nCtlId) {
 //  SetWindowTransparentMode()
 //
 void SetWindowTransparentMode(HWND hwnd, BOOL bTransparentMode, int iOpacityLevel) {
-	const LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+	const DWORD exStyle = GetWindowExStyle(hwnd);
 	if (bTransparentMode) {
-		SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+		SetWindowExStyle(hwnd, exStyle | WS_EX_LAYERED);
 		const BYTE bAlpha = (BYTE)(iOpacityLevel * 255 / 100);
 		SetLayeredWindowAttributes(hwnd, 0, bAlpha, LWA_ALPHA);
 	} else {
-		SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
+		SetWindowExStyle(hwnd, exStyle & ~WS_EX_LAYERED);
 	}
 }
 
 void SetWindowLayoutRTL(HWND hwnd, BOOL bRTL) {
-	const LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+	const DWORD exStyle = GetWindowExStyle(hwnd);
 	if (bRTL) {
-		SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYOUTRTL);
+		SetWindowExStyle(hwnd, exStyle | WS_EX_LAYOUTRTL);
 	} else {
-		SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYOUTRTL);
+		SetWindowExStyle(hwnd, exStyle & ~WS_EX_LAYOUTRTL);
 	}
 }
 
@@ -1755,7 +1748,7 @@ void MRU_LoadToCombobox(HWND hwnd, LPCWSTR pszKey) {
 	MRU_Load(pmru);
 	for (int i = 0; i < MRU_GetCount(pmru); i++) {
 		MRU_Enum(pmru, i, tch, COUNTOF(tch));
-		SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)tch);
+		ComboBox_AddString(hwnd, tch);
 	}
 	MRU_Destroy(pmru);
 }
@@ -1776,7 +1769,7 @@ void MRU_ClearCombobox(HWND hwnd, LPCWSTR pszKey) {
 	MRU_Empty(pmru);
 	MRU_Save(pmru);
 	MRU_Destroy(pmru);
-	SendMessage(hwnd, CB_RESETCONTENT, 0, 0);
+	ComboBox_ResetContent(hwnd);
 }
 
 /*

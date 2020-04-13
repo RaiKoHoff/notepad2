@@ -19,6 +19,7 @@
 ******************************************************************************/
 
 #include <windows.h>
+#include <windowsx.h>
 #include <shlwapi.h>
 #include <commctrl.h>
 #include <commdlg.h>
@@ -4454,7 +4455,8 @@ static LRESULT CALLBACK AddBackslashEditProc(HWND hwnd, UINT umsg, WPARAM wParam
 		if (done) {
 			return TRUE;
 		}
-	} break;
+	}
+	break;
 	}
 
 	return DefSubclassProc(hwnd, umsg, wParam, lParam);
@@ -4489,6 +4491,8 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 
 		SetWindowLongPtr(hwnd, DWLP_USER, lParam);
 		ResizeDlg_InitX(hwnd, cxFindReplaceDlg, IDC_RESIZEGRIP2);
+
+		HWND hwndFind = GetDlgItem(hwnd, IDC_FINDTEXT);
 		AddBackslashComboBoxSetup(hwnd, IDC_FINDTEXT);
 
 		LPEDITFINDREPLACE lpefr = (LPEDITFINDREPLACE)lParam;
@@ -4498,7 +4502,7 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 		// Load MRUs
 		for (int i = 0; i < MRU_GetCount(mruFind); i++) {
 			MRU_Enum(mruFind, i, tch, COUNTOF(tch));
-			SendDlgItemMessage(hwnd, IDC_FINDTEXT, CB_ADDSTRING, 0, (LPARAM)tch);
+			ComboBox_AddString(hwndFind, tch);
 		}
 
 		if (!bSwitchedFindReplace) {
@@ -4536,22 +4540,23 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 			}
 		}
 
-		SendDlgItemMessage(hwnd, IDC_FINDTEXT, CB_LIMITTEXT, NP2_FIND_REPLACE_LIMIT, 0);
-		SendDlgItemMessage(hwnd, IDC_FINDTEXT, CB_SETEXTENDEDUI, TRUE, 0);
+		ComboBox_LimitText(hwndFind, NP2_FIND_REPLACE_LIMIT);
+		ComboBox_SetExtendedUI(hwndFind, TRUE);
 
-		if (!GetWindowTextLength(GetDlgItem(hwnd, IDC_FINDTEXT))) {
+		if (!GetWindowTextLength(hwndFind)) {
 			SetDlgItemTextA2W(CP_UTF8, hwnd, IDC_FINDTEXT, lpefr->szFindUTF8);
 		}
 
-		if (GetDlgItem(hwnd, IDC_REPLACETEXT)) {
+		HWND hwndRepl = GetDlgItem(hwnd, IDC_REPLACETEXT);
+		if (hwndRepl) {
 			AddBackslashComboBoxSetup(hwnd, IDC_REPLACETEXT);
 			for (int i = 0; i < MRU_GetCount(mruReplace); i++) {
 				MRU_Enum(mruReplace, i, tch, COUNTOF(tch));
-				SendDlgItemMessage(hwnd, IDC_REPLACETEXT, CB_ADDSTRING, 0, (LPARAM)tch);
+				ComboBox_AddString(hwndRepl, tch);
 			}
 
-			SendDlgItemMessage(hwnd, IDC_REPLACETEXT, CB_LIMITTEXT, NP2_FIND_REPLACE_LIMIT, 0);
-			SendDlgItemMessage(hwnd, IDC_REPLACETEXT, CB_SETEXTENDEDUI, TRUE, 0);
+			ComboBox_LimitText(hwndRepl, NP2_FIND_REPLACE_LIMIT);
+			ComboBox_SetExtendedUI(hwndRepl, TRUE);
 			SetDlgItemTextA2W(CP_UTF8, hwnd, IDC_REPLACETEXT, lpefr->szReplaceUTF8);
 		}
 
@@ -4661,8 +4666,8 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 		switch (LOWORD(wParam)) {
 		case IDC_FINDTEXT:
 		case IDC_REPLACETEXT: {
-			const BOOL bEnable = (GetWindowTextLength(GetDlgItem(hwnd, IDC_FINDTEXT)) ||
-							CB_ERR != SendDlgItemMessage(hwnd, IDC_FINDTEXT, CB_GETCURSEL, 0, 0));
+			HWND hwndFind = GetDlgItem(hwnd, IDC_FINDTEXT);
+			const BOOL bEnable = ComboBox_HasText(hwndFind);
 
 			EnableWindow(GetDlgItem(hwnd, IDOK), bEnable);
 			EnableWindow(GetDlgItem(hwnd, IDC_FINDPREV), bEnable);
@@ -4671,9 +4676,9 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 			EnableWindow(GetDlgItem(hwnd, IDC_REPLACEINSEL), bEnable);
 
 			if (HIWORD(wParam) == CBN_CLOSEUP) {
-				LONG lSelEnd;
-				SendDlgItemMessage(hwnd, LOWORD(wParam), CB_GETEDITSEL, 0, (LPARAM)&lSelEnd);
-				SendDlgItemMessage(hwnd, LOWORD(wParam), CB_SETEDITSEL, 0, MAKELPARAM(lSelEnd, lSelEnd));
+				HWND hwndCtl = GetDlgItem(hwnd, LOWORD(wParam));
+				const DWORD lSelEnd = ComboBox_GetEditSelEnd(hwndCtl);
+				ComboBox_SetEditSel(hwndCtl, lSelEnd, lSelEnd);
 			}
 		}
 		break;
@@ -4712,7 +4717,9 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 		case IDMSG_SWITCHTOFIND:
 		case IDMSG_SWITCHTOREPLACE: {
 			LPEDITFINDREPLACE lpefr = (LPEDITFINDREPLACE)GetWindowLongPtr(hwnd, DWLP_USER);
-			const BOOL bIsFindDlg = (GetDlgItem(hwnd, IDC_REPLACE) == NULL);
+			HWND hwndFind = GetDlgItem(hwnd, IDC_FINDTEXT);
+			HWND hwndRepl = GetDlgItem(hwnd, IDC_REPLACETEXT);
+			const BOOL bIsFindDlg = (hwndRepl == NULL);
 
 			if ((bIsFindDlg && LOWORD(wParam) == IDMSG_SWITCHTOREPLACE) ||
 					(!bIsFindDlg && LOWORD(wParam) == IDMSG_SWITCHTOFIND)) {
@@ -4735,7 +4742,7 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 				return TRUE;
 			}
 
-			if (GetDlgItem(hwnd, IDC_REPLACETEXT)) {
+			if (!bIsFindDlg) {
 				GetDlgItemTextA2W(cpEdit, hwnd, IDC_REPLACETEXT, lpefr->szReplace, COUNTOF(lpefr->szReplace));
 			}
 
@@ -4771,13 +4778,13 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 				// Save MRUs
 				if (StrNotEmptyA(lpefr->szFind)) {
 					if (GetDlgItemTextA2W(CP_UTF8, hwnd, IDC_FINDTEXT, lpefr->szFindUTF8, COUNTOF(lpefr->szFindUTF8))) {
-						GetDlgItemText(hwnd, IDC_FINDTEXT, tch, COUNTOF(tch));
+						ComboBox_GetText(hwndFind, tch, COUNTOF(tch));
 						MRU_AddMultiline(mruFind, tch);
 					}
 				}
 				if (StrNotEmptyA(lpefr->szReplace)) {
 					if (GetDlgItemTextA2W(CP_UTF8, hwnd, IDC_REPLACETEXT, lpefr->szReplaceUTF8, COUNTOF(lpefr->szReplaceUTF8))) {
-						GetDlgItemText(hwnd, IDC_REPLACETEXT, tch, COUNTOF(tch));
+						ComboBox_GetText(hwndRepl, tch, COUNTOF(tch));
 						MRU_AddMultiline(mruReplace, tch);
 					}
 				} else {
@@ -4802,17 +4809,17 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 			}
 
 			// Reload MRUs
-			SendDlgItemMessage(hwnd, IDC_FINDTEXT, CB_RESETCONTENT, 0, 0);
-			SendDlgItemMessage(hwnd, IDC_REPLACETEXT, CB_RESETCONTENT, 0, 0);
+			ComboBox_ResetContent(hwndFind);
+			ComboBox_ResetContent(hwndRepl);
 
 			for (int i = 0; i < MRU_GetCount(mruFind); i++) {
 				MRU_Enum(mruFind, i, tch, COUNTOF(tch));
-				SendDlgItemMessage(hwnd, IDC_FINDTEXT, CB_ADDSTRING, 0, (LPARAM)tch);
+				ComboBox_AddString(hwndFind, tch);
 			}
 
 			for (int i = 0; i < MRU_GetCount(mruReplace); i++) {
 				MRU_Enum(mruReplace, i, tch, COUNTOF(tch));
-				SendDlgItemMessage(hwnd, IDC_REPLACETEXT, CB_ADDSTRING, 0, (LPARAM)tch);
+				ComboBox_AddString(hwndRepl, tch);
 			}
 
 			SetDlgItemTextA2W(CP_UTF8, hwnd, IDC_FINDTEXT, lpefr->szFindUTF8);
@@ -4946,21 +4953,25 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 				//ShowNotificationMessage(SC_NOTIFICATIONPOSITION_CENTER, IDS_WILDCARDHELP);
 				break;
 
-			case IDC_CLEAR_FIND:
-				GetDlgItemText(hwnd, IDC_FINDTEXT, tch, COUNTOF(tch));
-				SendDlgItemMessage(hwnd, IDC_FINDTEXT, CB_RESETCONTENT, 0, 0);
+			case IDC_CLEAR_FIND: {
+				HWND hwndFind = GetDlgItem(hwnd, IDC_FINDTEXT);
+				ComboBox_GetText(hwndFind, tch, COUNTOF(tch));
+				ComboBox_ResetContent(hwndFind);
 				MRU_Empty(mruFind);
 				MRU_Save(mruFind);
-				SetDlgItemText(hwnd, IDC_FINDTEXT, tch);
-				break;
+				ComboBox_SetText(hwndFind, tch);
+			}
+			break;
 
-			case IDC_CLEAR_REPLACE:
-				GetDlgItemText(hwnd, IDC_REPLACETEXT, tch, COUNTOF(tch));
-				SendDlgItemMessage(hwnd, IDC_REPLACETEXT, CB_RESETCONTENT, 0, 0);
+			case IDC_CLEAR_REPLACE: {
+				HWND hwndRepl = GetDlgItem(hwnd, IDC_REPLACETEXT);
+				ComboBox_GetText(hwndRepl, tch, COUNTOF(tch));
+				ComboBox_ResetContent(hwndRepl);
 				MRU_Empty(mruReplace);
 				MRU_Save(mruReplace);
-				SetDlgItemText(hwnd, IDC_REPLACETEXT, tch);
-				break;
+				ComboBox_SetText(hwndRepl, tch);
+			}
+			break;
 
 			case IDC_SAVEPOSITION:
 				PostWMCommand(hwnd, IDACC_SAVEPOS);
@@ -5280,7 +5291,7 @@ void EditMarkAll_Clear(void) {
 
 	iMatchesCount = 0;
 	// clear existing indicator
-	SciCall_SetIndicatorCurrent(IndicatorNumber_MarkOccurrences);
+	SciCall_SetIndicatorCurrent(IndicatorNumber_MarkOccurrence);
 	SciCall_IndicatorClearRange(0, SciCall_GetLength());
 
 	if (editMarkAllStatus.pszText) {
@@ -5329,12 +5340,13 @@ void EditMarkAll(BOOL bChanged, BOOL bMarkOccurrencesMatchCase, BOOL bMarkOccurr
 	if (!bChanged && findFlag == editMarkAllStatus.findFlag && editMarkAllStatus.iSelCount == iSelCount) {
 		// _stricmp() is not safe for DBCS string.
 		if (memcmp(pszText, editMarkAllStatus.pszText, iSelCount) == 0) {
+			NP2HeapFree(pszText);
 			return;
 		}
 	}
 
 	EditMarkAll_Clear();
-	SciCall_SetIndicatorCurrent(IndicatorNumber_MarkOccurrences);
+	SciCall_SetIndicatorCurrent(IndicatorNumber_MarkOccurrence);
 
 	SciCall_SetSearchFlags(findFlag);
 	const Sci_Position iDocLen = SciCall_GetLength();
@@ -5760,8 +5772,8 @@ extern int cxInsertTagDlg;
 extern int cyInsertTagDlg;
 
 static INT_PTR CALLBACK EditModifyLinesDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) {
-	static int id_hover;
-	static int id_capture;
+	static DWORD id_hover;
+	static DWORD id_capture;
 	static HFONT hFontHover;
 	static HCURSOR hCursorNormal;
 	static HCURSOR hCursorHover;
@@ -5861,13 +5873,13 @@ static INT_PTR CALLBACK EditModifyLinesDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 	break;
 
 	case WM_MOUSEMOVE: {
-		const POINT pt = { LOWORD(lParam), HIWORD(lParam) };
+		const POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 		HWND hwndHover = ChildWindowFromPoint(hwnd, pt);
 		const DWORD dwId = GetWindowLong(hwndHover, GWL_ID);
 
 		if (GetActiveWindow() == hwnd) {
 			if (dwId >= IDC_MODIFY_LINE_DLN_NP && dwId <= IDC_MODIFY_LINE_ZCN_ZP) {
-				if (id_capture == (int)dwId || id_capture == 0) {
+				if (id_capture == dwId || id_capture == 0) {
 					if (id_hover != id_capture || id_hover == 0) {
 						id_hover = dwId;
 						//InvalidateRect(GetDlgItem(hwnd, dwId), NULL, FALSE);
@@ -5888,7 +5900,7 @@ static INT_PTR CALLBACK EditModifyLinesDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 	break;
 
 	case WM_LBUTTONDOWN: {
-		const POINT pt = { LOWORD(lParam), HIWORD(lParam) };
+		const POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 		HWND hwndHover = ChildWindowFromPoint(hwnd, pt);
 		const DWORD dwId = GetWindowLong(hwndHover, GWL_ID);
 
@@ -5903,14 +5915,14 @@ static INT_PTR CALLBACK EditModifyLinesDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 	break;
 
 	case WM_LBUTTONUP: {
-		//const POINT pt = { LOWORD(lParam), HIWORD(lParam) };
+		//const POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 		//HWND hwndHover = ChildWindowFromPoint(hwnd, pt);
 		//const DWORD dwId = GetWindowLong(hwndHover, GWL_ID);
 
 		if (id_capture != 0) {
 			ReleaseCapture();
 			if (id_hover == id_capture) {
-				const int id_focus = GetWindowLong(GetFocus(), GWL_ID);
+				const DWORD id_focus = GetWindowLong(GetFocus(), GWL_ID);
 				if (id_focus == IDC_MODIFY_LINE_PREFIX || id_focus == IDC_MODIFY_LINE_APPEND) {
 					WCHAR wch[8];
 					GetDlgItemText(hwnd, id_capture, wch, COUNTOF(wch));
@@ -7466,7 +7478,7 @@ static void FoldPerformAction(Sci_Line ln, int mode, FOLD_ACTION action) {
 	}
 }
 
-void FoldClick(Sci_Line ln, int mode) {
+void FoldClickAt(Sci_Position pos, int mode) {
 	static struct {
 		Sci_Line ln;
 		int mode;
@@ -7475,6 +7487,7 @@ void FoldClick(Sci_Line ln, int mode) {
 
 	BOOL fGotoFoldPoint = mode & FOLD_SIBLINGS;
 
+	Sci_Line ln = SciCall_LineFromPosition(pos);
 	if (!(SciCall_GetFoldLevel(ln) & SC_FOLDLEVELHEADERFLAG)) {
 		// Not a fold point: need to look for a double-click
 		if (prev.ln == ln && prev.mode == mode && (GetTickCount() - prev.dwTickCount <= GetDoubleClickTime())) {

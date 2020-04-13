@@ -360,6 +360,10 @@ NP2_inline int SciCall_TextWidth(int style, const char *text) {
 	return (int)SciCall(SCI_TEXTWIDTH, style, (LPARAM)text);
 }
 
+NP2_inline int SciCall_TextHeight(void) {
+	return (int)SciCall(SCI_TEXTHEIGHT, 0, 0);
+}
+
 NP2_inline Sci_Position SciCall_GetColumn(Sci_Position position) {
 	return SciCall(SCI_GETCOLUMN, position, 0);
 }
@@ -733,6 +737,10 @@ NP2_inline void SciCall_SetMarginSensitive(int margin, BOOL sensitive) {
 	SciCall(SCI_SETMARGINSENSITIVEN, margin, sensitive);
 }
 
+NP2_inline void SciCall_SetMarginCursor(int margin, int cursor) {
+	SciCall(SCI_SETMARGINCURSORN, margin, cursor);
+}
+
 NP2_inline void SciCall_SetFoldMarginColour(BOOL useSetting, COLORREF back) {
 	SciCall(SCI_SETFOLDMARGINCOLOUR, useSetting, back);
 }
@@ -793,8 +801,16 @@ NP2_inline void SciCall_BraceHighlight(Sci_Position posA, Sci_Position posB) {
 	SciCall(SCI_BRACEHIGHLIGHT, posA, posB);
 }
 
+NP2_inline void SciCall_BraceHighlightIndicator(BOOL useSetting, int indicator) {
+	SciCall(SCI_BRACEHIGHLIGHTINDICATOR, useSetting, indicator);
+}
+
 NP2_inline void SciCall_BraceBadLight(Sci_Position pos) {
 	SciCall(SCI_BRACEBADLIGHT, pos, 0);
+}
+
+NP2_inline void SciCall_BraceBadLightIndicator(BOOL useSetting, int indicator) {
+	SciCall(SCI_BRACEBADLIGHTINDICATOR, useSetting, indicator);
 }
 
 NP2_inline Sci_Position SciCall_BraceMatch(Sci_Position pos, int maxReStyle) {
@@ -877,6 +893,10 @@ NP2_inline void SciCall_MarkerSetBack(int markerNumber, COLORREF back) {
 	SciCall(SCI_MARKERSETBACK, markerNumber, back);
 }
 
+NP2_inline void SciCall_MarkerSetBackSelected(int markerNumber, COLORREF back) {
+	SciCall(SCI_MARKERSETBACKSELECTED, markerNumber, back);
+}
+
 NP2_inline void SciCall_MarkerSetAlpha(int markerNumber, int alpha) {
 	SciCall(SCI_MARKERSETALPHA, markerNumber, alpha);
 }
@@ -925,6 +945,10 @@ NP2_inline void SciCall_IndicSetFore(int indicator, COLORREF fore) {
 
 NP2_inline void SciCall_IndicSetAlpha(int indicator, int alpha) {
 	SciCall(SCI_INDICSETALPHA, indicator, alpha);
+}
+
+NP2_inline void SciCall_IndicSetOutlineAlpha(int indicator, int alpha) {
+	SciCall(SCI_INDICSETOUTLINEALPHA, indicator, alpha);
 }
 
 NP2_inline void SciCall_SetIndicatorCurrent(int indicator) {

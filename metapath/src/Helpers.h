@@ -282,13 +282,9 @@ NP2_inline void EndWaitCursor(void) {
 HRESULT PrivateSetCurrentProcessExplicitAppUserModelID(PCWSTR AppID);
 BOOL ExeNameFromWnd(HWND hwnd, LPWSTR szExeName, int cchExeName);
 //BOOL Is32bitExe(LPCWSTR lpszExeName);
-BOOL SetTheme(HWND hwnd, LPCWSTR lpszTheme);
-NP2_inline BOOL SetExplorerTheme(HWND hwnd) {
-	return SetTheme(hwnd, L"Explorer");
-}
-NP2_inline BOOL SetListViewTheme(HWND hwnd) {
-	return SetTheme(hwnd, L"Listview");
-}
+
+#define SetExplorerTheme(hwnd)		SetWindowTheme((hwnd), L"Explorer", NULL)
+#define SetListViewTheme(hwnd)		SetWindowTheme((hwnd), L"Listview", NULL)
 
 HBITMAP LoadBitmapFile(LPCWSTR path);
 BOOL BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest);
@@ -331,6 +327,13 @@ void SetWindowLayoutRTL(HWND hwnd, BOOL bRTL);
 #define SendWMCommandEx(hwnd, id, extra)	SendMessage(hwnd, WM_COMMAND, MAKEWPARAM((id), (extra)), 0)
 #define SendWMCommand(hwnd, id)				SendWMCommandEx(hwnd, (id), 1)
 #define PostWMCommand(hwnd, id)				PostMessage(hwnd, WM_COMMAND, MAKEWPARAM((id), 1), 0)
+
+#define SetWindowStyle(hwnd, style)			SetWindowLong(hwnd, GWL_STYLE, (style))
+#define SetWindowExStyle(hwnd, style)		SetWindowLong(hwnd, GWL_EXSTYLE, (style))
+
+#define ComboBox_HasText(hwnd)					(ComboBox_GetTextLength(hwnd) || CB_ERR != ComboBox_GetCurSel(hwnd))
+#define ComboBox_GetEditSelStart(hwnd)			LOWORD(ComboBox_GetEditSel(hwnd))
+#define ComboBox_GetEditSelEnd(hwnd)			HIWORD(ComboBox_GetEditSel(hwnd))
 
 #define StatusSetSimple(hwnd, b)				SendMessage(hwnd, SB_SIMPLE, (b), 0)
 #define StatusSetText(hwnd, nPart, lpszText)	SendMessage(hwnd, SB_SETTEXT, (nPart), (LPARAM)(lpszText))
@@ -422,7 +425,7 @@ void History_UpdateToolbar(LCPHISTORY ph, HWND hwnd, int cmdBack, int cmdForward
 #define MRU_MAXITEMS	24
 
 enum {
-	MRUFlags_Default = 0, 
+	MRUFlags_Default = 0,
 	MRUFlags_CaseInsensitive = 1,
 };
 

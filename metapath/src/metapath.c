@@ -27,14 +27,12 @@
 #include <commdlg.h>
 #include <uxtheme.h>
 #include <stdio.h>
+#include "config.h"
 #include "Helpers.h"
 #include "Dlapi.h"
 #include "Dialogs.h"
 #include "metapath.h"
 #include "resource.h"
-
-// enable customize toolbar labels
-#define NP2_ENABLE_CUSTOMIZE_TOOLBAR_LABELS		0
 
 /******************************************************************************
 *
@@ -747,7 +745,7 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 					  NULL);
 
 	if (IsAppThemed()) {
-		SetWindowLongPtr(hwndDirList, GWL_EXSTYLE, GetWindowLongPtr(hwndDirList, GWL_EXSTYLE) & ~WS_EX_CLIENTEDGE);
+		SetWindowExStyle(hwndDirList, GetWindowExStyle(hwndDirList) & ~WS_EX_CLIENTEDGE);
 		SetWindowPos(hwndDirList, NULL, 0, 0, 0, 0, SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
 	}
 	InitWindowCommon(hwndDirList);
@@ -770,7 +768,7 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	// Window Initialization
 	// DriveBox
 	DriveBox_Init(hwndDriveBox);
-	SendMessage(hwndDriveBox, CB_SETEXTENDEDUI, TRUE, 0);
+	ComboBox_SetExtendedUI(hwndDriveBox, TRUE);
 	// DirList
 	LVCOLUMN lvc = { LVCF_FMT | LVCF_TEXT, LVCFMT_LEFT, 0, NULL, -1, 0, 0, 0
 #if (NTDDI_VERSION >= NTDDI_VISTA)
@@ -937,7 +935,7 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 
 	IniSectionFree(pIniSection);
 	NP2HeapFree(pIniSectionBuf);
-#endif
+#endif // NP2_ENABLE_CUSTOMIZE_TOOLBAR_LABELS
 
 	SendMessage(hwndToolbar, TB_SETEXTENDEDSTYLE, 0,
 				SendMessage(hwndToolbar, TB_GETEXTENDEDSTYLE, 0, 0) | TBSTYLE_EX_MIXEDBUTTONS);
@@ -998,10 +996,10 @@ void MsgThemeChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	UNREFERENCED_PARAMETER(wParam);
 	UNREFERENCED_PARAMETER(lParam);
 
-	HINSTANCE hInstance = (HINSTANCE)(INT_PTR)GetWindowLongPtr(hwnd, GWLP_HINSTANCE);
+	HINSTANCE hInstance = GetWindowInstance(hwnd);
 
 	if (IsAppThemed()) {
-		SetWindowLongPtr(hwndDirList, GWL_EXSTYLE, GetWindowLongPtr(hwndDirList, GWL_EXSTYLE) & ~WS_EX_CLIENTEDGE);
+		SetWindowExStyle(hwndDirList, GetWindowExStyle(hwndDirList) & ~WS_EX_CLIENTEDGE);
 		SetWindowPos(hwndDirList, NULL, 0, 0, 0, 0, SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE);
 		if (bFullRowSelect) {
 			SetExplorerTheme(hwndDirList);
@@ -1009,7 +1007,7 @@ void MsgThemeChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			SetListViewTheme(hwndDirList);
 		}
 	} else {
-		SetWindowLongPtr(hwndDirList, GWL_EXSTYLE, WS_EX_CLIENTEDGE | GetWindowLongPtr(hwndDirList, GWL_EXSTYLE));
+		SetWindowExStyle(hwndDirList, GetWindowExStyle(hwndDirList) | WS_EX_CLIENTEDGE);
 		SetWindowPos(hwndDirList, NULL, 0, 0, 0, 0, SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
 	}
 
@@ -1121,7 +1119,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	EnableCmd(hmenu, IDM_FILE_DELETE, i);
 	EnableCmd(hmenu, IDM_FILE_RENAME, i);
 
-	i = (SendMessage(hwndDriveBox, CB_GETCURSEL, 0, 0) != CB_ERR);
+	i = (ComboBox_GetCurSel(hwndDriveBox) != CB_ERR);
 	EnableCmd(hmenu, IDM_FILE_DRIVEPROP, i);
 
 	CheckCmd(hmenu, IDM_VIEW_FOLDERS, (dwFillMask & DL_FOLDERS));
@@ -1771,8 +1769,8 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	break;
 
 	case ACC_ESCAPE:
-		if (SendMessage(hwndDriveBox, CB_GETDROPPEDSTATE, 0, 0)) {
-			SendMessage(hwndDriveBox, CB_SHOWDROPDOWN, 0, 0);
+		if (ComboBox_GetDroppedState(hwndDriveBox)) {
+			ComboBox_ShowDropdown(hwndDriveBox, FALSE);
 		} else if (iEscFunction == 1) {
 			SendMessage(hwnd, WM_SYSCOMMAND, SC_MINIMIZE, 0);
 		} else if (iEscFunction == 2) {

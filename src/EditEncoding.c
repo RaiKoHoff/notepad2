@@ -318,7 +318,7 @@ static NP2EncodingGroup sEncodingGroupList[] = {
 		28606,		// Latin-10, ISO 8859-16
 		10082,		// Mac (Croatian)
 	}},
-	{ FALSE, IDS_ENCODINGGROUP_SOUTASIA, { // Southeast Asia
+	{ FALSE, IDS_ENCODINGGROUP_SOUTHASIA, { // Southeast Asia
 		874,		// Thai TIS-620, ISO 8859-11
 		10021,		// Mac (Thai)
 		1258,		// Vietnamese Windows-1258
@@ -735,8 +735,9 @@ void Encoding_AddToTreeView(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 	WCHAR wchBuf[256];
 	TVINSERTSTRUCT tvis;
 	ZeroMemory(&tvis, sizeof(TVINSERTSTRUCT));
-	tvis.hInsertAfter = TVI_LAST;
 	tvis.item.mask = TVIF_TEXT | TVIF_IMAGE | TVIF_SELECTEDIMAGE | TVIF_PARAM;
+
+	HTREEITEM hParent = TVI_FIRST;
 	HTREEITEM hSelNode = NULL;
 	HTREEITEM hSelParent = NULL;
 
@@ -756,27 +757,32 @@ void Encoding_AddToTreeView(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 		} else if (id == CPI_OEM) {
 			StrCatBuff(wchBuf, wchOEM, COUNTOF(wchBuf));
 		}
+
+		tvis.hInsertAfter = hParent;
 		tvis.item.pszText = wchBuf;
 		tvis.item.iImage = IsValidEncoding(id) ? 0 : 1;
 		tvis.item.iSelectedImage = tvis.item.iImage;
 		tvis.item.lParam = 1 + id;
 
-		HTREEITEM hTreeNode = (HTREEITEM)TreeView_InsertItem(hwnd, &tvis);
+		hParent = TreeView_InsertItem(hwnd, &tvis);
 		if (idSel == id) {
-			hSelNode = hTreeNode;
+			hSelNode = hParent;
 		}
 	}
 
 	for (UINT i = 0; i < COUNTOF(sEncodingGroupList); i++) {
 		const NP2EncodingGroup *group = &sEncodingGroupList[pEE[i].id];
 		tvis.hParent = NULL;
+		tvis.hInsertAfter = hParent;
 		tvis.item.pszText = pEE[i].wch;
 		tvis.item.iImage = 2; // folder
 		tvis.item.iSelectedImage = 2;
 		tvis.item.lParam = 0; // group
 
-		HTREEITEM hParent = (HTREEITEM)TreeView_InsertItem(hwnd, &tvis);
+		hParent = TreeView_InsertItem(hwnd, &tvis);
 		tvis.hParent = hParent;
+
+		HTREEITEM hTreeNode = TVI_FIRST;
 		BOOL expand = i < 2; // Unicode, Western European
 
 		for (UINT j = 0; j < COUNTOF(group->encodings); j++) {
@@ -791,12 +797,13 @@ void Encoding_AddToTreeView(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 					*pwsz = L'\0';
 				}
 
+				tvis.hInsertAfter = hTreeNode;
 				tvis.item.pszText = wchBuf;
 				tvis.item.iImage = IsValidEncoding(id) ? 0 : 1;
 				tvis.item.iSelectedImage = tvis.item.iImage;
 				tvis.item.lParam = 1 + id;
 
-				HTREEITEM hTreeNode = (HTREEITEM)TreeView_InsertItem(hwnd, &tvis);
+				hTreeNode = TreeView_InsertItem(hwnd, &tvis);
 				if (idSel == id) {
 					hSelNode = hTreeNode;
 					hSelParent = hParent;
@@ -941,7 +948,7 @@ void Encoding_AddToComboboxEx(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 		if (!bRecodeOnly || (mEncoding[id].uFlags & NCP_RECODE)) {
 			WCHAR *pwsz;
 
-			cbei.iItem = SendMessage(hwnd, CB_GETCOUNT, 0, 0);
+			cbei.iItem = ComboBox_GetCount(hwnd);
 			if ((pwsz = StrChr(pEE[i].wch, L';')) != NULL) {
 				lstrcpyn(wchBuf, CharNext(pwsz), COUNTOF(wchBuf));
 				if ((pwsz = StrChr(wchBuf, L';')) != NULL) {
@@ -970,14 +977,14 @@ void Encoding_AddToComboboxEx(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 	NP2HeapFree(pEE);
 
 	if (iSelItem != -1) {
-		SendMessage(hwnd, CB_SETCURSEL, iSelItem, 0);
+		ComboBox_SetCurSel(hwnd, iSelItem);
 	}
 }
 
 BOOL Encoding_GetFromComboboxEx(HWND hwnd, int *pidEncoding) {
 	COMBOBOXEXITEM cbei;
 
-	cbei.iItem = SendMessage(hwnd, CB_GETCURSEL, 0, 0);
+	cbei.iItem = ComboBox_GetCurSel(hwnd);
 	cbei.mask = CBEIF_LPARAM;
 
 	if (SendMessage(hwnd, CBEM_GETITEM, 0, (LPARAM)&cbei)) {

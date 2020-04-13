@@ -11,44 +11,46 @@ static EDITSTYLE Styles_Global[] = {
 	{ STYLE_DEFAULT, NP2StyleX_DefaultCodeStyle, L"font:$(Code)" },
 	{ STYLE_DEFAULT, NP2StyleX_DefaultTextStyle, L"font:$(Text)" },
 	{ STYLE_LINENUMBER, NP2StyleX_MarginLineNumber, L"size:-2; fore:#2B91AF" },
-	{ STYLE_BRACELIGHT, NP2StyleX_MatchingBrace, L"size:+1; bold; fore:#FF0000" },
-	{ STYLE_BRACEBAD, NP2StyleX_MatchingBraceError, L"size:+1; bold; fore:#000080" },
+	{ 0, NP2StyleX_MatchingBrace, L"fore:#02EA0A; alpha:50; outline:200" },
+	{ 0, NP2StyleX_MatchingBraceError, L"fore:#FF0000; alpha:50; outline:200" },
 	{ STYLE_CONTROLCHAR, NP2StyleX_ControlCharacter, L"size:-1" },
 	{ STYLE_INDENTGUIDE, NP2StyleX_IndentationGuide, L"fore:#FF8000" },
-	{ SCI_SETSELFORE + SCI_SETSELBACK, NP2StyleX_SelectedText, L"eolfilled; alpha:95" },
+	{ SCI_SETSELFORE + SCI_SETSELBACK, NP2StyleX_SelectedText, L"eolfilled; alpha:95; outline:50" },
 	{ SCI_SETWHITESPACEFORE + SCI_SETWHITESPACEBACK + SCI_SETWHITESPACESIZE, NP2StyleX_Whitespace, L"size:1; fore:#FF4000" },
-	{ SCI_SETCARETLINEBACK, NP2StyleX_CurrentLine, L"size:2; fore:#C2C0C3; back:#FFFF00; alpha:90" },
-	{ SCI_SETCARETFORE + SCI_SETCARETWIDTH, NP2StyleX_Caret, L"" },
+	{ 0, NP2StyleX_CurrentBlock, L"" },
+	{ SCI_SETCARETLINEBACK, NP2StyleX_CurrentLine, L"size:2; fore:#C2C0C3; back:#FFFF00; alpha:90; outline:90" },
+	{ SCI_SETCARETFORE + SCI_SETCARETWIDTH, NP2StyleX_Caret, L"back:#FF0000" },
 	{ 0, NP2StyleX_IMEIndicator, L"fore:#108010" },
 	{ SCI_SETEDGECOLOUR, NP2StyleX_LongLineMarker, L"fore:#FFC000" },
 	{ SCI_SETEXTRAASCENT + SCI_SETEXTRADESCENT, NP2StyleX_ExtraLineSpacing, L"size:2" },
 	{ 0, NP2StyleX_FoldingMarker,  L"fore:#8080FF; back:#ADD8E6" },
 	{ STYLE_FOLDDISPLAYTEXT, NP2StyleX_FoldEllipsis, L"font:$(Code); size:-2; bold; fore:#808080" },
-	{ 0, NP2StyleX_MarkOccurrences, L"alpha:100" },
+	{ 0, NP2StyleX_MarkOccurrences, L"alpha:100; outline:150" },
 	{ 0, NP2StyleX_Bookmark, L"fore:#408040; back:#00FF00; alpha:40" },
-	{ STYLE_CALLTIP, NP2StyleX_CallTips, L"" },
+	{ STYLE_CALLTIP, NP2StyleX_CallTip, L"" },
 };
 
 static EDITSTYLE Styles_2ndGlobal[] = {
 	{ STYLE_DEFAULT, NP2StyleX_DefaultCodeStyle, L"font:$(Code); fore:#D4D4D4; back:#1E1E1E" },
 	{ STYLE_DEFAULT, NP2StyleX_DefaultTextStyle, L"font:$(Text); fore:#D4D4D4; back:#1E1E1E" },
 	{ STYLE_LINENUMBER, NP2StyleX_MarginLineNumber, L"size:-2; fore:#A0A0A0; back:#2A2A2E" },
-	{ STYLE_BRACELIGHT, NP2StyleX_MatchingBrace, L"size:+1; bold; fore:#FF0000" },
-	{ STYLE_BRACEBAD, NP2StyleX_MatchingBraceError, L"size:+1; bold; fore:#FFFF00" },
+	{ 0, NP2StyleX_MatchingBrace, L"fore:#02EA0A; alpha:50; outline:150" },
+	{ 0, NP2StyleX_MatchingBraceError, L"fore:#FF0000; alpha:50; outline:200" },
 	{ STYLE_CONTROLCHAR, NP2StyleX_ControlCharacter, L"size:-1" },
 	{ STYLE_INDENTGUIDE, NP2StyleX_IndentationGuide, L"fore:#605F63" },
-	{ SCI_SETSELFORE + SCI_SETSELBACK, NP2StyleX_SelectedText, L"eolfilled; alpha:95" },
+	{ SCI_SETSELFORE + SCI_SETSELBACK, NP2StyleX_SelectedText, L"eolfilled; alpha:95; outline:50" },
 	{ SCI_SETWHITESPACEFORE + SCI_SETWHITESPACEBACK + SCI_SETWHITESPACESIZE, NP2StyleX_Whitespace, L"size:1; fore:#FF4000" },
-	{ SCI_SETCARETLINEBACK, NP2StyleX_CurrentLine, L"size:2; fore:#C2C0C3; back:#FFFF00; alpha:25" },
-	{ SCI_SETCARETFORE + SCI_SETCARETWIDTH, NP2StyleX_Caret, L"fore:#FFFFFF" },
+	{ 0, NP2StyleX_CurrentBlock, L"fore:#FF8000" },
+	{ SCI_SETCARETLINEBACK, NP2StyleX_CurrentLine, L"size:2; fore:#C2C0C3; back:#FFFF00; alpha:25; outline:25" },
+	{ SCI_SETCARETFORE + SCI_SETCARETWIDTH, NP2StyleX_Caret, L"fore:#FFFFFF; back:#00FF00" },
 	{ 0, NP2StyleX_IMEIndicator, L"fore:#108010" },
 	{ SCI_SETEDGECOLOUR, NP2StyleX_LongLineMarker, L"fore:#605F63" },
 	{ SCI_SETEXTRAASCENT + SCI_SETEXTRADESCENT, NP2StyleX_ExtraLineSpacing, L"size:2" },
 	{ 0, NP2StyleX_FoldingMarker, L"fore:#808080; back:#606060" },
 	{ STYLE_FOLDDISPLAYTEXT, NP2StyleX_FoldEllipsis, L"font:$(Code); size:-2; bold; fore:#606060" },
-	{ 0, NP2StyleX_MarkOccurrences, L"alpha:100" },
+	{ 0, NP2StyleX_MarkOccurrences, L"alpha:100; outline:150" },
 	{ 0, NP2StyleX_Bookmark, L"fore:#408040; back:#00FF00; alpha:40" },
-	{ STYLE_CALLTIP, NP2StyleX_CallTips, L"" },
+	{ STYLE_CALLTIP, NP2StyleX_CallTip, L"" },
 };
 
 EDITLEXER lexGlobal = {
@@ -92,10 +94,12 @@ EDITLEXER lex2ndTextFile = {
 };
 
 static EDITSTYLE Styles_ANSI[] = {
+	// override font used in global styles to ensure line height is same as measured from STYLE_DEFAULT.
+	// negative extra line spacing is required when using Direct2D, not required when using GDI.
 	{ STYLE_DEFAULT, NP2StyleX_Default, L"font:Lucida Console" },
-	{ STYLE_LINENUMBER, NP2StyleX_MarginLineNumber, L"font:Lucida Console; size:-2" },
-	{ STYLE_BRACELIGHT, NP2StyleX_MatchingBrace, L"size:+0" },
-	{ STYLE_BRACEBAD, NP2StyleX_MatchingBraceError, L"size:+0" },
+	{ STYLE_LINENUMBER, NP2StyleX_MarginLineNumber, L"font:Lucida Console" },
+	{ SCI_SETEXTRAASCENT + SCI_SETEXTRADESCENT, NP2StyleX_ExtraLineSpacing, L"size:-1" },
+	{ STYLE_FOLDDISPLAYTEXT, NP2StyleX_FoldEllipsis, L"font:Lucida Console" },
 };
 
 EDITLEXER lexANSI = {

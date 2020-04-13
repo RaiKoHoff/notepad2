@@ -192,8 +192,6 @@ extern HANDLE g_hDefaultHeap;
 #if _WIN32_WINNT < _WIN32_WINNT_WIN10
 extern DWORD g_uWinVer;
 #endif
-extern UINT g_uCurrentDPI;
-extern UINT g_uDefaultDPI;
 extern WCHAR szIniFile[MAX_PATH];
 
 // Operating System Version
@@ -251,12 +249,40 @@ extern WCHAR szIniFile[MAX_PATH];
 #define MDT_EFFECTIVE_DPI	0
 #endif
 
+// use large icon when window DPI is greater than or equal to this value.
+#define NP2_LARGER_ICON_SIZE_DPI	192		// 200%
+
+// current DPI for main/editor window
+extern UINT g_uCurrentDPI;
+// startup DPI for main/editor window, may different from g_uCurrentDPI after moving to a different display.
+extern UINT g_uDefaultDPI;
+
 NP2_inline int RoundToCurrentDPI(int value)	{
 	return (g_uCurrentDPI == USER_DEFAULT_SCREEN_DPI) ? value : MulDiv(g_uCurrentDPI, value, USER_DEFAULT_SCREEN_DPI);
 }
 
 NP2_inline int DefaultToCurrentDPI(int value) {
 	return (g_uCurrentDPI == g_uDefaultDPI) ? value : MulDiv(g_uCurrentDPI, value, g_uDefaultDPI);
+}
+
+NP2_inline DWORD GetIconIndexFlagsForDPI(UINT dpi) {
+	return (dpi >= NP2_LARGER_ICON_SIZE_DPI)
+			? (SHGFI_USEFILEATTRIBUTES | SHGFI_LARGEICON | SHGFI_SYSICONINDEX)
+			: (SHGFI_USEFILEATTRIBUTES | SHGFI_SMALLICON | SHGFI_SYSICONINDEX);
+}
+
+NP2_inline DWORD GetIconHandleFlagsForDPI(UINT dpi) {
+	return (dpi >= NP2_LARGER_ICON_SIZE_DPI)
+			? (SHGFI_USEFILEATTRIBUTES | SHGFI_LARGEICON | SHGFI_ICON)
+			: (SHGFI_USEFILEATTRIBUTES | SHGFI_SMALLICON | SHGFI_ICON);
+}
+
+NP2_inline DWORD GetCurrentIconIndexFlags(void) {
+	return GetIconIndexFlagsForDPI(g_uCurrentDPI);
+}
+
+NP2_inline DWORD GetCurrentIconHandleFlags(void) {
+	return GetIconHandleFlagsForDPI(g_uCurrentDPI);
 }
 
 // https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getsystemmetrics
@@ -447,13 +473,28 @@ UINT GetCurrentDPI(HWND hwnd);
 HRESULT PrivateSetCurrentProcessExplicitAppUserModelID(PCWSTR AppID);
 BOOL IsElevated(void);
 
-//BOOL SetTheme(HWND hwnd, LPCWSTR lpszTheme)
-//NP2_inline BOOL SetExplorerTheme(HWND hwnd) {
-//	return SetTheme(hwnd, L"Explorer");
-//}
+#define SetExplorerTheme(hwnd)		SetWindowTheme((hwnd), L"Explorer", NULL)
 
 HBITMAP LoadBitmapFile(LPCWSTR path);
-HBITMAP ResizeImageForCurrentDPI(HBITMAP hbmp);
+HBITMAP EnlargeImageForDPI(HBITMAP hbmp, UINT dpi);
+HBITMAP ResizeImageForDPI(HBITMAP hbmp, UINT dpi, int height);
+
+NP2_inline HBITMAP EnlargeImageForCurrentDPI(HBITMAP hbmp) {
+	return EnlargeImageForDPI(hbmp, g_uCurrentDPI);
+}
+
+NP2_inline HBITMAP ResizeImageForCurrentDPI(HBITMAP hbmp, int height) {
+	return ResizeImageForDPI(hbmp, g_uCurrentDPI, height);
+}
+
+NP2_inline HBITMAP ResizeButtonImageForCurrentDPI(HBITMAP hbmp) {
+	return ResizeImageForDPI(hbmp, g_uCurrentDPI, 16);
+}
+
+NP2_inline HBITMAP ResizeToolbarImageForCurrentDPI(HBITMAP hbmp) {
+	return ResizeImageForDPI(hbmp, g_uCurrentDPI, 16);
+}
+
 BOOL BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest);
 BOOL BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha);
 BOOL BitmapGrayScale(HBITMAP hbmp);
@@ -524,6 +565,13 @@ void MultilineEditSetup(HWND hwndDlg, int nCtlId);
 void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, WORD wBmpId);
 void MakeColorPickButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, COLORREF crColor);
 void DeleteBitmapButton(HWND hwnd, int nCtlId);
+
+#define SetWindowStyle(hwnd, style)			SetWindowLong(hwnd, GWL_STYLE, (style))
+#define SetWindowExStyle(hwnd, style)		SetWindowLong(hwnd, GWL_EXSTYLE, (style))
+
+#define ComboBox_HasText(hwnd)					(ComboBox_GetTextLength(hwnd) || CB_ERR != ComboBox_GetCurSel(hwnd))
+#define ComboBox_GetEditSelStart(hwnd)			LOWORD(ComboBox_GetEditSel(hwnd))
+#define ComboBox_GetEditSelEnd(hwnd)			HIWORD(ComboBox_GetEditSel(hwnd))
 
 #define StatusSetSimple(hwnd, b)				SendMessage(hwnd, SB_SIMPLE, (b), 0)
 #define StatusSetText(hwnd, nPart, lpszText)	SendMessage(hwnd, SB_SETTEXT, (nPart), (LPARAM)(lpszText))
