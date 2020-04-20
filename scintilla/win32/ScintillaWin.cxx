@@ -1020,7 +1020,7 @@ sptr_t ScintillaWin::WndPaint() {
 	//ElapsedPeriod ep;
 
 	// Redirect assertions to debug output and save current state
-	const bool assertsPopup = Platform::ShowAssertionPopUps(false);
+	//const bool assertsPopup = Platform::ShowAssertionPopUps(false);
 	paintState = painting;
 	PAINTSTRUCT ps = {};
 
@@ -1049,7 +1049,7 @@ sptr_t ScintillaWin::WndPaint() {
 	paintState = notPainting;
 
 	// Restore debug output state
-	Platform::ShowAssertionPopUps(assertsPopup);
+	//Platform::ShowAssertionPopUps(assertsPopup);
 
 	//Platform::DebugPrintf("Paint took %g\n", ep.Duration());
 	return 0;
@@ -2286,18 +2286,18 @@ bool ScintillaWin::FineTickerRunning(TickReason reason) noexcept {
 
 void ScintillaWin::FineTickerStart(TickReason reason, int millis, int tolerance) noexcept {
 	FineTickerCancel(reason);
-	const UINT_PTR idEvent = fineTimerStart + static_cast<UINT_PTR>(reason);
+	const UINT_PTR eventID = fineTimerStart + static_cast<UINT_PTR>(reason);
 #if _WIN32_WINNT < _WIN32_WINNT_WIN8
 	if (SetCoalescableTimerFn && tolerance) {
-		timers[reason] = SetCoalescableTimerFn(MainHWND(), idEvent, millis, nullptr, tolerance);
+		timers[reason] = SetCoalescableTimerFn(MainHWND(), eventID, millis, nullptr, tolerance);
 	} else {
-		timers[reason] = ::SetTimer(MainHWND(), idEvent, millis, nullptr);
+		timers[reason] = ::SetTimer(MainHWND(), eventID, millis, nullptr);
 	}
 #else
 	if (tolerance) {
-		timers[reason] = SetCoalescableTimer(MainHWND(), idEvent, millis, nullptr, tolerance);
+		timers[reason] = SetCoalescableTimer(MainHWND(), eventID, millis, nullptr, tolerance);
 	} else {
-		timers[reason] = ::SetTimer(MainHWND(), idEvent, millis, nullptr);
+		timers[reason] = ::SetTimer(MainHWND(), eventID, millis, nullptr);
 	}
 #endif
 }

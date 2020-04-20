@@ -6,6 +6,8 @@
 // The License.txt file describes the conditions under which this software may be distributed.
 #pragma once
 
+#define Enable_WithoutPerLine		1
+
 namespace Scintilla {
 
 // Interface to per-line data that wants to see each line insertion and deletion
@@ -15,6 +17,7 @@ public:
 	virtual void Init() = 0;
 	virtual bool IsActive() const noexcept = 0;
 	virtual void InsertLine(Sci::Line line) = 0;
+	virtual void InsertLines(Sci::Line lineFirst, Sci::Line lineCount) = 0;
 	virtual void RemoveLine(Sci::Line line) = 0;
 };
 
