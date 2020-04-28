@@ -261,12 +261,12 @@ void WordList_Free(struct WordList *pWList) {
 	}
 }
 
-void WordList_GetList(struct WordList *pWList, char* *pList) {
+char* WordList_GetList(struct WordList *pWList) {
 	struct WordNode *root = pWList->pListHead;
 	struct WordNode *path[NP2_TREE_HEIGHT_LIMIT] = { NULL };
 	int top = 0;
 	char *buf = (char *)NP2HeapAlloc(pWList->nTotalLen + 1);// additional separator
-	*pList = buf;
+	char * const pList = buf;
 
 	while (root || top > 0) {
 		if (root) {
@@ -281,14 +281,15 @@ void WordList_GetList(struct WordList *pWList, char* *pList) {
 		}
 	}
 	// trim last separator char
-	if (buf && buf != *pList) {
-		*(--buf) = 0;
+	if (buf != pList) {
+		*(--buf) = '\0';
 	}
+	return pList;
 }
 
 struct WordList *WordList_Alloc(LPCSTR pRoot, int iRootLen, BOOL bIgnoreCase) {
 	struct WordList *pWList = (struct WordList *)NP2HeapAlloc(sizeof(struct WordList));
-	pWList->pListHead =  NULL;
+	pWList->pListHead = NULL;
 	pWList->pWordStart = pRoot;
 	pWList->nWordCount = 0;
 	pWList->nTotalLen = 0;
@@ -397,6 +398,49 @@ void WordList_AddListEx(struct WordList *pWList, LPCSTR pList) {
 static inline void WordList_AddList(struct WordList *pWList, LPCSTR pList) {
 	if (StrNotEmptyA(pList)) {
 		WordList_AddListEx(pWList, pList);
+	}
+}
+
+void WordList_AddSubWord(struct WordList *pWList, LPSTR pWord, int wordLength, int iRootLen) {
+	/*
+	when pRoot is 'b', split 'bugprone-branch-clone' as following:
+	1. first hyphen: 'bugprone-branch-clone' => 'bugprone', 'branch-clone'.
+	2. second hyphen: 'bugprone-branch-clone' => 'bugprone-branch'; 'branch-clone' => 'branch'.
+	*/
+
+	LPCSTR words[8];
+	int starts[8];
+	UINT count = 0;
+
+	for (int i = 0; i < wordLength - 1; i++) {
+		const char ch = pWord[i];
+		if (ch == '.' || ch == '-' || ch == ':') {
+			if (i >= iRootLen) {
+				pWord[i] = '\0';
+				WordList_AddWord(pWList, pWord, i);
+				for (UINT j = 0; j < count; j++) {
+					const int subLen = i - starts[j];
+					if (subLen >= iRootLen) {
+						WordList_AddWord(pWList, words[j], subLen);
+					}
+				}
+				pWord[i] = ch;
+			}
+			if (ch != '.' && (pWord[i + 1] == '>' || pWord[i + 1] == ':')) {
+				++i;
+			}
+
+			const int subLen = wordLength - (i + 1);
+			LPCSTR pSubRoot = pWord + i + 1;
+			if (subLen >= iRootLen && WordList_StartsWith(pWList, pSubRoot)) {
+				WordList_AddWord(pWList, pSubRoot, subLen);
+				if (count < COUNTOF(words)) {
+					words[count] = pSubRoot;
+					starts[count] = i + 1;
+					++count;
+				}
+			}
+		}
 	}
 }
 
@@ -861,22 +905,20 @@ void AutoC_AddDocWord(struct WordList *pWList, BOOL bIgnoreCase, char prefix) {
 					break;
 				}
 
-				BOOL bFound = FALSE;
+				const Sci_Position before = wordEnd;
 				Sci_Position width = 0;
 				int chNext = SciCall_GetCharacterAndWidth(wordEnd + 1, &width);
 				if ((ch == '-' && chNext == '>') || (ch == ':' && chNext == ':')) {
 					chNext = SciCall_GetCharacterAndWidth(wordEnd + 2, &width);
 					if (IsAutoCompletionWordCharacter(chNext)) {
-						bFound = TRUE;
 						wordEnd += 2;
 					}
 				} else if (ch == '.' || (ch == '-' && !IsOperatorStyle(SciCall_GetStyleAt(wordEnd)))) {
 					if (IsAutoCompletionWordCharacter(chNext)) {
-						bFound = TRUE;
 						++wordEnd;
 					}
 				}
-				if (!bFound) {
+				if (wordEnd == before) {
 					break;
 				}
 
@@ -889,17 +931,20 @@ void AutoC_AddDocWord(struct WordList *pWList, BOOL bIgnoreCase, char prefix) {
 				}
 
 				wordEnd = SciCall_WordEndPosition(wordEnd, TRUE);
+				if (wordEnd - iPosFind > NP2_AUTOC_MAX_WORD_LENGTH) {
+					wordEnd = before;
+					break;
+				}
 				bSubWord = TRUE;
 			}
 
-			Sci_Position wordLength = wordEnd - iPosFind;
-			if (wordLength >= iRootLen) {
+			if (wordEnd - iPosFind >= iRootLen) {
 				char *pWord = pWList->wordBuf + NP2DefaultPointerAlignment;
 				BOOL bChanged = FALSE;
 				tr.lpstrText = pWord;
 				tr.chrg.cpMin = (Sci_PositionCR)iPosFind;
-				tr.chrg.cpMax = (Sci_PositionCR)((wordLength > NP2_AUTOC_MAX_WORD_LENGTH)? iPosFind + NP2_AUTOC_MAX_WORD_LENGTH : wordEnd);
-				SciCall_GetTextRange(&tr);
+				tr.chrg.cpMax = (Sci_PositionCR)min_pos(iPosFind + NP2_AUTOC_MAX_WORD_LENGTH, wordEnd);
+				int wordLength = (int)SciCall_GetTextRange(&tr);
 
 				Sci_Position before = SciCall_PositionBefore(iPosFind);
 				if (before + 1 == iPosFind) {
@@ -972,21 +1017,9 @@ void AutoC_AddDocWord(struct WordList *pWList, BOOL bIgnoreCase, char prefix) {
 
 					if (wordLength >= iRootLen) {
 						pWord[wordLength] = '\0';
-						WordList_AddWord(pWList, pWord, (int)wordLength);
+						WordList_AddWord(pWList, pWord, wordLength);
 						if (bSubWord) {
-							for (int i = 0; i < (int)wordLength - 1; i++) {
-								const char ch = pWord[i];
-								if (ch == '.' || ch == '-' || ch == ':') {
-									if (i >= iRootLen) {
-										pWord[i] = '\0';
-										WordList_AddWord(pWList, pWord, i);
-										pWord[i] = ch;
-									}
-									if (ch != '.' && (pWord[i + 1] == '>' || pWord[i + 1] == ':')) {
-										++i;
-									}
-								}
-							}
+							WordList_AddSubWord(pWList, pWord, wordLength, iRootLen);
 						}
 					}
 				}
@@ -1371,8 +1404,7 @@ static BOOL EditCompleteWordCore(int iCondition, BOOL autoInsert) {
 
 	if (bShow && bUpdated) {
 		autoCompletionConfig.iPreviousItemCount = pWList->nWordCount;
-		char *pList = NULL;
-		WordList_GetList(pWList, &pList);
+		char *pList = WordList_GetList(pWList);
 		SciCall_AutoCSetOrder(SC_ORDER_PRESORTED); // pre-sorted
 		SciCall_AutoCSetIgnoreCase(bIgnoreCase); // case sensitivity
 		//if (bIgnoreCase) {
@@ -1510,7 +1542,7 @@ void EditAutoCloseBraceQuote(int ch) {
 	case '<':
 		if ((mask & AutoInsertAngleBracket) && (pLexCurrent->rid == NP2LEX_CPP || pLexCurrent->rid == NP2LEX_CSHARP || pLexCurrent->rid == NP2LEX_JAVA)) {
 			// geriatric type, template
-			if (iCurrentStyle == SCE_C_CLASS || iCurrentStyle == SCE_C_INTERFACE || iCurrentStyle ==  SCE_C_STRUCT) {
+			if (iCurrentStyle == SCE_C_CLASS || iCurrentStyle == SCE_C_INTERFACE || iCurrentStyle == SCE_C_STRUCT) {
 				tchIns[0] = '>';
 			}
 		}

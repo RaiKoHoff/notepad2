@@ -224,7 +224,10 @@ extern WCHAR szIniFile[MAX_PATH];
 #endif
 
 #ifndef LOAD_LIBRARY_SEARCH_SYSTEM32
-#define LOAD_LIBRARY_SEARCH_SYSTEM32 0x00000800
+#define LOAD_LIBRARY_SEARCH_SYSTEM32	0x00000800
+#endif
+#ifndef LOAD_LIBRARY_AS_IMAGE_RESOURCE
+#define LOAD_LIBRARY_AS_IMAGE_RESOURCE	0x00000020
 #endif
 
 #ifndef SEE_MASK_NOZONECHECKS
@@ -602,6 +605,13 @@ NP2_inline void SendWMCommandOrBeep(HWND hwnd, UINT id) {
 	} else {
 		MessageBeep(MB_OK);
 	}
+}
+
+HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName);
+NP2_inline BOOL IsChineseTraditionalSubLang(LANGID subLang) {
+	return subLang == SUBLANG_CHINESE_TRADITIONAL
+		|| subLang == SUBLANG_CHINESE_HONGKONG
+		|| subLang == SUBLANG_CHINESE_MACAU;
 }
 
 #define GetString(id, pb, cb)	LoadString(g_hInstance, id, pb, cb)

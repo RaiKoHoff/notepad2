@@ -1,6 +1,7 @@
 // Microsoft Visual C++ generated resource script.
 //
 #include "resource.h"
+#include "config.h"
 
 #define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////
@@ -107,7 +108,7 @@ BEGIN
 		POPUP "&Launch"
 		BEGIN
 			MENUITEM "Open Containing &Folder",		IDM_FILE_OPEN_CONTAINING_FOLDER
-			MENUITEM "Reopen As &Administrator",	IDM_FILE_RELAUNCH_ELEVATED
+			MENUITEM "Open As &Administrator",		IDM_FILE_RELAUNCH_ELEVATED
 			MENUITEM SEPARATOR
 			MENUITEM "&New Window\tAlt+N",			IDM_FILE_NEWWINDOW
 			MENUITEM "&Empty Window\tAlt+0",		IDM_FILE_NEWWINDOW2
@@ -589,6 +590,16 @@ BEGIN
 			MENUITEM "Show Stat&usbar\tShift+F11",	IDM_VIEW_STATUSBAR
 			MENUITEM SEPARATOR
 			MENUITEM "Transparent &Mode\tCtrl+0",	IDM_VIEW_TRANSPARENT
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+			MENUITEM SEPARATOR
+			POPUP "&Language"
+			BEGIN
+				MENUITEM "&System Language",		IDM_LANG_USER_DEFAULT
+				MENUITEM "&English",				IDM_LANG_ENGLISH_US
+				MENUITEM "简体中文(&C)",				IDM_LANG_CHINESE_SIMPLIFIED
+				MENUITEM "繁體中文(&T)",				IDM_LANG_CHINESE_TRADITIONAL
+			END
+#endif
 		END
 		POPUP "Full Scree&n Mode"
 		BEGIN
@@ -1160,7 +1171,7 @@ BEGIN
     GROUPBOX        "Info",IDC_INFO_GROUPBOX,181,7,280,122
     ICON            IDI_STYLES,IDC_STATIC,189,19,20,20
     LTEXT           "Customize Schemes",IDC_TITLE,220,25,200,12
-    EDITTEXT        IDC_STYLEEDIT_HELP,186,40,272,86,ES_READONLY | ES_MULTILINE | NOT WS_BORDER
+    EDITTEXT        IDC_STYLEEDIT_HELP,186,40,272,86,ES_READONLY | ES_MULTILINE | NOT WS_BORDER | NOT WS_TABSTOP
     LTEXT           "Associated file&name extensions:|Style &settings:",IDC_STYLELABELS,315,230,152,8,NOT WS_VISIBLE
     LTEXT           "Built-in default value:",IDC_STYLELABEL_DEFAULT,181,162,160,8
     EDITTEXT        IDC_STYLEVALUE_DEFAULT,181,172,280,18,ES_READONLY | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL
@@ -1323,9 +1334,9 @@ CAPTION "Insert HTML/XML Tag"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     LTEXT           "&Opening tag (with attributes):",IDC_STATIC,7,7,130,8
-    EDITTEXT        IDC_MODIFY_LINE_PREFIX,7,18,250,18,ES_MULTILINE | ES_AUTOVSCROLL |  WS_VSCROLL | ES_WANTRETURN
+    EDITTEXT        IDC_MODIFY_LINE_PREFIX,7,18,250,18,ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL | ES_WANTRETURN
     LTEXT           "&Closing tag (can be edited):",IDC_MODIFY_LINE_TIP2,7,41,118,8
-    EDITTEXT        IDC_MODIFY_LINE_APPEND,7,52,250,18,ES_MULTILINE | ES_AUTOVSCROLL |  WS_VSCROLL | ES_WANTRETURN
+    EDITTEXT        IDC_MODIFY_LINE_APPEND,7,52,250,18,ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL | ES_WANTRETURN
     DEFPUSHBUTTON   "OK",IDOK,151,77,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,207,77,50,14
     SCROLLBAR       IDC_RESIZEGRIP2,7,77,10,10
@@ -1339,7 +1350,7 @@ BEGIN
     LTEXT           "Insert &before selection:",IDC_STATIC,7,7,114,8
     EDITTEXT        IDC_MODIFY_LINE_PREFIX,7,18,234,18,ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL | ES_WANTRETURN
     LTEXT           "Insert &after selection:",IDC_MODIFY_LINE_TIP2,7,41,116,8
-    EDITTEXT        IDC_MODIFY_LINE_APPEND,7,52,234,18,ES_MULTILINE |  ES_AUTOVSCROLL | WS_VSCROLL | ES_WANTRETURN
+    EDITTEXT        IDC_MODIFY_LINE_APPEND,7,52,234,18,ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL | ES_WANTRETURN
     DEFPUSHBUTTON   "OK",IDOK,135,77,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,191,77,50,14
     SCROLLBAR       IDC_RESIZEGRIP2,7,77,10,10
@@ -2064,6 +2075,10 @@ END
 
 #endif    // APSTUDIO_INVOKED
 
+#endif    // English (United States) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
 
 #ifndef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////
@@ -2074,5 +2089,3 @@ END
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED
 
-#endif    // English (United States) resources
-/////////////////////////////////////////////////////////////////////////////

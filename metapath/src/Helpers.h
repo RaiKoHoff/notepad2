@@ -112,6 +112,10 @@ extern DWORD g_uWinVer;
 #define IsWin10AndAbove()	(g_uWinVer >= _WIN32_WINNT_WIN10)
 #endif
 
+#ifndef LOAD_LIBRARY_AS_IMAGE_RESOURCE
+#define LOAD_LIBRARY_AS_IMAGE_RESOURCE	0x00000020
+#endif
+
 // https://docs.microsoft.com/en-us/windows/desktop/Memory/comparing-memory-allocation-methods
 // https://blogs.msdn.microsoft.com/oldnewthing/20120316-00/?p=8083/
 #define NP2HeapAlloc(size)			HeapAlloc(g_hDefaultHeap, HEAP_ZERO_MEMORY, (size))
@@ -354,6 +358,13 @@ LRESULT SendWMSize(HWND hwnd);
 #define CheckCmd(hmenu, id, b)  CheckMenuItem(hmenu, id, (b)? (MF_BYCOMMAND | MF_CHECKED) : (MF_BYCOMMAND | MF_UNCHECKED))
 
 #define IsButtonChecked(hwnd, uId)	(IsDlgButtonChecked(hwnd, (uId)) == BST_CHECKED)
+
+HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName);
+NP2_inline BOOL IsChineseTraditionalSubLang(LANGID subLang) {
+	return subLang == SUBLANG_CHINESE_TRADITIONAL
+		|| subLang == SUBLANG_CHINESE_HONGKONG
+		|| subLang == SUBLANG_CHINESE_MACAU;
+}
 
 #define GetString(id, pb, cb)	LoadString(g_hInstance, id, pb, cb)
 #define StrEnd(pStart)			((pStart) + lstrlen(pStart))

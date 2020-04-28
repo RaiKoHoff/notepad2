@@ -790,6 +790,37 @@ LRESULT SendWMSize(HWND hwnd) {
 	return SendMessage(hwnd, WM_SIZE, SIZE_RESTORED, MAKELPARAM(rc.right, rc.bottom));
 }
 
+HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName) {
+	if (lang == LANG_USER_DEFAULT) {
+		lang = GetUserDefaultUILanguage();
+	}
+
+	LPCWSTR folder = NULL;
+	const LANGID subLang = SUBLANGID(lang);
+	switch (PRIMARYLANGID(lang)) {
+	case LANG_ENGLISH:
+		break;
+	case LANG_CHINESE:
+		folder = IsChineseTraditionalSubLang(subLang) ? L"zh-Hant" : L"zh-Hans";
+		break;
+	}
+
+	if (folder == NULL) {
+		return NULL;
+	}
+
+	WCHAR path[MAX_PATH];
+	GetModuleFileName(NULL, path, COUNTOF(path));
+	PathRemoveFileSpec(path);
+	PathAppend(path, L"locale");
+	PathAppend(path, folder);
+	PathAppend(path, dllName);
+
+	const DWORD flags = IsVistaAndAbove() ? (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE) : LOAD_LIBRARY_AS_DATAFILE;
+	HMODULE hDLL = LoadLibraryEx(path, NULL, flags);
+	return hDLL;
+}
+
 //=============================================================================
 //
 //  PathRelativeToApp()
@@ -1400,7 +1431,7 @@ HDROP CreateDropHandle(LPCWSTR lpFileName) {
 //  Execute a DDE command (Msg, App, Topic)
 //
 //
-HDDEDATA CALLBACK DdeCallback(UINT uType, UINT uFmt, HCONV hconv, HSZ hsz1, HSZ hsz2, HDDEDATA hdata, ULONG_PTR  dwData1, ULONG_PTR  dwData2) {
+HDDEDATA CALLBACK DdeCallback(UINT uType, UINT uFmt, HCONV hconv, HSZ hsz1, HSZ hsz2, HDDEDATA hdata, ULONG_PTR dwData1, ULONG_PTR dwData2) {
 	UNREFERENCED_PARAMETER(uFmt);
 	UNREFERENCED_PARAMETER(hconv);
 	UNREFERENCED_PARAMETER(hsz1);

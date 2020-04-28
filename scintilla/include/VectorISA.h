@@ -28,22 +28,16 @@
 #else
 	#define NP2_TARGET_ARM64	0
 	#define NP2_TARGET_ARM32	0
-	#ifndef NP2_USE_SSE2
-		// SSE2 enabled by default
-		#define NP2_USE_SSE2	1
-	#endif
+	// SSE2 enabled by default
+	#define NP2_USE_SSE2		1
 
 	// Clang & GCC use -mavx2 -mpopcnt -mbmi (to enable tzcnt).
 	// MSVC use /arch:AVX2
-	#if defined(_WIN64) && !defined(NP2_USE_AVX2)
-		#if defined(__AVX2__)
-			#define NP2_USE_AVX2	1
-		#else
-			#define NP2_USE_AVX2	0
-		#endif
+	#if defined(_WIN64) && defined(__AVX2__)
+		#define NP2_USE_AVX2	1
 	#else
 		#define NP2_USE_AVX2	0
-	#endif // NP2_USE_AVX2
+	#endif
 
 	// TODO: use __isa_enabled/__isa_available in MSVC build to dynamic enable AVX2 code.
 	//#if defined(_MSC_VER) || (defined(__has_include) && __has_include(<isa_availability.h>))
@@ -65,28 +59,31 @@
 #endif
 
 // for C++20, use functions from <bit> header.
+#if !(NP2_TARGET_ARM64 || NP2_TARGET_ARM32)
 
 // count trailing zero bits
+//!NOTE: TZCNT is compatible with BSF for non-zero value;
+//! but LZCNT is not compatible with BSR, LZCNT = 31 - BSR.
 #if defined(__clang__) || defined(__GNUC__)
-	#define np2_ctz		__builtin_ctz
-#elif defined(_MSC_VER) && !(NP2_TARGET_ARM64 || NP2_TARGET_ARM32)
-	//! NOTE: TZCNT is compatible with BSF; but LZCNT is not compatible with BSR, LZCNT = 31 - BSR.
-	#define np2_ctz		_tzcnt_u32
-#else
+	#define np2_ctz(x)		__builtin_ctz(x)
+#elif defined(_MSC_VER) || defined(__INTEL_COMPILER_BUILD_DATE)
+	#define np2_ctz(x)		_tzcnt_u32(x)
+#elif defined(_WIN32)
+	// https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=bsf
 	static __forceinline uint32_t np2_ctz(uint32_t value) NP2_noexcept {
 		unsigned long trailing;
 		_BitScanForward(&trailing, value);
 		return trailing;
 	}
-
-	// https://graphics.stanford.edu/~seander/bithacks.html#ZerosOnRightParallel
+#else
+	#define np2_ctz(x)		_bit_scan_forward(x)
 #endif
 
 // count bits set
 #if defined(__clang__) || defined(__GNUC__)
-	#define np2_popcount	__builtin_popcount
+	#define np2_popcount(x)	__builtin_popcount(x)
 #elif NP2_USE_AVX2
-	#define np2_popcount	_mm_popcnt_u32
+	#define np2_popcount(x)	_mm_popcnt_u32(x)
 #else
 	// https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
 	// Bit Twiddling Hacks copyright 1997-2005 Sean Eron Anderson
@@ -96,6 +93,8 @@
 		return (((v + (v >> 4)) & 0x0F0F0F0FU) * 0x01010101U) >> 24;
 	}
 
-	//#define np2_popcount	__popcnt
-	#define np2_popcount	bth_popcount
+	//#define np2_popcount(x)	__popcnt(x)
+	#define np2_popcount(x)	bth_popcount(x)
+#endif
+
 #endif

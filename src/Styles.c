@@ -2789,8 +2789,8 @@ BOOL Style_MaybeBinaryFile(LPCWSTR lpszFile) {
 #if 1
 	UNREFERENCED_PARAMETER(lpszFile);
 	/* Test C0 Control Character
-	These character is not reused in most text encoding, and doesn't appears in normal text file.
-	Most binary file has reserved fields (most are NULL) or small values in it's header.
+	These characters are not reused in most text encodings, and do not appear in normal text files.
+	Most binary files have reserved fields (mostly zeros) or small values in the header.
 	Treat the file as binary when we find two adjacent C0 control characters
 	(very common in file header) or some (currently set to 8) C0 control characters. */
 
@@ -2802,7 +2802,7 @@ BOOL Style_MaybeBinaryFile(LPCWSTR lpszFile) {
 		return FALSE; // empty file
 	}
 
-	const uint8_t * const end  = ptr + headerLen;
+	const uint8_t * const end = ptr + headerLen;
 	UINT count = 0;
 	while (ptr < end) {
 		uint8_t ch = *ptr++;
@@ -4790,7 +4790,7 @@ static void Lexer_OnCheckStateChanged(HWND hwndTV, HTREEITEM hFavoriteNode, HTRE
 			WCHAR szTitle[4] = {0};
 			//item.mask = TVIF_TEXT;
 			item.pszText = szTitle;
-			item.cchTextMax  = COUNTOF(szTitle);
+			item.cchTextMax = COUNTOF(szTitle);
 
 			hParent = TreeView_GetNextSibling(hwndTV, hParent);
 			found = FALSE;

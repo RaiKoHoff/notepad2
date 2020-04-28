@@ -12,7 +12,7 @@ Latest development build [![Build status](https://ci.appveyor.com/api/projects/s
 Or build from source, see the [Wiki](https://github.com/zufuliu/notepad2/wiki/Build-Notepad2).
 
 ## [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots)
-![v4.19.06](https://raw.githubusercontent.com/wiki/zufuliu/notepad2/screenshots/v4.19.06.png)
+![v4.20.04](https://raw.githubusercontent.com/wiki/zufuliu/notepad2/screenshots/v4.20.04.png)
 
 ## Changes compared to the official [Notepad2](http://www.flos-freeware.ch/notepad2.html) or [Notepad2-mod](https://xhmikosr.github.io/notepad2-mod/):
 
@@ -195,7 +195,8 @@ Or build from source, see the [Wiki](https://github.com/zufuliu/notepad2/wiki/Bu
 * [Build Notepad2 and metapath](https://github.com/zufuliu/notepad2/wiki/Build-Notepad2)
 * [Localization](https://github.com/zufuliu/notepad2/wiki/Localization)
 	* [한국어](https://teus.me/category/IT/Notepad2)
-	* [简体中文](https://github.com/yfdyh000/notepad2)
+	* [简体中文](https://github.com/zufuliu/notepad2/tree/master/locale/zh-Hans)
+	* [繁體中文](https://github.com/zufuliu/notepad2/tree/master/locale/zh-Hant)
 * [Notepad2 Wiki](https://github.com/zufuliu/notepad2/wiki)
 * Other projects based on (original) Notepad2 or Notepad2-mod:
 	* [Notepad3](https://github.com/rizonesoft/Notepad3)

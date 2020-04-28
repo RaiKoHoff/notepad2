@@ -456,7 +456,7 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	const uint8_t * const end = ptr + cbData - 1;
 
 #if NP2_USE_AVX2
-	#define LAST_CR_MASK	(1U << (sizeof(__m256i) - 1))
+	const uint32_t LAST_CR_MASK = (1U << (sizeof(__m256i) - 1));
 	const __m256i vectCR = _mm256_set1_epi8('\r');
 	const __m256i vectLF = _mm256_set1_epi8('\n');
 	while (ptr + sizeof(__m256i) <= end) {
@@ -498,11 +498,9 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 			lineCountLF += np2_popcount(maskLF);
 		}
 	}
-
-	#undef LAST_CR_MASK
 	// end NP2_USE_AVX2
 #elif NP2_USE_SSE2
-	#define LAST_CR_MASK	(1U << (2*sizeof(__m128i) - 1))
+	const uint32_t LAST_CR_MASK = (1U << (2*sizeof(__m128i) - 1));
 	const __m128i vectCR = _mm_set1_epi8('\r');
 	const __m128i vectLF = _mm_set1_epi8('\n');
 	while (ptr + 2*sizeof(__m128i) <= end) {
@@ -547,8 +545,6 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 			lineCountLF += np2_popcount(maskLF);
 		}
 	}
-
-	#undef LAST_CR_MASK
 	// end NP2_USE_SSE2
 #endif
 
@@ -1140,7 +1136,8 @@ void EditTitleCase(void) {
 		}
 		NP2HeapFree(pszMappedW);
 	} else {
-#if 1 // BOOKMARK_EDITION
+#if 1
+		// BOOKMARK_EDITION
 		//Slightly enhanced function to make Title Case:
 		//Added some '-characters and bPrevWasSpace makes it better (for example "'Don't'" will now work)
 		BOOL bNewWord = TRUE;
@@ -1296,7 +1293,7 @@ LPWSTR EditURLEncodeSelection(int *pcchEscaped, BOOL bTrim) {
 	MultiByteToWideChar(cpEdit, 0, pszText, (int)iSelCount, pszTextW, (int)(NP2HeapSize(pszTextW) / sizeof(WCHAR)));
 
 	// https://docs.microsoft.com/en-us/windows/desktop/api/shlwapi/nf-shlwapi-urlescapew
-	LPWSTR pszEscapedW = (LPWSTR)NP2HeapAlloc(NP2HeapSize(pszTextW) * 3);  // '&', H1, H0
+	LPWSTR pszEscapedW = (LPWSTR)NP2HeapAlloc(NP2HeapSize(pszTextW) * 3); // '&', H1, H0
 
 	DWORD cchEscapedW = (int)NP2HeapSize(pszEscapedW) / sizeof(WCHAR);
 	UrlEscape(pszTextW, pszEscapedW, &cchEscapedW, URL_ESCAPE_SEGMENT_ONLY);
@@ -1681,7 +1678,7 @@ void EditHex2Char(void) {
 						ci = ci * 16 + (*p++ - '0');
 					} else if (*p >= 'a' && *p <= 'f') {
 						ci = ci * 16 + (*p++ - 'a') + 10;
-					} else if (*p >= 'A' && *p <=  'F') {
+					} else if (*p >= 'A' && *p <= 'F') {
 						ci = ci * 16 + (*p++ - 'A') + 10;
 					} else {
 						break;
@@ -1850,8 +1847,8 @@ void EditConvertNumRadix(int radix) {
 						ci += (*p++ - '0');
 					} else if (*p >= 'a' && *p <= 'f') {
 						ci <<= 4;
-						ci += (*p++ - 'a') + 10;;
-					} else if (*p >= 'A' && *p <=  'F') {
+						ci += (*p++ - 'a') + 10;
+					} else if (*p >= 'A' && *p <= 'F') {
 						ci <<= 4;
 						ci += (*p++ - 'A') + 10;
 					} else if (*p == '_') {
@@ -2129,7 +2126,7 @@ void EditSpacesToTabs(int nTabWidth, BOOL bOnlyIndentingWS) {
 	tr.chrg.cpMin = (Sci_PositionCR)iSelStart;
 	tr.chrg.cpMax = (Sci_PositionCR)iSelEnd;
 	tr.lpstrText = pszText;
-	SciCall_GetTextRange(&tr);;
+	SciCall_GetTextRange(&tr);
 
 	const UINT cpEdit = SciCall_GetCodePage();
 
@@ -2147,7 +2144,7 @@ void EditSpacesToTabs(int nTabWidth, BOOL bOnlyIndentingWS) {
 	WCHAR space[256];
 	for (int iTextW = 0; iTextW < cchTextW; iTextW++) {
 		const WCHAR w = pszTextW[iTextW];
-		if ((w == L' ' || w == L'\t') && (!bOnlyIndentingWS ||  bIsLineStart)) {
+		if ((w == L' ' || w == L'\t') && (!bOnlyIndentingWS || bIsLineStart)) {
 			space[j++] = w;
 			if (j == nTabWidth - i % nTabWidth || w == L'\t') {
 				if (j > 1 || pszTextW[iTextW + 1] == L' ' || pszTextW[iTextW + 1] == L'\t') {
@@ -3122,7 +3119,7 @@ void EditToggleLineComments(LPCWSTR pwszComment, BOOL bInsertAtStart) {
 		tr.chrg.cpMin = (Sci_PositionCR)iIndentPos;
 		tr.chrg.cpMax = tr.chrg.cpMin + min_i(31, cchComment);
 		tr.lpstrText = tchBuf;
-		SciCall_GetTextRange(&tr);;
+		SciCall_GetTextRange(&tr);
 
 		Sci_Position iCommentPos;
 		if (_strnicmp(tchBuf, mszComment, cchComment) == 0) {
@@ -3670,7 +3667,7 @@ void EditWrapToColumn(int nColumn/*, int nTabWidth*/) {
 	tr.chrg.cpMin = (Sci_PositionCR)iSelStart;
 	tr.chrg.cpMax = (Sci_PositionCR)iSelEnd;
 	tr.lpstrText = pszText;
-	SciCall_GetTextRange(&tr);;
+	SciCall_GetTextRange(&tr);
 
 	const UINT cpEdit = SciCall_GetCodePage();
 	const int cchTextW = MultiByteToWideChar(cpEdit, 0, pszText, (int)iSelCount, pszTextW, (int)(NP2HeapSize(pszTextW) / sizeof(WCHAR)));
@@ -3831,7 +3828,7 @@ void EditJoinLinesEx(void) {
 	tr.chrg.cpMin = (Sci_PositionCR)iSelStart;
 	tr.chrg.cpMax = (Sci_PositionCR)iSelEnd;
 	tr.lpstrText = pszText;
-	SciCall_GetTextRange(&tr);;
+	SciCall_GetTextRange(&tr);
 
 	char szEOL[] = "\r\n";
 	int cchEOL = 2;
@@ -4329,7 +4326,7 @@ void EditGetExcerpt(LPWSTR lpszExcerpt, DWORD cchExcerpt) {
 	tr.chrg.cpMin = (Sci_PositionCR)iSelStart;
 	tr.chrg.cpMax = (Sci_PositionCR)iSelEnd;
 	tr.lpstrText = pszText;
-	SciCall_GetTextRange(&tr);;
+	SciCall_GetTextRange(&tr);
 	const UINT cpEdit = SciCall_GetCodePage();
 	MultiByteToWideChar(cpEdit, 0, pszText, (int)iSelCount, pszTextW, (int)(NP2HeapSize(pszTextW) / sizeof(WCHAR)));
 
@@ -4407,7 +4404,6 @@ void EditSelectLine(void) {
 }
 
 static LRESULT CALLBACK AddBackslashEditProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-	UNREFERENCED_PARAMETER(uIdSubclass);
 	UNREFERENCED_PARAMETER(dwRefData);
 
 	switch (umsg) {
@@ -4432,6 +4428,10 @@ static LRESULT CALLBACK AddBackslashEditProc(HWND hwnd, UINT umsg, WPARAM wParam
 		}
 	}
 	break;
+
+	case WM_NCDESTROY:
+		RemoveWindowSubclass(hwnd, AddBackslashEditProc, uIdSubclass);
+		break;
 	}
 
 	return DefSubclassProc(hwnd, umsg, wParam, lParam);
@@ -6638,7 +6638,7 @@ char* EditGetStringAroundCaret(LPCSTR delimiters) {
 
 	char *mszSelection = (char *)NP2HeapAlloc(iLineEnd - iLineStart + 1);
 	struct Sci_TextRange tr = { { (Sci_PositionCR)iLineStart, (Sci_PositionCR)iLineEnd }, mszSelection };
-	SciCall_GetTextRange(&tr);;
+	SciCall_GetTextRange(&tr);
 
 	return mszSelection;
 }
@@ -7172,11 +7172,11 @@ LRESULT CALLBACK SciThemedWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lP
 #define FOLD_CHILDREN SCMOD_CTRL
 #define FOLD_SIBLINGS SCMOD_SHIFT
 
-#define MAX_EDIT_TOGGLE_FOLD_LEVEL		126	// for Toggle Folds > Current Level
-// uint16_t is used because max fold level <= SC_FOLDLEVELNUMBERMASK - SC_FOLDLEVELBASE + 1
+// max level for Toggle Folds for Current Level for indentation based lexers.
+#define MAX_EDIT_TOGGLE_FOLD_LEVEL		63
 struct FoldLevelStack {
-	uint16_t levelCount; // 1-based level number at current header line
-	uint16_t levelStack[MAX_EDIT_TOGGLE_FOLD_LEVEL + 1];
+	int levelCount; // 1-based level number at current header line
+	int levelStack[MAX_EDIT_TOGGLE_FOLD_LEVEL];
 };
 
 static void FoldLevelStack_Push(struct FoldLevelStack *levelStack, int level) {
@@ -7184,7 +7184,7 @@ static void FoldLevelStack_Push(struct FoldLevelStack *levelStack, int level) {
 		--levelStack->levelCount;
 	}
 
-	levelStack->levelStack[levelStack->levelCount] = (uint16_t)level;
+	levelStack->levelStack[levelStack->levelCount] = level;
 	++levelStack->levelCount;
 }
 
@@ -7357,7 +7357,7 @@ void FoldToggleCurrentLevel(FOLD_ACTION action) {
 
 	if (level != 0 && IsFoldIndentationBased(pLexCurrent->iLexer)) {
 		level = 0;
-		while (line != 0 && level < MAX_EDIT_TOGGLE_FOLD_LEVEL) {
+		while (line != 0 && level < MAX_EDIT_TOGGLE_FOLD_LEVEL - 1) {
 			line = SciCall_GetFoldParent(line);
 			if (line < 0) {
 				break;

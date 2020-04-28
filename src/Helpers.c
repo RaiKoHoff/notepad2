@@ -1055,7 +1055,6 @@ void ResizeDlgCtl(HWND hwndDlg, int nCtlId, int dx, int dy) {
 // https://support.microsoft.com/en-us/help/102589/how-to-use-the-enter-key-from-edit-controls-in-a-dialog-box
 // Ctrl+A: https://stackoverflow.com/questions/10127054/select-all-text-in-edit-contol-by-clicking-ctrla
 static LRESULT CALLBACK MultilineEditProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-	UNREFERENCED_PARAMETER(uIdSubclass);
 	UNREFERENCED_PARAMETER(dwRefData);
 
 	switch (umsg) {
@@ -1078,9 +1077,18 @@ static LRESULT CALLBACK MultilineEditProc(HWND hwnd, UINT umsg, WPARAM wParam, L
 			return TRUE;
 		}
 		if (wParam == VK_TAB && KeyboardIsKeyDown(VK_SHIFT)) {
-			// focus on next control: GetNextDlgTabItem(GetParent(hwnd), hwnd)
-			// TODO: find first control when hwnd is last tab item on this dialog: GetNextDlgTabItem() returns hwnd
-			PostMessage(GetParent(hwnd), WM_NEXTDLGCTL, 0, FALSE);
+			// normally focus on previous control that has the WS_TABSTOP style set.
+			// focus on next control when the ES_WANTRETURN style is set (acts as normal Tab key).
+			const BOOL previous = (GetWindowStyle(hwnd) & ES_WANTRETURN) == 0;
+			HWND hwndParent = GetParent(hwnd);
+			HWND hwndCtl = GetNextDlgTabItem(hwndParent, hwnd, previous);
+			if (hwndCtl == hwnd) {
+				hwndCtl = GetNextDlgTabItem(hwndParent, hwnd, !previous);
+			}
+			// TODO: find first control when hwnd is last tab item on this dialog.
+			if (hwndCtl != hwnd) {
+				PostMessage(hwndParent, WM_NEXTDLGCTL, (WPARAM)hwndCtl, TRUE);
+			}
 		}
 		break;
 
@@ -1091,6 +1099,12 @@ static LRESULT CALLBACK MultilineEditProc(HWND hwnd, UINT umsg, WPARAM wParam, L
 		}
 		return result;
 	}
+
+	case WM_NCDESTROY:
+		// Safer subclassing
+		// https://devblogs.microsoft.com/oldnewthing/20031111-00/?p=41883
+		RemoveWindowSubclass(hwnd, MultilineEditProc, uIdSubclass);
+		break;
 	}
 
 	return DefSubclassProc(hwnd, umsg, wParam, lParam);
@@ -1299,6 +1313,37 @@ INT GetCheckedRadioButton(HWND hwnd, int nIDFirstButton, int nIDLastButton) {
 		}
 	}
 	return -1; // IDC_STATIC;
+}
+
+HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName) {
+	if (lang == LANG_USER_DEFAULT) {
+		lang = GetUserDefaultUILanguage();
+	}
+
+	LPCWSTR folder = NULL;
+	const LANGID subLang = SUBLANGID(lang);
+	switch (PRIMARYLANGID(lang)) {
+	case LANG_ENGLISH:
+		break;
+	case LANG_CHINESE:
+		folder = IsChineseTraditionalSubLang(subLang) ? L"zh-Hant" : L"zh-Hans";
+		break;
+	}
+
+	if (folder == NULL) {
+		return NULL;
+	}
+
+	WCHAR path[MAX_PATH];
+	GetModuleFileName(NULL, path, COUNTOF(path));
+	PathRemoveFileSpec(path);
+	PathAppend(path, L"locale");
+	PathAppend(path, folder);
+	PathAppend(path, dllName);
+
+	const DWORD flags = IsVistaAndAbove() ? (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE) : LOAD_LIBRARY_AS_DATAFILE;
+	HMODULE hDLL = LoadLibraryEx(path, NULL, flags);
+	return hDLL;
 }
 
 //=============================================================================
