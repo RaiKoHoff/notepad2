@@ -449,6 +449,23 @@ NP2_inline void IniSectionSetBoolEx(IniSectionOnSave *section, LPCWSTR key, BOOL
 	}
 }
 
+#define NP2RegSubKey_ContextMenu	L"*\\shell\\Notepad2"
+#define NP2RegSubKey_JumpList		L"Applications\\Notepad2.exe"
+
+LPWSTR Registry_GetString(HKEY hKey, LPCWSTR valueName);
+LSTATUS Registry_SetString(HKEY hKey, LPCWSTR valueName, LPCWSTR lpszText);
+#define Registry_GetDefaultString(hKey)				Registry_GetString((hKey), NULL)
+#define Registry_SetDefaultString(hKey, lpszText)	Registry_SetString((hKey), NULL, (lpszText))
+NP2_inline LSTATUS Registry_CreateKey(HKEY hKey, LPCWSTR lpSubKey, PHKEY phkResult) {
+	return RegCreateKeyEx(hKey, lpSubKey, 0, NULL, 0, KEY_WRITE, NULL, phkResult, NULL);
+}
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+#define Registry_DeleteTree(hKey, lpSubKey)			RegDeleteTree((hKey), (lpSubKey))
+#else
+LSTATUS Registry_DeleteTree(HKEY hKey, LPCWSTR lpSubKey);
+#endif
+
+
 typedef struct DStringW {
 	LPWSTR buffer;
 	INT capacity;
@@ -478,6 +495,7 @@ BOOL IsElevated(void);
 
 #define SetExplorerTheme(hwnd)		SetWindowTheme((hwnd), L"Explorer", NULL)
 
+BOOL FindUserResourcePath(LPCWSTR path, LPWSTR outPath);
 HBITMAP LoadBitmapFile(LPCWSTR path);
 HBITMAP EnlargeImageForDPI(HBITMAP hbmp, UINT dpi);
 HBITMAP ResizeImageForDPI(HBITMAP hbmp, UINT dpi, int height);

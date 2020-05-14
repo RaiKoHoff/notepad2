@@ -204,6 +204,10 @@ NP2_inline BOOL SciCall_CanPaste(void) {
 	return (BOOL)SciCall(SCI_CANPASTE, 0, 0);
 }
 
+NP2_inline void SciCall_CopyAllowLine(void) {
+	SciCall(SCI_COPYALLOWLINE, 0, 0);
+}
+
 NP2_inline void SciCall_CopyRange(Sci_Position start, Sci_Position end) {
 	SciCall(SCI_COPYRANGE, start, end);
 }
@@ -334,6 +338,10 @@ NP2_inline Sci_Position SciCall_GetSelText(char *buffer) {
 
 NP2_inline BOOL SciCall_IsRectangleSelection(void) {
 	return (BOOL)SciCall(SCI_SELECTIONISRECTANGLE, 0, 0);
+}
+
+NP2_inline void SciCall_SetSelectionMode(int selectionMode) {
+	SciCall(SCI_SETSELECTIONMODE, selectionMode, 0);
 }
 
 NP2_inline int SciCall_GetSelectionMode(void) {
@@ -1081,12 +1089,12 @@ NP2_inline void SciCall_LineDelete(void) {
 	SciCall(SCI_LINEDELETE, 0, 0);
 }
 
-NP2_inline void SciCall_LineCut(void) {
-	SciCall(SCI_LINECUT, 0, 0);
+NP2_inline void SciCall_LineCut(BOOL lineCopy) {
+	SciCall(SCI_LINECUT, lineCopy, 0);
 }
 
-NP2_inline void SciCall_LineCopy(void) {
-	SciCall(SCI_LINECOPY, 0, 0);
+NP2_inline void SciCall_LineCopy(BOOL lineCopy) {
+	SciCall(SCI_LINECOPY, lineCopy, 0);
 }
 
 NP2_inline void SciCall_LineTranspose(void) {

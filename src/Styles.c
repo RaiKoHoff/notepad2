@@ -135,8 +135,8 @@ extern EDITLEXER lexYAML;
 // 3. other lexers, grouped by first letter, sorted alphabetical (case insensitive).
 #define LEXER_INDEX_GENERAL		(LEXER_INDEX_MATCH + 2)	// global styles and lexers for text file
 #define GENERAL_LEXER_COUNT		(ALL_LEXER_COUNT - LEXER_INDEX_GENERAL)
-#define MAX_FAVORITE_SCHEMES_COUNT			31
-#define MAX_FAVORITE_SCHEMES_CONFIG_SIZE	96	// 1 + MAX_FAVORITE_SCHEMES_COUNT*3
+#define MAX_FAVORITE_SCHEMES_CONFIG_SIZE	128	// 1 + MAX_FAVORITE_SCHEMES_COUNT*(3 + 1)
+#define MAX_FAVORITE_SCHEMES_SAFE_SIZE		(MAX_FAVORITE_SCHEMES_CONFIG_SIZE - 5) // three digits, one space and NULL
 // This array holds all the lexers...
 static PEDITLEXER pLexArray[ALL_LEXER_COUNT] = {
 	&lexGlobal,
@@ -307,6 +307,7 @@ int		cyStyleCustomizeDlg;
 static LPWSTR g_AllFileExtensions = NULL;
 
 // Notepad2.c
+extern HWND hwndMain;
 extern int	iEncoding;
 extern int	g_DOSEncoding;
 extern int	iDefaultCodePage;
@@ -648,7 +649,6 @@ void Style_SetFavoriteSchemes(void) {
 }
 
 void Style_GetFavoriteSchemes(void) {
-	const int maxCch = MAX_FAVORITE_SCHEMES_CONFIG_SIZE - 3; // two digits, one space and NULL
 	WCHAR *wch = favoriteSchemesConfig;
 	int len = 0;
 	int count = 0;
@@ -660,7 +660,7 @@ void Style_GetFavoriteSchemes(void) {
 
 		len += wsprintf(wch + len, L"%i ", pLex->rid - NP2LEX_TEXTFILE);
 		++count;
-		if (count == MAX_FAVORITE_SCHEMES_COUNT || len > maxCch) {
+		if (count == MAX_FAVORITE_SCHEMES_COUNT || len > MAX_FAVORITE_SCHEMES_SAFE_SIZE) {
 			break;
 		}
 	}
@@ -676,7 +676,7 @@ static int __cdecl CmpEditLexerByOrder(const void *p1, const void *p2) {
 	LPCEDITLEXER pLex2 = *(LPCEDITLEXER *)(p2);
 	int cmp = pLex2->iFavoriteOrder - pLex1->iFavoriteOrder;
 	// TODO: sort by localized name
-#if NP2_ENABLE_LEXER_NAME_LOCALIZATION
+#if NP2_ENABLE_LOCALIZE_LEXER_NAME
 #endif
 	cmp = cmp ? cmp : StrCmpIW(pLex1->pszName, pLex2->pszName);
 	return cmp;
@@ -686,7 +686,7 @@ static int __cdecl CmpEditLexerByName(const void *p1, const void *p2) {
 	LPCEDITLEXER pLex1 = *(LPCEDITLEXER *)(p1);
 	LPCEDITLEXER pLex2 = *(LPCEDITLEXER *)(p2);
 	// TODO: sort by localized name
-#if NP2_ENABLE_LEXER_NAME_LOCALIZATION
+#if NP2_ENABLE_LOCALIZE_LEXER_NAME
 #endif
 	int cmp = StrCmpIW(pLex1->pszName, pLex2->pszName);
 	return cmp;
@@ -728,11 +728,6 @@ void Style_Load(void) {
 	// auto select
 	bAutoSelect = IniSectionGetBool(pIniSection, L"AutoSelect", 1);
 
-	strValue = IniSectionGetValue(pIniSection, L"DarkTheme.ini");
-	if (StrNotEmpty(strValue)) {
-		lstrcpyn(darkStyleThemeFilePath, strValue, COUNTOF(darkStyleThemeFilePath));
-	}
-
 	// file extensions
 	LoadIniSection(INI_SECTION_NAME_FILE_EXTENSIONS, pIniSectionBuf, cchIniSection);
 	IniSectionParse(pIniSection, pIniSectionBuf);
@@ -750,6 +745,7 @@ void Style_Load(void) {
 	if (np2StyleTheme == StyleTheme_Dark) {
 		FindDarkThemeFile();
 	}
+
 	Style_LoadOneEx(pLexGlobal, pIniSection, pIniSectionBuf, cchIniSection);
 	Style_LoadOneEx(pLexArray[iDefaultLexerIndex], pIniSection, pIniSectionBuf, cchIniSection);
 
@@ -1099,7 +1095,7 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 	uint8_t *attr = currentLexKeywordAttr;
 
 	// Code Snippet
-	attr[NUMKEYWORD - 1] = KeywordAttr_NoLexer;
+	attr[KEYWORDSET_MAX] = KeywordAttr_NoLexer;
 
 	switch (pLexNew->rid) {
 	case NP2LEX_AU3:
@@ -1436,7 +1432,7 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 		Style_UpdateLexerKeywords(pLexNew);
 		Style_UpdateLexerKeywordAttr(pLexNew);
 		// Add keyword lists
-		for (int i = 0; i < NUMKEYWORD; i++) {
+		for (int i = 0; i < KEYWORDSET_MAX; i++) {
 			const char *pKeywords = pLexNew->pKeyWords->pszKeyWords[i];
 			const uint8_t attr = currentLexKeywordAttr[i];
 			if (StrNotEmptyA(pKeywords) && !(attr & KeywordAttr_NoLexer)) {
@@ -2281,119 +2277,33 @@ PEDITLEXER Style_AutoDetect(BOOL bDotFile) {
 //
 // Style_GetCurrentLexerName()
 //
-LPCWSTR Style_GetCurrentLexerDisplayName(LPWSTR lpszName, int cchName) {
-	if (GetString(pLexCurrent->rid, lpszName, cchName)) {
+LPCWSTR Style_GetCurrentLexerName(LPWSTR lpszName, int cchName) {
+	if (np2LexLangIndex == 0) {
+#if NP2_ENABLE_LOCALIZE_LEXER_NAME
+		if (GetString(pLexCurrent->rid, lpszName, cchName)) {
+			return lpszName;
+		}
+#endif
+		return pLexCurrent->pszName;
+	}
+
+	HMENU hmenu = GetMenu(hwndMain);
+	MENUITEMINFO mii;
+	mii.cbSize = sizeof(MENUITEMINFO);
+	mii.fMask = MIIM_STRING;
+	mii.dwTypeData = lpszName;
+	mii.cch = cchName;
+	if (GetMenuItemInfo(hmenu, np2LexLangIndex, FALSE, &mii)) {
+		// remove '&' from access key
+		LPWSTR p = StrChr(lpszName, L'&');
+		if (p != NULL) {
+			const int len = lstrlen(p) - 1;
+			MoveMemory(p, p + 1, sizeof(WCHAR) * len);
+			p[len] = L'\0';
+		}
 		return lpszName;
 	}
-	return Style_GetCurrentLexerName();
-}
-
-LPCWSTR Style_GetCurrentLexerName(void) {
-	if (np2LexLangIndex == 0) {
-		return pLexCurrent->pszName;
-	}
-	switch (np2LexLangIndex) {
-	case IDM_LEXER_TEXTFILE:
-	case IDM_LEXER_2NDTEXTFILE:
-		return pLexCurrent->pszName;
-	case IDM_LEXER_WEB:
-		return L"Web Source Code";
-	case IDM_LEXER_PHP:
-		return L"PHP Page";
-	case IDM_LEXER_JSP:
-		return L"JSP Page";
-	case IDM_LEXER_ASPX_CS:
-		return L"ASP.NET (C#)";
-	case IDM_LEXER_ASPX_VB:
-		return L"ASP.NET (VB.NET)";
-	case IDM_LEXER_ASP_VBS:
-		return L"ASP (VBScript)";
-	case IDM_LEXER_ASP_JS:
-		return L"ASP (JScript)";
-
-	case IDM_LEXER_XML:
-		return L"XML Document";
-	case IDM_LEXER_XSD:
-		return L"XML Schema";
-	case IDM_LEXER_XSLT:
-		return L"XSLT Stylesheet";
-	case IDM_LEXER_DTD:
-		return L"XML DTD";
-
-	case IDM_LEXER_ANT_BUILD:
-		return L"Ant Build";
-	case IDM_LEXER_MAVEN_POM:
-		return L"Maven POM";
-	case IDM_LEXER_MAVEN_SETTINGS:
-		return L"Maven Settings";
-	case IDM_LEXER_IVY_MODULE:
-		return L"Ivy Module";
-	case IDM_LEXER_IVY_SETTINGS:
-		return L"Ivy Settings";
-	case IDM_LEXER_PMD_RULESET:
-		return L"PMD Ruleset";
-	case IDM_LEXER_CHECKSTYLE:
-		return L"CheckStyle";
-
-	case IDM_LEXER_APACHE:
-		return L"Apache Config";
-	case IDM_LEXER_TOMCAT:
-		return L"Tomcat Config";
-	case IDM_LEXER_WEB_JAVA:
-		return L"Java Web Config";
-	case IDM_LEXER_STRUTS:
-		return L"Struts Config";
-	case IDM_LEXER_HIB_CFG:
-		return L"Hibernate Config";
-	case IDM_LEXER_HIB_MAP:
-		return L"Hibernate Mapping";
-	case IDM_LEXER_SPRING_BEANS:
-		return L"Spring Beans";
-	case IDM_LEXER_JBOSS:
-		return L"JBoss Config";
-
-	case IDM_LEXER_WEB_NET:
-		return L"ASP.NET Web Config";
-	case IDM_LEXER_RESX:
-		return L"ResX Schema";
-	case IDM_LEXER_XAML:
-		return L"WPF XAML";
-
-	case IDM_LEXER_PROPERTY_LIST:
-		return L"Property List";
-	case IDM_LEXER_ANDROID_MANIFEST:
-		return L"Android Manifest";
-	case IDM_LEXER_ANDROID_LAYOUT:
-		return L"Android Layout";
-	case IDM_LEXER_SVG:
-		return L"SVG Document";
-
-	case IDM_LEXER_BASH:
-		return L"Shell Script";
-	case IDM_LEXER_CSHELL:
-		return L"C Shell";
-	case IDM_LEXER_M4:
-		return L"M4 Macro";
-
-	case IDM_LEXER_MATLAB:
-		return L"MATLAB Code";
-	case IDM_LEXER_OCTAVE:
-		return L"Octave Code";
-	case IDM_LEXER_SCILAB:
-		return L"Scilab Code";
-
-	case IDM_LEXER_CSS:
-		return L"CSS Style Sheet";
-	case IDM_LEXER_SCSS:
-		return L"Sassy CSS";
-	case IDM_LEXER_LESS:
-		return L"Less CSS";
-	case IDM_LEXER_HSS:
-		return L"HSS";
-
-	default:
-		return L"Error";
-	}
+	return pLexCurrent->pszName;
 }
 
 static void Style_UpdateLexerLang(PEDITLEXER pLex, LPCWSTR lpszExt, LPCWSTR lpszName) {
@@ -3164,19 +3074,116 @@ void Style_SetBookmark(void) {
 
 //=============================================================================
 //
-// Style_GetFileOpenDlgFilter()
+// Style_GetOpenDlgFilterStr()
 //
-extern LPWSTR tchFileDlgFilters;
-
-BOOL Style_GetOpenDlgFilterStr(LPWSTR lpszFilter, int cchFilter) {
-	if (StrIsEmpty(tchFileDlgFilters)) {
-		GetString(IDS_FILTER_ALL, lpszFilter, cchFilter);
-	} else {
-		lstrcpyn(lpszFilter, tchFileDlgFilters, cchFilter - 2);
-		lstrcat(lpszFilter, L"||");
+static void AddLexFilterStr(LPWSTR szFilter, LPCEDITLEXER pLex, LPCWSTR lpszExt, int *length, int lexers[], int *index) {
+	LPCWSTR p = pLex->szExtensions;
+	if (StrIsEmpty(p)) {
+		p = pLex->pszDefExt;
 	}
-	PrepareFilterStr(lpszFilter);
-	return TRUE;
+
+	// add '*.' prefix for each extension
+	WCHAR extensions[MAX_EDITLEXER_EXT_SIZE*3];
+	LPWSTR ptr = extensions;
+	WCHAR ch;
+	int state = 1;
+	int count = 0;
+	while ((ch = *p++) != L'\0') {
+		if (ch != L' ') {
+			if (ch == L';') {
+				if (state == 0) {
+					state = 1;
+					*ptr++ = L';';
+				}
+			} else {
+				if (state == 1) {
+					state = 0;
+					++count;
+					*ptr++ = L'*';
+					*ptr++ = L'.';
+				}
+				*ptr++ = ch;
+			}
+		}
+	}
+
+	// add file extension for current file to current scheme
+	if (StrNotEmpty(lpszExt)) {
+		if (state == 0) {
+			state = 1;
+			*ptr++ = L';';
+		}
+		*ptr = L'\0';
+
+		WCHAR wch[MAX_PATH];
+		wsprintf(wch, L"*%s;", lpszExt);
+		if (StrStrI(extensions, wch) == NULL) {
+			++count;
+			lstrcpy(ptr, wch);
+			ptr += lstrlen(wch);
+		}
+	}
+
+	if (count == 0) {
+		return;
+	}
+	if (state == 1) {
+		--ptr; // trailing semicolon
+	}
+	*ptr = L'\0';
+
+#if NP2_ENABLE_LOCALIZE_LEXER_NAME
+	LPCWSTR pszName;
+	WCHAR wch[MAX_EDITLEXER_NAME_SIZE];
+	if (GetString(pLex->rid, wch, COUNTOF(wch))) {
+		pszName = wch;
+	} else {
+		pszName = pLex->pszName;
+	}
+#else
+	LPCWSTR pszName = pLex->pszName;
+#endif
+
+	*length += wsprintf(szFilter + *length, L"%s (%s)|%s|", pszName, extensions, extensions);
+	lexers[*index] = pLex->rid;
+	*index += 1;
+}
+
+LPWSTR Style_GetOpenDlgFilterStr(BOOL open, LPCWSTR lpszFile, int lexers[]) {
+	int length = (MAX_FAVORITE_SCHEMES_COUNT + 2 + LEXER_INDEX_GENERAL - LEXER_INDEX_MATCH)
+				*(MAX_EDITLEXER_NAME_SIZE + MAX_EDITLEXER_EXT_SIZE*3*2);
+	LPWSTR szFilter = (LPWSTR)NP2HeapAlloc(length * sizeof(WCHAR));
+
+	length = 0;
+	int index = 1; // 1-based filter index
+	if (open) {
+		// All Files comes first for open file dialog.
+		GetString(IDS_FILTER_ALL, szFilter, MAX_EDITLEXER_EXT_SIZE);
+		length = lstrlen(szFilter);
+		++index;
+	}
+
+	// current scheme
+	LPCWSTR lpszExt = PathFindExtension(lpszFile);
+	AddLexFilterStr(szFilter, pLexCurrent, lpszExt, &length, lexers, &index);
+	// text file and favorite schemes
+	for (UINT iLexer = LEXER_INDEX_MATCH; iLexer < ALL_LEXER_COUNT; iLexer++) {
+		LPCEDITLEXER pLex = pLexArray[iLexer];
+		if (iLexer >= LEXER_INDEX_GENERAL && pLex->iFavoriteOrder == 0) {
+			break;
+		}
+		if (pLex != pLexCurrent) {
+			AddLexFilterStr(szFilter, pLex, NULL, &length, lexers, &index);
+		}
+	}
+
+	if (!open) {
+		// All Files comes last for save file dialog.
+		GetString(IDS_FILTER_ALL, szFilter + length, MAX_EDITLEXER_EXT_SIZE);
+	}
+
+	PrepareFilterStr(szFilter);
+	return szFilter;
 }
 
 //=============================================================================
@@ -3832,7 +3839,7 @@ int Style_GetLexerIconId(LPCEDITLEXER pLex, DWORD iconFlags) {
 // Style_AddLexerToTreeView()
 //
 HTREEITEM Style_AddLexerToTreeView(HWND hwnd, PEDITLEXER pLex, DWORD iconFlags, HTREEITEM hParent, HTREEITEM hInsertAfter, BOOL withStyles) {
-#if NP2_ENABLE_LEXER_NAME_LOCALIZATION || NP2_ENABLE_STYLE_NAME_LOCALIZATION
+#if NP2_ENABLE_LOCALIZE_LEXER_NAME || NP2_ENABLE_LOCALIZE_STYLE_NAME
 	WCHAR tch[MAX_EDITLEXER_NAME_SIZE];
 #endif
 
@@ -3842,7 +3849,7 @@ HTREEITEM Style_AddLexerToTreeView(HWND hwnd, PEDITLEXER pLex, DWORD iconFlags, 
 	tvis.hParent = hParent;
 	tvis.hInsertAfter = hInsertAfter;
 	tvis.item.mask = TVIF_TEXT | TVIF_IMAGE | TVIF_SELECTEDIMAGE | TVIF_PARAM;
-#if NP2_ENABLE_LEXER_NAME_LOCALIZATION
+#if NP2_ENABLE_LOCALIZE_LEXER_NAME
 	if (GetString(pLex->rid, tch, COUNTOF(tch))) {
 		tvis.item.pszText = tch;
 	} else {
@@ -3870,7 +3877,7 @@ HTREEITEM Style_AddLexerToTreeView(HWND hwnd, PEDITLEXER pLex, DWORD iconFlags, 
 
 	for (UINT i = 0; i < iStyleCount; i++) {
 		tvis.hInsertAfter = hInsertAfter;
-#if NP2_ENABLE_STYLE_NAME_LOCALIZATION
+#if NP2_ENABLE_LOCALIZE_STYLE_NAME
 		if (GetString(pLex->Styles[i].rid, tch, COUNTOF(tch))) {
 			tvis.item.pszText = tch;
 		} else {
@@ -3892,7 +3899,7 @@ HTREEITEM Style_AddLexerToTreeView(HWND hwnd, PEDITLEXER pLex, DWORD iconFlags, 
 // Style_AddLexerToListView()
 //
 void Style_AddLexerToListView(HWND hwnd, PEDITLEXER pLex, DWORD iconFlags) {
-#if NP2_ENABLE_LEXER_NAME_LOCALIZATION
+#if NP2_ENABLE_LOCALIZE_LEXER_NAME
 	WCHAR tch[MAX_EDITLEXER_NAME_SIZE];
 #endif
 	LVITEM lvi;
@@ -3900,7 +3907,7 @@ void Style_AddLexerToListView(HWND hwnd, PEDITLEXER pLex, DWORD iconFlags) {
 
 	lvi.mask = LVIF_IMAGE | LVIF_PARAM | LVIF_TEXT;
 	lvi.iItem = ListView_GetItemCount(hwnd);
-#if NP2_ENABLE_LEXER_NAME_LOCALIZATION
+#if NP2_ENABLE_LOCALIZE_LEXER_NAME
 	if (GetString(pLex->rid, tch, COUNTOF(tch))) {
 		lvi.pszText = tch;
 	} else {
@@ -4892,7 +4899,6 @@ static void Lexer_OnDragDrop(HWND hwndTV, HTREEITEM hFavoriteNode, HTREEITEM hDr
 }
 
 static void Style_GetFavoriteSchemesFromTreeView(HWND hwndTV, HTREEITEM hFavoriteNode) {
-	const int maxCch = MAX_FAVORITE_SCHEMES_CONFIG_SIZE - 3; // two digits, one space and NULL
 	WCHAR *wch = favoriteSchemesConfig;
 	int len = 0;
 	int count = 0;
@@ -4911,7 +4917,7 @@ static void Style_GetFavoriteSchemesFromTreeView(HWND hwndTV, HTREEITEM hFavorit
 
 			len += wsprintf(wch + len, L"%i ", pLex->rid - NP2LEX_TEXTFILE);
 			++count;
-			if (count == MAX_FAVORITE_SCHEMES_COUNT || len > maxCch) {
+			if (count == MAX_FAVORITE_SCHEMES_COUNT || len > MAX_FAVORITE_SCHEMES_SAFE_SIZE) {
 				break;
 			}
 		}

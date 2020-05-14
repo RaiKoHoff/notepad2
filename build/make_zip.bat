@@ -27,74 +27,86 @@ IF /I "%~1" == "/?"     GOTO SHOWHELP
 SET "COMPILER=MSVC"
 SET "ARCH=all"
 SET "CONFIG=Release"
+SET "WITH_LOCALE="
+SET "ZIP_SUFFIX="
 
 @rem Check for the first switch
-IF "%~1" == "" GOTO START_WORK
-IF /I "%~1" == "MSVC"    SET "COMPILER=MSVC"  & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "/MSVC"   SET "COMPILER=MSVC"  & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "-MSVC"   SET "COMPILER=MSVC"  & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "--MSVC"  SET "COMPILER=MSVC"  & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "GCC"     SET "COMPILER=GCC"   & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "/GCC"    SET "COMPILER=GCC"   & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "-GCC"    SET "COMPILER=GCC"   & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "--GCC"   SET "COMPILER=GCC"   & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "Clang"   SET "COMPILER=Clang" & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "/Clang"  SET "COMPILER=Clang" & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "-Clang"  SET "COMPILER=Clang" & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "--Clang" SET "COMPILER=Clang" & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "LLVM"    SET "COMPILER=Clang" & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "/LLVM"   SET "COMPILER=Clang" & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "-LLVM"   SET "COMPILER=Clang" & SHIFT & GOTO CHECKSECONDARG
-IF /I "%~1" == "--LLVM"  SET "COMPILER=Clang" & SHIFT & GOTO CHECKSECONDARG
+IF "%~1" == "" GOTO StartWork
+IF /I "%~1" == "MSVC"    SET "COMPILER=MSVC"  & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "/MSVC"   SET "COMPILER=MSVC"  & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "-MSVC"   SET "COMPILER=MSVC"  & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "--MSVC"  SET "COMPILER=MSVC"  & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "GCC"     SET "COMPILER=GCC"   & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "/GCC"    SET "COMPILER=GCC"   & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "-GCC"    SET "COMPILER=GCC"   & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "--GCC"   SET "COMPILER=GCC"   & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "Clang"   SET "COMPILER=Clang" & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "/Clang"  SET "COMPILER=Clang" & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "-Clang"  SET "COMPILER=Clang" & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "--Clang" SET "COMPILER=Clang" & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "LLVM"    SET "COMPILER=Clang" & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "/LLVM"   SET "COMPILER=Clang" & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "-LLVM"   SET "COMPILER=Clang" & SHIFT & GOTO CheckSecondArg
+IF /I "%~1" == "--LLVM"  SET "COMPILER=Clang" & SHIFT & GOTO CheckSecondArg
 
 
-:CHECKSECONDARG
+:CheckSecondArg
 @rem Check for the second switch
-IF "%~1" == "" GOTO START_WORK
-IF /I "%~1" == "x86"     SET "ARCH=Win32" & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "/x86"    SET "ARCH=Win32" & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "-x86"    SET "ARCH=Win32" & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "--x86"   SET "ARCH=Win32" & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "Win32"   SET "ARCH=Win32" & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "/Win32"  SET "ARCH=Win32" & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "-Win32"  SET "ARCH=Win32" & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "--Win32" SET "ARCH=Win32" & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "x64"     SET "ARCH=x64"   & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "/x64"    SET "ARCH=x64"   & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "-x64"    SET "ARCH=x64"   & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "--x64"   SET "ARCH=x64"   & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "AVX2"    SET "ARCH=AVX2"  & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "/AVX2"   SET "ARCH=AVX2"  & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "-AVX2"   SET "ARCH=AVX2"  & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "--AVX2"  SET "ARCH=AVX2"  & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "ARM64"   SET "ARCH=ARM64" & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "/ARM64"  SET "ARCH=ARM64" & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "-ARM64"  SET "ARCH=ARM64" & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "--ARM64" SET "ARCH=ARM64" & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "ARM"     SET "ARCH=ARM"   & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "/ARM"    SET "ARCH=ARM"   & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "-ARM"    SET "ARCH=ARM"   & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "--ARM"   SET "ARCH=ARM"   & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "all"     SET "ARCH=all"   & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "/all"    SET "ARCH=all"   & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "-all"    SET "ARCH=all"   & SHIFT & GOTO CHECKTHIRDARG
-IF /I "%~1" == "--all"   SET "ARCH=all"   & SHIFT & GOTO CHECKTHIRDARG
+IF "%~1" == "" GOTO StartWork
+IF /I "%~1" == "x86"     SET "ARCH=Win32" & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "/x86"    SET "ARCH=Win32" & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "-x86"    SET "ARCH=Win32" & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "--x86"   SET "ARCH=Win32" & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "Win32"   SET "ARCH=Win32" & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "/Win32"  SET "ARCH=Win32" & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "-Win32"  SET "ARCH=Win32" & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "--Win32" SET "ARCH=Win32" & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "x64"     SET "ARCH=x64"   & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "/x64"    SET "ARCH=x64"   & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "-x64"    SET "ARCH=x64"   & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "--x64"   SET "ARCH=x64"   & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "AVX2"    SET "ARCH=AVX2"  & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "/AVX2"   SET "ARCH=AVX2"  & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "-AVX2"   SET "ARCH=AVX2"  & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "--AVX2"  SET "ARCH=AVX2"  & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "ARM64"   SET "ARCH=ARM64" & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "/ARM64"  SET "ARCH=ARM64" & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "-ARM64"  SET "ARCH=ARM64" & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "--ARM64" SET "ARCH=ARM64" & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "ARM"     SET "ARCH=ARM"   & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "/ARM"    SET "ARCH=ARM"   & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "-ARM"    SET "ARCH=ARM"   & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "--ARM"   SET "ARCH=ARM"   & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "all"     SET "ARCH=all"   & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "/all"    SET "ARCH=all"   & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "-all"    SET "ARCH=all"   & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "--all"   SET "ARCH=all"   & SHIFT & GOTO CheckThirdArg
 
 
-:CHECKTHIRDARG
+:CheckThirdArg
 @rem Check for the third switch
-IF "%~1" == "" GOTO START_WORK
-IF /I "%~1" == "Release"   SET "CONFIG=Release" & SHIFT & GOTO START_WORK
-IF /I "%~1" == "/Release"  SET "CONFIG=Release" & SHIFT & GOTO START_WORK
-IF /I "%~1" == "-Release"  SET "CONFIG=Release" & SHIFT & GOTO START_WORK
-IF /I "%~1" == "--Release" SET "CONFIG=Release" & SHIFT & GOTO START_WORK
-IF /I "%~1" == "Debug"     SET "CONFIG=Debug"   & SHIFT & GOTO START_WORK
-IF /I "%~1" == "/Debug"    SET "CONFIG=Debug"   & SHIFT & GOTO START_WORK
-IF /I "%~1" == "-Debug"    SET "CONFIG=Debug"   & SHIFT & GOTO START_WORK
-IF /I "%~1" == "--Debug"   SET "CONFIG=Debug"   & SHIFT & GOTO START_WORK
+IF "%~1" == "" GOTO StartWork
+IF /I "%~1" == "Release"   SET "CONFIG=Release" & SHIFT & GOTO CheckFourthArg
+IF /I "%~1" == "/Release"  SET "CONFIG=Release" & SHIFT & GOTO CheckFourthArg
+IF /I "%~1" == "-Release"  SET "CONFIG=Release" & SHIFT & GOTO CheckFourthArg
+IF /I "%~1" == "--Release" SET "CONFIG=Release" & SHIFT & GOTO CheckFourthArg
+IF /I "%~1" == "Debug"     SET "CONFIG=Debug"   & SHIFT & GOTO CheckFourthArg
+IF /I "%~1" == "/Debug"    SET "CONFIG=Debug"   & SHIFT & GOTO CheckFourthArg
+IF /I "%~1" == "-Debug"    SET "CONFIG=Debug"   & SHIFT & GOTO CheckFourthArg
+IF /I "%~1" == "--Debug"   SET "CONFIG=Debug"   & SHIFT & GOTO CheckFourthArg
 
 
-:START_WORK
+:CheckFourthArg
+@rem Check for the fourth switch
+IF "%~1" == "" GOTO StartWork
+IF /I "%~1" == "Locale"   SET "WITH_LOCALE=1" & SHIFT & GOTO StartWork
+IF /I "%~1" == "/Locale"  SET "WITH_LOCALE=1" & SHIFT & GOTO StartWork
+IF /I "%~1" == "-Locale"  SET "WITH_LOCALE=1" & SHIFT & GOTO StartWork
+IF /I "%~1" == "--Locale" SET "WITH_LOCALE=1" & SHIFT & GOTO StartWork
+IF NOT "%~1" == "1" (IF NOT "%~1" == "0" (SET "ZIP_SUFFIX=%1" & SHIFT & GOTO StartWork))
+
+
+:StartWork
 SET "EXIT_ON_ERROR=%~1"
 
 CALL :SubGetVersion
@@ -174,10 +186,15 @@ EXIT /B
 IF NOT EXIST "%1\Notepad2.exe" CALL :SUBMSG "ERROR" "%1\Notepad2.exe NOT found"
 IF NOT EXIST "%1\metapath.exe" CALL :SUBMSG "ERROR" "%1\metapath.exe NOT found"
 
-IF /I "%COMPILER%" == "MSVC" (
-  SET "ZIP_NAME=Notepad2_%2_%NP2_VER%"
+IF "%WITH_LOCALE%" == "1" (
+  SET "ZIP_NAME=Notepad2_i18n"
 ) ELSE (
-  SET "ZIP_NAME=Notepad2_%COMPILER%_%2_%NP2_VER%"
+  IF "%ZIP_SUFFIX%" == "" (SET "ZIP_NAME=Notepad2") ELSE (SET "ZIP_NAME=Notepad2(%ZIP_SUFFIX%)")
+)
+IF /I "%COMPILER%" == "MSVC" (
+  SET "ZIP_NAME=%ZIP_NAME%_%2_%NP2_VER%"
+) ELSE (
+  SET "ZIP_NAME=%ZIP_NAME%_%COMPILER%_%2_%NP2_VER%"
 )
 TITLE Creating %ZIP_NAME%.zip...
 CALL :SUBMSG "INFO" "Creating %ZIP_NAME%.zip..."
@@ -186,12 +203,15 @@ SET "TEMP_ZIP_DIR=temp_zip_dir"
 IF EXIST "%TEMP_ZIP_DIR%"     RD /S /Q "%TEMP_ZIP_DIR%"
 IF NOT EXIST "%TEMP_ZIP_DIR%" MD "%TEMP_ZIP_DIR%"
 
-FOR %%A IN ( "..\License.txt"  "%1\Notepad2.exe"  "%1\metapath.exe" "..\doc\Notepad2.ini" "..\doc\Notepad2.reg" "..\metapath\doc\metapath.ini"
+FOR %%A IN ( "..\License.txt"  "%1\Notepad2.exe"  "%1\metapath.exe" "..\doc\Notepad2.ini" "..\metapath\doc\metapath.ini"
 ) DO COPY /Y /B /V "%%A" "%TEMP_ZIP_DIR%\"
 COPY /Y /B /V "..\doc\Notepad2 DarkTheme.ini" "%TEMP_ZIP_DIR%\"
+IF "%WITH_LOCALE%" == "1" (
+  XCOPY /Q /S /Y "%1\locale" "%TEMP_ZIP_DIR%\locale\"
+)
 
 PUSHD "%TEMP_ZIP_DIR%"
-"%SEVENZIP%" a -tzip -mx=9 "../%ZIP_NAME%.zip" "License.txt" "Notepad2.exe" "metapath.exe" "Notepad2.ini" "Notepad2 DarkTheme.ini" "Notepad2.reg" "metapath.ini" >NUL
+"%SEVENZIP%" a -tzip -mx=9 "../%ZIP_NAME%.zip" "*" >NUL
 POPD
 
 IF %ERRORLEVEL% NEQ 0 CALL :SUBMSG "ERROR" "Compilation failed!"
@@ -213,6 +233,11 @@ FOR /F "tokens=2*" %%A IN (
    REG QUERY "HKLM\SOFTWARE\Wow6432Node\7-Zip" /v "Path" 2^>NUL ^| FIND "REG_SZ"') DO SET "SEVENZIP=%%B\7z.exe"
 EXIT /B
 
+FOR /F "tokens=2*" %%A IN (
+  'REG QUERY "HKLM\SOFTWARE\7-Zip-Zstandard" /v "Path" 2^>NUL ^| FIND "REG_SZ" ^|^|
+   REG QUERY "HKLM\SOFTWARE\Wow6432Node\7-Zip-Zstandard" /v "Path" 2^>NUL ^| FIND "REG_SZ"') DO SET "SEVENZIP=%%B\7z.exe"
+EXIT /B
+
 
 :SubGetVersion
 rem Get the version
@@ -232,7 +257,7 @@ EXIT /B
 :SHOWHELP
 TITLE %~nx0 %1
 ECHO. & ECHO.
-ECHO Usage:  %~nx0 [MSVC^|GCC^|Clang^|LLVM] [Win32^|x64^|AVX2^|ARM64^|ARM^|all] [Release^|Debug]
+ECHO Usage:  %~nx0 [MSVC^|GCC^|Clang^|LLVM] [Win32^|x64^|AVX2^|ARM64^|ARM^|all] [Release^|Debug] [Locale]
 ECHO.
 ECHO Notes:  You can also prefix the commands with "-", "--" or "/".
 ECHO         The arguments are not case sensitive.

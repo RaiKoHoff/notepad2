@@ -260,6 +260,57 @@ void IniSectionSetQuotedString(IniSectionOnSave *section, LPCWSTR key, LPCWSTR v
 	section->next = p;
 }
 
+LPWSTR Registry_GetString(HKEY hKey, LPCWSTR valueName) {
+	LPWSTR lpszText = NULL;
+	DWORD type = REG_SZ;
+	DWORD size = 0;
+
+	LSTATUS status = RegQueryValueEx(hKey, valueName, NULL, &type, NULL, &size);
+	if (status == ERROR_SUCCESS && type == REG_SZ && size != 0) {
+		size = (size + 1)*sizeof(WCHAR);
+		lpszText = (LPWSTR)NP2HeapAlloc(size);
+		status = RegQueryValueEx(hKey, valueName, NULL, &type, (LPBYTE)lpszText, &size);
+		if (status != ERROR_SUCCESS || type != REG_SZ || size == 0) {
+			NP2HeapFree(lpszText);
+			lpszText = NULL;
+		}
+	}
+	return lpszText;
+}
+
+LSTATUS Registry_SetString(HKEY hKey, LPCWSTR valueName, LPCWSTR lpszText) {
+	DWORD len = lstrlen(lpszText);
+	len = len ? ((len + 1)*sizeof(WCHAR)) : 0;
+	LSTATUS status = RegSetValueEx(hKey, valueName, 0, REG_SZ, (const BYTE *)lpszText, len);
+	return status;
+}
+
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+LSTATUS Registry_DeleteTree(HKEY hKey, LPCWSTR lpSubKey) {
+	typedef LSTATUS (WINAPI *RegDeleteTreeSig)(HKEY hKey, LPCWSTR lpSubKey);
+	static RegDeleteTreeSig pfnDeleteTree = NULL;
+
+	if (IsVistaAndAbove()) {
+		if (pfnDeleteTree == NULL) {
+			pfnDeleteTree = (RegDeleteTreeSig)GetProcAddress(GetModuleHandle(L"advapi32.dll"), "RegDeleteTreeW");
+		}
+	}
+
+	LSTATUS status;
+	if (pfnDeleteTree != NULL) {
+		status = pfnDeleteTree(hKey, lpSubKey);
+	} else {
+		status = RegDeleteKey(hKey, lpSubKey);
+		if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND) {
+			// TODO: Deleting a Key with Subkeys on Windows XP.
+			// https://docs.microsoft.com/en-us/windows/win32/sysinfo/deleting-a-key-with-subkeys
+		}
+	}
+
+	return status;
+}
+#endif
+
 int DStringW_GetWindowText(DStringW *s, HWND hwnd) {
 	int len = GetWindowTextLength(hwnd);
 	if (len == 0) {
@@ -382,20 +433,44 @@ int GetSystemMetricsEx(int nIndex) {
 	return value;
 }
 
+BOOL FindUserResourcePath(LPCWSTR path, LPWSTR outPath) {
+	// similar to CheckIniFile()
+	WCHAR tchFileExpanded[MAX_PATH];
+	ExpandEnvironmentStrings(path, tchFileExpanded, COUNTOF(tchFileExpanded));
+
+	if (PathIsRelative(tchFileExpanded)) {
+		WCHAR tchBuild[MAX_PATH];
+		// relative to program ini file
+		if (StrNotEmpty(szIniFile)) {
+			lstrcpy(tchBuild, szIniFile);
+			lstrcpy(PathFindFileName(tchBuild), tchFileExpanded);
+			if (PathFileExists(tchBuild)) {
+				lstrcpy(outPath, tchBuild);
+				return TRUE;
+			}
+		}
+
+		// relative to program exe file
+		GetModuleFileName(NULL, tchBuild, COUNTOF(tchBuild));
+		lstrcpy(PathFindFileName(tchBuild), tchFileExpanded);
+		if (PathFileExists(tchBuild)) {
+			lstrcpy(outPath, tchBuild);
+			return TRUE;
+		}
+	} else if (PathFileExists(tchFileExpanded)) {
+		lstrcpy(outPath, tchFileExpanded);
+		return TRUE;
+	}
+	return FALSE;
+}
+
 HBITMAP LoadBitmapFile(LPCWSTR path) {
 	WCHAR szTmp[MAX_PATH];
-	if (PathIsRelative(path)) {
-		GetModuleFileName(NULL, szTmp, COUNTOF(szTmp));
-		PathRemoveFileSpec(szTmp);
-		PathAppend(szTmp, path);
-		path = szTmp;
-	}
-
-	if (!PathFileExists(path)) {
+	if (!FindUserResourcePath(path, szTmp)) {
 		return NULL;
 	}
 
-	HBITMAP hbmp = (HBITMAP)LoadImage(NULL, path, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION | LR_LOADFROMFILE);
+	HBITMAP hbmp = (HBITMAP)LoadImage(NULL, szTmp, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION | LR_LOADFROMFILE);
 	return hbmp;
 }
 
@@ -1328,6 +1403,9 @@ HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName) {
 	case LANG_CHINESE:
 		folder = IsChineseTraditionalSubLang(subLang) ? L"zh-Hant" : L"zh-Hans";
 		break;
+	case LANG_JAPANESE:
+		folder = L"ja";
+		break;
 	}
 
 	if (folder == NULL) {
@@ -1579,7 +1657,7 @@ BOOL PathCreateDeskLnk(LPCWSTR pszDocument) {
 	WCHAR tchLinkDir[MAX_PATH];
 	SHGetSpecialFolderPath(NULL, tchLinkDir, CSIDL_DESKTOPDIRECTORY, TRUE);
 
-	WCHAR tchDescription[64];
+	WCHAR tchDescription[128];
 	GetString(IDS_LINKDESCRIPTION, tchDescription, COUNTOF(tchDescription));
 
 	// Try to construct a valid filename...

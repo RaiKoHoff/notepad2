@@ -26,6 +26,7 @@
 #include <shellapi.h>
 #include <commdlg.h>
 #include <uxtheme.h>
+#include "config.h"
 #include "Helpers.h"
 #include "metapath.h"
 #include "Dlapi.h"
@@ -33,32 +34,45 @@
 #include "resource.h"
 #include "version.h"
 
+extern HWND hwndMain;
 //=============================================================================
 //
-//  ErrorMessage()
+// MsgBox()
 //
-//  L"Title\nMessage Text"
-//
-extern HWND hwndMain;
-
-int ErrorMessage(int iLevel, UINT uIdMsg, ...) {
+int MsgBox(int iType, UINT uIdMsg, ...) {
+	WCHAR szBuf[256 * 2];
 	WCHAR szText[256 * 2];
-	WCHAR szTitle[256 * 2];
 
-	GetString(uIdMsg, szText, COUNTOF(szText));
+	GetString(uIdMsg, szBuf, COUNTOF(szBuf));
 
 	va_list va;
 	va_start(va, uIdMsg);
-	wvsprintf(szTitle, szText, va);
+	wvsprintf(szText, szBuf, va);
 	va_end(va);
 
-	WCHAR *c = StrChr(szTitle, L'\n');
-	if (c) {
-		lstrcpy(szText, (c + 1));
-		*c = L'\0';
-	} else {
-		lstrcpy(szText, szTitle);
-		lstrcpy(szTitle, L"");
+	WCHAR szTitle[64];
+	GetString(IDS_APPTITLE, szTitle, COUNTOF(szTitle));
+
+	int iIcon = MB_OK;
+	switch (iType) {
+	case MBINFO:
+		iIcon = MB_ICONINFORMATION;
+		break;
+	case MBWARN:
+		iIcon = MB_ICONEXCLAMATION;
+		break;
+	case MBYESNO:
+		iIcon = MB_ICONEXCLAMATION | MB_YESNO;
+		break;
+	case MBYESNOCANCEL:
+		iIcon = MB_ICONEXCLAMATION | MB_YESNOCANCEL;
+		break;
+	case MBYESNOWARN:
+		iIcon = MB_ICONEXCLAMATION | MB_YESNO;
+		break;
+	case MBOKCANCEL:
+		iIcon = MB_ICONEXCLAMATION | MB_OKCANCEL;
+		break;
 	}
 
 	HWND hwnd;
@@ -66,9 +80,10 @@ int ErrorMessage(int iLevel, UINT uIdMsg, ...) {
 		hwnd = hwndMain;
 	}
 
-	const int iIcon = (iLevel > 1) ? MB_ICONEXCLAMATION : MB_ICONINFORMATION;
 	PostMessage(hwndMain, APPM_CENTER_MESSAGE_BOX, (WPARAM)hwnd, 0);
-	return MessageBoxEx(hwnd, szText, szTitle, MB_SETFOREGROUND | iIcon, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT));
+	return MessageBoxEx(hwnd, szText, szTitle,
+						MB_SETFOREGROUND | iIcon,
+						MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT));
 }
 
 //=============================================================================
@@ -765,6 +780,10 @@ extern BOOL     bDefColorFilter;
 extern COLORREF colorNoFilter;
 extern COLORREF colorFilter;
 extern COLORREF colorCustom[16];
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+extern UINT		languageResID;
+#endif
+extern WCHAR g_wchAppUserModelID[64];
 
 static INT_PTR CALLBACK ItemsPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) {
 	static BOOL m_bDefColorNoFilter;
@@ -779,7 +798,7 @@ static INT_PTR CALLBACK ItemsPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARA
 	CHOOSECOLOR cc;
 
 	switch (umsg) {
-	case WM_INITDIALOG:
+	case WM_INITDIALOG: {
 		m_bDefColorNoFilter = bDefColorNoFilter;
 		m_bDefColorFilter = bDefColorFilter;
 
@@ -802,7 +821,19 @@ static INT_PTR CALLBACK ItemsPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARA
 		} else {
 			CheckRadioButton(hwnd, IDC_COLOR_DEF2, IDC_COLOR_CUST2, IDC_COLOR_CUST2);
 		}
-		return TRUE;
+
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+		HWND hwndCtl = GetDlgItem(hwnd, IDC_LANGUAGE_LIST);
+		WCHAR szText[128];
+		for (UINT rid = IDS_LANG_USER_DEFAULT; rid <= IDS_LANG_LAST_LANGUAGE; rid++) {
+			GetString(rid, szText, COUNTOF(szText));
+			ComboBox_AddString(hwndCtl, szText);
+		}
+		ComboBox_SetCurSel(hwndCtl, languageResID - IDS_LANG_USER_DEFAULT);
+		ComboBox_SetExtendedUI(hwndCtl, TRUE);
+#endif
+	}
+	return TRUE;
 
 	case WM_DESTROY:
 		DeleteObject(m_hbrNoFilter);
@@ -872,6 +903,9 @@ static INT_PTR CALLBACK ItemsPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARA
 			colorNoFilter = m_colorNoFilter;
 			colorFilter = m_colorFilter;
 
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+			SetUILanguage((UINT)SendDlgItemMessage(hwnd, IDC_LANGUAGE_LIST, CB_GETCURSEL, 0, 0) + IDS_LANG_USER_DEFAULT);
+#endif
 			SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_NOERROR);
 			return TRUE;
 		}
@@ -888,6 +922,122 @@ static INT_PTR CALLBACK ItemsPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARA
 	}
 
 	return FALSE;
+}
+
+/*
+HKEY_CLASSES_ROOT\Folder\shell\metapath
+	(Default)				REG_SZ		Open in metapath
+	icon					REG_SZ		metapath.exe
+	command
+		(Default)			REG_SZ		"metapath.exe" "%1"
+
+HKEY_CLASSES_ROOT\Applications\metapath.exe
+	AppUserModelID			REG_SZ		metapath File Browser
+	FriendlyAppName			REG_SZ		metapath File Browser
+	shell\open\command
+		(Default)			REG_SZ		"metapath.exe" "%1"
+*/
+
+enum {
+	SystemIntegration_ContextMenu = 1,
+	SystemIntegration_JumpList = 2,
+};
+
+struct SystemIntegrationInfo {
+	LPWSTR lpszText;
+	LPWSTR lpszName;
+};
+
+int GetSystemIntegrationStatus(struct SystemIntegrationInfo *info) {
+	int mask = 0;
+	WCHAR tchModule[MAX_PATH];
+	GetModuleFileName(NULL, tchModule, COUNTOF(tchModule));
+
+	// context menu
+	HKEY hKey;
+	LSTATUS status = RegOpenKeyEx(HKEY_CLASSES_ROOT, NP2RegSubKey_ContextMenu, 0, KEY_READ, &hKey);
+	if (status == ERROR_SUCCESS) {
+		info->lpszText = Registry_GetDefaultString(hKey);
+		HKEY hSubKey;
+		status = RegOpenKeyEx(hKey, L"command", 0, KEY_READ, &hSubKey);
+		if (status == ERROR_SUCCESS) {
+			LPWSTR command = Registry_GetDefaultString(hSubKey);
+			if (command != NULL) {
+				if (StrStrI(command, tchModule) != NULL) {
+					mask |= SystemIntegration_ContextMenu;
+				}
+				NP2HeapFree(command);
+			}
+			RegCloseKey(hSubKey);
+		}
+		RegCloseKey(hKey);
+	}
+
+	// jump list
+	status = RegOpenKeyEx(HKEY_CLASSES_ROOT, NP2RegSubKey_JumpList, 0, KEY_READ, &hKey);
+	if (status == ERROR_SUCCESS) {
+		info->lpszName = Registry_GetString(hKey, L"FriendlyAppName");
+		HKEY hSubKey;
+		status = RegOpenKeyEx(hKey, L"shell\\open\\command", 0, KEY_READ, &hSubKey);
+		if (status == ERROR_SUCCESS) {
+			LPWSTR command = Registry_GetDefaultString(hSubKey);
+			if (command != NULL) {
+				LPWSTR userId = Registry_GetString(hKey, L"AppUserModelID");
+				if (userId != NULL && StrEqual(userId, g_wchAppUserModelID) && StrStrI(command, tchModule) != NULL) {
+					mask |= SystemIntegration_JumpList;
+				}
+				if (userId != NULL) {
+					NP2HeapFree(userId);
+				}
+				NP2HeapFree(command);
+			}
+			RegCloseKey(hSubKey);
+		}
+		RegCloseKey(hKey);
+	}
+
+	return mask;
+}
+
+void UpdateSystemIntegrationStatus(int mask, LPCWSTR lpszText, LPCWSTR lpszName) {
+	WCHAR tchModule[MAX_PATH];
+	GetModuleFileName(NULL, tchModule, COUNTOF(tchModule));
+	WCHAR command[300];
+	wsprintf(command, L"\"%s\" \"%%1\"", tchModule);
+
+	// context menu
+	if (mask & SystemIntegration_ContextMenu) {
+		HKEY hSubKey;
+		const LSTATUS status = Registry_CreateKey(HKEY_CLASSES_ROOT, NP2RegSubKey_ContextMenu L"\\command", &hSubKey);
+		if (status == ERROR_SUCCESS) {
+			HKEY hKey;
+			RegOpenKeyEx(HKEY_CLASSES_ROOT, NP2RegSubKey_ContextMenu, 0, KEY_WRITE, &hKey);
+			Registry_SetDefaultString(hKey, lpszText);
+			Registry_SetString(hKey, L"icon", tchModule);
+			Registry_SetDefaultString(hSubKey, command);
+			RegCloseKey(hKey);
+			RegCloseKey(hSubKey);
+		}
+	} else {
+		Registry_DeleteTree(HKEY_CLASSES_ROOT, NP2RegSubKey_ContextMenu);
+	}
+
+	// jump list
+	if (mask & SystemIntegration_JumpList) {
+		HKEY hSubKey;
+		const LSTATUS status = Registry_CreateKey(HKEY_CLASSES_ROOT, NP2RegSubKey_JumpList L"\\shell\\open\\command", &hSubKey);
+		if (status == ERROR_SUCCESS) {
+			HKEY hKey;
+			RegOpenKeyEx(HKEY_CLASSES_ROOT, NP2RegSubKey_JumpList, 0, KEY_WRITE, &hKey);
+			Registry_SetString(hKey, L"AppUserModelID", g_wchAppUserModelID);
+			Registry_SetString(hKey, L"FriendlyAppName", lpszName);
+			Registry_SetDefaultString(hSubKey, command);
+			RegCloseKey(hKey);
+			RegCloseKey(hSubKey);
+		}
+	} else {
+		Registry_DeleteTree(HKEY_CLASSES_ROOT, NP2RegSubKey_JumpList);
+	}
 }
 
 //=============================================================================
@@ -918,6 +1068,41 @@ static INT_PTR CALLBACK ProgPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM
 		Edit_LimitText(hwndCtl, MAX_PATH - 2);
 		Edit_SetText(hwndCtl, tchFavoritesDir);
 		SHAutoComplete(hwndCtl, SHACF_FILESYSTEM);
+
+		struct SystemIntegrationInfo info = {NULL, NULL};
+		const int mask = GetSystemIntegrationStatus(&info);
+
+		hwndCtl = GetDlgItem(hwnd, IDC_CONTEXT_MENU_TEXT);
+		if (StrIsEmpty(info.lpszText)) {
+			WCHAR wch[128];
+			GetString(IDS_LINKDESCRIPTION, wch, COUNTOF(wch));
+			Edit_SetText(hwndCtl, wch);
+		} else {
+			Edit_SetText(hwndCtl, info.lpszText);
+		}
+
+		HWND hwndName = GetDlgItem(hwnd, IDC_APPLICATION_NAME);
+		Edit_SetText(hwndName, StrIsEmpty(info.lpszName)? g_wchAppUserModelID : info.lpszName);
+		if (info.lpszText) {
+			NP2HeapFree(info.lpszText);
+		}
+		if (info.lpszName) {
+			NP2HeapFree(info.lpszName);
+		}
+
+		if (mask & SystemIntegration_ContextMenu) {
+			CheckDlgButton(hwnd, IDC_ENABLE_CONTEXT_MENU, BST_CHECKED);
+		}
+		if (mask & SystemIntegration_JumpList) {
+			CheckDlgButton(hwnd, IDC_ENABLE_JUMP_LIST, BST_CHECKED);
+		}
+
+		if (IsVistaAndAbove() && !IsElevated()) {
+			EnableWindow(GetDlgItem(hwnd, IDC_ENABLE_CONTEXT_MENU), FALSE);
+			Edit_SetReadOnly(hwndCtl, TRUE);
+			EnableWindow(GetDlgItem(hwnd, IDC_ENABLE_JUMP_LIST), FALSE);
+			Edit_SetReadOnly(hwndName, TRUE);
+		}
 	}
 	return TRUE;
 
@@ -1002,6 +1187,25 @@ static INT_PTR CALLBACK ProgPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM
 				GetDefaultFavoritesDir(tchFavoritesDir, COUNTOF(tchFavoritesDir));
 			} else {
 				StrTrim(tchFavoritesDir, L" \"");
+			}
+
+			if (IsWindowEnabled(GetDlgItem(hwnd, IDC_ENABLE_CONTEXT_MENU))) {
+				int mask = 0;
+				if (IsButtonChecked(hwnd, IDC_ENABLE_CONTEXT_MENU)) {
+					mask |= SystemIntegration_ContextMenu;
+				}
+				if (IsButtonChecked(hwnd, IDC_ENABLE_JUMP_LIST)) {
+					mask |= SystemIntegration_JumpList;
+				}
+
+				GetDlgItemText(hwnd, IDC_CONTEXT_MENU_TEXT, tch, COUNTOF(tch));
+				TrimString(tch);
+
+				WCHAR wchName[128];
+				GetDlgItemText(hwnd, IDC_APPLICATION_NAME, wchName, COUNTOF(wchName));
+				TrimString(wchName);
+
+				UpdateSystemIntegrationStatus(mask, tch, wchName);
 			}
 
 			SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_NOERROR);
@@ -1234,7 +1438,7 @@ INT_PTR CALLBACK GetFilterDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lP
 					}
 				}
 			} else {
-				ErrorMessage(0, IDS_ERR_FILTER);
+				MsgBox(MBINFO, IDS_ERR_FILTER);
 			}
 
 			DestroyMenu(hMenu);
@@ -2287,7 +2491,7 @@ INT_PTR CALLBACK FindTargetDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 					 (GetDlgItemText(hwnd, IDC_DDEMSG, tch, COUNTOF(tch)) == 0 ||
 					  GetDlgItemText(hwnd, IDC_DDEAPP, tch, COUNTOF(tch)) == 0 ||
 					  GetDlgItemText(hwnd, IDC_DDETOPIC, tch, COUNTOF(tch)) == 0))) {
-				ErrorMessage(1, IDS_ERR_INVALIDTARGET);
+				MsgBox(MBINFO, IDS_ERR_INVALIDTARGET);
 			} else {
 				IniSectionOnSave section;
 				WCHAR *pIniSectionBuf = (WCHAR *)NP2HeapAlloc(sizeof(WCHAR) * MAX_INI_SECTION_SIZE_TARGET_APPLICATION);

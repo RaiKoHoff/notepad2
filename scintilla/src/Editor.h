@@ -330,7 +330,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	void ThinRectangularRange();
 	void InvalidateSelection(SelectionRange newMain, bool invalidateWholeSelection = false) noexcept;
 	void InvalidateWholeSelection() noexcept;
-	SelectionRange LineSelectionRange(SelectionPosition currentPos_, SelectionPosition anchor_) const noexcept;
+	SelectionRange LineSelectionRange(SelectionPosition currentPos_, SelectionPosition anchor_, bool withEOL = false) const noexcept;
 	void SetSelection(SelectionPosition currentPos_, SelectionPosition anchor_);
 	void SetSelection(Sci::Position currentPos_, Sci::Position anchor_);
 	void SetSelection(SelectionPosition currentPos_);
@@ -426,10 +426,10 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	void ClearSelection(bool retainMultipleSelections = false);
 	void ClearAll();
 	void ClearDocumentStyle();
-	virtual void Cut(bool asBinary);
+	virtual void Cut(bool asBinary, bool lineCopy = false);
 	void PasteRectangular(SelectionPosition pos, const char *ptr, Sci::Position len);
 	virtual void Copy(bool asBinary) = 0;
-	virtual void CopyAllowLine();
+	void CopyAllowLine();
 	virtual bool CanPaste() noexcept;
 	virtual void Paste(bool asBinary) = 0;
 	void Clear();
@@ -513,7 +513,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	virtual void CopyToClipboard(const SelectionText &selectedText) = 0;
 	std::string RangeText(Sci::Position start, Sci::Position end) const;
 	void CopySelectionRange(SelectionText *ss, bool allowLineCopy = false);
-	void CopyRangeToClipboard(Sci::Position start, Sci::Position end);
+	void CopyRangeToClipboard(Sci::Position start, Sci::Position end, bool lineCopy = false);
 	void CopyText(size_t length, const char *text);
 	void SetDragPosition(SelectionPosition newPos);
 	virtual void DisplayCursor(Window::Cursor c) noexcept;

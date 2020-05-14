@@ -20,11 +20,15 @@
 #pragma once
 
 #include "EditLexer.h"
+
 // Number of Lexers in pLexArray
 #define NUMLEXERS	64
 
-// all schemes with "All Files (*.*)"
-#define MAX_OPEN_SAVE_FILE_DIALOG_FILTER_SIZE	((NUMLEXERS + 1) * 128)
+// maximum favorite schemes count, DON'T change.
+#define MAX_FAVORITE_SCHEMES_COUNT			31
+// All Files, current scheme, Text File, 2nd Text File and favorite schemes
+// see Style_GetOpenDlgFilterStr() for actually count.
+#define OPENDLG_MAX_LEXER_COUNT				(MAX_FAVORITE_SCHEMES_COUNT + 2 + 2)
 
 #define INI_SECTION_NAME_STYLES				L"Styles"
 #define INI_SECTION_NAME_FILE_EXTENSIONS	L"File Extensions"
@@ -61,8 +65,7 @@ int		Style_GetMatchLexerIndex(int rid);
 int		Style_GetDocTypeLanguage(void);
 void	Style_UpdateLexerKeywords(LPCEDITLEXER pLexNew);
 void	Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew);
-LPCWSTR Style_GetCurrentLexerDisplayName(LPWSTR lpszName, int cchName);
-LPCWSTR Style_GetCurrentLexerName(void);
+LPCWSTR Style_GetCurrentLexerName(LPWSTR lpszName, int cchName);
 void	Style_SetLexerByLangIndex(int lang);
 void	Style_UpdateSchemeMenu(HMENU hmenu);
 
@@ -74,7 +77,7 @@ void	Style_SetLongLineColors(void);
 void	Style_HighlightCurrentLine(void);
 void	Style_ToggleUse2ndGlobalStyle(void);
 void	Style_ToggleUseDefaultCodeStyle(void);
-BOOL	Style_GetOpenDlgFilterStr(LPWSTR lpszFilter, int cchFilter);
+LPWSTR	Style_GetOpenDlgFilterStr(BOOL open, LPCWSTR lpszFile, int lexers[]);
 
 BOOL	Style_StrGetFontEx(LPCWSTR lpszStyle, LPWSTR lpszFont, int cchFont, BOOL bDefaultStyle);
 BOOL	Style_StrGetCharSet(LPCWSTR lpszStyle, int *charset);

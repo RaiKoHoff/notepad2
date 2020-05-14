@@ -31,12 +31,6 @@
 #include "UniConversion.h"
 //#include "ElapsedPeriod.h"
 
-#if defined(_WIN64)
-#define CellBuffer_InsertLine_CacheCount	256
-#else
-#define CellBuffer_InsertLine_CacheCount	128
-#endif
-
 namespace Scintilla {
 
 struct CountWidths {
@@ -142,11 +136,12 @@ public:
 		starts.ReAllocate(lineCount);
 	}
 	void InsertLines(Sci::Line line, Sci::Line lines) {
-		lines += line;
-		for (; line < lines; line++) {
-			const POS lineAsPos = static_cast<POS>(line);
-			starts.InsertPartition(lineAsPos,
-				static_cast<POS>(starts.PositionFromPartition(lineAsPos - 1) + 1));
+		// Insert multiple lines with each temporarily 1 character wide.
+		// The line widths will be fixed up by later measuring code.
+		const POS lineAsPos = static_cast<POS>(line);
+		const POS lineStart = starts.PositionFromPartition(lineAsPos - 1) + 1;
+		for (POS l = 0; l < static_cast<POS>(lines); l++) {
+			starts.InsertPartition(lineAsPos + l, lineStart + l);
 		}
 	}
 };
@@ -158,6 +153,12 @@ class LineVector : public ILineVector {
 	LineStartIndex<POS> startsUTF16;
 	LineStartIndex<POS> startsUTF32;
 	int activeIndices;
+
+	void SetActiveIndices() noexcept {
+		activeIndices = (startsUTF32.Active() ? SC_LINECHARACTERINDEX_UTF32 : 0)
+			| (startsUTF16.Active() ? SC_LINECHARACTERINDEX_UTF16 : 0);
+	}
+
 public:
 	LineVector() : starts(256), perLine(nullptr), activeIndices(0) {
 	}
@@ -186,12 +187,10 @@ public:
 		starts.InsertPartition(lineAsPos, static_cast<POS>(position));
 		if (activeIndices) {
 			if (activeIndices & SC_LINECHARACTERINDEX_UTF32) {
-				startsUTF32.starts.InsertPartition(lineAsPos,
-					static_cast<POS>(startsUTF32.starts.PositionFromPartition(lineAsPos - 1) + 1));
+				startsUTF32.InsertLines(line, 1);
 			}
 			if (activeIndices & SC_LINECHARACTERINDEX_UTF16) {
-				startsUTF16.starts.InsertPartition(lineAsPos,
-					static_cast<POS>(startsUTF16.starts.PositionFromPartition(lineAsPos - 1) + 1));
+				startsUTF16.InsertLines(line, 1);
 			}
 		}
 		if (perLine) {
@@ -279,30 +278,28 @@ public:
 		return activeIndices;
 	}
 	bool AllocateLineCharacterIndex(int lineCharacterIndex, Sci::Line lines) override {
-		bool changed = false;
+		const int activeIndicesStart = activeIndices;
 		if ((lineCharacterIndex & SC_LINECHARACTERINDEX_UTF32) != 0) {
-			changed = startsUTF32.Allocate(lines) || changed;
+			startsUTF32.Allocate(lines);
 			assert(startsUTF32.starts.Partitions() == starts.Partitions());
 		}
 		if ((lineCharacterIndex & SC_LINECHARACTERINDEX_UTF16) != 0) {
-			changed = startsUTF16.Allocate(lines) || changed;
+			startsUTF16.Allocate(lines);
 			assert(startsUTF16.starts.Partitions() == starts.Partitions());
 		}
-		activeIndices = (startsUTF32.Active() ? SC_LINECHARACTERINDEX_UTF32 : 0)
-			| (startsUTF16.Active() ? SC_LINECHARACTERINDEX_UTF16 : 0);
-		return changed;
+		SetActiveIndices();
+		return activeIndicesStart != activeIndices;
 	}
 	bool ReleaseLineCharacterIndex(int lineCharacterIndex) override {
-		bool changed = false;
+		const int activeIndicesStart = activeIndices;
 		if ((lineCharacterIndex & SC_LINECHARACTERINDEX_UTF32) != 0) {
-			changed = startsUTF32.Release() || changed;
+			startsUTF32.Release();
 		}
 		if ((lineCharacterIndex & SC_LINECHARACTERINDEX_UTF16) != 0) {
-			changed = startsUTF16.Release() || changed;
+			startsUTF16.Release();
 		}
-		activeIndices = (startsUTF32.Active() ? SC_LINECHARACTERINDEX_UTF32 : 0)
-			| (startsUTF16.Active() ? SC_LINECHARACTERINDEX_UTF16 : 0);
-		return changed;
+		SetActiveIndices();
+		return activeIndicesStart != activeIndices;
 	}
 	Sci::Position IndexLineStart(Sci::Line line, int lineCharacterIndex) const noexcept override {
 		if (lineCharacterIndex == SC_LINECHARACTERINDEX_UTF32) {
@@ -751,7 +748,8 @@ bool CellBuffer::ContainsLineEnd(const char *s, Sci::Position length) const noex
 		const unsigned char ch = s[i];
 		if ((ch == '\r') || (ch == '\n')) {
 			return true;
-		} else if (utf8LineEnds && !UTF8IsAscii(ch)) {
+		}
+		if (utf8LineEnds && !UTF8IsAscii(ch)) {
 			const unsigned char back3[3] = { chBeforePrev, chPrev, ch };
 			if (UTF8IsSeparator(back3) || UTF8IsNEL(back3 + 1)) {
 				return true;
@@ -1024,9 +1022,15 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 		RemoveLine(lineInsert);
 	}
 
+#if defined(_WIN64)
+	constexpr size_t PositionBlockSize = 256;
+#else
+	constexpr size_t PositionBlockSize = 128;
+#endif
+
 	//ElapsedPeriod period;
-	Sci::Position lineEndPos[CellBuffer_InsertLine_CacheCount];
-	Sci::Line lineCount = 0;
+	Sci::Position positions[PositionBlockSize];
+	size_t nPositions = 0;
 	const Sci::Line lineStart = lineInsert;
 
 	// s may not NULL-terminated, ensure *ptr == '\n' or *next == '\n' is valid.
@@ -1066,22 +1070,22 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 				}
 				[[fallthrough]];
 			case 1: // '\n'
-				lineEndPos[lineCount++] = position + ptr - s;
-				if (lineCount == CellBuffer_InsertLine_CacheCount) {
-					plv->InsertLines(lineInsert, lineEndPos, lineCount, atLineStart);
-					lineInsert += lineCount;
-					lineCount = 0;
+				positions[nPositions++] = position + ptr - s;
+				if (nPositions == PositionBlockSize) {
+					plv->InsertLines(lineInsert, positions, nPositions, atLineStart);
+					lineInsert += nPositions;
+					nPositions = 0;
 				}
 				break;
 			case 3:
 			case 4:
 				// LS, PS and NEL
 				if ((type == 3 && chPrev == 0x80 && chBeforePrev == 0xe2) || (type == 4 && chPrev == 0xc2)) {
-					lineEndPos[lineCount++] = position + ptr - s;
-					if (lineCount == CellBuffer_InsertLine_CacheCount) {
-						plv->InsertLines(lineInsert, lineEndPos, lineCount, atLineStart);
-						lineInsert += lineCount;
-						lineCount = 0;
+					positions[nPositions++] = position + ptr - s;
+					if (nPositions == PositionBlockSize) {
+						plv->InsertLines(lineInsert, positions, nPositions, atLineStart);
+						lineInsert += nPositions;
+						nPositions = 0;
 					}
 				}
 				break;
@@ -1129,10 +1133,10 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 				maskLF |= maskCRLF | ((maskCR_LF ^ maskLF) >> 1);
 			}
 			if (maskLF) {
-				if (lineCount >= CellBuffer_InsertLine_CacheCount - 32) {
-					plv->InsertLines(lineInsert, lineEndPos, lineCount, atLineStart);
-					lineInsert += lineCount;
-					lineCount = 0;
+				if (nPositions >= PositionBlockSize - 32) {
+					plv->InsertLines(lineInsert, positions, nPositions, atLineStart);
+					lineInsert += nPositions;
+					nPositions = 0;
 				}
 
 				Sci::Position offset = position + ptr - s;
@@ -1142,18 +1146,18 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 					//! shift 32 bit is undefined behavior: (0x80000000 >> 32) == 0x80000000.
 					maskLF >>= 1;
 					offset += trailing + 1;
-					lineEndPos[lineCount++] = offset;
+					positions[nPositions++] = offset;
 				} while (maskLF);
 			}
 
 			ptr = next;
 			if (lastCR) {
-				if (lineCount == CellBuffer_InsertLine_CacheCount) {
-					plv->InsertLines(lineInsert, lineEndPos, lineCount, atLineStart);
-					lineInsert += lineCount;
-					lineCount = 0;
+				if (nPositions == PositionBlockSize) {
+					plv->InsertLines(lineInsert, positions, nPositions, atLineStart);
+					lineInsert += nPositions;
+					nPositions = 0;
 				}
-				lineEndPos[lineCount++] = position + ptr - s;
+				positions[nPositions++] = position + ptr - s;
 			}
 		}
 		// end NP2_USE_AVX2
@@ -1193,10 +1197,10 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 				maskLF |= maskCRLF | ((maskCR_LF ^ maskLF) >> 1);
 			}
 			if (maskLF) {
-				if (lineCount >= CellBuffer_InsertLine_CacheCount - 32) {
-					plv->InsertLines(lineInsert, lineEndPos, lineCount, atLineStart);
-					lineInsert += lineCount;
-					lineCount = 0;
+				if (nPositions >= PositionBlockSize - 32) {
+					plv->InsertLines(lineInsert, positions, nPositions, atLineStart);
+					lineInsert += nPositions;
+					nPositions = 0;
 				}
 
 				Sci::Position offset = position + ptr - s;
@@ -1206,18 +1210,18 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 					//! shift 32 bit is undefined behavior: (0x80000000 >> 32) == 0x80000000.
 					maskLF >>= 1;
 					offset += trailing + 1;
-					lineEndPos[lineCount++] = offset;
+					positions[nPositions++] = offset;
 				} while (maskLF);
 			}
 
 			ptr = next;
 			if (lastCR) {
-				if (lineCount == CellBuffer_InsertLine_CacheCount) {
-					plv->InsertLines(lineInsert, lineEndPos, lineCount, atLineStart);
-					lineInsert += lineCount;
-					lineCount = 0;
+				if (nPositions == PositionBlockSize) {
+					plv->InsertLines(lineInsert, positions, nPositions, atLineStart);
+					lineInsert += nPositions;
+					nPositions = 0;
 				}
-				lineEndPos[lineCount++] = position + ptr - s;
+				positions[nPositions++] = position + ptr - s;
 			}
 		}
 		// end NP2_USE_SSE2
@@ -1236,20 +1240,20 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 				}
 				[[fallthrough]];
 			case 1: // '\n'
-				if (lineCount == CellBuffer_InsertLine_CacheCount) {
-					plv->InsertLines(lineInsert, lineEndPos, lineCount, atLineStart);
-					lineInsert += lineCount;
-					lineCount = 0;
+				if (nPositions == PositionBlockSize) {
+					plv->InsertLines(lineInsert, positions, nPositions, atLineStart);
+					lineInsert += nPositions;
+					nPositions = 0;
 				}
-				lineEndPos[lineCount++] = position + ptr - s;
+				positions[nPositions++] = position + ptr - s;
 				break;
 			}
 		}
 	}
 
-	if (lineCount != 0) {
-		plv->InsertLines(lineInsert, lineEndPos, lineCount, atLineStart);
-		lineInsert += lineCount;
+	if (nPositions != 0) {
+		plv->InsertLines(lineInsert, positions, nPositions, atLineStart);
+		lineInsert += nPositions;
 	}
 
 	ch = *end;
@@ -1269,7 +1273,7 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 
 	//const double duration = period.Duration()*1e3;
 	//printf("%s avx2=%d, cache=%d, perLine=%d, duration=%f\n", __func__, NP2_USE_AVX2,
-	//	CellBuffer_InsertLine_CacheCount, InsertString_WithoutPerLine, duration);
+	//	(int)PositionBlockSize, InsertString_WithoutPerLine, duration);
 
 	// Joining two lines where last insertion is cr and following substance starts with lf
 	if (chAfter == '\n') {

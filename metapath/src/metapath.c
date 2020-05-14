@@ -167,10 +167,11 @@ HANDLE		g_hDefaultHeap;
 #if _WIN32_WINNT < _WIN32_WINNT_WIN10
 DWORD		g_uWinVer;
 #endif
-static WCHAR g_wchAppUserModelID[64] = L"";
+WCHAR g_wchAppUserModelID[64] = L"";
 #if NP2_ENABLE_APP_LOCALIZATION_DLL
 static HMODULE hResDLL;
 static LANGID uiLanguage;
+UINT languageResID;
 #endif
 
 //=============================================================================
@@ -582,7 +583,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 		DisplayPath(szBuf, IDS_ERR_DROP1);
 
 		//if (DragQueryFile(hDrop, (UINT)(-1), NULL, 0) > 1) {
-		//	ErrorMessage(1, IDS_ERR_DROP2);
+		//	MsgBox(MBWARN, IDS_ERR_DROP2);
 		//}
 
 		DragFinish(hDrop);
@@ -1178,7 +1179,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 			if (DriveBox_GetSelDrive(hwndDriveBox, tch, COUNTOF(tch), TRUE) && !PathIsSameRoot(szCurDir, tch)) {
 				if (!ChangeDirectory(hwnd, tch, TRUE)) {
-					ErrorMessage(2, IDS_ERR_CD);
+					MsgBox(MBWARN, IDS_ERR_CD);
 					DriveBox_SelectDrive(hwndDriveBox, szCurDir);
 				}
 			}
@@ -1196,7 +1197,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		switch (dli.ntype) {
 		case DLE_DIR:
 			if (!ChangeDirectory(hwnd, dli.szFileName, TRUE)) {
-				ErrorMessage(2, IDS_ERR_CD);
+				MsgBox(MBWARN, IDS_ERR_CD);
 			}
 			break;
 
@@ -1373,7 +1374,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				ListView_EnsureVisible(hwndDirList, 0, FALSE);
 			}
 		} else {
-			ErrorMessage(2, IDS_ERR_NEW);
+			MsgBox(MBWARN, IDS_ERR_NEW);
 		}
 	}
 	break;
@@ -1383,7 +1384,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 		if (NewDirDlg(hwnd, tchNewDir)) {
 			if (!CreateDirectory(tchNewDir, NULL)) {
-				ErrorMessage(2, IDS_ERR_NEWDIR);
+				MsgBox(MBWARN, IDS_ERR_NEWDIR);
 			}
 		}
 	}
@@ -1400,7 +1401,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 		if (GetDirectory(hwnd, IDS_CREATELINK, tchLinkDestination, NULL)) {
 			if (!PathCreateLnk(tchLinkDestination, dli.szFileName)) {
-				ErrorMessage(2, IDS_ERR_CREATELINK);
+				MsgBox(MBWARN, IDS_ERR_CREATELINK);
 			}
 		}
 	}
@@ -1453,7 +1454,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		const BOOL bSuccess = CopyFile(dli.szFileName, szNewFile, FALSE);
 
 		if (!bSuccess) {
-			ErrorMessage(2, IDS_ERR_SAVEAS1, dli.szDisplayName);
+			MsgBox(MBWARN, IDS_ERR_SAVEAS1, dli.szDisplayName);
 		}
 
 		if (bSuccess && bClearReadOnly) {
@@ -1461,7 +1462,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			if (dwFileAttributes & FILE_ATTRIBUTE_READONLY) {
 				dwFileAttributes &= ~FILE_ATTRIBUTE_READONLY;
 				if (!SetFileAttributes(szNewFile, dwFileAttributes)) {
-					ErrorMessage(2, IDS_ERR_SAVEAS2);
+					MsgBox(MBWARN, IDS_ERR_SAVEAS2);
 				}
 			}
 		}
@@ -1546,7 +1547,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 		if (GetDirectory(hwnd, IDS_GETDIRECTORY, tch, NULL)) {
 			if (!ChangeDirectory(hwnd, tch, TRUE)) {
-				ErrorMessage(2, IDS_ERR_CD);
+				MsgBox(MBWARN, IDS_ERR_CD);
 			}
 		}
 	}
@@ -1568,13 +1569,17 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	}
 	break;
 
-	case IDM_VIEW_NEWWINDOW: {
+	case IDM_VIEW_NEWWINDOW:
+	case IDM_FILE_RESTART: {
 		WCHAR szModuleName[MAX_PATH];
 		WCHAR szParameters[1024];
 
 		GetModuleFileName(NULL, szModuleName, COUNTOF(szModuleName));
 		GetRelaunchParameters(szParameters);
-		ShellExecute(hwnd, NULL, szModuleName, szParameters, NULL, SW_SHOWNORMAL);
+		const LONG_PTR result = (LONG_PTR)ShellExecute(hwnd, NULL, szModuleName, szParameters, NULL, SW_SHOWNORMAL);
+		if (result > 32 && LOWORD(wParam) == IDM_FILE_RESTART) {
+			DestroyWindow(hwnd);
+		}
 	}
 	break;
 
@@ -1886,7 +1891,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			WCHAR tch[MAX_PATH];
 			History_Back(&mHistory, tch, COUNTOF(tch));
 			if (!ChangeDirectory(hwnd, tch, FALSE)) {
-				ErrorMessage(2, IDS_ERR_CD);
+				MsgBox(MBWARN, IDS_ERR_CD);
 			}
 		} else {
 			MessageBeep(MB_OK);
@@ -1899,7 +1904,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			WCHAR tch[MAX_PATH];
 			History_Forward(&mHistory, tch, COUNTOF(tch));
 			if (!ChangeDirectory(hwnd, tch, FALSE)) {
-				ErrorMessage(2, IDS_ERR_CD);
+				MsgBox(MBWARN, IDS_ERR_CD);
 			}
 		} else {
 			MessageBeep(MB_OK);
@@ -1910,7 +1915,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDT_UP_DIR: {
 		if (!PathIsRoot(szCurDir)) {
 			if (!ChangeDirectory(hwnd, L"..", TRUE)) {
-				ErrorMessage(2, IDS_ERR_CD);
+				MsgBox(MBWARN, IDS_ERR_CD);
 			}
 		} else {
 			MessageBeep(MB_OK);
@@ -1921,7 +1926,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDT_ROOT_DIR: {
 		if (!PathIsRoot(szCurDir)) {
 			if (!ChangeDirectory(hwnd, L"\\", TRUE)) {
-				ErrorMessage(2, IDS_ERR_CD);
+				MsgBox(MBWARN, IDS_ERR_CD);
 			}
 		} else {
 			MessageBeep(MB_OK);
@@ -2248,7 +2253,7 @@ BOOL ChangeDirectory(HWND hwnd, LPCWSTR lpszNewDir, BOOL bUpdateHistory) {
 			WCHAR szWinDir[MAX_PATH];
 			GetWindowsDirectory(szWinDir, COUNTOF(szWinDir));
 			SetCurrentDirectory(szWinDir);
-			ErrorMessage(2, IDS_ERR_CD);
+			MsgBox(MBWARN, IDS_ERR_CD);
 		}
 	}
 
@@ -2329,6 +2334,63 @@ static void GetWindowPositionSectionName(WCHAR sectionName[96]) {
 
 	wsprintf(sectionName, L"%s %ix%i", INI_SECTION_NAME_WINDOW_POSITION, cxScreen, cyScreen);
 }
+
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+void ValidateUILangauge(void) {
+	const LANGID subLang = SUBLANGID(uiLanguage);
+	switch (PRIMARYLANGID(uiLanguage)) {
+	case LANG_ENGLISH:
+		languageResID = IDS_LANG_ENGLISH_US;
+		break;
+	case LANG_CHINESE:
+		languageResID = IsChineseTraditionalSubLang(subLang)? IDS_LANG_CHINESE_TRADITIONAL : IDS_LANG_CHINESE_SIMPLIFIED;
+		break;
+	case LANG_JAPANESE:
+		languageResID = IDS_LANG_JAPANESE;
+		break;
+	case LANG_NEUTRAL:
+	default:
+		languageResID = IDS_LANG_USER_DEFAULT;
+		uiLanguage = LANG_USER_DEFAULT;
+		break;
+	}
+}
+
+void SetUILanguage(UINT resID) {
+	LANGID lang = uiLanguage;
+	switch (resID) {
+	case IDS_LANG_USER_DEFAULT:
+		lang = LANG_USER_DEFAULT;
+		break;
+	case IDS_LANG_ENGLISH_US:
+		lang = MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US);
+		break;
+	case IDS_LANG_CHINESE_SIMPLIFIED:
+		lang = MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED);
+		break;
+	case IDS_LANG_CHINESE_TRADITIONAL:
+		lang = MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL);
+		break;
+	case IDS_LANG_JAPANESE:
+		lang = MAKELANGID(LANG_JAPANESE, SUBLANG_DEFAULT);
+		break;
+	}
+
+	if (uiLanguage == lang) {
+		return;
+	}
+
+	const int result = MsgBox(MBYESNOCANCEL, IDS_CHANGE_LANG_RESTART);
+	if (result != IDCANCEL) {
+		languageResID = resID;
+		uiLanguage = lang;
+		IniSetInt(INI_SECTION_NAME_FLAGS, L"UILanguage", lang);
+		if (result == IDYES) {
+			PostWMCommand(hwndMain, IDM_FILE_RESTART);
+		}
+	}
+}
+#endif
 
 //=============================================================================
 //
@@ -2537,14 +2599,14 @@ void SaveSettingsNow(void) {
 			}
 			EndWaitCursor();
 			if (!bCreateFailure) {
-				ErrorMessage(0, IDS_SAVESETTINGS);
+				MsgBox(MBINFO, IDS_SAVESETTINGS);
 			}
 		} else {
-			ErrorMessage(2, IDS_ERR_INIWRITE);
+			MsgBox(MBWARN, IDS_ERR_INIWRITE);
 		}
 	}
 	if (bCreateFailure) {
-		ErrorMessage(2, IDS_ERR_INICREATE);
+		MsgBox(MBWARN, IDS_ERR_INICREATE);
 	}
 }
 
@@ -2865,6 +2927,7 @@ void LoadFlags(void) {
 
 #if NP2_ENABLE_APP_LOCALIZATION_DLL
 	uiLanguage = (LANGID)IniSectionGetInt(pIniSection, L"UILanguage", LANG_USER_DEFAULT);
+	ValidateUILangauge();
 #endif
 
 	bReuseWindow = IniSectionGetBool(pIniSection, L"ReuseWindow", 0);
@@ -3092,7 +3155,7 @@ BOOL DisplayPath(LPCWSTR lpPath, UINT uIdError) {
 	if (dwAttr != INVALID_FILE_ATTRIBUTES) {
 		if (dwAttr & FILE_ATTRIBUTE_DIRECTORY) {
 			if (!SetCurrentDirectory(szPath)) {
-				ErrorMessage(2, uIdError);
+				MsgBox(MBWARN, uIdError);
 				return FALSE;
 			}
 			PostWMCommand(hwndMain, IDM_VIEW_UPDATE);
@@ -3125,7 +3188,7 @@ BOOL DisplayPath(LPCWSTR lpPath, UINT uIdError) {
 		}
 	}
 
-	ErrorMessage(2, uIdError);
+	MsgBox(MBWARN, uIdError);
 	return FALSE;
 }
 
@@ -3152,7 +3215,7 @@ BOOL DisplayLnkFile(LPCWSTR pszLnkFile) {
 			}
 		}
 
-		ErrorMessage(2, IDS_ERR_LNK_GETPATH);
+		MsgBox(MBWARN, IDS_ERR_LNK_GETPATH);
 		return FALSE;
 	}
 
@@ -3167,7 +3230,7 @@ BOOL DisplayLnkFile(LPCWSTR pszLnkFile) {
 	if (dwAttr != INVALID_FILE_ATTRIBUTES) {
 		if (dwAttr & FILE_ATTRIBUTE_DIRECTORY) {
 			if (!SetCurrentDirectory(szPath)) {
-				ErrorMessage(2, IDS_ERR_LNK_NOACCESS);
+				MsgBox(MBWARN, IDS_ERR_LNK_NOACCESS);
 				return FALSE;
 			}
 			PostWMCommand(hwndMain, IDM_VIEW_UPDATE);
@@ -3225,7 +3288,7 @@ BOOL DisplayLnkFile(LPCWSTR pszLnkFile) {
 		}
 	}
 
-	ErrorMessage(2, IDS_ERR_LNK_NOACCESS);
+	MsgBox(MBWARN, IDS_ERR_LNK_NOACCESS);
 	return FALSE;
 }
 
