@@ -26,6 +26,7 @@
 #include <commctrl.h>
 #include <commdlg.h>
 #include <uxtheme.h>
+#include "config.h"
 #include "SciCall.h"
 #include "Helpers.h"
 #include "Notepad2.h"
@@ -39,6 +40,7 @@ extern HWND		hwndMain;
 extern DWORD	dwLastIOError;
 extern BOOL		bSkipUnicodeDetection;
 extern BOOL		bLoadANSIasUTF8;
+extern BOOL		bLoadASCIIasUTF8;
 extern BOOL		bLoadNFOasOEM;
 extern int		fNoFileVariables;
 extern BOOL		bNoEncodingTags;
@@ -46,12 +48,15 @@ extern BOOL		bWarnLineEndings;
 extern BOOL		bFixLineEndings;
 extern BOOL		bAutoStripBlanks;
 extern WCHAR	szCurFile[MAX_PATH + 40];
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+extern LANGID uiLanguage;
+#endif
 
 //=============================================================================
 //
 // MsgBox()
 //
-int MsgBox(int iType, UINT uIdMsg, ...) {
+int MsgBox(UINT uType, UINT uIdMsg, ...) {
 	WCHAR szBuf[1024];
 	WCHAR szText[1024];
 
@@ -62,15 +67,20 @@ int MsgBox(int iType, UINT uIdMsg, ...) {
 	wvsprintf(szText, szBuf, va);
 	va_end(va);
 
-	if (uIdMsg == IDS_ERR_LOADFILE || uIdMsg == IDS_ERR_SAVEFILE ||
-			uIdMsg == IDS_CREATEINI_FAIL || uIdMsg == IDS_WRITEINI_FAIL ||
-			uIdMsg == IDS_EXPORT_FAIL) {
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+	const LANGID lang = uiLanguage;
+#else
+	const LANGID lang = LANG_USER_DEFAULT;
+#endif
+
+	if (uType & MB_SERVICE_NOTIFICATION) {
+		uType &= ~MB_SERVICE_NOTIFICATION;
 		LPWSTR lpMsgBuf;
 		FormatMessage(
 			FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL,
 			dwLastIOError,
-			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			lang,
 			(LPWSTR)(&lpMsgBuf),
 			0,
 			NULL);
@@ -84,40 +94,21 @@ int MsgBox(int iType, UINT uIdMsg, ...) {
 		}
 	}
 
-	WCHAR szTitle[64];
+	WCHAR szTitle[128];
 	GetString(IDS_APPTITLE, szTitle, COUNTOF(szTitle));
-
-	int iIcon = MB_OK;
-	switch (iType) {
-	case MBINFO:
-		iIcon = MB_ICONINFORMATION;
-		break;
-	case MBWARN:
-		iIcon = MB_ICONEXCLAMATION;
-		break;
-	case MBYESNO:
-		iIcon = MB_ICONEXCLAMATION | MB_YESNO;
-		break;
-	case MBYESNOCANCEL:
-		iIcon = MB_ICONEXCLAMATION | MB_YESNOCANCEL;
-		break;
-	case MBYESNOWARN:
-		iIcon = MB_ICONEXCLAMATION | MB_YESNO;
-		break;
-	case MBOKCANCEL:
-		iIcon = MB_ICONEXCLAMATION | MB_OKCANCEL;
-		break;
-	}
 
 	HWND hwnd;
 	if ((hwnd = GetActiveWindow()) == NULL) {
 		hwnd = hwndMain;
 	}
 
+	uType |= MB_SETFOREGROUND;
+	if (bWindowLayoutRTL) {
+		uType |= MB_RTLREADING;
+	}
+
 	PostMessage(hwndMain, APPM_CENTER_MESSAGE_BOX, (WPARAM)hwnd, 0);
-	return MessageBoxEx(hwnd, szText, szTitle,
-						MB_SETFOREGROUND | iIcon,
-						MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT));
+	return MessageBoxEx(hwnd, szText, szTitle, uType, lang);
 }
 
 //=============================================================================
@@ -141,7 +132,14 @@ void DisplayCmdLineHelp(HWND hwnd) {
 	mbp.lpszIcon = MAKEINTRESOURCE(IDR_MAINWND);
 	mbp.dwContextHelpId = 0;
 	mbp.lpfnMsgBoxCallback = NULL;
-	mbp.dwLanguageId = MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL);
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+	mbp.dwLanguageId = uiLanguage;
+#else
+	mbp.dwLanguageId = LANG_USER_DEFAULT;
+#endif
+	if (bWindowLayoutRTL) {
+		mbp.dwStyle |= MB_RTLREADING;
+	}
 
 	if (hwnd != NULL) {
 		PostMessage(hwndMain, APPM_CENTER_MESSAGE_BOX, (WPARAM)hwnd, 0);
@@ -233,7 +231,7 @@ BOOL GetDirectory(HWND hwndParent, int iTitle, LPWSTR pszFolder, LPCWSTR pszBase
 	LPITEMIDLIST pidl = SHBrowseForFolder(&bi);
 	if (pidl) {
 		SHGetPathFromIDList(pidl, pszFolder);
-		CoTaskMemFree((LPVOID)pidl);
+		CoTaskMemFree(pidl);
 		return TRUE;
 	}
 
@@ -918,10 +916,10 @@ BOOL AddToFavDlg(HWND hwnd, LPCWSTR lpszName, LPCWSTR lpszTarget) {
 
 	if (iResult == IDOK) {
 		if (PathCreateFavLnk(pszName, lpszTarget, tchFavoritesDir)) {
-			MsgBox(MBINFO, IDS_FAV_SUCCESS);
+			MsgBoxInfo(MB_OK, IDS_FAV_SUCCESS);
 			return TRUE;
 		}
-		MsgBox(MBWARN, IDS_FAV_FAILURE);
+		MsgBoxWarn(MB_OK, IDS_FAV_FAILURE);
 	}
 
 	return FALSE;
@@ -966,7 +964,7 @@ static DWORD WINAPI FileMRUIconThread(LPVOID lpParam) {
 		if (ListView_GetItem(hwnd, &lvi)) {
 			SHFILEINFO shfi;
 			DWORD dwAttr = 0;
-			if (PathIsUNC(tch) || !PathFileExists(tch)) {
+			if (PathIsUNC(tch) || !PathIsFile(tch)) {
 				dwFlags |= SHGFI_USEFILEATTRIBUTES;
 				dwAttr = FILE_ATTRIBUTE_NORMAL;
 				shfi.dwAttributes = 0;
@@ -1134,7 +1132,7 @@ static INT_PTR CALLBACK FileMRUDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 					DWORD dwFlags = SHGFI_SMALLICON | SHGFI_SYSICONINDEX | SHGFI_ATTRIBUTES | SHGFI_ATTR_SPECIFIED;
 					DWORD dwAttr = 0;
 					SHFILEINFO shfi;
-					if (!PathFileExists(tch)) {
+					if (!PathIsFile(tch)) {
 						dwFlags |= SHGFI_USEFILEATTRIBUTES;
 						dwAttr = FILE_ATTRIBUTE_NORMAL;
 						shfi.dwAttributes = 0;
@@ -1258,9 +1256,9 @@ static INT_PTR CALLBACK FileMRUDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 
 				PathUnquoteSpaces(tch);
 
-				if (!PathFileExists(tch)) {
+				if (!PathIsFile(tch)) {
 					// Ask...
-					if (IDYES == MsgBox(MBYESNO, IDS_ERR_MRUDLG)) {
+					if (IDYES == MsgBoxWarn(MB_YESNO, IDS_ERR_MRUDLG)) {
 						MRU_Delete(pFileMRU, lvi.iItem);
 						MRU_DeleteFileFromStore(pFileMRU, tch);
 
@@ -1686,6 +1684,9 @@ static INT_PTR CALLBACK SelectDefEncodingDlgProc(HWND hwnd, UINT umsg, WPARAM wP
 		if (bLoadANSIasUTF8) {
 			CheckDlgButton(hwnd, IDC_ANSIASUTF8, BST_CHECKED);
 		}
+		if (bLoadASCIIasUTF8) {
+			CheckDlgButton(hwnd, IDC_ASCIIASUTF8, BST_CHECKED);
+		}
 
 		if (bLoadNFOasOEM) {
 			CheckDlgButton(hwnd, IDC_NFOASOEM, BST_CHECKED);
@@ -1721,6 +1722,7 @@ static INT_PTR CALLBACK SelectDefEncodingDlgProc(HWND hwnd, UINT umsg, WPARAM wP
 		case IDOK: {
 			bSkipUnicodeDetection = IsButtonChecked(hwnd, IDC_NOUNICODEDETECTION);
 			bLoadANSIasUTF8 = IsButtonChecked(hwnd, IDC_ANSIASUTF8);
+			bLoadASCIIasUTF8 = IsButtonChecked(hwnd, IDC_ASCIIASUTF8);
 			bLoadNFOasOEM = IsButtonChecked(hwnd, IDC_NFOASOEM);
 			bNoEncodingTags = IsButtonChecked(hwnd, IDC_ENCODINGFROMFILEVARS);
 			EndDialog(hwnd, IDOK);
@@ -2275,7 +2277,7 @@ BOOL AutoCompletionSettingsDlg(HWND hwnd) {
 //
 typedef struct INFOBOX {
 	LPWSTR lpstrMessage;
-	LPWSTR lpstrSetting;
+	LPCWSTR lpstrSetting;
 	LPCWSTR idiIcon;
 	BOOL   bDisableCheckBox;
 } INFOBOX, *LPINFOBOX;
@@ -2333,10 +2335,12 @@ static INT_PTR CALLBACK InfoBoxDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 // InfoBox()
 //
 //
-INT_PTR InfoBox(int iType, LPCWSTR lpstrSetting, UINT uidMessage, ...) {
+INT_PTR InfoBox(UINT uType, LPCWSTR lpstrSetting, UINT uidMessage, ...) {
+	const UINT icon = uType & MB_ICONMASK;
+	uType &= MB_TYPEMASK;
 	const int iMode = IniGetInt(INI_SECTION_NAME_SUPPRESSED_MESSAGES, lpstrSetting, 0);
 	if (StrNotEmpty(lpstrSetting) && iMode == 1) {
-		return (iType == MBYESNO) ? IDYES : IDOK;
+		return (uType == MB_YESNO) ? IDYES : IDOK;
 	}
 
 	WCHAR wchFormat[512];
@@ -2350,11 +2354,11 @@ INT_PTR InfoBox(int iType, LPCWSTR lpstrSetting, UINT uidMessage, ...) {
 	wvsprintf(ib.lpstrMessage, wchFormat, va);
 	va_end(va);
 
-	ib.lpstrSetting = (LPWSTR)lpstrSetting;
-	ib.idiIcon = (uidMessage == IDS_REPLCOUNT || uidMessage == IDS_FIND_WRAPFW || uidMessage == IDS_FIND_WRAPRE) ? IDI_INFORMATION : IDI_EXCLAMATION;
+	ib.lpstrSetting = lpstrSetting;
+	ib.idiIcon = (icon == MB_ICONINFORMATION) ? IDI_INFORMATION : ((icon == MB_ICONQUESTION) ? IDI_QUESTION : IDI_EXCLAMATION);
 	ib.bDisableCheckBox = StrIsEmpty(szIniFile) || StrIsEmpty(lpstrSetting) || iMode == 2;
 
-	const WORD idDlg = (iType == MBYESNO) ? IDD_INFOBOX_YESNO : ((iType == MBOKCANCEL) ? IDD_INFOBOX_OKCANCEL : IDD_INFOBOX_OK);
+	const WORD idDlg = (uType == MB_YESNO) ? IDD_INFOBOX_YESNO : ((uType == MB_OKCANCEL) ? IDD_INFOBOX_OKCANCEL : IDD_INFOBOX_OK);
 
 	HWND hwnd;
 	if ((hwnd = GetActiveWindow()) == NULL) {

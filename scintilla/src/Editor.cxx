@@ -154,7 +154,7 @@ Editor::Editor() : durationWrapOneLine(0.00001, 0.000001, 0.0001) {
 	horizontalScrollBarVisible = true;
 	scrollWidth = 2000;
 	verticalScrollBarVisible = true;
-	endAtLastLine = true;
+	endAtLastLine = 1;
 	caretSticky = SC_CARETSTICKY_OFF;
 	marginOptions = SC_MARGINOPTION_NONE;
 	mouseSelectionRectangularSwitch = false;
@@ -234,10 +234,8 @@ void Editor::SetRepresentations() {
 		}
 		reprs.SetRepresentation("\xe2\x80\xa8", "LS");
 		reprs.SetRepresentation("\xe2\x80\xa9", "PS");
-	}
 
-	// UTF-8 invalid bytes
-	if (IsUnicodeMode()) {
+		// UTF-8 invalid bytes
 		for (int k = 0x80; k < 0x100; k++) {
 			const char hiByte[2] = { static_cast<char>(k), 0 };
 			char hexits[5];	// Really only needs 4 but that causes warning from gcc 7.1
@@ -350,19 +348,28 @@ Sci::Line Editor::LinesToScroll() const noexcept {
 }
 
 Sci::Line Editor::MaxScrollPos() const noexcept {
-	//Platform::DebugPrintf("Lines %d screen = %d maxScroll = %d\n",
-	//pdoc->LinesTotal(), LinesOnScreen(), pdoc->LinesTotal() - LinesOnScreen() + 1);
 	Sci::Line retVal = pcs->LinesDisplayed();
-	if (endAtLastLine) {
-		retVal -= LinesOnScreen();
-	} else {
+	const Sci::Line linesOnScreen = LinesOnScreen();
+	//Platform::DebugPrintf("Lines %d screen = %d maxScroll = %d\n",
+	//pdoc->LinesTotal(), linesOnScreen, pdoc->LinesTotal() - linesOnScreen + 1);
+	switch (endAtLastLine) {
+	case 0:
 		retVal--;
+		break;
+	case 1:
+		retVal -= linesOnScreen;
+		break;
+	case 2:
+		retVal -= linesOnScreen/2;
+		break;
+	case 3:
+		retVal -= 2*linesOnScreen/3;
+		break;
+	case 4:
+		retVal -= 3*linesOnScreen/4;
+		break;
 	}
-	if (retVal < 0) {
-		return 0;
-	} else {
-		return retVal;
-	}
+	return (retVal < 0) ? 0 : retVal;
 }
 
 SelectionPosition Editor::ClampPositionIntoDocument(SelectionPosition sp) const noexcept {
@@ -643,7 +650,7 @@ void Editor::InvalidateWholeSelection() noexcept {
 /* For Line selection - the anchor and caret are always
    at the beginning and end of the region lines. */
 SelectionRange Editor::LineSelectionRange(SelectionPosition currentPos_, SelectionPosition anchor_, bool withEOL) const noexcept {
-	if (currentPos_ > anchor_) {
+	if (currentPos_ >= anchor_) {
 		anchor_ = SelectionPosition(
 			pdoc->LineStart(pdoc->LineFromPosition(anchor_.Position())));
 		const Sci::Line endLine = pdoc->LineFromPosition(currentPos_.Position());
@@ -1832,7 +1839,7 @@ int Editor::TextWidth(int style, const char *text) {
 	RefreshStyleData();
 	AutoSurface surface(this);
 	if (surface) {
-		return static_cast<int>(surface->WidthText(vs.styles[style].font, text));
+		return static_cast<int>(std::lround(surface->WidthText(vs.styles[style].font, text)));
 	} else {
 		return 1;
 	}
@@ -6805,13 +6812,14 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 		RefreshStyleData();
 		return vs.lineHeight;
 
-	case SCI_SETENDATLASTLINE:
-		PLATFORM_ASSERT((wParam == 0) || (wParam == 1));
-		if (endAtLastLine != (wParam != 0)) {
-			endAtLastLine = wParam != 0;
+	case SCI_SETENDATLASTLINE: {
+		const int line = std::clamp(static_cast<int>(wParam), 0, 4);
+		if (endAtLastLine != line) {
+			endAtLastLine = line;
 			SetScrollBars();
 		}
-		break;
+	}
+	break;
 
 	case SCI_GETENDATLASTLINE:
 		return endAtLastLine;

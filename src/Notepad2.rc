@@ -251,21 +251,21 @@ BEGIN
 			MENUITEM "&Sentence Case\tCtrl+Alt+O",		IDM_EDIT_SENTENCECASE
 			POPUP "Oth&er Conversions"
 			BEGIN
-				MENUITEM "Halfwidth Form To Full&width",		IDM_EDIT_MAP_FULLWIDTH
-				MENUITEM "Fullwidth Form To H&alfwidth",		IDM_EDIT_MAP_HALFWIDTH
+				MENUITEM "Halfwidth Form to Full&width",		IDM_EDIT_MAP_FULLWIDTH
+				MENUITEM "Fullwidth Form to H&alfwidth",		IDM_EDIT_MAP_HALFWIDTH
 				MENUITEM SEPARATOR
-				MENUITEM "Chinese Traditional To &Simplified",	IDM_EDIT_MAP_SIMPLIFIED_CHINESE
-				MENUITEM "Chinese Simplified To &Traditional",	IDM_EDIT_MAP_TRADITIONAL_CHINESE
+				MENUITEM "Chinese Traditional to &Simplified",	IDM_EDIT_MAP_SIMPLIFIED_CHINESE
+				MENUITEM "Chinese Simplified to &Traditional",	IDM_EDIT_MAP_TRADITIONAL_CHINESE
 				MENUITEM SEPARATOR
-				MENUITEM "Japanese Katakana To &Hiragana",		IDM_EDIT_MAP_HIRAGANA
-				MENUITEM "Japanese Hiragana To &Katakana",		IDM_EDIT_MAP_KATAKANA
+				MENUITEM "Japanese Katakana to &Hiragana",		IDM_EDIT_MAP_HIRAGANA
+				MENUITEM "Japanese Hiragana to &Katakana",		IDM_EDIT_MAP_KATAKANA
 				MENUITEM SEPARATOR
 				MENUITEM "Korean Han&gul Decomposition",		IDM_EDIT_MAP_HANGUL_DECOMPOSITION
 				MENUITEM SEPARATOR
-				MENUITEM "&Bengali To Latin",					IDM_EDIT_MAP_BENGALI_LATIN
-				MENUITEM "C&yrillic To Latin",					IDM_EDIT_MAP_CYRILLIC_LATIN
-				MENUITEM "&Devanagari To Latin",				IDM_EDIT_MAP_DEVANAGARI_LATIN
-				MENUITEM "&Malayalam To Latin",					IDM_EDIT_MAP_MALAYALAM_LATIN
+				MENUITEM "&Bengali to Latin",					IDM_EDIT_MAP_BENGALI_LATIN
+				MENUITEM "C&yrillic to Latin",					IDM_EDIT_MAP_CYRILLIC_LATIN
+				MENUITEM "&Devanagari to Latin",				IDM_EDIT_MAP_DEVANAGARI_LATIN
+				MENUITEM "&Malayalam to Latin",					IDM_EDIT_MAP_MALAYALAM_LATIN
 			END
 			MENUITEM SEPARATOR
 			MENUITEM "&Tabify Selection\tCtrl+Shift+T",		IDM_EDIT_CONVERTSPACES
@@ -378,14 +378,15 @@ BEGIN
 			MENUITEM "Find Matching &Brace\tCtrl+B",				IDM_EDIT_FINDMATCHINGBRACE
 			MENUITEM "Select to Matching B&race\tCtrl+Shift+B",		IDM_EDIT_SELTOMATCHINGBRACE
 			MENUITEM "Select &Word\tCtrl+Alt+Space",				IDM_EDIT_SELECTWORD
-			MENUITEM "Select &Lines\tCtrl+Shift+Space",				IDM_EDIT_SELECTLINE
+			MENUITEM "Select &Lines (Expand Selection)\tCtrl+Shift+Space",	IDM_EDIT_SELECTLINE
+			MENUITEM "Select Lines in &Current Block\tAlt+Shift+]",	IDM_EDIT_SELECTLINE_BLOCK
 			MENUITEM SEPARATOR
 			MENUITEM "Select to Document Star&t",					IDM_EDIT_SELTODOCSTART
 			MENUITEM "Select to Document En&d",						IDM_EDIT_SELTODOCEND
 			MENUITEM "Select to Ne&xt\tCtrl+Alt+F2",				IDM_EDIT_SELTONEXT
 			MENUITEM "Select to Previou&s\tCtrl+Alt+Shift+F2",		IDM_EDIT_SELTOPREV
-			MENUITEM "&Jump to Selection Start\tAlt+,",				CMD_JUMP2SELSTART
-			MENUITEM "J&ump to Selection End\tAlt+.",				CMD_JUMP2SELEND
+			MENUITEM "&Jump to Selection Start\tAlt+Comma (,)",		CMD_JUMP2SELSTART
+			MENUITEM "J&ump to Selection End\tAlt+Period (.)",		CMD_JUMP2SELEND
 		END
 		POPUP "Boo&kmarks"
 		BEGIN
@@ -469,7 +470,7 @@ BEGIN
 		BEGIN
 			MENUITEM "Zoom &In\tCtrl++",			IDM_VIEW_ZOOMIN
 			MENUITEM "Zoom &Out\tCtrl+-",			IDM_VIEW_ZOOMOUT
-			MENUITEM "Zoom &Level...\tCtrl+.",		IDM_VIEW_ZOOM_LEVEL
+			MENUITEM "Zoom &Level...",				IDM_VIEW_ZOOM_LEVEL
 			MENUITEM "&Reset Zoom\tCtrl+\\",		IDM_VIEW_RESETZOOM
 		END
 		MENUITEM "Toggle Full &Screen\tF11 [Esc]",	IDM_VIEW_TOGGLE_FULLSCREEN
@@ -583,6 +584,14 @@ BEGIN
 			MENUITEM "Show Stat&usbar\tShift+F11",	IDM_VIEW_STATUSBAR
 			MENUITEM SEPARATOR
 			MENUITEM "Transparent &Mode\tCtrl+0",	IDM_VIEW_TRANSPARENT
+			POPUP "Scroll &Past Last Line"
+			BEGIN
+				MENUITEM "&No",						IDM_VIEW_SCROLLPASTLASTLINE_NO
+				MENUITEM "&One Page",				IDM_VIEW_SCROLLPASTLASTLINE_ONE
+				MENUITEM "&Half Page",				IDM_VIEW_SCROLLPASTLASTLINE_HALF
+				MENUITEM "1/&3 Page",				IDM_VIEW_SCROLLPASTLASTLINE_THIRD
+				MENUITEM "1/&4 Page",				IDM_VIEW_SCROLLPASTLASTLINE_QUARTER
+			END
 #if NP2_ENABLE_APP_LOCALIZATION_DLL
 			MENUITEM SEPARATOR
 			POPUP "&Language"
@@ -903,10 +912,10 @@ BEGIN
     VK_OEM_2,       IDM_EDIT_LINECOMMENT,   VIRTKEY, CONTROL, NOINVERT
     VK_OEM_2,       IDM_EDIT_COMPLETEWORD,  VIRTKEY, ALT, NOINVERT
     VK_OEM_5,       IDM_VIEW_RESETZOOM,     VIRTKEY, CONTROL, NOINVERT
+    VK_OEM_6,       IDM_EDIT_SELECTLINE_BLOCK,VIRTKEY, SHIFT, ALT, NOINVERT
     VK_OEM_COMMA,   CMD_JUMP2SELSTART,      VIRTKEY, ALT, NOINVERT
     VK_OEM_MINUS,   IDM_VIEW_ZOOMOUT,       VIRTKEY, CONTROL, NOINVERT
     VK_OEM_MINUS,   CMD_DECREASENUM,        VIRTKEY, CONTROL, ALT, NOINVERT
-    VK_OEM_PERIOD,  IDM_VIEW_ZOOM_LEVEL,    VIRTKEY, CONTROL, NOINVERT
     VK_OEM_PERIOD,  CMD_JUMP2SELEND,        VIRTKEY, ALT, NOINVERT
     VK_OEM_PLUS,    IDM_VIEW_ZOOMIN,        VIRTKEY, CONTROL, NOINVERT
     VK_OEM_PLUS,    CMD_INCREASENUM,        VIRTKEY, CONTROL, ALT, NOINVERT
@@ -1088,20 +1097,21 @@ BEGIN
     PUSHBUTTON      "Cancel",IDCANCEL,175,97,50,14
 END
 
-IDD_DEFENCODING DIALOGEX 0, 0, 209, 119
+IDD_DEFENCODING DIALOGEX 0, 0, 209, 129
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Encoding"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     LTEXT           "&Default encoding:",IDC_STATIC,7,7,195,8
     EDITTEXT        IDC_ENCODING_LABEL,7,20,195,14,ES_READONLY | ES_AUTOHSCROLL | WS_TABSTOP
-    CONTROL         "<a>Click here to select default encoding.</a>",IDC_ENCODING_LINK,"SysLink",WS_TABSTOP,7,38,195,10
+    CONTROL         "<a>Click here to &select default encoding.</a>",IDC_ENCODING_LINK,"SysLink",WS_TABSTOP,7,38,195,10
     AUTOCHECKBOX    "Skip statistical &Unicode (UTF-16) detection.",IDC_NOUNICODEDETECTION,7,52,195,10,WS_TABSTOP
-    AUTOCHECKBOX    "Open &ANSI (unknown encoding) files in UTF-8 mode.",IDC_ANSIASUTF8,7,62,195,10,WS_TABSTOP
-    AUTOCHECKBOX    "Open ANSI Art (*.&nfo, *.diz) files in DOS-437 mode.",IDC_NFOASOEM,7,72,195,10,WS_TABSTOP
-    AUTOCHECKBOX    "Don't parse encoding &tags.",IDC_ENCODINGFROMFILEVARS,7,82,195,10,WS_TABSTOP
-    DEFPUSHBUTTON   "OK",IDOK,96,98,50,14
-    PUSHBUTTON      "Cancel",IDCANCEL,152,98,50,14
+    AUTOCHECKBOX    "Open 7-bit &ASCII files in UTF-8 mode.",IDC_ASCIIASUTF8,7,62,195,10,WS_TABSTOP
+    AUTOCHECKBOX    "Open ANSI (unknown encoding) files in UTF-&8 mode.",IDC_ANSIASUTF8,7,72,195,10,WS_TABSTOP
+    AUTOCHECKBOX    "Open ANSI Art (*.&nfo, *.diz) files in DOS-437 mode.",IDC_NFOASOEM,7,82,195,10,WS_TABSTOP
+    AUTOCHECKBOX    "Don't parse encoding &tags.",IDC_ENCODINGFROMFILEVARS,7,92,195,10,WS_TABSTOP
+    DEFPUSHBUTTON   "OK",IDOK,96,108,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,152,108,50,14
 END
 
 IDD_DEFEOLMODE DIALOGEX 0, 0, 196, 80
@@ -1774,9 +1784,9 @@ BEGIN
     IDS_SAVEFILE            "Saving ""%s""..."
     IDS_PRINTFILE           "Printing page %s..."
     IDS_SAVINGSETTINGS      "Saving settings..."
-    IDS_LINKDESCRIPTION     "Edit with Notepad2"
-    IDS_FILTER_ALL          "All files (*.*)|*.*|"
-    IDS_FILTER_EXE          "Executable files (*.exe;*.com;*.bat;*.cmd;*.lnk;*.pif)|*.exe;*.com;*.bat;*.cmd;*.lnk;*.pif|All files (*.*)|*.*|"
+    IDS_LINKDESCRIPTION     "Edit with Notepad&2"
+    IDS_FILTER_ALL          "All Files (*.*)|*.*|"
+    IDS_FILTER_EXE          "Executable Files (*.exe;*.com;*.bat;*.cmd;*.lnk;*.pif)|*.exe;*.com;*.bat;*.cmd;*.lnk;*.pif|All Files (*.*)|*.*|"
 END
 
 STRINGTABLE
@@ -1830,7 +1840,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILTER_INI          "Configuration files (*.ini)|*.ini|All files (*.*)|*.*|"
+    IDS_FILTER_INI          "Configuration Files (*.ini)|*.ini|All Files (*.*)|*.*|"
     IDS_OPENWITH            "Select the directory with links to your favorite applications."
     IDS_FAVORITES           "Select the directory with links to your favorite files."
 END
@@ -2044,7 +2054,7 @@ BEGIN
 	IDS_ENCODING_IBM855				"OEM Cyrillic (primarily Russian) (IBM855);OEM Cyrillic"// Cyrillic
 	IDS_ENCODING_MAC_JAPANESE		"Mac Japanese;Mac Japanese"								// Japanese
 	IDS_ENCODING_CS_ISO2022_JP		"ISO 2022 (allow 1 byte Kana);CS ISO-2022-JP"			// Japanese
-	IDS_ENCODING_ISO2022_JP_SI		"ISO 2022 (allow 1 byte Kana - SO/SI);ISO-2022-JP SI/SO"// Japanese
+	IDS_ENCODING_ISO2022_JP_SOSI	"ISO 2022 (allow 1 byte Kana - SO/SI);ISO-2022-JP SO/SI"// Japanese
 	IDS_ENCODING_MAC_KOREAN			"Mac Korean;Mac Korean"									// Korean
 	IDS_ENCODING_ISO2022_KR			"ISO 2022 Korean;ISO-2022-KR"							// Korean
 	IDS_ENCODING_MAC_GB2312			"Simplified Chinese (Mac);Mac GB-2312"					// Chinese

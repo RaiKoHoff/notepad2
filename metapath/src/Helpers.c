@@ -27,6 +27,7 @@
 #include <vssym32.h>
 #include <psapi.h>
 #include <stdio.h>
+#include "config.h"
 #include "Helpers.h"
 #include "Dlapi.h"
 #include "resource.h"
@@ -52,7 +53,7 @@ void IniClearAllSectionEx(LPCWSTR lpszPrefix, LPCWSTR lpszIniFile, BOOL bDelete)
 	const int len = lstrlen(lpszPrefix);
 
 	while (*p) {
-		if (StrNCaseEqual(p, lpszPrefix, len)) {
+		if (StrHasPrefixCaseEx(p, lpszPrefix, len)) {
 			WritePrivateProfileSection(p, value, lpszIniFile);
 		}
 		p = StrEnd(p) + 1;
@@ -74,10 +75,10 @@ BOOL IniSectionParseArray(IniSection *section, LPWSTR lpCachedIniSection) {
 	int count = 0;
 
 	do {
-		IniKeyValueNode *node = &section->nodeList[count];
 		LPWSTR v = StrChr(p, L'=');
 		if (v != NULL) {
 			*v++ = L'\0';
+			IniKeyValueNode *node = &section->nodeList[count];
 			node->key = p;
 			node->value = v;
 			++count;
@@ -88,7 +89,7 @@ BOOL IniSectionParseArray(IniSection *section, LPWSTR lpCachedIniSection) {
 	} while (*p && count < capacity);
 
 	section->count = count;
-	return TRUE;
+	return count != 0;
 }
 
 BOOL IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection) {
@@ -102,11 +103,11 @@ BOOL IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection) {
 	int count = 0;
 
 	do {
-		IniKeyValueNode *node = &section->nodeList[count];
 		LPWSTR v = StrChr(p, L'=');
 		if (v != NULL) {
 			*v++ = L'\0';
 			const UINT keyLen = (UINT)(v - p - 1);
+			IniKeyValueNode *node = &section->nodeList[count];
 			node->hash = keyLen | (p[0] << 8) | (p[1] << 16);
 			node->key = p;
 			node->value = v;
@@ -116,6 +117,10 @@ BOOL IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection) {
 			p = StrEnd(p) + 1;
 		}
 	} while (*p && count < capacity);
+
+	if (count == 0) {
+		return FALSE;
+	}
 
 	section->count = count;
 	section->head = &section->nodeList[0];
@@ -245,17 +250,11 @@ LSTATUS Registry_SetString(HKEY hKey, LPCWSTR valueName, LPCWSTR lpszText) {
 #if _WIN32_WINNT < _WIN32_WINNT_VISTA
 LSTATUS Registry_DeleteTree(HKEY hKey, LPCWSTR lpSubKey) {
 	typedef LSTATUS (WINAPI *RegDeleteTreeSig)(HKEY hKey, LPCWSTR lpSubKey);
-	static RegDeleteTreeSig pfnDeleteTree = NULL;
-
-	if (IsVistaAndAbove()) {
-		if (pfnDeleteTree == NULL) {
-			pfnDeleteTree = (RegDeleteTreeSig)GetProcAddress(GetModuleHandle(L"advapi32.dll"), "RegDeleteTreeW");
-		}
-	}
+	RegDeleteTreeSig pfnRegDeleteTree = DLLFunctionEx(RegDeleteTreeSig, L"advapi32.dll", "RegDeleteTreeW");
 
 	LSTATUS status;
-	if (pfnDeleteTree != NULL) {
-		status = pfnDeleteTree(hKey, lpSubKey);
+	if (pfnRegDeleteTree != NULL) {
+		status = pfnRegDeleteTree(hKey, lpSubKey);
 	} else {
 		status = RegDeleteKey(hKey, lpSubKey);
 		if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND) {
@@ -301,7 +300,7 @@ BOOL FindUserResourcePath(LPCWSTR path, LPWSTR outPath) {
 		if (StrNotEmpty(szIniFile)) {
 			lstrcpy(tchBuild, szIniFile);
 			lstrcpy(PathFindFileName(tchBuild), tchFileExpanded);
-			if (PathFileExists(tchBuild)) {
+			if (PathIsFile(tchBuild)) {
 				lstrcpy(outPath, tchBuild);
 				return TRUE;
 			}
@@ -310,11 +309,11 @@ BOOL FindUserResourcePath(LPCWSTR path, LPWSTR outPath) {
 		// relative to program exe file
 		GetModuleFileName(NULL, tchBuild, COUNTOF(tchBuild));
 		lstrcpy(PathFindFileName(tchBuild), tchFileExpanded);
-		if (PathFileExists(tchBuild)) {
+		if (PathIsFile(tchBuild)) {
 			lstrcpy(outPath, tchBuild);
 			return TRUE;
 		}
-	} else if (PathFileExists(tchFileExpanded)) {
+	} else if (PathIsFile(tchFileExpanded)) {
 		lstrcpy(outPath, tchFileExpanded);
 		return TRUE;
 	}
@@ -336,9 +335,6 @@ HBITMAP LoadBitmapFile(LPCWSTR path) {
 // PrivateSetCurrentProcessExplicitAppUserModelID()
 //
 HRESULT PrivateSetCurrentProcessExplicitAppUserModelID(PCWSTR AppID) {
-	if (!IsWin7AndAbove()) {
-		return S_OK;
-	}
 	if (StrIsEmpty(AppID)) {
 		return S_OK;
 	}
@@ -352,7 +348,7 @@ HRESULT PrivateSetCurrentProcessExplicitAppUserModelID(PCWSTR AppID) {
 #else
 	typedef HRESULT (WINAPI *SetCurrentProcessExplicitAppUserModelIDSig)(PCWSTR AppID);
 	SetCurrentProcessExplicitAppUserModelIDSig pfnSetCurrentProcessExplicitAppUserModelID =
-		(SetCurrentProcessExplicitAppUserModelIDSig)GetProcAddress(GetModuleHandle(L"shell32.dll"), "SetCurrentProcessExplicitAppUserModelID");
+		DLLFunctionEx(SetCurrentProcessExplicitAppUserModelIDSig, L"shell32.dll", "SetCurrentProcessExplicitAppUserModelID");
 	if (pfnSetCurrentProcessExplicitAppUserModelID) {
 		return pfnSetCurrentProcessExplicitAppUserModelID(AppID);
 	}
@@ -365,10 +361,6 @@ HRESULT PrivateSetCurrentProcessExplicitAppUserModelID(PCWSTR AppID) {
 // IsElevated()
 //
 BOOL IsElevated(void) {
-	if (!IsVistaAndAbove()) {
-		return FALSE;
-	}
-
 	BOOL bIsElevated = FALSE;
 	HANDLE hToken = NULL;
 
@@ -891,6 +883,7 @@ LRESULT SendWMSize(HWND hwnd) {
 	return SendMessage(hwnd, WM_SIZE, SIZE_RESTORED, MAKELPARAM(rc.right, rc.bottom));
 }
 
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
 HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName) {
 	if (lang == LANG_USER_DEFAULT) {
 		lang = GetUserDefaultUILanguage();
@@ -907,6 +900,9 @@ HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName) {
 	case LANG_JAPANESE:
 		folder = L"ja";
 		break;
+	//case LANG_KOREAN:
+	//	folder = L"ko";
+	//	break;
 	}
 
 	if (folder == NULL) {
@@ -920,10 +916,38 @@ HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName) {
 	PathAppend(path, folder);
 	PathAppend(path, dllName);
 
-	const DWORD flags = IsVistaAndAbove() ? (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE) : LOAD_LIBRARY_AS_DATAFILE;
+	const DWORD flags = IsVistaAndAbove() ? (LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE) : LOAD_LIBRARY_AS_DATAFILE;
 	HMODULE hDLL = LoadLibraryEx(path, NULL, flags);
 	return hDLL;
 }
+
+#if NP2_ENABLE_TEST_LOCALIZATION_LAYOUT
+void GetLocaleDefaultUIFont(LANGID lang, LPWSTR lpFaceName, WORD *wSize) {
+	LPCWSTR font;
+	const LANGID subLang = SUBLANGID(lang);
+	switch (PRIMARYLANGID(lang)) {
+	default:
+	case LANG_ENGLISH:
+		font = L"Segoe UI";
+		*wSize = 9;
+		break;
+	case LANG_CHINESE:
+		font = IsChineseTraditionalSubLang(subLang) ? L"Microsoft JhengHei UI" : L"Microsoft YaHei UI";
+		*wSize = 9;
+		break;
+	case LANG_JAPANESE:
+		font = L"Meiryo UI";
+		*wSize = 9;
+		break;
+	case LANG_KOREAN:
+		font = L"Malgun Gothic";
+		*wSize = 9;
+		break;
+	}
+	lstrcpy(lpFaceName, font);
+}
+#endif
+#endif
 
 //=============================================================================
 //
@@ -939,7 +963,18 @@ void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, int cchDest, BOOL bSrcI
 	GetModuleFileName(NULL, wchAppPath, COUNTOF(wchAppPath));
 	PathRemoveFileSpec(wchAppPath);
 	GetWindowsDirectory(wchWinDir, COUNTOF(wchWinDir));
-	SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, wchUserFiles);
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+	if (S_OK != SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, wchUserFiles)) {
+		return;
+	}
+#else
+	LPWSTR pszPath = NULL;
+	if (S_OK != SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &pszPath)) {
+		return;
+	}
+	lstrcpy(wchUserFiles, pszPath);
+	CoTaskMemFree(pszPath);
+#endif
 
 	if (bUnexpandMyDocs &&
 			!PathIsRelative(lpszSrc) &&
@@ -976,8 +1011,19 @@ void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, int cchDest, BOOL bSrcI
 void PathAbsoluteFromApp(LPCWSTR lpszSrc, LPWSTR lpszDest, int cchDest, BOOL bExpandEnv) {
 	WCHAR wchPath[MAX_PATH];
 
-	if (StrNEqual(lpszSrc, L"%CSIDL:MYDOCUMENTS%", CSTRLEN("%CSIDL:MYDOCUMENTS%"))) {
-		SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, wchPath);
+	if (StrHasPrefix(lpszSrc, L"%CSIDL:MYDOCUMENTS%")) {
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+		if (S_OK != SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, wchPath)) {
+			return;
+		}
+#else
+		LPWSTR pszPath = NULL;
+		if (S_OK != SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &pszPath)) {
+			return;
+		}
+		lstrcpy(wchPath, pszPath);
+		CoTaskMemFree(pszPath);
+#endif
 		PathAppend(wchPath, lpszSrc + CSTRLEN("%CSIDL:MYDOCUMENTS%"));
 	} else {
 		lstrcpyn(wchPath, lpszSrc, COUNTOF(wchPath));
@@ -1071,7 +1117,7 @@ BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath, int cchResPath) {
 
 			if (SUCCEEDED(ppf->Load(wsz, STGM_READ))) {
 				WIN32_FIND_DATA fd;
-				if (NOERROR == psl->GetPath(pszResPath, cchResPath, &fd, 0)) {
+				if (S_OK == psl->GetPath(pszResPath, cchResPath, &fd, 0)) {
 					// This additional check seems reasonable
 					bSucceeded = StrNotEmpty(pszResPath);
 				}
@@ -1090,7 +1136,7 @@ BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath, int cchResPath) {
 
 			if (SUCCEEDED(ppf->lpVtbl->Load(ppf, wsz, STGM_READ))) {
 				WIN32_FIND_DATA fd;
-				if (NOERROR == psl->lpVtbl->GetPath(psl, pszResPath, cchResPath, &fd, 0)) {
+				if (S_OK == psl->lpVtbl->GetPath(psl, pszResPath, cchResPath, &fd, 0)) {
 					// This additional check seems reasonable
 					bSucceeded = StrNotEmpty(pszResPath);
 				}
@@ -1163,7 +1209,7 @@ BOOL PathCreateLnk(LPCWSTR pszLnkDir, LPCWSTR pszPath) {
 			WCHAR wsz[MAX_PATH];
 			lstrcpy(wsz, tchLnkFileName);
 
-			if (NOERROR == psl->SetPath(pszPath) && SUCCEEDED(ppf->Save(wsz, TRUE))) {
+			if (S_OK == psl->SetPath(pszPath) && SUCCEEDED(ppf->Save(wsz, TRUE))) {
 				bSucceeded = TRUE;
 			}
 
@@ -1179,7 +1225,7 @@ BOOL PathCreateLnk(LPCWSTR pszLnkDir, LPCWSTR pszPath) {
 			WCHAR wsz[MAX_PATH];
 			lstrcpy(wsz, tchLnkFileName);
 
-			if (NOERROR == psl->lpVtbl->SetPath(psl, pszPath) && SUCCEEDED(ppf->lpVtbl->Save(ppf, wsz, TRUE))) {
+			if (S_OK == psl->lpVtbl->SetPath(psl, pszPath) && SUCCEEDED(ppf->lpVtbl->Save(ppf, wsz, TRUE))) {
 				bSucceeded = TRUE;
 			}
 
@@ -1221,7 +1267,7 @@ void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, BOOL bSelect) {
 		LPITEMIDLIST pidlEntry = path ? ILCreateFromPath(path) : NULL;
 		if (pidlEntry) {
 			hr = SHOpenFolderAndSelectItems(pidl, 1, (LPCITEMIDLIST *)(&pidlEntry), 0);
-			ILFree(pidlEntry);
+			CoTaskMemFree(pidlEntry);
 		} else if (!bSelect) {
 #if 0
 			// Use an invalid item to open the folder?
@@ -1245,12 +1291,13 @@ void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, BOOL bSelect) {
 			// open parent folder and select the folder
 			hr = SHOpenFolderAndSelectItems(pidl, 0, NULL, 0);
 		}
-		ILFree(pidl);
+		CoTaskMemFree(pidl);
 		if (hr == S_OK) {
 			return;
 		}
 	}
 
+#if 0
 	if (path == NULL) {
 		path = wchDirectory;
 	}
@@ -1263,6 +1310,7 @@ void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, BOOL bSelect) {
 	lstrcat(szParameters, L"\"");
 	ShellExecute(hwnd, L"open", L"explorer", szParameters, NULL, SW_SHOW);
 	NP2HeapFree(szParameters);
+#endif
 }
 
 //=============================================================================
@@ -1482,9 +1530,14 @@ void FormatNumberStr(LPWSTR lpNumberStr) {
 void GetDefaultFavoritesDir(LPWSTR lpFavDir, int cchFavDir) {
 	LPITEMIDLIST pidl;
 
-	if (NOERROR == SHGetSpecialFolderLocation(NULL, CSIDL_PERSONAL, &pidl)) {
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+	if (S_OK == SHGetFolderLocation(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_DEFAULT, &pidl))
+#else
+	if (S_OK == SHGetKnownFolderIDList(&FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &pidl))
+#endif
+	{
 		SHGetPathFromIDList(pidl, lpFavDir);
-		CoTaskMemFree((LPVOID)pidl);
+		CoTaskMemFree(pidl);
 	} else {
 		GetWindowsDirectory(lpFavDir, cchFavDir);
 	}
@@ -1497,9 +1550,14 @@ void GetDefaultFavoritesDir(LPWSTR lpFavDir, int cchFavDir) {
 void GetDefaultOpenWithDir(LPWSTR lpOpenWithDir, int cchOpenWithDir) {
 	LPITEMIDLIST pidl;
 
-	if (NOERROR == SHGetSpecialFolderLocation(NULL, CSIDL_DESKTOPDIRECTORY, &pidl)) {
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+	if (S_OK == SHGetFolderLocation(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_DEFAULT, &pidl))
+#else
+	if (S_OK == SHGetKnownFolderIDList(&FOLDERID_Desktop, KF_FLAG_DEFAULT, NULL, &pidl))
+#endif
+	{
 		SHGetPathFromIDList(pidl, lpOpenWithDir);
-		CoTaskMemFree((LPVOID)pidl);
+		CoTaskMemFree(pidl);
 	} else {
 		GetWindowsDirectory(lpOpenWithDir, cchOpenWithDir);
 	}
@@ -1913,11 +1971,14 @@ void MRU_ClearCombobox(HWND hwnd, LPCWSTR pszKey) {
   Based on code of MFC helper class CDialogTemplate
 */
 BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
-	BOOL bSucceed = FALSE;
+#if NP2_ENABLE_APP_LOCALIZATION_DLL && NP2_ENABLE_TEST_LOCALIZATION_LAYOUT
+	extern LANGID uiLanguage;
+	GetLocaleDefaultUIFont(uiLanguage, lpFaceName, wSize);
+	return TRUE;
+#else
 
-	HDC hDC = GetDC(NULL);
-	const int iLogPixelsY = GetDeviceCaps(hDC, LOGPIXELSY);
-	ReleaseDC(NULL, hDC);
+	BOOL bSucceed = FALSE;
+	const UINT iLogPixelsY = g_uSystemDPI;
 
 	if (IsAppThemed()) {
 		HTHEME hTheme = OpenThemeData(NULL, L"WINDOWSTYLE;WINDOW");
@@ -1965,6 +2026,7 @@ BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
 		lstrcpy(lpFaceName, L"Tahoma");
 	}
 	return bSucceed;
+#endif
 }
 
 static inline BOOL DialogTemplate_IsDialogEx(const DLGTEMPLATE *pTemplate) {
@@ -1989,13 +2051,13 @@ static inline BYTE *DialogTemplate_GetFontSizeField(const DLGTEMPLATE *pTemplate
 		pw = (WORD *)(pTemplate + 1);
 	}
 
-	if (*pw == (WORD) - 1) {
+	if (*pw == (WORD)(-1)) {
 		pw += 2;
 	} else {
 		while (*pw++){}
 	}
 
-	if (*pw == (WORD) - 1) {
+	if (*pw == (WORD)(-1)) {
 		pw += 2;
 	} else {
 		while (*pw++){}

@@ -35,11 +35,15 @@
 #include "version.h"
 
 extern HWND hwndMain;
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+extern LANGID uiLanguage;
+#endif
+
 //=============================================================================
 //
 // MsgBox()
 //
-int MsgBox(int iType, UINT uIdMsg, ...) {
+int MsgBox(UINT uType, UINT uIdMsg, ...) {
 	WCHAR szBuf[256 * 2];
 	WCHAR szText[256 * 2];
 
@@ -50,40 +54,25 @@ int MsgBox(int iType, UINT uIdMsg, ...) {
 	wvsprintf(szText, szBuf, va);
 	va_end(va);
 
-	WCHAR szTitle[64];
+	WCHAR szTitle[128];
 	GetString(IDS_APPTITLE, szTitle, COUNTOF(szTitle));
-
-	int iIcon = MB_OK;
-	switch (iType) {
-	case MBINFO:
-		iIcon = MB_ICONINFORMATION;
-		break;
-	case MBWARN:
-		iIcon = MB_ICONEXCLAMATION;
-		break;
-	case MBYESNO:
-		iIcon = MB_ICONEXCLAMATION | MB_YESNO;
-		break;
-	case MBYESNOCANCEL:
-		iIcon = MB_ICONEXCLAMATION | MB_YESNOCANCEL;
-		break;
-	case MBYESNOWARN:
-		iIcon = MB_ICONEXCLAMATION | MB_YESNO;
-		break;
-	case MBOKCANCEL:
-		iIcon = MB_ICONEXCLAMATION | MB_OKCANCEL;
-		break;
-	}
 
 	HWND hwnd;
 	if ((hwnd = GetActiveWindow()) == NULL) {
 		hwnd = hwndMain;
 	}
 
+	uType |= MB_SETFOREGROUND;
+	if (bWindowLayoutRTL) {
+		uType |= MB_RTLREADING;
+	}
+
 	PostMessage(hwndMain, APPM_CENTER_MESSAGE_BOX, (WPARAM)hwnd, 0);
-	return MessageBoxEx(hwnd, szText, szTitle,
-						MB_SETFOREGROUND | iIcon,
-						MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT));
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+	return MessageBoxEx(hwnd, szText, szTitle, uType, uiLanguage);
+#else
+	return MessageBoxEx(hwnd, szText, szTitle, uType, LANG_USER_DEFAULT);
+#endif
 }
 
 //=============================================================================
@@ -130,7 +119,7 @@ BOOL GetDirectory(HWND hwndParent, int iTitle, LPWSTR pszFolder, LPCWSTR pszBase
 	LPITEMIDLIST pidl = SHBrowseForFolder(&bi);
 	if (pidl) {
 		SHGetPathFromIDList(pidl, pszFolder);
-		CoTaskMemFree((LPVOID)pidl);
+		CoTaskMemFree(pidl);
 		return TRUE;
 	}
 
@@ -141,14 +130,24 @@ BOOL GetDirectory(HWND hwndParent, int iTitle, LPWSTR pszFolder, LPCWSTR pszBase
 //
 // GetDirectory2()
 //
-BOOL GetDirectory2(HWND hwndParent, int iTitle, LPWSTR pszFolder, int iBase) {
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+BOOL GetDirectory2(HWND hwndParent, int iTitle, LPWSTR pszFolder, int iBase)
+#else
+BOOL GetDirectory2(HWND hwndParent, int iTitle, LPWSTR pszFolder, REFKNOWNFOLDERID iBase)
+#endif
+{
 	WCHAR szTitle[256];
 	lstrcpy(szTitle, L"");
 	GetString(iTitle, szTitle, COUNTOF(szTitle));
 
 	LPITEMIDLIST pidlRoot;
-	if (NOERROR != SHGetSpecialFolderLocation(hwndParent, iBase, &pidlRoot)) {
-		CoTaskMemFree((LPVOID)pidlRoot);
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+	if (S_OK != SHGetFolderLocation(hwndParent, iBase, NULL, SHGFP_TYPE_DEFAULT, &pidlRoot))
+#else
+	if (S_OK != SHGetKnownFolderIDList(iBase, KF_FLAG_DEFAULT, NULL, &pidlRoot))
+#endif
+	{
+		CoTaskMemFree(pidlRoot);
 		return FALSE;
 	}
 
@@ -166,10 +165,10 @@ BOOL GetDirectory2(HWND hwndParent, int iTitle, LPWSTR pszFolder, int iBase) {
 	const BOOL fOk = pidl != NULL;
 	if (fOk) {
 		SHGetPathFromIDList(pidl, pszFolder);
-		CoTaskMemFree((LPVOID)pidl);
+		CoTaskMemFree(pidl);
 	}
 
-	CoTaskMemFree((LPVOID)pidlRoot);
+	CoTaskMemFree(pidlRoot);
 	return fOk;
 }
 
@@ -1438,7 +1437,7 @@ INT_PTR CALLBACK GetFilterDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lP
 					}
 				}
 			} else {
-				MsgBox(MBINFO, IDS_ERR_FILTER);
+				MsgBoxInfo(MB_OK, IDS_ERR_FILTER);
 			}
 
 			DestroyMenu(hMenu);
@@ -2491,7 +2490,7 @@ INT_PTR CALLBACK FindTargetDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 					 (GetDlgItemText(hwnd, IDC_DDEMSG, tch, COUNTOF(tch)) == 0 ||
 					  GetDlgItemText(hwnd, IDC_DDEAPP, tch, COUNTOF(tch)) == 0 ||
 					  GetDlgItemText(hwnd, IDC_DDETOPIC, tch, COUNTOF(tch)) == 0))) {
-				MsgBox(MBINFO, IDS_ERR_INVALIDTARGET);
+				MsgBoxInfo(MB_OK, IDS_ERR_INVALIDTARGET);
 			} else {
 				IniSectionOnSave section;
 				WCHAR *pIniSectionBuf = (WCHAR *)NP2HeapAlloc(sizeof(WCHAR) * MAX_INI_SECTION_SIZE_TARGET_APPLICATION);

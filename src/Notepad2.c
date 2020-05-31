@@ -30,7 +30,6 @@
 #include <time.h>
 #include <inttypes.h>
 #include "SciCall.h"
-#include "VectorISA.h"
 #include "config.h"
 #include "Helpers.h"
 #include "Notepad2.h"
@@ -153,6 +152,7 @@ static BOOL bViewEOLs;
 int		iDefaultEncoding;
 BOOL	bSkipUnicodeDetection;
 BOOL	bLoadANSIasUTF8;
+BOOL	bLoadASCIIasUTF8;
 BOOL	bLoadNFOasOEM;
 BOOL	bNoEncodingTags;
 int		iSrcEncoding = -1;
@@ -181,6 +181,7 @@ static int iEscFunction;
 static BOOL bAlwaysOnTop;
 static BOOL bMinimizeToTray;
 static BOOL bTransparentMode;
+static int	iEndAtLastLine;
 BOOL	bFindReplaceTransparentMode;
 static BOOL bEditLayoutRTL;
 BOOL	bWindowLayoutRTL;
@@ -202,7 +203,6 @@ typedef struct WININFO {
 } WININFO;
 
 static WININFO wi;
-//BOOL	bIsAppThemed;
 
 static int cyReBar;
 static int cyReBarFrame;
@@ -321,19 +321,19 @@ struct CachedStatusItem {
 HINSTANCE	g_hInstance;
 HANDLE		g_hDefaultHeap;
 HANDLE		g_hScintilla;
-#if _WIN32_WINNT < _WIN32_WINNT_WIN10
+#if _WIN32_WINNT < _WIN32_WINNT_WIN7
 DWORD		g_uWinVer;
 #endif
 #if _WIN32_WINNT < _WIN32_WINNT_WIN8
 DWORD		kSystemLibraryLoadFlags = 0;
 #endif
 UINT		g_uCurrentDPI = USER_DEFAULT_SCREEN_DPI;
-UINT		g_uDefaultDPI = USER_DEFAULT_SCREEN_DPI;
+UINT		g_uSystemDPI = USER_DEFAULT_SCREEN_DPI;
 WCHAR 		g_wchAppUserModelID[64] = L"";
 static WCHAR g_wchWorkingDirectory[MAX_PATH] = L"";
 #if NP2_ENABLE_APP_LOCALIZATION_DLL
 static HMODULE hResDLL;
-static LANGID uiLanguage;
+LANGID uiLanguage;
 static UINT languageMenu;
 #endif
 
@@ -410,7 +410,7 @@ static inline void InvalidateStyleRedraw(void) {
 
 // temporary fix for issue #134: Direct2D on arm32
 static inline int GetDefualtRenderingTechnology(void) {
-#if NP2_TARGET_ARM32
+#if defined(__arm__) || defined(_ARM_) || defined(_M_ARM)
 	return SC_TECHNOLOGY_DIRECTWRITERETAIN;
 #else
 	return IsVistaAndAbove()? SC_TECHNOLOGY_DIRECTWRITE : SC_TECHNOLOGY_DEFAULT;
@@ -465,7 +465,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 
 	// Set global variable g_hInstance
 	g_hInstance = hInstance;
-#if _WIN32_WINNT < _WIN32_WINNT_WIN10
+#if _WIN32_WINNT < _WIN32_WINNT_WIN7
 	// Set the Windows version global variable
 	NP2_COMPILER_WARNING_PUSH
 	NP2_IGNORE_WARNING_DEPRECATED_DECLARATIONS
@@ -505,7 +505,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 	ParseCommandLine();
 	FindIniFile();
 	TestIniFile();
-	CreateIniFile();
+	CreateIniFile(szIniFile);
 	LoadFlags();
 
 	// set AppUserModelID
@@ -563,7 +563,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 
 #if _WIN32_WINNT < _WIN32_WINNT_WIN8
 	// see LoadD2D() in PlatWin.cxx
-	kSystemLibraryLoadFlags = (IsWin8AndAbove() || GetProcAddress(GetModuleHandle(L"kernel32.dll"), "SetDefaultDllDirectories")) ? LOAD_LIBRARY_SEARCH_SYSTEM32 : 0;
+	kSystemLibraryLoadFlags = (DLLFunctionEx(FARPROC, L"kernel32.dll", "SetDefaultDllDirectories") != NULL) ? LOAD_LIBRARY_SEARCH_SYSTEM32 : 0;
 #endif
 
 #if NP2_ENABLE_APP_LOCALIZATION_DLL
@@ -571,6 +571,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 	if (hResDLL) {
 		g_hInstance = hInstance = (HINSTANCE)hResDLL;
 	}
+#endif
+#if NP2_TARGET_ARM64
+	g_uSystemDPI = GetDpiForSystem();
+#else
+	Scintilla_LoadDpiForWindow();
 #endif
 	Scintilla_RegisterClasses(hInstance);
 
@@ -969,7 +974,7 @@ static inline BOOL IsFileStartsWithDotLog(void) {
 	char tch[5] = "";
 	const Sci_Position len = SciCall_GetText(COUNTOF(tch), tch);
 	// upper case
-	return len >= 4 && strncmp(tch, ".LOG", 4) == 0;
+	return len >= 4 && strcmp(tch, ".LOG") == 0;
 }
 #endif
 
@@ -1093,9 +1098,14 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 		MsgDPIChanged(hwnd, wParam, lParam);
 		break;
 
+	case WM_SETTINGCHANGE:
+		SendMessage(hwndEdit, WM_SETTINGCHANGE, wParam, lParam);
+		break;
+
 	// update Scintilla colors
 	case WM_SYSCOLORCHANGE: {
 		Style_SetLexer(pLexCurrent, FALSE);
+		SendMessage(hwndEdit, WM_SYSCOLORCHANGE, wParam, lParam);
 		return DefWindowProc(hwnd, umsg, wParam, lParam);
 	}
 
@@ -1117,8 +1127,10 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 			const int h = mi.rcMonitor.bottom - mi.rcMonitor.top;
 
 			LPMINMAXINFO pmmi = (LPMINMAXINFO)lParam;
-			pmmi->ptMaxSize.x = w + 2 * GetSystemMetricsEx(SM_CXSIZEFRAME);
-			pmmi->ptMaxSize.y = h + GetSystemMetricsEx(SM_CYCAPTION) + GetSystemMetricsEx(SM_CYMENU) + 2 * GetSystemMetricsEx(SM_CYSIZEFRAME);
+			pmmi->ptMaxSize.x = w + 2 * SystemMetricsForDpi(SM_CXSIZEFRAME, g_uCurrentDPI);
+			pmmi->ptMaxSize.y = h + SystemMetricsForDpi(SM_CYCAPTION, g_uCurrentDPI)
+				+ SystemMetricsForDpi(SM_CYMENU, g_uCurrentDPI)
+				+ 2 * SystemMetricsForDpi(SM_CYSIZEFRAME, g_uCurrentDPI);
 			pmmi->ptMaxTrackSize.x = pmmi->ptMaxSize.x;
 			pmmi->ptMaxTrackSize.y = pmmi->ptMaxSize.y;
 			return 0;
@@ -1139,7 +1151,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 		OnDropOneFile(hwnd, szBuf);
 
 		//if (DragQueryFile(hDrop, (UINT)(-1), NULL, 0) > 1) {
-		//	MsgBox(MBWARN, IDS_ERR_DROP);
+		//	MsgBoxWarn(MB_OK, IDS_ERR_DROP);
 		//}
 
 		DragFinish(hDrop);
@@ -1320,8 +1332,8 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 			SetForegroundWindow(hwnd);
 		}
 
-		if (PathFileExists(szCurFile)) {
-			if ((iFileWatchingMode == 2 && !IsDocumentModified()) || MsgBox(MBYESNO, IDS_FILECHANGENOTIFY) == IDYES) {
+		if (PathIsFile(szCurFile)) {
+			if ((iFileWatchingMode == 2 && !IsDocumentModified()) || MsgBoxWarn(MB_YESNO, IDS_FILECHANGENOTIFY) == IDYES) {
 				const Sci_Position iCurPos = SciCall_GetCurrentPos();
 				const Sci_Position iAnchorPos = SciCall_GetAnchor();
 #if NP2_ENABLE_DOT_LOG_FEATURE
@@ -1349,7 +1361,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 				}
 			}
 		} else {
-			if (MsgBox(MBYESNO, IDS_FILECHANGENOTIFY2) == IDYES) {
+			if (MsgBoxWarn(MB_YESNO, IDS_FILECHANGENOTIFY2) == IDYES) {
 				FileSave(TRUE, FALSE, FALSE, FALSE);
 			}
 		}
@@ -1599,7 +1611,7 @@ HWND EditCreate(HWND hwndParent) {
 	SciCall_SetCommandEvents(FALSE);
 	SciCall_UsePopUp(SC_POPUP_NEVER);
 	SciCall_SetScrollWidthTracking(TRUE);
-	SciCall_SetEndAtLastLine(TRUE);
+	SciCall_SetEndAtLastLine(iEndAtLastLine);
 	SciCall_SetCaretSticky(SC_CARETSTICKY_OFF);
 	SciCall_SetXCaretPolicy(CARET_SLOP | CARET_EVEN, 50);
 	SciCall_SetYCaretPolicy(CARET_EVEN, 0);
@@ -1730,8 +1742,7 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	UNREFERENCED_PARAMETER(wParam);
 
 	HINSTANCE hInstance = ((LPCREATESTRUCT)lParam)->hInstance;
-	g_uCurrentDPI = GetCurrentDPI(hwnd);
-	g_uDefaultDPI = GetDefaultDPI(hwnd);
+	g_uCurrentDPI = GetWindowDPI(hwnd);
 	Style_DetectBaseFontSize(hwnd);
 
 	// Setup edit control
@@ -1993,11 +2004,6 @@ void MsgDPIChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	g_uCurrentDPI = HIWORD(wParam);
 	const RECT* const rc = (RECT *)lParam;
 	const Sci_Position pos = SciCall_GetCurrentPos();
-#if 0
-	char buf[128];
-	sprintf(buf, "WM_DPICHANGED: dpi=%u, %u\n", g_uCurrentDPI, g_uDefaultDPI);
-	SciCall_InsertText(0, buf);
-#endif
 
 	// recreate toolbar and statusbar
 	RecreateBars(hwnd, g_hInstance);
@@ -2005,7 +2011,12 @@ void MsgDPIChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	Style_DetectBaseFontSize(hwnd);
 	UpdateStatusBarWidth();
-	Style_OnDPIChanged();
+	Style_OnDPIChanged(pLexCurrent);
+	SendMessage(hwndEdit, WM_DPICHANGED, wParam, lParam);
+	UpdateLineNumberWidth();
+	UpdateBookmarkMarginWidth();
+	UpdateFoldMarginWidth();
+
 	SciCall_GotoPos(pos);
 	UpdateToolbar();
 	UpdateStatusbar();
@@ -2142,7 +2153,8 @@ void UpdateStatusBarWidth(void) {
 	aWidth[3] = StatusCalcPaneWidth(hwndStatus, L"CR+LF");
 	aWidth[4] = StatusCalcPaneWidth(hwndStatus, L"OVR");
 	aWidth[5] = StatusCalcPaneWidth(hwndStatus, L"500%");
-	aWidth[6] = StatusCalcPaneWidth(hwndStatus, ((iBytes < 1024)? L"1,023 Bytes" : L"99.9 MiB")) + GetSystemMetricsEx(SM_CXHTHUMB);
+	aWidth[6] = StatusCalcPaneWidth(hwndStatus, ((iBytes < 1024)? L"1,023 Bytes" : L"99.9 MiB"))
+		+ SystemMetricsForDpi(SM_CXHTHUMB, g_uCurrentDPI);
 
 	aWidth[0] = max_i(120, cx - (aWidth[1] + aWidth[2] + aWidth[3] + aWidth[4] + aWidth[5] + aWidth[6]));
 	aWidth[1] += aWidth[0];
@@ -2200,7 +2212,7 @@ void SetUILanguage(UINT menu) {
 		return;
 	}
 
-	const int result = MsgBox(MBYESNOCANCEL, IDS_CHANGE_LANG_RESTART);
+	const int result = MsgBoxInfo(MB_YESNOCANCEL, IDS_CHANGE_LANG_RESTART);
 	if (result != IDCANCEL) {
 		languageMenu = menu;
 		uiLanguage = lang;
@@ -2441,6 +2453,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	EnableCmd(hmenu, IDM_EDIT_REPLACENEXT, i);
 	EnableCmd(hmenu, IDM_EDIT_SELECTWORD, i);
 	EnableCmd(hmenu, IDM_EDIT_SELECTLINE, i);
+	EnableCmd(hmenu, IDM_EDIT_SELECTLINE_BLOCK, i);
 	EnableCmd(hmenu, IDM_EDIT_SELTODOCEND, i);
 	EnableCmd(hmenu, IDM_EDIT_SELTODOCSTART, i);
 	EnableCmd(hmenu, IDM_EDIT_SELTONEXT, i && StrNotEmptyA(efrData.szFind));
@@ -2533,6 +2546,8 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	CheckCmd(hmenu, IDM_VIEW_MINTOTRAY, bMinimizeToTray);
 	CheckCmd(hmenu, IDM_VIEW_TRANSPARENT, bTransparentMode);
 	EnableCmd(hmenu, IDM_VIEW_TRANSPARENT, i);
+	i = IDM_VIEW_SCROLLPASTLASTLINE_ONE + iEndAtLastLine;
+	CheckMenuRadioItem(hmenu, IDM_VIEW_SCROLLPASTLASTLINE_ONE, IDM_VIEW_SCROLLPASTLASTLINE_QUARTER, i, MF_BYCOMMAND);
 
 	// Rendering Technology
 	i = IsVistaAndAbove();
@@ -2621,6 +2636,19 @@ void EditToggleBookmarkAt(Sci_Position iPos) {
 	}
 }
 
+static inline BOOL IsBraceMatchChar(int ch) {
+#if 0
+	return ch == '(' || ch == ')'
+		|| ch == '[' || ch == ']'
+		|| ch == '{' || ch == '}'
+		|| ch == '<' || ch == '>';
+#else
+	// tools/GenerateTable.py
+	static const uint32_t table[8] = { 0, 0x50000300, 0x28000000, 0x28000000 };
+	return table[ch >> 5] & (1 << (ch & 31));
+#endif
+}
+
 //=============================================================================
 //
 // MsgCommand() - Handles WM_COMMAND
@@ -2640,7 +2668,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_FILE_REVERT:
 		if (StrNotEmpty(szCurFile)) {
-			if (IsDocumentModified() && MsgBox(MBOKCANCEL, IDS_ASK_REVERT) != IDOK) {
+			if (IsDocumentModified() && MsgBoxWarn(MB_OKCANCEL, IDS_ASK_REVERT) != IDOK) {
 				return 0;
 			}
 
@@ -2688,10 +2716,10 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 					dwFileAttributes |= FILE_ATTRIBUTE_READONLY;
 				}
 				if (!SetFileAttributes(szCurFile, dwFileAttributes)) {
-					MsgBox(MBWARN, IDS_READONLY_MODIFY, szCurFile);
+					MsgBoxWarn(MB_OK, IDS_READONLY_MODIFY, szCurFile);
 				}
 			} else {
-				MsgBox(MBWARN, IDS_READONLY_MODIFY, szCurFile);
+				MsgBoxWarn(MB_OK, IDS_READONLY_MODIFY, szCurFile);
 			}
 
 			dwFileAttributes = GetFileAttributes(szCurFile);
@@ -2822,7 +2850,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		}
 
 		if (!EditPrint(hwndEdit, pszTitle)) {
-			MsgBox(MBWARN, IDS_PRINT_ERROR, pszTitle);
+			MsgBoxWarn(MB_OK, IDS_PRINT_ERROR, pszTitle);
 		}
 	}
 	break;
@@ -2852,7 +2880,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		}
 
 		if (!PathCreateDeskLnk(szCurFile)) {
-			MsgBox(MBWARN, IDS_ERR_CREATELINK);
+			MsgBoxWarn(MB_OK, IDS_ERR_CREATELINK);
 		}
 	}
 	break;
@@ -2989,7 +3017,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				break;
 			}
 
-			if (IsDocumentModified() && MsgBox(MBOKCANCEL, IDS_ASK_RECODE) != IDOK) {
+			if (IsDocumentModified() && MsgBoxWarn(MB_OKCANCEL, IDS_ASK_RECODE) != IDOK) {
 				return 0;
 			}
 
@@ -3146,11 +3174,8 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_EDIT_SELECTLINE:
-		if (bEnableLineSelectionMode) {
-			SciCall_SetSelectionMode(SC_SEL_LINES);
-		} else {
-			EditSelectLine();
-		}
+	case IDM_EDIT_SELECTLINE_BLOCK:
+		EditSelectLines(LOWORD(wParam) == IDM_EDIT_SELECTLINE_BLOCK, bEnableLineSelectionMode);
 		break;
 
 	case IDM_EDIT_MOVELINEUP:
@@ -3678,12 +3703,12 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		Sci_Position iBrace2 = -1;
 		Sci_Position iPos = SciCall_GetCurrentPos();
 		int ch = SciCall_GetCharAt(iPos);
-		if (ch < 0x80 && strchr("()[]{}<>", ch)) {
+		if (IsBraceMatchChar(ch)) {
 			iBrace2 = SciCall_BraceMatch(iPos, 0);
 		} else { // Try one before
 			iPos = SciCall_PositionBefore(iPos);
 			ch = SciCall_GetCharAt(iPos);
-			if (ch < 0x80 && strchr("()[]{}<>", ch)) {
+			if (IsBraceMatchChar(ch)) {
 				iBrace2 = SciCall_BraceMatch(iPos, 0);
 			}
 		}
@@ -3697,12 +3722,12 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		Sci_Position iBrace2 = -1;
 		Sci_Position iPos = SciCall_GetCurrentPos();
 		int ch = SciCall_GetCharAt(iPos);
-		if (ch < 0x80 && strchr("()[]{}<>", ch)) {
+		if (IsBraceMatchChar(ch)) {
 			iBrace2 = SciCall_BraceMatch(iPos, 0);
 		} else { // Try one before
 			iPos = SciCall_PositionBefore(iPos);
 			ch = SciCall_GetCharAt(iPos);
-			if (ch < 0x80 && strchr("()[]{}<>", ch)) {
+			if (IsBraceMatchChar(ch)) {
 				iBrace2 = SciCall_BraceMatch(iPos, 0);
 			}
 		}
@@ -4218,16 +4243,32 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		SetWindowTransparentMode(hwnd, bTransparentMode, iOpacityLevel);
 		break;
 
+	case IDM_VIEW_SCROLLPASTLASTLINE_NO:
+	case IDM_VIEW_SCROLLPASTLASTLINE_ONE:
+	case IDM_VIEW_SCROLLPASTLASTLINE_HALF:
+	case IDM_VIEW_SCROLLPASTLASTLINE_THIRD:
+	case IDM_VIEW_SCROLLPASTLASTLINE_QUARTER:
+		iEndAtLastLine = LOWORD(wParam) - IDM_VIEW_SCROLLPASTLASTLINE_ONE;
+		SciCall_SetEndAtLastLine(iEndAtLastLine);
+		break;
+
 	case IDM_SET_RENDER_TECH_GDI:
 	case IDM_SET_RENDER_TECH_D2D:
 	case IDM_SET_RENDER_TECH_D2DRETAIN:
-	case IDM_SET_RENDER_TECH_D2DDC:
+	case IDM_SET_RENDER_TECH_D2DDC: {
+		const int back = iRenderingTechnology;
 		iRenderingTechnology = LOWORD(wParam) - IDM_SET_RENDER_TECH_GDI;
 		SciCall_SetBufferedDraw(iRenderingTechnology == SC_TECHNOLOGY_DEFAULT);
 		SciCall_SetTechnology(iRenderingTechnology);
 		iRenderingTechnology = SciCall_GetTechnology();
 		iBidirectional = SciCall_GetBidirectional();
-		break;
+		if (back != iRenderingTechnology) {
+			UpdateLineNumberWidth();
+			UpdateBookmarkMarginWidth();
+			UpdateFoldMarginWidth();
+		}
+	}
+	break;
 
 	case IDM_SET_RTL_LAYOUT_EDIT:
 		bEditLayoutRTL = !bEditLayoutRTL;
@@ -4703,7 +4744,9 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			const Sci_Position iAnchorPos = SciCall_GetAnchor();
 			const Sci_Position iCursorPos = SciCall_GetCurrentPos();
 			if (iCursorPos > iAnchorPos) {
+				const int mode = SciCall_GetSelectionMode();
 				SciCall_SetSel(iCursorPos, iAnchorPos);
+				SciCall_SetSelectionMode(mode);
 				SciCall_ChooseCaretX();
 			}
 		}
@@ -4714,7 +4757,9 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			const Sci_Position iAnchorPos = SciCall_GetAnchor();
 			const Sci_Position iCursorPos = SciCall_GetCurrentPos();
 			if (iCursorPos < iAnchorPos) {
+				const int mode = SciCall_GetSelectionMode();
 				SciCall_SetSel(iCursorPos, iAnchorPos);
+				SciCall_SetSelectionMode(mode);
 				SciCall_ChooseCaretX();
 			}
 		}
@@ -4745,7 +4790,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case CMD_OPENINIFILE:
 		if (StrNotEmpty(szIniFile)) {
-			CreateIniFile();
+			CreateIniFile(szIniFile);
 			FileLoad(FALSE, FALSE, FALSE, FALSE, szIniFile);
 		}
 		break;
@@ -4900,7 +4945,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				if (bMatchBraces) {
 					Sci_Position iPos = SciCall_GetCurrentPos();
 					int ch = SciCall_GetCharAt(iPos);
-					if (ch < 0x80 && strchr("()[]{}<>", ch)) {
+					if (IsBraceMatchChar(ch)) {
 						const Sci_Position iBrace2 = SciCall_BraceMatch(iPos, 0);
 						if (iBrace2 != -1) {
 							const Sci_Position col1 = SciCall_GetColumn(iPos);
@@ -4914,7 +4959,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 					} else { // Try one before
 						iPos = SciCall_PositionBefore(iPos);
 						ch = SciCall_GetCharAt(iPos);
-						if (ch < 0x80 && strchr("()[]{}<>", ch)) {
+						if (IsBraceMatchChar(ch)) {
 							const Sci_Position iBrace2 = SciCall_BraceMatch(iPos, 0);
 							if (iBrace2 != -1) {
 								const Sci_Position col1 = SciCall_GetColumn(iPos);
@@ -5249,14 +5294,30 @@ void LoadSettings(void) {
 
 	LPCWSTR strValue = IniSectionGetValue(pIniSection, L"OpenWithDir");
 	if (StrIsEmpty(strValue)) {
-		SHGetSpecialFolderPath(NULL, tchOpenWithDir, CSIDL_DESKTOPDIRECTORY, TRUE);
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+		SHGetFolderPath(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, tchOpenWithDir);
+#else
+		LPWSTR pszPath = NULL;
+		if (S_OK == SHGetKnownFolderPath(&FOLDERID_Desktop, KF_FLAG_DEFAULT, NULL, &pszPath)) {
+			lstrcpy(tchOpenWithDir, pszPath);
+			CoTaskMemFree(pszPath);
+		}
+#endif
 	} else {
 		PathAbsoluteFromApp(strValue, tchOpenWithDir, COUNTOF(tchOpenWithDir), TRUE);
 	}
 
 	strValue = IniSectionGetValue(pIniSection, L"Favorites");
 	if (StrIsEmpty(strValue)) {
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
 		SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, tchFavoritesDir);
+#else
+		LPWSTR pszPath = NULL;
+		if (S_OK == SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &pszPath)) {
+			lstrcpy(tchFavoritesDir, pszPath);
+			CoTaskMemFree(pszPath);
+		}
+#endif
 	} else {
 		PathAbsoluteFromApp(strValue, tchFavoritesDir, COUNTOF(tchFavoritesDir), TRUE);
 	}
@@ -5373,6 +5434,7 @@ void LoadSettings(void) {
 
 	bSkipUnicodeDetection = IniSectionGetBool(pIniSection, L"SkipUnicodeDetection", 1);
 	bLoadANSIasUTF8 = IniSectionGetBool(pIniSection, L"LoadANSIasUTF8", 0);
+	bLoadASCIIasUTF8 = IniSectionGetBool(pIniSection, L"LoadASCIIasUTF8", 1);
 	bLoadNFOasOEM = IniSectionGetBool(pIniSection, L"LoadNFOasOEM", 1);
 	bNoEncodingTags = IniSectionGetBool(pIniSection, L"NoEncodingTags", 0);
 
@@ -5425,6 +5487,8 @@ void LoadSettings(void) {
 	bMinimizeToTray = IniSectionGetBool(pIniSection, L"MinimizeToTray", 0);
 	bTransparentMode = IniSectionGetBool(pIniSection, L"TransparentMode", 0);
 	bFindReplaceTransparentMode = IniSectionGetBool(pIniSection, L"FindReplaceTransparentMode", 1);
+	iValue = IniSectionGetInt(pIniSection, L"EndAtLastLine", 1);
+	iEndAtLastLine = clamp_i(iValue, 0, 4);
 	bEditLayoutRTL = IniSectionGetBool(pIniSection, L"EditLayoutRTL", 0);
 	bWindowLayoutRTL = IniSectionGetBool(pIniSection, L"WindowLayoutRTL", 0);
 
@@ -5555,7 +5619,7 @@ void SaveSettingsNow(BOOL bOnlySaveStyle, BOOL bQuiet) {
 
 	if (StrIsEmpty(szIniFile)) {
 		if (StrNotEmpty(szIniFile2)) {
-			if (CreateIniFileEx(szIniFile2)) {
+			if (CreateIniFile(szIniFile2)) {
 				lstrcpy(szIniFile, szIniFile2);
 				lstrcpy(szIniFile2, L"");
 			} else {
@@ -5574,7 +5638,7 @@ void SaveSettingsNow(BOOL bOnlySaveStyle, BOOL bQuiet) {
 			StatusSetSimple(hwndStatus, TRUE);
 			InvalidateRect(hwndStatus, NULL, TRUE);
 			UpdateWindow(hwndStatus);
-			if (CreateIniFile()) {
+			if (CreateIniFile(szIniFile)) {
 				if (bOnlySaveStyle) {
 					Style_Save();
 				} else {
@@ -5586,15 +5650,15 @@ void SaveSettingsNow(BOOL bOnlySaveStyle, BOOL bQuiet) {
 			StatusSetSimple(hwndStatus, FALSE);
 			EndWaitCursor();
 			if (!bCreateFailure && !bQuiet) {
-				MsgBox(MBINFO, IDS_SAVEDSETTINGS);
+				MsgBoxInfo(MB_OK, IDS_SAVEDSETTINGS);
 			}
 		} else {
 			dwLastIOError = GetLastError();
-			MsgBox(MBWARN, IDS_WRITEINI_FAIL);
+			MsgBoxLastError(MB_OK, IDS_WRITEINI_FAIL);
 		}
 	}
 	if (bCreateFailure) {
-		MsgBox(MBWARN, IDS_CREATEINI_FAIL);
+		MsgBoxLastError(MB_OK, IDS_CREATEINI_FAIL);
 	}
 }
 
@@ -5604,7 +5668,7 @@ void SaveSettingsNow(BOOL bOnlySaveStyle, BOOL bQuiet) {
 //
 //
 void SaveSettings(BOOL bSaveSettingsNow) {
-	if (!CreateIniFile()) {
+	if (!CreateIniFile(szIniFile)) {
 		return;
 	}
 
@@ -5692,6 +5756,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetIntEx(pIniSection, L"DefaultEncoding", Encoding_MapIniSetting(FALSE, iDefaultEncoding), Encoding_MapIniSetting(FALSE, CPI_UTF8));
 	IniSectionSetBoolEx(pIniSection, L"SkipUnicodeDetection", bSkipUnicodeDetection, 1);
 	IniSectionSetBoolEx(pIniSection, L"LoadANSIasUTF8", bLoadANSIasUTF8, 0);
+	IniSectionSetBoolEx(pIniSection, L"LoadASCIIasUTF8", bLoadASCIIasUTF8, 1);
 	IniSectionSetBoolEx(pIniSection, L"LoadNFOasOEM", bLoadNFOasOEM, 1);
 	IniSectionSetBoolEx(pIniSection, L"NoEncodingTags", bNoEncodingTags, 0);
 	IniSectionSetIntEx(pIniSection, L"DefaultEOLMode", iDefaultEOLMode, 0);
@@ -5718,6 +5783,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBoolEx(pIniSection, L"MinimizeToTray", bMinimizeToTray, 0);
 	IniSectionSetBoolEx(pIniSection, L"TransparentMode", bTransparentMode, 0);
 	IniSectionSetBoolEx(pIniSection, L"FindReplaceTransparentMode", bFindReplaceTransparentMode, 1);
+	IniSectionSetIntEx(pIniSection, L"EndAtLastLine", iEndAtLastLine, 1);
 	IniSectionSetBoolEx(pIniSection, L"EditLayoutRTL", bEditLayoutRTL, 0);
 	IniSectionSetBoolEx(pIniSection, L"WindowLayoutRTL", bWindowLayoutRTL, 0);
 	IniSectionSetIntEx(pIniSection, L"RenderingTechnology", iRenderingTechnology, GetDefualtRenderingTechnology());
@@ -5846,13 +5912,13 @@ int ParseCommandLineEncoding(LPCWSTR opt, int idmLE, int idmBE) {
 	if (*opt == '-') {
 		++opt;
 	}
-	if (StrNCaseEqual(opt, L"LE", CSTRLEN(L"LE"))){
+	if (StrHasPrefixCase(opt, L"LE")){
 		flag = idmLE;
 		opt += CSTRLEN(L"LE");
 		if (*opt == '-') {
 			++opt;
 		}
-	} else if (StrNCaseEqual(opt, L"BE", CSTRLEN(L"BE"))) {
+	} else if (StrHasPrefixCase(opt, L"BE")) {
 		flag = idmBE;
 		opt += CSTRLEN(L"BE");
 		if (*opt == '-') {
@@ -6117,7 +6183,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 		if (StrCaseEqual(opt, L"ANSI")) {
 			flagSetEncoding = IDM_ENCODING_ANSI - IDM_ENCODING_ANSI + 1;
 			state = 1;
-		} else if (StrNCaseEqual(opt, L"appid=", CSTRLEN(L"appid="))) {
+		} else if (StrHasPrefixCase(opt, L"appid=")) {
 			// Shell integration
 			opt += CSTRLEN(L"appid=");
 			lstrcpyn(g_wchAppUserModelID, opt, COUNTOF(g_wchAppUserModelID));
@@ -6206,7 +6272,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 			break;
 		}
 
-		if (StrNCaseEqual(opt, L"POS", CSTRLEN(L"POS"))) {
+		if (StrHasPrefixCase(opt, L"POS")) {
 			opt += CSTRLEN(L"POS");
 		} else {
 			++opt;
@@ -6319,7 +6385,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 
 	case L'S':
 		// Shell integration
-		if (StrNCaseEqual(opt, L"sysmru=", CSTRLEN(L"sysmru="))) {
+		if (StrHasPrefixCase(opt, L"sysmru=")) {
 			opt += CSTRLEN(L"sysmru=");
 			if (opt[1] == L'\0') {
 				switch (*opt) {
@@ -6338,7 +6404,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 		break;
 
 	case L'U':
-		if (StrNCaseEqual(opt, L"UTF", CSTRLEN(L"UTF"))) {
+		if (StrHasPrefixCase(opt, L"UTF")) {
 			opt += CSTRLEN(L"UTF");
 			if (*opt == '-') {
 				++opt;
@@ -6359,7 +6425,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 				opt += 2;
 				state = ParseCommandLineEncoding(opt, IDM_ENCODING_UNICODE, IDM_ENCODING_UNICODEREV);
 			}
-		} else if (StrNCaseEqual(opt, L"UNICODE", CSTRLEN(L"UNICODE"))) {
+		} else if (StrHasPrefixCase(opt, L"UNICODE")) {
 			opt += CSTRLEN(L"UNICODE");
 			state = ParseCommandLineEncoding(opt, IDM_ENCODING_UNICODE, IDM_ENCODING_UNICODEREV);
 		}
@@ -6571,27 +6637,56 @@ BOOL CheckIniFile(LPWSTR lpszFile, LPCWSTR lpszModule) {
 		// program directory
 		lstrcpy(tchBuild, lpszModule);
 		lstrcpy(PathFindFileName(tchBuild), tchFileExpanded);
-		if (PathFileExists(tchBuild)) {
+		if (PathIsFile(tchBuild)) {
 			lstrcpy(lpszFile, tchBuild);
 			return TRUE;
 		}
-		// Application Data
-		if (S_OK == SHGetFolderPath(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, tchBuild)) {
-			PathAppend(tchBuild, tchFileExpanded);
-			if (PathFileExists(tchBuild)) {
-				lstrcpy(lpszFile, tchBuild);
-				return TRUE;
+
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+		const int csidlList[] = {
+			// %LOCALAPPDATA%
+			// C:\Users\<username>\AppData\Local
+			// C:\Documents and Settings\<username>\Local Settings\Application Data
+			CSIDL_LOCAL_APPDATA,
+			// %APPDATA%
+			// C:\Users\<username>\AppData\Roaming
+			// C:\Documents and Settings\<username>\Application Data
+			CSIDL_APPDATA,
+			// Home
+			// C:\Users\<username>
+			CSIDL_PROFILE,
+		};
+		for (UINT i = 0; i < COUNTOF(csidlList); i++) {
+			if (S_OK == SHGetFolderPath(NULL, csidlList[i], NULL, SHGFP_TYPE_CURRENT, tchBuild)) {
+				PathAppend(tchBuild, WC_NOTEPAD2);
+				PathAppend(tchBuild, tchFileExpanded);
+				if (PathIsFile(tchBuild)) {
+					lstrcpy(lpszFile, tchBuild);
+					return TRUE;
+				}
 			}
 		}
-		// Home
-		if (S_OK == SHGetFolderPath(NULL, CSIDL_PROFILE, NULL, SHGFP_TYPE_CURRENT, tchBuild)) {
-			PathAppend(tchBuild, tchFileExpanded);
-			if (PathFileExists(tchBuild)) {
-				lstrcpy(lpszFile, tchBuild);
-				return TRUE;
+#else
+		REFKNOWNFOLDERID rfidList[] = {
+			&FOLDERID_LocalAppData,
+			&FOLDERID_RoamingAppData,
+			&FOLDERID_Profile,
+		};
+		for (UINT i = 0; i < COUNTOF(rfidList); i++) {
+			LPWSTR pszPath = NULL;
+			if (S_OK == SHGetKnownFolderPath(rfidList[i], KF_FLAG_DEFAULT, NULL, &pszPath)) {
+				lstrcpy(tchBuild, pszPath);
+				CoTaskMemFree(pszPath);
+				PathAppend(tchBuild, WC_NOTEPAD2);
+				PathAppend(tchBuild, tchFileExpanded);
+				if (PathIsFile(tchBuild)) {
+					lstrcpy(lpszFile, tchBuild);
+					return TRUE;
+				}
 			}
 		}
-	} else if (PathFileExists(tchFileExpanded)) {
+#endif
+	} else if (PathIsFile(tchFileExpanded)) {
 		lstrcpy(lpszFile, tchFileExpanded);
 		return TRUE;
 	}
@@ -6670,21 +6765,29 @@ BOOL TestIniFile(void) {
 		return FALSE;
 	}
 
-	if (PathIsDirectory(szIniFile) || *CharPrev(szIniFile, StrEnd(szIniFile)) == L'\\') {
+	DWORD dwFileAttributes = GetFileAttributes(szIniFile);
+	if ((dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+		return TRUE;
+	}
+
+	if ((dwFileAttributes != INVALID_FILE_ATTRIBUTES) || *CharPrev(szIniFile, StrEnd(szIniFile)) == L'\\') {
 		WCHAR wchModule[MAX_PATH];
 		GetModuleFileName(NULL, wchModule, COUNTOF(wchModule));
 		PathAppend(szIniFile, PathFindFileName(wchModule));
 		PathRenameExtension(szIniFile, L".ini");
-		if (!PathFileExists(szIniFile)) {
+		dwFileAttributes = GetFileAttributes(szIniFile);
+		if ((dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
 			lstrcpy(PathFindFileName(szIniFile), L"Notepad2.ini");
-			if (!PathFileExists(szIniFile)) {
+			dwFileAttributes = GetFileAttributes(szIniFile);
+			if ((dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
 				lstrcpy(PathFindFileName(szIniFile), PathFindFileName(wchModule));
 				PathRenameExtension(szIniFile, L".ini");
+				dwFileAttributes = GetFileAttributes(szIniFile);
 			}
 		}
 	}
 
-	if (!PathFileExists(szIniFile) || PathIsDirectory(szIniFile)) {
+	if ((dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
 		lstrcpy(szIniFile2, szIniFile);
 		lstrcpy(szIniFile, L"");
 		return FALSE;
@@ -6716,11 +6819,7 @@ void FindExtraIniFile(LPWSTR lpszIniFile, LPCWSTR defaultName, LPCWSTR redirectK
 	lstrcpy(PathFindFileName(lpszIniFile), defaultName);
 }
 
-BOOL CreateIniFile(void) {
-	return CreateIniFileEx(szIniFile);
-}
-
-BOOL CreateIniFileEx(LPCWSTR lpszIniFile) {
+BOOL CreateIniFile(LPCWSTR lpszIniFile) {
 	if (StrNotEmpty(lpszIniFile)) {
 		WCHAR *pwchTail;
 
@@ -6949,15 +7048,15 @@ void ToggleFullScreenMode(void) {
 		const int y = mi.rcMonitor.top;
 		const int w = mi.rcMonitor.right - x;
 		const int h = mi.rcMonitor.bottom - y;
-		const int cx = GetSystemMetricsEx(SM_CXSIZEFRAME);
-		const int cy = GetSystemMetricsEx(SM_CYSIZEFRAME);
+		const int cx = SystemMetricsForDpi(SM_CXSIZEFRAME, g_uCurrentDPI);
+		const int cy = SystemMetricsForDpi(SM_CYSIZEFRAME, g_uCurrentDPI);
 
 		int top = cy;
 		if (iFullScreenMode & (FullScreenMode_HideCaption | FullScreenMode_HideMenu)) {
-			top += GetSystemMetricsEx(SM_CYCAPTION);
+			top += SystemMetricsForDpi(SM_CYCAPTION, g_uCurrentDPI);
 		}
 		if (iFullScreenMode & FullScreenMode_HideMenu) {
-			top += GetSystemMetricsEx(SM_CYMENU);
+			top += SystemMetricsForDpi(SM_CYMENU, g_uCurrentDPI);
 		}
 
 		SystemParametersInfo(SPI_SETWORKAREA, 0, NULL, SPIF_SENDCHANGE);
@@ -7114,9 +7213,9 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 #endif
 
 	// Ask to create a new file...
-	if (!bReload && !PathFileExists(szFileName)) {
+	if (!bReload && !PathIsFile(szFileName)) {
 		int result = IDCANCEL;
-		if (flagQuietCreate || (result = MsgBox(MBYESNOCANCEL, IDS_ASK_CREATE, szFileName)) == IDYES) {
+		if (flagQuietCreate || (result = MsgBoxWarn(MB_YESNOCANCEL, IDS_ASK_CREATE, szFileName)) == IDYES) {
 			HANDLE hFile = CreateFile(szFileName,
 									  GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
 									  NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -7228,7 +7327,7 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 		UpdateDocumentModificationStatus();
 		// Show warning: Unicode file loaded as ANSI
 		if (status.bUnicodeErr) {
-			MsgBox(MBWARN, IDS_ERR_UNICODE);
+			MsgBoxWarn(MB_OK, IDS_ERR_UNICODE);
 		}
 		// notify binary file been locked for editing
 		if (binary) {
@@ -7248,7 +7347,7 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 			}
 		}
 	} else if (!status.bFileTooBig) {
-		MsgBox(MBWARN, IDS_ERR_LOADFILE, szFileName);
+		MsgBoxLastError(MB_OK, IDS_ERR_LOADFILE, szFileName);
 	}
 
 	return fSuccess;
@@ -7290,7 +7389,7 @@ BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy) {
 			GetString(IDS_UNTITLED, tch, COUNTOF(tch));
 		}
 
-		switch (MsgBox(MBYESNOCANCEL, IDS_ASK_SAVE, tch)) {
+		switch (MsgBoxAsk(MB_YESNOCANCEL, IDS_ASK_SAVE, tch)) {
 		case IDCANCEL:
 			return FALSE;
 		case IDNO:
@@ -7315,7 +7414,7 @@ BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy) {
 		bReadOnly = (dwFileAttributes != INVALID_FILE_ATTRIBUTES) && (dwFileAttributes & FILE_ATTRIBUTE_READONLY);
 		if (bReadOnly) {
 			UpdateWindowTitle();
-			if (MsgBox(MBYESNOWARN, IDS_READONLY_SAVE, szCurFile) == IDYES) {
+			if (MsgBoxWarn(MB_YESNO, IDS_READONLY_SAVE, szCurFile) == IDYES) {
 				bSaveAs = TRUE;
 			} else {
 				return FALSE;
@@ -7397,7 +7496,7 @@ BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy) {
 		}
 
 		UpdateWindowTitle();
-		MsgBox(MBWARN, IDS_ERR_SAVEFILE, tchFile);
+		MsgBoxLastError(MB_OK, IDS_ERR_SAVEFILE, tchFile);
 	}
 
 	return fSuccess;
@@ -7636,7 +7735,7 @@ BOOL ActivatePrevInst(void) {
 			}
 
 			// Ask...
-			if (IDYES == MsgBox(MBYESNO, IDS_ERR_PREVWINDISABLED)) {
+			if (IDYES == MsgBoxAsk(MB_YESNO, IDS_ERR_PREVWINDISABLED)) {
 				return FALSE;
 			}
 			return TRUE;
@@ -7730,7 +7829,7 @@ BOOL ActivatePrevInst(void) {
 		}
 
 		// Ask...
-		if (IDYES == MsgBox(MBYESNO, IDS_ERR_PREVWINDISABLED)) {
+		if (IDYES == MsgBoxAsk(MB_YESNO, IDS_ERR_PREVWINDISABLED)) {
 			return FALSE;
 		}
 		return TRUE;
@@ -7969,7 +8068,9 @@ BOOL RelaunchElevated(void) {
 			sei.lpDirectory = g_wchWorkingDirectory;
 			sei.nShow = SW_SHOWNORMAL;
 
-			ShellExecuteEx(&sei);
+			if (!ShellExecuteEx(&sei)) {
+				exit = FALSE;
+			}
 		} else {
 			exit = FALSE;
 		}

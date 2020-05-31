@@ -176,7 +176,7 @@ NP2ENCODING mEncoding[] = {
 	{ NCP_7BIT | NCP_RECODE, 52936, "HZ-GB-2312,hzgb2312,hz,", IDS_ENCODING_HZ_GB2312, NULL },// HZ-GB2312 Simplified Chinese; Chinese Simplified (HZ)
 	{ NCP_7BIT | NCP_RECODE, 50220, "ISO-2022-JP,iso2022jp,", IDS_ENCODING_ISO2022_JP, NULL },// ISO 2022 Japanese with no halfwidth Katakana; Japanese (JIS)
 	{ NCP_7BIT | NCP_RECODE, 50221, "csISO2022JP,csiso2022jp,", IDS_ENCODING_CS_ISO2022_JP, NULL },// ISO 2022 Japanese with halfwidth Katakana; Japanese (JIS-Allow 1 byte Kana)
-	{ NCP_7BIT | NCP_RECODE, 50222, "_iso-2022-jp$SIO,iso2022jpsio,", IDS_ENCODING_ISO2022_JP_SI, NULL },// ISO 2022 Japanese JIS X 0201-1989; Japanese (JIS-Allow 1 byte Kana - SO/SI)
+	{ NCP_7BIT | NCP_RECODE, 50222, "_iso-2022-jp$SIO,iso2022jpsio,", IDS_ENCODING_ISO2022_JP_SOSI, NULL },// ISO 2022 Japanese JIS X 0201-1989; Japanese (JIS-Allow 1 byte Kana - SO/SI)
 	{ NCP_7BIT | NCP_RECODE, 50225, "ISO-2022-KR,iso2022kr,csiso2022kr,", IDS_ENCODING_ISO2022_KR, NULL },// Korean (ISO-2022-KR)
 	{ NCP_7BIT | NCP_RECODE, 50227, "x-cp50227,xcp50227,", IDS_ENCODING_ISO2022_CNS, NULL },// Chinese Simplified (ISO-2022)
 	{ NCP_7BIT | NCP_RECODE, 50229, "ISO-2022-CN,iso2022cn,", IDS_ENCODING_ISO2022_CNT, NULL },// Chinese Traditional (ISO-2022)
@@ -478,11 +478,11 @@ BOOL EditSetNewEncoding(int iCurrentEncoding, int iNewEncoding, BOOL bNoUI, BOOL
 		if (SciCall_GetLength() == 0) {
 			const BOOL bIsEmptyUndoHistory = !(SciCall_CanUndo() || SciCall_CanRedo());
 
-			if (bNoUI || bIsEmptyUndoHistory || InfoBox(MBYESNO, L"MsgConv2", IDS_ASK_ENCODING2) == IDYES) {
+			if (bNoUI || bIsEmptyUndoHistory || InfoBoxWarn(MB_YESNO, L"MsgConv2", IDS_ASK_ENCODING2) == IDYES) {
 				EditConvertText(cpSrc, cpDest, bSetSavePoint);
 				return TRUE;
 			}
-		} else if (bNoUI || InfoBox(MBYESNO, L"MsgConv1", IDS_ASK_ENCODING) == IDYES) {
+		} else if (bNoUI || InfoBoxWarn(MB_YESNO, L"MsgConv1", IDS_ASK_ENCODING) == IDYES) {
 			BeginWaitCursor();
 			EditConvertText(cpSrc, cpDest, FALSE);
 			EndWaitCursor();
@@ -841,7 +841,7 @@ BOOL Encoding_GetFromTreeView(HWND hwnd, int *pidEncoding, BOOL bQuiet) {
 				return TRUE;
 			}
 			if (!bQuiet) {
-				MsgBox(MBWARN, IDS_ERR_ENCODINGNA);
+				MsgBoxWarn(MB_OK, IDS_ERR_ENCODINGNA);
 			}
 		}
 	}
@@ -918,7 +918,7 @@ BOOL Encoding_GetFromListView(HWND hwnd, int *pidEncoding) {
 			*pidEncoding = (int)lvi.lParam;
 			return TRUE;
 		}
-		MsgBox(MBWARN, IDS_ERR_ENCODINGNA);
+		MsgBoxWarn(MB_OK, IDS_ERR_ENCODINGNA);
 	}
 
 	return FALSE;
@@ -992,7 +992,7 @@ BOOL Encoding_GetFromComboboxEx(HWND hwnd, int *pidEncoding) {
 			*pidEncoding = (int)cbei.lParam;
 			return TRUE;
 		}
-		MsgBox(MBWARN, IDS_ERR_ENCODINGNA);
+		MsgBoxWarn(MB_OK, IDS_ERR_ENCODINGNA);
 	}
 
 	return FALSE;

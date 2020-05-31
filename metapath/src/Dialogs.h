@@ -21,22 +21,30 @@
 
 #include "compiler.h"
 
-#define MBINFO			0
-#define MBWARN			1
-#define MBYESNO			2
-#define MBYESNOWARN		3
-#define MBYESNOCANCEL	4
-#define MBOKCANCEL		8
-
 extern BOOL bWindowLayoutRTL;
 NP2_inline void InitWindowCommon(HWND hwnd) {
 	if (bWindowLayoutRTL) {
 		SetWindowLayoutRTL(hwnd, TRUE);
 	}
 }
-int MsgBox(int iType, UINT uIdMsg, ...);
+
+int MsgBox(UINT uType, UINT uIdMsg, ...);
+#if defined(__GNUC__) || defined(__clang__)
+#define MsgBoxInfo(uType, uIdMsg, ...)		MsgBox(MB_ICONINFORMATION | (uType), (uIdMsg), ##__VA_ARGS__)
+#define MsgBoxWarn(uType, uIdMsg, ...)		MsgBox(MB_ICONEXCLAMATION | (uType), (uIdMsg), ##__VA_ARGS__)
+#define MsgBoxAsk(uType, uIdMsg, ...)		MsgBox(MB_ICONQUESTION | (uType), (uIdMsg), ##__VA_ARGS__)
+#else
+#define MsgBoxInfo(uType, uIdMsg, ...)		MsgBox(MB_ICONINFORMATION | (uType), (uIdMsg), __VA_ARGS__)
+#define MsgBoxWarn(uType, uIdMsg, ...)		MsgBox(MB_ICONEXCLAMATION | (uType), (uIdMsg), __VA_ARGS__)
+#define MsgBoxAsk(uType, uIdMsg, ...)		MsgBox(MB_ICONQUESTION | (uType), (uIdMsg), __VA_ARGS__)
+#endif
+
 BOOL GetDirectory(HWND hwndParent, int iTitle, LPWSTR pszFolder, LPCWSTR pszBase);
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
 BOOL GetDirectory2(HWND hwndParent, int iTitle, LPWSTR pszFolder, int iBase);
+#else
+BOOL GetDirectory2(HWND hwndParent, int iTitle, LPWSTR pszFolder, REFKNOWNFOLDERID iBase);
+#endif
 
 void RunDlg(HWND hwnd);
 void GotoDlg(HWND hwnd);

@@ -107,13 +107,10 @@ NP2_inline BOOL StrCaseEqual(LPCWSTR s1, LPCWSTR s2) {
 	return _wcsicmp(s1, s2) == 0;
 }
 
-NP2_inline BOOL StrNEqual(LPCWSTR s1, LPCWSTR s2, int cch) {
-	return wcsncmp(s1, s2, cch) == 0;
-}
-
-NP2_inline BOOL StrNCaseEqual(LPCWSTR s1, LPCWSTR s2, int cch) {
-	return _wcsnicmp(s1, s2, cch) == 0;
-}
+#define StrHasPrefix(s, prefix)				(wcsncmp((s), (prefix), CSTRLEN(prefix)) == 0)
+#define StrHasPrefixEx(s, prefix, len)		(wcsncmp((s), (prefix), (len)) == 0)
+#define StrHasPrefixCase(s, prefix)			(_wcsnicmp((s), (prefix), CSTRLEN(prefix)) == 0)
+#define StrHasPrefixCaseEx(s, prefix, len)	(_wcsnicmp((s), (prefix), (len)) == 0)
 
 NP2_inline BOOL StrToFloat(LPCWSTR str, float *value) {
 	LPWSTR end;
@@ -189,7 +186,7 @@ __attribute__((format(printf, 1, 2)))
 
 extern HINSTANCE g_hInstance;
 extern HANDLE g_hDefaultHeap;
-#if _WIN32_WINNT < _WIN32_WINNT_WIN10
+#if _WIN32_WINNT < _WIN32_WINNT_WIN7
 extern DWORD g_uWinVer;
 #endif
 extern WCHAR szIniFile[MAX_PATH];
@@ -230,6 +227,26 @@ extern WCHAR szIniFile[MAX_PATH];
 #define LOAD_LIBRARY_AS_IMAGE_RESOURCE	0x00000020
 #endif
 
+#if defined(__GNUC__) && __GNUC__ >= 8
+#define DLLFunction(funcSig, hModule, funcName) __extension__({			\
+	_Pragma("GCC diagnostic push")										\
+	_Pragma("GCC diagnostic ignored \"-Wcast-function-type\"")			\
+	funcSig PP_CONCAT(temp, __LINE__) = (funcSig)GetProcAddress((hModule), (funcName));\
+	_Pragma("GCC diagnostic pop")										\
+	PP_CONCAT(temp, __LINE__);											\
+	})
+#define DLLFunctionEx(funcSig, dllName, funcName) __extension__({		\
+	_Pragma("GCC diagnostic push")										\
+	_Pragma("GCC diagnostic ignored \"-Wcast-function-type\"")			\
+	funcSig PP_CONCAT(temp, __LINE__) = (funcSig)GetProcAddress(GetModuleHandleW(dllName), (funcName));\
+	_Pragma("GCC diagnostic pop")										\
+	PP_CONCAT(temp, __LINE__);											\
+	})
+#else
+#define DLLFunction(funcSig, hModule, funcName)		(funcSig)GetProcAddress((hModule), (funcName))
+#define DLLFunctionEx(funcSig, dllName, funcName)	(funcSig)GetProcAddress(GetModuleHandleW(dllName), (funcName))
+#endif
+
 #ifndef SEE_MASK_NOZONECHECKS
 #define SEE_MASK_NOZONECHECKS		0x00800000		// NTDDI_VERSION >= NTDDI_WINXPSP1
 #endif
@@ -248,24 +265,33 @@ extern WCHAR szIniFile[MAX_PATH];
 #ifndef USER_DEFAULT_SCREEN_DPI
 #define USER_DEFAULT_SCREEN_DPI		96		// _WIN32_WINNT >= _WIN32_WINNT_VISTA
 #endif
-#ifndef DPI_ENUMS_DECLARED
-#define MDT_EFFECTIVE_DPI	0
-#endif
 
 // use large icon when window DPI is greater than or equal to this value.
 #define NP2_LARGER_ICON_SIZE_DPI	192		// 200%
 
 // current DPI for main/editor window
 extern UINT g_uCurrentDPI;
-// startup DPI for main/editor window, may different from g_uCurrentDPI after moving to a different display.
-extern UINT g_uDefaultDPI;
+// system DPI, same for all monitor.
+extern UINT g_uSystemDPI;
+
+// since Windows 10, version 1607
+#if defined(__aarch64__) || defined(_ARM64_) || defined(_M_ARM64)
+// 1709 was the first version for Windows 10 on ARM64.
+#define NP2_TARGET_ARM64	1
+#define GetWindowDPI(hwnd)					GetDpiForWindow(hwnd)
+#define SystemMetricsForDpi(nIndex, dpi)	GetSystemMetricsForDpi((nIndex), (dpi))
+#define DpiAdjustWindowRect(lpRect, dwStyle, dwExStyle, dpi) \
+		AdjustWindowRectExForDpi((lpRect), (dwStyle), FALSE, (dwExStyle), (dpi))
+
+#else
+#define NP2_TARGET_ARM64	0
+extern UINT GetWindowDPI(HWND hwnd) NP2_noexcept;
+extern int SystemMetricsForDpi(int nIndex, UINT dpi) NP2_noexcept;
+extern BOOL DpiAdjustWindowRect(LPRECT lpRect, DWORD dwStyle, DWORD dwExStyle, UINT dpi) NP2_noexcept;
+#endif
 
 NP2_inline int RoundToCurrentDPI(int value)	{
 	return (g_uCurrentDPI == USER_DEFAULT_SCREEN_DPI) ? value : MulDiv(g_uCurrentDPI, value, USER_DEFAULT_SCREEN_DPI);
-}
-
-NP2_inline int DefaultToCurrentDPI(int value) {
-	return (g_uCurrentDPI == g_uDefaultDPI) ? value : MulDiv(g_uCurrentDPI, value, g_uDefaultDPI);
 }
 
 NP2_inline DWORD GetIconIndexFlagsForDPI(UINT dpi) {
@@ -287,10 +313,6 @@ NP2_inline DWORD GetCurrentIconIndexFlags(void) {
 NP2_inline DWORD GetCurrentIconHandleFlags(void) {
 	return GetIconHandleFlagsForDPI(g_uCurrentDPI);
 }
-
-// https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getsystemmetrics
-// https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getsystemmetricsfordpi
-int GetSystemMetricsEx(int nIndex);
 
 // https://docs.microsoft.com/en-us/windows/desktop/Memory/comparing-memory-allocation-methods
 // https://blogs.msdn.microsoft.com/oldnewthing/20120316-00/?p=8083/
@@ -488,8 +510,6 @@ NP2_inline BOOL KeyboardIsKeyDown(int key) {
 	return (GetKeyState(key) & 0x8000) != 0;
 }
 
-UINT GetDefaultDPI(HWND hwnd);
-UINT GetCurrentDPI(HWND hwnd);
 HRESULT PrivateSetCurrentProcessExplicitAppUserModelID(PCWSTR AppID);
 BOOL IsElevated(void);
 
@@ -560,10 +580,6 @@ NP2_inline void ResizeDlg_InitY(HWND hwnd, int cyFrame, int nIdGrip) {
 void ResizeDlg_Destroy(HWND hwnd, int *cxFrame, int *cyFrame);
 void ResizeDlg_Size(HWND hwnd, LPARAM lParam, int *cx, int *cy);
 void ResizeDlg_GetMinMaxInfo(HWND hwnd, LPARAM lParam);
-
-#define MAX_RESIZEDLG_ATTR_COUNT	2
-void ResizeDlg_SetAttr(HWND hwnd, int index, int value);
-int ResizeDlg_GetAttr(HWND hwnd, int index);
 
 void ResizeDlg_InitY2Ex(HWND hwnd, int cxFrame, int cyFrame, int nIdGrip, int iDirection, int nCtlId1, int nCtlId2);
 NP2_inline void ResizeDlg_InitY2(HWND hwnd, int cxFrame, int cyFrame, int nIdGrip, int nCtlId1, int nCtlId2) {
@@ -640,10 +656,22 @@ NP2_inline BOOL IsChineseTraditionalSubLang(LANGID subLang) {
  * https://gcc.gnu.org/onlinedocs/cpp/Variadic-Macros.html
  * https://docs.microsoft.com/en-us/cpp/preprocessor/variadic-macros?view=vs-2017
  */
+#if defined(__GNUC__) || defined(__clang__)
+#define FormatString(lpOutput, lpFormat, uIdFormat, ...) do {	\
+		GetString((uIdFormat), (lpFormat), COUNTOF(lpFormat));	\
+		wsprintf((lpOutput), (lpFormat), ##__VA_ARGS__);		\
+	} while (0)
+#else
 #define FormatString(lpOutput, lpFormat, uIdFormat, ...) do {	\
 		GetString((uIdFormat), (lpFormat), COUNTOF(lpFormat));	\
 		wsprintf((lpOutput), (lpFormat), __VA_ARGS__);			\
 	} while (0)
+#endif
+
+NP2_inline BOOL PathIsFile(LPCWSTR pszPath) {
+	// note: INVALID_FILE_ATTRIBUTES is -1.
+	return (GetFileAttributes(pszPath) & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
 
 void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, int cchDest,
 					   BOOL bSrcIsFile, BOOL bUnexpandEnv, BOOL bUnexpandMyDocs);
@@ -672,6 +700,9 @@ void	PathCanonicalizeEx(LPWSTR lpSrc);
 DWORD	GetLongPathNameEx(LPWSTR lpszPath, DWORD cchBuffer);
 DWORD_PTR SHGetFileInfo2(LPCWSTR pszPath, DWORD dwFileAttributes,
 						 SHFILEINFO *psfi, UINT cbFileInfo, UINT uFlags);
+
+// remove '&' from access key, i.e. SHStripMneumonic().
+void	StripMnemonic(LPWSTR pszMenu);
 
 void	FormatNumberStr(LPWSTR lpNumberStr);
 BOOL	SetDlgItemIntEx(HWND hwnd, int nIdItem, UINT uValue);

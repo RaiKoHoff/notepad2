@@ -21,6 +21,7 @@
 
 //==== Main Window ============================================================
 #define WC_METAPATH L"metapath"
+#define WC_NOTEPAD2 L"Notepad2"
 #define MY_APPUSERMODELID	L"metapath File Browser"
 
 #define WS_METAPATH ((WS_OVERLAPPEDWINDOW ^ \
@@ -127,8 +128,7 @@ BOOL CheckIniFile(LPWSTR lpszFile, LPCWSTR lpszModule);
 BOOL CheckIniFileRedirect(LPWSTR lpszFile, LPCWSTR lpszModule);
 BOOL FindIniFile(void);
 BOOL TestIniFile(void);
-BOOL CreateIniFile(void);
-BOOL CreateIniFileEx(LPCWSTR lpszIniFile);
+BOOL CreateIniFile(LPCWSTR lpszIniFile);
 
 BOOL DisplayPath(LPCWSTR lpPath, UINT uIdError);
 BOOL DisplayLnkFile(LPCWSTR pszLnkFile);

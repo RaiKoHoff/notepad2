@@ -854,9 +854,9 @@ void Style_Save(void) {
 	// save changes to each theme
 	LPCWSTR themePath = GetStyleThemeFilePath();
 	if (np2StyleTheme != StyleTheme_Default) {
-		if (!CreateIniFileEx(themePath)) {
+		if (!CreateIniFile(themePath)) {
 			NP2HeapFree(pIniSectionBuf);
-			MsgBox(MBWARN, IDS_CREATEINI_FAIL);
+			MsgBoxLastError(MB_OK, IDS_CREATEINI_FAIL);
 			return;
 		}
 	}
@@ -1029,7 +1029,7 @@ BOOL Style_Export(HWND hwnd) {
 		NP2HeapFree(pIniSectionBuf);
 
 		if (dwError != ERROR_SUCCESS) {
-			MsgBox(MBINFO, IDS_EXPORT_FAIL, szFile);
+			MsgBoxLastError(MB_OK, IDS_EXPORT_FAIL, szFile);
 		}
 		return TRUE;
 	}
@@ -1058,13 +1058,47 @@ static void Style_ResetAll(BOOL resetColor) {
 	fStylesModified |= STYLESMODIFIED_ALL_STYLE | STYLESMODIFIED_FILE_EXT | STYLESMODIFIED_COLOR;
 }
 
-void Style_OnDPIChanged(void) {
-	Style_SetLexer(pLexCurrent, FALSE);
+// styles depend on current DPI.
+void Style_OnDPIChanged(PEDITLEXER pLex) {
+	// whitespace dot size
+	LPCWSTR szValue = pLexGlobal->Styles[GlobalStyleIndex_Whitespace].szValue;
+	int iValue = 1;
+	Style_StrGetRawSize(szValue, &iValue);
+	iValue = max_i(1, RoundToCurrentDPI(iValue));
+	SciCall_SetWhitespaceSize(iValue);
+
+	// update styles that use pixel
+	Style_HighlightCurrentLine();
+
+	// Extra Line Spacing
+	szValue = (pLex->rid != NP2LEX_ANSI)? pLexGlobal->Styles[GlobalStyleIndex_ExtraLineSpacing].szValue
+		: pLex->Styles[ANSIArtStyleIndex_ExtraLineSpacing].szValue;
+	if (Style_StrGetRawSize(szValue, &iValue) && iValue != 0) {
+		int iAscent;
+		int iDescent;
+		if (iValue > 0) {
+			// 5 => iAscent = 3, iDescent = 2
+			iValue = max_i(0, RoundToCurrentDPI(iValue));
+			iDescent = iValue/2 ;
+			iAscent = iValue - iDescent;
+		} else {
+			// -5 => iAscent = -2, iDescent = -3
+			iValue = -max_i(0, RoundToCurrentDPI(-iValue));
+			iAscent = iValue/2 ;
+			iDescent = iValue - iAscent;
+		}
+
+		SciCall_SetExtraAscent(iAscent);
+		SciCall_SetExtraDescent(iDescent);
+	} else {
+		SciCall_SetExtraAscent(0);
+		SciCall_SetExtraDescent(0);
+	}
 }
 
 void Style_OnStyleThemeChanged(int theme) {
 	if (theme != StyleTheme_Default) {
-		if (!PathFileExists(darkStyleThemeFilePath)) {
+		if (!PathIsFile(darkStyleThemeFilePath)) {
 			FindDarkThemeFile();
 		}
 	}
@@ -1462,8 +1496,7 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	// base font size
 	if (!Style_StrGetFontSize(szValue, &iBaseFontSize)) {
 		iBaseFontSize = defaultBaseFontSize;
-		iValue = DefaultToCurrentDPI(iBaseFontSize);
-		SciCall_StyleSetSizeFractional(STYLE_DEFAULT, iValue);
+		SciCall_StyleSetSizeFractional(STYLE_DEFAULT, iBaseFontSize);
 	}
 	Style_SetStyles(STYLE_DEFAULT, szValue);
 
@@ -1477,8 +1510,11 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 		char localeName[LOCALE_NAME_MAX_LENGTH] = "";
 #if 0
 		if (!Style_StrGetLocale(szValue, localeWide, COUNTOF(localeWide))) {
-			 //GetUserDefaultLocaleName(localeWide, COUNTOF(localeWide));
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+			GetUserDefaultLocaleName(localeWide, COUNTOF(localeWide));
+#else
 			 GetLocaleInfo(0 /*LOCALE_NAME_USER_DEFAULT*/, 0x0000005c /*LOCALE_SNAME*/, localeWide, COUNTOF(localeWide));
+#endif
 		}
 		WideCharToMultiByte(CP_UTF8, 0, localeWide, -1, localeName, COUNTOF(localeName), NULL, NULL);
 #else
@@ -1544,16 +1580,9 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	} else {
 		SciCall_SetWhitespaceBack(FALSE, 0);
 	}
-
-	// whitespace dot size
-	iValue = 1;
-	Style_StrGetRawSize(szValue, &iValue);
-	iValue = max_i(1, RoundToCurrentDPI(iValue));
-	SciCall_SetWhitespaceSize(iValue);
 	//! end Whitespace
 
 	//! begin Caret
-	Style_HighlightCurrentLine();
 	Style_UpdateCaret();
 	const COLORREF backColor = SciCall_StyleGetBack(STYLE_DEFAULT);
 	// caret fore
@@ -1582,31 +1611,7 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	SciCall_IndicSetFore(SC_INDICATOR_UNKNOWN, rgb);
 
 	Style_SetLongLineColors();
-
-	// Extra Line Spacing
-	szValue = (rid != NP2LEX_ANSI)? pLexGlobal->Styles[GlobalStyleIndex_ExtraLineSpacing].szValue
-		: pLexNew->Styles[ANSIArtStyleIndex_ExtraLineSpacing].szValue;
-	if (Style_StrGetRawSize(szValue, &iValue) && iValue != 0) {
-		int iAscent;
-		int iDescent;
-		if (iValue > 0) {
-			// 5 => iAscent = 3, iDescent = 2
-			iValue = max_i(0, RoundToCurrentDPI(iValue));
-			iDescent = iValue/2 ;
-			iAscent = iValue - iDescent;
-		} else {
-			// -5 => iAscent = -2, iDescent = -3
-			iValue = -max_i(0, RoundToCurrentDPI(-iValue));
-			iAscent = iValue/2 ;
-			iDescent = iValue - iAscent;
-		}
-
-		SciCall_SetExtraAscent(iAscent);
-		SciCall_SetExtraDescent(iDescent);
-	} else {
-		SciCall_SetExtraAscent(0);
-		SciCall_SetExtraDescent(0);
-	}
+	Style_OnDPIChanged(pLexNew);
 
 	// set folding style; braces are for scoping only
 	{
@@ -2294,13 +2299,18 @@ LPCWSTR Style_GetCurrentLexerName(LPWSTR lpszName, int cchName) {
 	mii.dwTypeData = lpszName;
 	mii.cch = cchName;
 	if (GetMenuItemInfo(hmenu, np2LexLangIndex, FALSE, &mii)) {
-		// remove '&' from access key
+#if 0 && defined(_MSC_VER)
+		SHStripMneumonic(lpszName);
+#elif 0
+		StripMnemonic(lpszName);
+#else
 		LPWSTR p = StrChr(lpszName, L'&');
 		if (p != NULL) {
 			const int len = lstrlen(p) - 1;
 			MoveMemory(p, p + 1, sizeof(WCHAR) * len);
 			p[len] = L'\0';
 		}
+#endif
 		return lpszName;
 	}
 	return pLexCurrent->pszName;
@@ -2317,7 +2327,7 @@ static void Style_UpdateLexerLang(PEDITLEXER pLex, LPCWSTR lpszExt, LPCWSTR lpsz
 		break;
 
 	case NP2LEX_CONF:
-		if (StrNCaseEqual(lpszName, L"httpd", 5) || StrCaseEqual(lpszExt, L"htaccess")) {
+		if (StrHasPrefixCase(lpszName, L"httpd") || StrCaseEqual(lpszExt, L"htaccess")) {
 			np2LexLangIndex = IDM_LEXER_APACHE;
 		}
 		break;
@@ -2383,7 +2393,7 @@ static void Style_UpdateLexerLang(PEDITLEXER pLex, LPCWSTR lpszExt, LPCWSTR lpsz
 			}
 		} else if (StrCaseEqual(L"xsd", lpszExt)) {
 			np2LexLangIndex = IDM_LEXER_XSD;
-		} else if (StrNCaseEqual(L"xsl", lpszExt, 3)) {
+		} else if (StrHasPrefixCase(lpszExt, L"xsl")) {
 			np2LexLangIndex = IDM_LEXER_XSLT;
 		} else if (StrCaseEqual(L"dtd", lpszExt)) {
 			np2LexLangIndex = IDM_LEXER_DTD;
@@ -2438,7 +2448,7 @@ PEDITLEXER Style_MatchLexer(LPCWSTR lpszMatch, BOOL bCheckNames) {
 		if (cch >= 3) {
 			for (UINT iLexer = LEXER_INDEX_MATCH; iLexer < ALL_LEXER_COUNT; iLexer++) {
 				PEDITLEXER pLex = pLexArray[iLexer];
-				if (StrNCaseEqual(pLex->pszName, lpszMatch, cch)) {
+				if (StrHasPrefixCaseEx(pLex->pszName, lpszMatch, cch)) {
 					return pLex;
 				}
 			}
@@ -2493,7 +2503,7 @@ static PEDITLEXER Style_GetLexerFromFile(LPCWSTR lpszFile, BOOL bCGIGuess, LPCWS
 		}
 
 		// MySQL ini/cnf
-		if (!bFound && StrNCaseEqual(lpszName, L"my", 2) && (StrCaseEqual(lpszExt, L"ini") || StrCaseEqual(lpszExt, L"cnf"))) {
+		if (!bFound && StrHasPrefixCase(lpszName, L"my") && (StrCaseEqual(lpszExt, L"ini") || StrCaseEqual(lpszExt, L"cnf"))) {
 			pLexNew = &lexCONF;
 			bFound = TRUE;
 		}
@@ -2516,7 +2526,7 @@ static PEDITLEXER Style_GetLexerFromFile(LPCWSTR lpszFile, BOOL bCGIGuess, LPCWS
 			if (pDotFile) {
 				*pDotFile = TRUE;
 			}
-			if (StrNEqual(lpszExt, L"bash", 4) || StrEqual(lpszExt, L"profile")) { // .bash_history, .bash_logout, .bash_profile, .bashrc, .profile
+			if (StrHasPrefix(lpszExt, L"bash") || StrEqual(lpszExt, L"profile")) { // .bash_history, .bash_logout, .bash_profile, .bashrc, .profile
 				pLexNew = &lexBash;
 				bFound = TRUE;
 			}
@@ -2524,11 +2534,11 @@ static PEDITLEXER Style_GetLexerFromFile(LPCWSTR lpszFile, BOOL bCGIGuess, LPCWS
 	}
 
 	if (!bFound) {
-		if (StrNCaseEqual(lpszName, L"Readme", 6)) {
+		if (StrHasPrefixCase(lpszName, L"Readme")) {
 			pLexNew = &lexTextFile;
 			bFound = TRUE;
 		}
-		if (!bFound && (StrNCaseEqual(lpszName, L"Makefile", 8) || StrNCaseEqual(lpszName, L"Kbuild", 6))) {
+		if (!bFound && (StrHasPrefixCase(lpszName, L"Makefile") || StrHasPrefixCase(lpszName, L"Kbuild"))) {
 			pLexNew = &lexMake;
 			bFound = TRUE;
 		}
@@ -2541,11 +2551,11 @@ static PEDITLEXER Style_GetLexerFromFile(LPCWSTR lpszFile, BOOL bCGIGuess, LPCWS
 			bFound = TRUE;
 		}
 		// Boost build
-		if (!bFound && (StrCaseEqual(lpszName, L"Jamroot") || StrNCaseEqual(lpszName, L"Jamfile", 7))) {
+		if (!bFound && (StrCaseEqual(lpszName, L"Jamroot") || StrHasPrefixCase(lpszName, L"Jamfile"))) {
 			pLexNew = &lexJAM;
 			bFound = TRUE;
 		}
-		if (!bFound && (StrNCaseEqual(lpszName, L"Kconfig", 7) || StrNCaseEqual(lpszName, L"Doxyfile", 8))) {
+		if (!bFound && (StrHasPrefixCase(lpszName, L"Kconfig") || StrHasPrefixCase(lpszName, L"Doxyfile"))) {
 			pLexNew = &lexCONF;
 			bFound = TRUE;
 		}
@@ -3089,21 +3099,19 @@ static void AddLexFilterStr(LPWSTR szFilter, LPCEDITLEXER pLex, LPCWSTR lpszExt,
 	int state = 1;
 	int count = 0;
 	while ((ch = *p++) != L'\0') {
-		if (ch != L' ') {
-			if (ch == L';') {
-				if (state == 0) {
-					state = 1;
-					*ptr++ = L';';
-				}
-			} else {
-				if (state == 1) {
-					state = 0;
-					++count;
-					*ptr++ = L'*';
-					*ptr++ = L'.';
-				}
-				*ptr++ = ch;
+		if (ch == L';') {
+			if (state == 0) {
+				state = 1;
+				*ptr++ = L';';
 			}
+		} else if (ch != ' ') {
+			if (state == 1) {
+				state = 0;
+				++count;
+				*ptr++ = L'*';
+				*ptr++ = L'.';
+			}
+			*ptr++ = ch;
 		}
 	}
 
@@ -3338,7 +3346,7 @@ BOOL Style_StrGetLocale(LPCWSTR lpszStyle, LPWSTR lpszLocale, int cchLocale) {
 
 #define Style_StrCopyValue(szNewStyle, lpszStyle, name, tch)	Style_StrCopyValueEx((szNewStyle), (lpszStyle), (name), CSTRLEN(name), (tch), COUNTOF(tch))
 #define Style_StrCopyFont(szNewStyle, lpszStyle, tch)		Style_StrCopyValue((szNewStyle), (lpszStyle), L"font:", (tch));
-#define Style_StrCopyChatset(szNewStyle, lpszStyle, tch)	Style_StrCopyValue((szNewStyle), (lpszStyle), L"charset:", (tch));
+#define Style_StrCopyCharSet(szNewStyle, lpszStyle, tch)	Style_StrCopyValue((szNewStyle), (lpszStyle), L"charset:", (tch));
 #define Style_StrCopyLocale(szNewStyle, lpszStyle, tch)		Style_StrCopyValue((szNewStyle), (lpszStyle), L"locale:", (tch));
 #define Style_StrCopySize(szNewStyle, lpszStyle, tch)		Style_StrCopyValue((szNewStyle), (lpszStyle), L"size:", (tch));
 #define Style_StrCopyWeight(szNewStyle, lpszStyle, tch)		Style_StrCopyValue((szNewStyle), (lpszStyle), L"weight:", (tch));
@@ -3453,12 +3461,7 @@ BOOL Style_SelectFont(HWND hwnd, LPWSTR lpszStyle, int cchStyle, BOOL bDefaultSt
 	if (!Style_StrGetFontSize(lpszStyle, &iValue)) {
 		iValue = iBaseFontSize;
 	}
-	{
-		HDC hdc = GetDC(hwnd);
-		cf.iPointSize = iValue / (SC_FONT_SIZE_MULTIPLIER / 10);
-		lf.lfHeight = -MulDiv(iValue, GetDeviceCaps(hdc, LOGPIXELSY), 72*SC_FONT_SIZE_MULTIPLIER);
-		ReleaseDC(hwnd, hdc);
-	}
+	lf.lfHeight = -MulDiv(iValue, g_uSystemDPI, 72*SC_FONT_SIZE_MULTIPLIER);
 	if (!Style_StrGetFontWeight(lpszStyle, &iValue)) {
 		iValue = FW_NORMAL;
 	}
@@ -3580,7 +3583,7 @@ BOOL Style_SelectColor(HWND hwnd, BOOL bFore, LPWSTR lpszStyle, int cchStyle) {
 
 	lstrcpy(szNewStyle, L"");
 	Style_StrCopyFont(szNewStyle, lpszStyle, tch);
-	Style_StrCopyChatset(szNewStyle, lpszStyle, tch);
+	Style_StrCopyCharSet(szNewStyle, lpszStyle, tch);
 	Style_StrCopyLocale(szNewStyle, lpszStyle, tch);
 	Style_StrCopySize(szNewStyle, lpszStyle, tch);
 	Style_StrCopyWeight(szNewStyle, lpszStyle, tch);
@@ -3633,7 +3636,6 @@ void Style_SetStyles(int iStyle, LPCWSTR lpszStyle) {
 
 	// Size
 	if (Style_StrGetFontSize(lpszStyle, &iValue)) {
-		iValue = DefaultToCurrentDPI(iValue);
 		SciCall_StyleSetSizeFractional(iStyle, iValue);
 	}
 
@@ -3693,7 +3695,7 @@ static void Style_Parse(struct DetailStyle *style, LPCWSTR lpszStyle) {
 
 	// Size
 	if (Style_StrGetFontSize(lpszStyle, &iValue)) {
-		style->fontSize = DefaultToCurrentDPI(iValue);
+		style->fontSize = iValue;
 		mask |= STYLE_MASK_FONT_SIZE;
 	}
 
@@ -4706,7 +4708,7 @@ void Style_ConfigDlg(HWND hwnd) {
 		if ((fStylesModified & STYLESMODIFIED_WARN_MASK) && !fWarnedNoIniFile) {
 			LPCWSTR themePath = GetStyleThemeFilePath();
 			if (StrIsEmpty(themePath)) {
-				MsgBox(MBWARN, IDS_SETTINGSNOTSAVED);
+				MsgBoxWarn(MB_OK, IDS_SETTINGSNOTSAVED);
 				fWarnedNoIniFile = TRUE;
 			}
 		}

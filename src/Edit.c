@@ -59,6 +59,7 @@ extern BOOL bAutoStripBlanks;
 extern int iDefaultCodePage;
 //extern int iDefaultCharSet;
 extern BOOL bLoadANSIasUTF8;
+extern BOOL bLoadASCIIasUTF8;
 extern BOOL bLoadNFOasOEM;
 extern int iSrcEncoding;
 extern int iWeakSrcEncoding;
@@ -115,7 +116,7 @@ void Edit_ReleaseResources(void) {
 }
 
 static inline void NotifyRectangleSelection(void) {
-	MsgBox(MBWARN, IDS_SELRECT);
+	MsgBoxWarn(MB_OK, IDS_SELRECT);
 	//ShowNotificationMessage(SC_NOTIFICATIONPOSITION_CENTER, IDS_SELRECT);
 }
 
@@ -635,6 +636,119 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	status->linesCount[2] = lineCountCR;
 }
 
+int EditDetermineEncoding(LPCWSTR pszFile, char *lpData, DWORD cbData, BOOL bSkipEncodingDetection, LPBOOL lpbBOM) {
+	BOOL bPreferOEM = FALSE;
+	if (bLoadNFOasOEM) {
+		LPCWSTR const pszExt = pszFile + lstrlen(pszFile) - 4;
+		if (pszExt >= pszFile && (StrCaseEqual(pszExt, L".nfo") || StrCaseEqual(pszExt, L".diz"))) {
+			bPreferOEM = TRUE;
+		}
+	}
+
+	if (!Encoding_IsValid(iDefaultEncoding)) {
+		iDefaultEncoding = CPI_UTF8;
+	}
+
+	int _iDefaultEncoding = bPreferOEM ? g_DOSEncoding : iDefaultEncoding;
+	if (iWeakSrcEncoding != -1 && Encoding_IsValid(iWeakSrcEncoding)) {
+		_iDefaultEncoding = iWeakSrcEncoding;
+	}
+
+	int iEncoding = CPI_DEFAULT;
+	// default encoding for empty file.
+	if (cbData == 0) {
+		FileVars_Init(NULL, 0, &fvCurFile);
+
+		if (iSrcEncoding == -1) {
+			if ((bLoadANSIasUTF8 || bLoadASCIIasUTF8) && !bPreferOEM) {
+				iEncoding = CPI_UTF8;
+			} else {
+				iEncoding = _iDefaultEncoding;
+			}
+		} else {
+			iEncoding = iSrcEncoding;
+		}
+		return iEncoding;
+	}
+
+	BOOL utf8Sig = IsUTF8Signature(lpData);
+	BOOL bBOM = FALSE;
+	BOOL bReverse = FALSE;
+
+	// check Unicode / UTF-16
+	// file large than 2 GiB is loaded without encoding conversion, i.e. loaded as UTF-8 or ANSI only.
+	if (cbData < MAX_NON_UTF8_SIZE && (
+		(iSrcEncoding == CPI_UNICODE || iSrcEncoding == CPI_UNICODEBE) // reload as UTF-16
+		|| (!bSkipEncodingDetection && iSrcEncoding == -1 && !utf8Sig && IsUnicode(lpData, cbData, &bBOM, &bReverse))
+	)) {
+		if (iSrcEncoding == CPI_UNICODE) {
+			bBOM = (lpData[0] == '\xFF' && lpData[1] == '\xFE');
+			bReverse = FALSE;
+		} else if (iSrcEncoding == CPI_UNICODEBE) {
+			bBOM = (lpData[0] == '\xFE' && lpData[1] == '\xFF');
+		}
+
+		if (iSrcEncoding == CPI_UNICODEBE || bReverse) {
+			_swab(lpData, lpData, cbData);
+			iEncoding = bBOM ? CPI_UNICODEBEBOM : CPI_UNICODEBE;
+		} else {
+			iEncoding = bBOM ? CPI_UNICODEBOM : CPI_UNICODE;
+		}
+
+		*lpbBOM = bBOM;
+		return iEncoding;
+	}
+
+	FileVars_Init(lpData, cbData, &fvCurFile);
+	if (iSrcEncoding == -1) {
+		iSrcEncoding = FileVars_GetEncoding(&fvCurFile);
+	}
+
+	iEncoding = iSrcEncoding;
+	if (iEncoding == -1) {
+		if (fvCurFile.mask & FV_ENCODING) {
+			iEncoding = CPI_DEFAULT;
+		} else {
+			if ((iWeakSrcEncoding != -1) && (mEncoding[iWeakSrcEncoding].uFlags & NCP_INTERNAL)) {
+				iEncoding = iDefaultEncoding;
+			} else {
+				iEncoding = _iDefaultEncoding;
+			}
+		}
+	}
+
+	// check UTF-8
+	bBOM = utf8Sig;
+	utf8Sig = (iSrcEncoding == CPI_UTF8 || iSrcEncoding == CPI_UTF8SIGN); // reload as UTF-8 or UTF-8 filevar
+	if (iSrcEncoding == -1) {
+		if (bLoadANSIasUTF8 && !bPreferOEM) { // load ANSI as UTF-8
+			utf8Sig = TRUE;
+		} else if (!bSkipEncodingDetection || cbData >= MAX_NON_UTF8_SIZE) {
+			if (!bBOM && !bLoadASCIIasUTF8 && cbData < MAX_NON_UTF8_SIZE && IsUTF7(lpData, cbData)) {
+				// 7-bit / any encoding
+				return iEncoding;
+			}
+			utf8Sig = bBOM || IsUTF8(lpData, cbData);
+		}
+	}
+
+	if (utf8Sig) {
+		*lpbBOM = bBOM;
+		iEncoding = bBOM ? CPI_UTF8SIGN : CPI_UTF8;
+		return iEncoding;
+	}
+
+	if (cbData < MAX_NON_UTF8_SIZE && iEncoding != CPI_DEFAULT) {
+		const UINT uFlags = mEncoding[iEncoding].uFlags;
+		if ((uFlags & NCP_8BIT) || ((uFlags & NCP_7BIT) && IsUTF7(lpData, cbData))) {
+			return iEncoding;
+		}
+	}
+
+	// ANSI / unknown encoding
+	return CPI_DEFAULT;
+}
+
 //=============================================================================
 //
 // EditLoadFile()
@@ -665,21 +779,22 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 	}
 
 	// display real path name
-	if (IsVistaAndAbove()) {
+	{
 		WCHAR path[MAX_PATH] = L"";
 		// since Windows Vista
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 		if (GetFinalPathNameByHandleW(hFile, path, MAX_PATH, FILE_NAME_OPENED))
 #else
 		typedef DWORD (WINAPI *GetFinalPathNameByHandleSig)(HANDLE hFile, LPWSTR lpszFilePath, DWORD cchFilePath, DWORD dwFlags);
-		GetFinalPathNameByHandleSig pfnGetFinalPathNameByHandle = (GetFinalPathNameByHandleSig)GetProcAddress(GetModuleHandle(L"kernel32.dll"), "GetFinalPathNameByHandleW");
+		GetFinalPathNameByHandleSig pfnGetFinalPathNameByHandle =
+			DLLFunctionEx(GetFinalPathNameByHandleSig, L"kernel32.dll", "GetFinalPathNameByHandleW");
 		if (pfnGetFinalPathNameByHandle && pfnGetFinalPathNameByHandle(hFile, path, MAX_PATH, FILE_NAME_OPENED))
 #endif
 		{
-			if (StrNEqual(path, L"\\\\?\\", CSTRLEN(L"\\\\?\\"))) {
-				WCHAR *p = path + 4;
-				if (StrNEqual(p, L"UNC\\", CSTRLEN(L"UNC\\"))) {
-					p += 2;
+			if (StrHasPrefix(path, L"\\\\?\\")) {
+				WCHAR *p = path + CSTRLEN(L"\\\\?\\");
+				if (StrHasPrefix(p, L"UNC\\")) {
+					p += CSTRLEN(L"UNC\\");
 					*p = L'\\';
 				}
 				lstrcpy(pszFile, p);
@@ -728,7 +843,7 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 		_i64tow(maxFileSize, tchMaxBytes, 10);
 		FormatNumberStr(tchDocBytes);
 		FormatNumberStr(tchMaxBytes);
-		MsgBox(MBWARN, IDS_WARNLOADBIGFILE, pszFile, tchDocSize, tchDocBytes, tchMaxSize, tchMaxBytes);
+		MsgBoxWarn(MB_OK, IDS_WARNLOADBIGFILE, pszFile, tchDocSize, tchDocBytes, tchMaxSize, tchMaxBytes);
 		return FALSE;
 	}
 
@@ -747,151 +862,68 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 		return FALSE;
 	}
 
-	BOOL bPreferOEM = FALSE;
-	if (bLoadNFOasOEM) {
-		LPCWSTR const pszExt = pszFile + lstrlen(pszFile) - 4;
-		if (pszExt >= pszFile && (StrCaseEqual(pszExt, L".nfo") || StrCaseEqual(pszExt, L".diz"))) {
-			bPreferOEM = TRUE;
-		}
-	}
-
-	if (!Encoding_IsValid(iDefaultEncoding)) {
-		iDefaultEncoding = CPI_UTF8;
-	}
-
-	int _iDefaultEncoding = bPreferOEM ? g_DOSEncoding : iDefaultEncoding;
-	if (iWeakSrcEncoding != -1 && Encoding_IsValid(iWeakSrcEncoding)) {
-		_iDefaultEncoding = iWeakSrcEncoding;
-	}
-
-	int iEncoding = CPI_DEFAULT;
-	const BOOL utf8Sig = cbData? IsUTF8Signature(lpData) : FALSE;
-	BOOL bBOM = FALSE;
-	BOOL bReverse = FALSE;
-
 	status->iEOLMode = iLineEndings[iDefaultEOLMode];
 	status->bInconsistent = FALSE;
 	status->totalLineCount = 1;
 
-	if (cbData == 0) {
-		FileVars_Init(NULL, 0, &fvCurFile);
-
-		if (iSrcEncoding == -1) {
-			if (bLoadANSIasUTF8 && !bPreferOEM) {
-				iEncoding = CPI_UTF8;
-			} else {
-				iEncoding = _iDefaultEncoding;
-			}
-		} else {
-			iEncoding = iSrcEncoding;
-		}
-
-		SciCall_SetCodePage((mEncoding[iEncoding].uFlags & NCP_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
-		EditSetEmptyText();
-		SciCall_SetEOLMode(status->iEOLMode);
-	} else if (cbData < MAX_NON_UTF8_SIZE && ((iSrcEncoding == CPI_UNICODE || iSrcEncoding == CPI_UNICODEBE) // reload as UTF-16
-		|| (!bSkipEncodingDetection && iSrcEncoding == -1 && !utf8Sig && IsUnicode(lpData, cbData, &bBOM, &bReverse))
-		)) {
-		if (iSrcEncoding == CPI_UNICODE) {
-			bBOM = (lpData[0] == '\xFF' && lpData[1] == '\xFE');
-			bReverse = FALSE;
-		} else if (iSrcEncoding == CPI_UNICODEBE) {
-			bBOM = (lpData[0] == '\xFE' && lpData[1] == '\xFF');
-		}
-
-		if (iSrcEncoding == CPI_UNICODEBE || bReverse) {
-			_swab(lpData, lpData, cbData);
-			if (bBOM) {
-				iEncoding = CPI_UNICODEBEBOM;
-			} else {
-				iEncoding = CPI_UNICODEBE;
-			}
-		} else {
-			if (bBOM) {
-				iEncoding = CPI_UNICODEBOM;
-			} else {
-				iEncoding = CPI_UNICODE;
-			}
-		}
-
-		// cbData/2 => WCHAR, WCHAR*3 => UTF-8
-		char *lpDataUTF8 = (char *)NP2HeapAlloc((cbData + 1)*sizeof(WCHAR));
-		cbData = WideCharToMultiByte(CP_UTF8, 0, (bBOM ? (LPWSTR)lpData + 1 : (LPWSTR)lpData),
-									 (int)(bBOM ? (cbData / sizeof(WCHAR)) : (cbData / sizeof(WCHAR)) + 1),
-									 lpDataUTF8, (int)NP2HeapSize(lpDataUTF8), NULL, NULL);
-		if (cbData == 0) {
-			cbData = WideCharToMultiByte(CP_ACP, 0, (bBOM ? (LPWSTR)lpData + 1 : (LPWSTR)lpData),
-										 -1, lpDataUTF8, (int)NP2HeapSize(lpDataUTF8), NULL, NULL);
-			status->bUnicodeErr = TRUE;
-		}
-
-		EditDetectEOLMode(lpDataUTF8, cbData - 1, status);
-		FileVars_Init(lpDataUTF8, cbData - 1, &fvCurFile);
-		SciCall_SetCodePage(SC_CP_UTF8);
-		EditSetNewText(lpDataUTF8, cbData - 1, status->totalLineCount);
-		NP2HeapFree(lpDataUTF8);
-	} else {
-		FileVars_Init(lpData, cbData, &fvCurFile);
-		if (iSrcEncoding == -1) {
-			iSrcEncoding = FileVars_GetEncoding(&fvCurFile);
-		}
-		if ((iSrcEncoding == CPI_UTF8 || iSrcEncoding == CPI_UTF8SIGN) // reload as UTF-8 or UTF-8 filevar
-			|| ((iSrcEncoding == -1) && ((bLoadANSIasUTF8 && !bPreferOEM) // load ANSI as UTF-8
-				|| ((!bSkipEncodingDetection || cbData >= MAX_NON_UTF8_SIZE) && (utf8Sig || IsUTF8(lpData, cbData)))
-			))
-		) {
-			SciCall_SetCodePage(SC_CP_UTF8);
-			if (utf8Sig) {
-				EditDetectEOLMode(lpData + 3, cbData - 3, status);
-				EditSetNewText(lpData + 3, cbData - 3, status->totalLineCount);
-				iEncoding = CPI_UTF8SIGN;
-			} else {
-				EditDetectEOLMode(lpData, cbData, status);
-				EditSetNewText(lpData, cbData, status->totalLineCount);
-				iEncoding = CPI_UTF8;
-			}
-		} else {
-			iEncoding = iSrcEncoding;
-			if (iEncoding == -1) {
-				if (fvCurFile.mask & FV_ENCODING) {
-					iEncoding = CPI_DEFAULT;
-				} else {
-					if ((iWeakSrcEncoding != -1) && (mEncoding[iWeakSrcEncoding].uFlags & NCP_INTERNAL)) {
-						iEncoding = iDefaultEncoding;
-					} else {
-						iEncoding = _iDefaultEncoding;
-					}
-				}
-			}
-
-			const UINT uCodePage = mEncoding[iEncoding].uCodePage;
-			if (cbData < MAX_NON_UTF8_SIZE && ((mEncoding[iEncoding].uFlags & NCP_8BIT)
-				|| ((mEncoding[iEncoding].uFlags & NCP_7BIT) && IsUTF7(lpData, cbData))
-			)) {
-				LPWSTR lpDataWide = (LPWSTR)NP2HeapAlloc(cbData * sizeof(WCHAR) + 16);
-				const int cbDataWide = MultiByteToWideChar(uCodePage, 0, lpData, cbData, lpDataWide, (int)(NP2HeapSize(lpDataWide) / sizeof(WCHAR)));
-				NP2HeapFree(lpData);
-				lpData = (char *)NP2HeapAlloc(cbDataWide * kMaxMultiByteCount + 16);
-				cbData = WideCharToMultiByte(CP_UTF8, 0, lpDataWide, cbDataWide, lpData, (int)NP2HeapSize(lpData), NULL, NULL);
-				NP2HeapFree(lpDataWide);
-
-				EditDetectEOLMode(lpData, cbData, status);
-				SciCall_SetCodePage(SC_CP_UTF8);
-				EditSetNewText(lpData, cbData, status->totalLineCount);
-			} else {
-				EditDetectEOLMode(lpData, cbData, status);
-				SciCall_SetCodePage(iDefaultCodePage);
-				EditSetNewText(lpData, cbData, status->totalLineCount);
-				iEncoding = CPI_DEFAULT;
-			}
-		}
-	}
-
-	NP2HeapFree(lpData);
+	BOOL bBOM = FALSE;
+	const int iEncoding = EditDetermineEncoding(pszFile, lpData, cbData, bSkipEncodingDetection, &bBOM);
 	status->iEncoding = iEncoding;
+
 	iSrcEncoding = -1;
 	iWeakSrcEncoding = -1;
+	const UINT uFlags = mEncoding[iEncoding].uFlags;
 
+	if (cbData == 0) {
+		SciCall_SetCodePage((uFlags & NCP_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
+		EditSetEmptyText();
+		SciCall_SetEOLMode(status->iEOLMode);
+		NP2HeapFree(lpData);
+		return TRUE;
+	}
+
+	char *lpDataUTF8 = lpData;
+	if (uFlags & NCP_UNICODE) {
+		// cbData/2 => WCHAR, WCHAR*3 => UTF-8
+		lpDataUTF8 = (char *)NP2HeapAlloc((cbData + 1)*sizeof(WCHAR));
+		LPCWSTR pszTextW = bBOM ? ((LPWSTR)lpData + 1) : (LPWSTR)lpData;
+		// NOTE: requires two extra trailing NULL bytes.
+		const DWORD cchTextW = bBOM ? (cbData / sizeof(WCHAR)) : ((cbData / sizeof(WCHAR)) + 1);
+		cbData = WideCharToMultiByte(CP_UTF8, 0, pszTextW, cchTextW, lpDataUTF8, (int)NP2HeapSize(lpDataUTF8), NULL, NULL);
+		if (cbData == 0) {
+			cbData = WideCharToMultiByte(CP_ACP, 0, pszTextW, -1, lpDataUTF8, (int)NP2HeapSize(lpDataUTF8), NULL, NULL);
+			status->bUnicodeErr = TRUE;
+		}
+		if (cbData != 0) {
+			// remove the NULL terminator.
+			cbData -= 1;
+		}
+
+		NP2HeapFree(lpData);
+		lpData = lpDataUTF8;
+		FileVars_Init(lpData, cbData, &fvCurFile);
+	} else if (uFlags & NCP_UTF8) {
+		if (bBOM) {
+			lpDataUTF8 = lpData + 3;
+			cbData -= 3;
+		}
+	} else if (uFlags & (NCP_8BIT | NCP_7BIT)) {
+		const UINT uCodePage = mEncoding[iEncoding].uCodePage;
+		LPWSTR lpDataWide = (LPWSTR)NP2HeapAlloc(cbData * sizeof(WCHAR) + 16);
+		const int cbDataWide = MultiByteToWideChar(uCodePage, 0, lpData, cbData, lpDataWide, (int)(NP2HeapSize(lpDataWide) / sizeof(WCHAR)));
+		NP2HeapFree(lpData);
+
+		lpData = (char *)NP2HeapAlloc(cbDataWide * kMaxMultiByteCount + 16);
+		cbData = WideCharToMultiByte(CP_UTF8, 0, lpDataWide, cbDataWide, lpData, (int)NP2HeapSize(lpData), NULL, NULL);
+		NP2HeapFree(lpDataWide);
+		lpDataUTF8 = lpData;
+	}
+
+	EditDetectEOLMode(lpDataUTF8, cbData, status);
+	SciCall_SetCodePage((uFlags & NCP_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
+	EditSetNewText(lpDataUTF8, cbData, status->totalLineCount);
+
+	NP2HeapFree(lpData);
 	return TRUE;
 }
 
@@ -951,7 +983,7 @@ BOOL EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, EditFileIOStatus *
 		int iEncoding = status->iEncoding;
 		UINT uFlags = mEncoding[iEncoding].uFlags;
 		if (cbData >= MAX_NON_UTF8_SIZE) {
-			// save in UTF-8 or ANSI
+			// save as UTF-8 or ANSI
 			if (!(uFlags & (NCP_DEFAULT | NCP_UTF8))) {
 				if (uFlags & NCP_UNICODE_BOM) {
 					iEncoding = CPI_UTF8SIGN;
@@ -981,7 +1013,7 @@ BOOL EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, EditFileIOStatus *
 					if (bEncodingMismatch) {
 						Encoding_GetLabel(iAltEncoding);
 						Encoding_GetLabel(iEncoding);
-						InfoBox(0, L"MsgEncodingMismatch", IDS_ENCODINGMISMATCH,
+						InfoBoxWarn(MB_OK, L"MsgEncodingMismatch", IDS_ENCODINGMISMATCH,
 							mEncoding[iAltEncoding].wchLabel,
 							mEncoding[iEncoding].wchLabel);
 					}
@@ -1044,7 +1076,7 @@ BOOL EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, EditFileIOStatus *
 			}
 			NP2HeapFree(lpDataWide);
 
-			if (!bCancelDataLoss || InfoBox(MBOKCANCEL, L"MsgConv3", IDS_ERR_UNICODE2) == IDOK) {
+			if (!bCancelDataLoss || InfoBoxWarn(MB_OKCANCEL, L"MsgConv3", IDS_ERR_UNICODE2) == IDOK) {
 				SetEndOfFile(hFile);
 				bWriteSuccess = WriteFile(hFile, lpData, cbData, &dwBytesWritten, NULL);
 				dwLastIOError = GetLastError();
@@ -1140,7 +1172,7 @@ void EditInvertCase(void) {
 
 // https://docs.microsoft.com/en-us/windows/win32/intl/transliteration-services
 #include <elscore.h>
-#if (defined(__MINGW64__) || defined(__MINGW32__))
+#if defined(__MINGW64__) || defined(__MINGW32__)
 #if defined(__has_include) && __has_include(<elssrvc.h>)
 #include <elssrvc.h>
 #else
@@ -1191,12 +1223,12 @@ typedef HRESULT (WINAPI *MappingFreePropertyBagSig)(PMAPPING_PROPERTY_BAG pBag);
 
 	if (triedLoadingELSCore == 0) {
 		triedLoadingELSCore = 1;
-		hELSCoreDLL = LoadLibraryEx(L"elscore.dll", NULL, kSystemLibraryLoadFlags);
+		hELSCoreDLL = LoadLibraryExW(L"elscore.dll", NULL, kSystemLibraryLoadFlags);
 		if (hELSCoreDLL != NULL) {
-			pfnMappingGetServices = (MappingGetServicesSig)GetProcAddress(hELSCoreDLL, "MappingGetServices");
-			pfnMappingFreeServices = (MappingFreeServicesSig)GetProcAddress(hELSCoreDLL, "MappingFreeServices");
-			pfnMappingRecognizeText = (MappingRecognizeTextSig)GetProcAddress(hELSCoreDLL, "MappingRecognizeText");
-			pfnMappingFreePropertyBag = (MappingFreePropertyBagSig)GetProcAddress(hELSCoreDLL, "MappingFreePropertyBag");
+			pfnMappingGetServices = DLLFunction(MappingGetServicesSig, hELSCoreDLL, "MappingGetServices");
+			pfnMappingFreeServices = DLLFunction(MappingFreeServicesSig, hELSCoreDLL, "MappingFreeServices");
+			pfnMappingRecognizeText = DLLFunction(MappingRecognizeTextSig, hELSCoreDLL, "MappingRecognizeText");
+			pfnMappingFreePropertyBag = DLLFunction(MappingFreePropertyBagSig, hELSCoreDLL, "MappingFreePropertyBag");
 			if (pfnMappingGetServices == NULL || pfnMappingFreeServices == NULL || pfnMappingRecognizeText == NULL || pfnMappingFreePropertyBag == NULL) {
 				FreeLibrary(hELSCoreDLL);
 				hELSCoreDLL = NULL;
@@ -1397,7 +1429,7 @@ void EditMapTextCase(UINT menu) {
 		if (pGuid != NULL && IsWin7AndAbove()) {
 			charsConverted = TransliterateText(pGuid, pszTextW, cchTextW, &pszMappedW);
 		}
-		if (charsConverted == 0 && flags != 0) {
+		if (pszMappedW == NULL && flags != 0) {
 			charsConverted = LCMapString(LOCALE_SYSTEM_DEFAULT, flags, pszTextW, cchTextW, NULL, 0);
 			if (charsConverted) {
 				pszMappedW = (LPWSTR)NP2HeapAlloc((charsConverted + 1)*sizeof(WCHAR));
@@ -3112,7 +3144,7 @@ void EditAlignText(int nMode) {
 			SciCall_EndUndoAction();
 		}
 	} else {
-		MsgBox(MBINFO, IDS_BUFFERTOOSMALL);
+		MsgBoxInfo(MB_OK, IDS_BUFFERTOOSMALL);
 	}
 
 	if (iCurPos < iAnchorPos) {
@@ -4504,22 +4536,55 @@ void EditSelectWord(void) {
 	SciCall_SetSel(iLineStart, iLineEnd);
 }
 
-void EditSelectLine(void) {
+void EditSelectLines(BOOL currentBlock, BOOL lineSelection) {
+	if (lineSelection && !currentBlock) {
+		SciCall_SetSelectionMode(SC_SEL_LINES);
+		return;
+	}
+
 	// see Editor::LineSelectionRange()
 	Sci_Position iCurrentPos = SciCall_GetCurrentPos();
 	Sci_Position iAnchorPos = SciCall_GetAnchor();
-	const Sci_Line iLineAnchorPos = SciCall_LineFromPosition(iAnchorPos);
-	const Sci_Line iLineCurPos = SciCall_LineFromPosition(iCurrentPos);
+	BOOL backward = (iCurrentPos < iAnchorPos);
 
-	if (iCurrentPos > iAnchorPos) {
-		iAnchorPos = SciCall_PositionFromLine(iLineAnchorPos);
-		iCurrentPos = SciCall_PositionFromLine(iLineCurPos + 1);
-	} else {
+	Sci_Line iLineAnchorPos = SciCall_LineFromPosition(iAnchorPos);
+	Sci_Line iLineCurPos = SciCall_LineFromPosition(iCurrentPos);
+
+	if (currentBlock) {
+		Sci_Line iLineStart = iLineCurPos;
+		const int level = SciCall_GetFoldLevel(iLineStart);
+		if (!(level & SC_FOLDLEVELHEADERFLAG)) {
+			iLineStart = SciCall_GetFoldParent(iLineStart);
+			if (iLineStart < 0) {
+				SciCall_SelectAll();
+				return;
+			}
+		}
+
+		const Sci_Line iLineEnd = SciCall_GetLastChild(iLineStart);
+		backward = backward || (iCurrentPos == iAnchorPos && iLineEnd - iLineCurPos > iLineCurPos - iLineStart);
+		if (backward) {
+			iLineCurPos = iLineStart;
+			iLineAnchorPos = iLineEnd;
+		} else {
+			iLineCurPos = iLineEnd;
+			iLineAnchorPos = iLineStart;
+		}
+	}
+
+	const Sci_Line offset = lineSelection ? 0 : 1;
+	if (backward) {
 		iCurrentPos = SciCall_PositionFromLine(iLineCurPos);
-		iAnchorPos = SciCall_PositionFromLine(iLineAnchorPos + 1);
+		iAnchorPos = SciCall_PositionFromLine(iLineAnchorPos + offset);
+	} else {
+		iAnchorPos = SciCall_PositionFromLine(iLineAnchorPos);
+		iCurrentPos = SciCall_PositionFromLine(iLineCurPos + offset);
 	}
 
 	SciCall_SetSel(iAnchorPos, iCurrentPos);
+	if (lineSelection) {
+		SciCall_SetSelectionMode(SC_SEL_LINES);
+	}
 	SciCall_ChooseCaretX();
 }
 
@@ -5034,17 +5099,17 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 
 			// Display help messages in the find/replace windows
 			case IDC_BACKSLASHHELP:
-				MsgBox(MBINFO, IDS_BACKSLASHHELP);
+				MsgBoxInfo(MB_OK, IDS_BACKSLASHHELP);
 				//ShowNotificationMessage(SC_NOTIFICATIONPOSITION_CENTER, IDS_BACKSLASHHELP);
 				break;
 
 			case IDC_REGEXPHELP:
-				MsgBox(MBINFO, IDS_REGEXPHELP);
+				MsgBoxInfo(MB_OK, IDS_REGEXPHELP);
 				//ShowNotificationMessage(SC_NOTIFICATIONPOSITION_CENTER, IDS_REGEXPHELP);
 				break;
 
 			case IDC_WILDCARDHELP:
-				MsgBox(MBINFO, IDS_WILDCARDHELP);
+				MsgBoxInfo(MB_OK, IDS_WILDCARDHELP);
 				//ShowNotificationMessage(SC_NOTIFICATIONPOSITION_CENTER, IDS_WILDCARDHELP);
 				break;
 
@@ -5150,7 +5215,7 @@ BOOL EditFindNext(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection) {
 	}
 
 	if (StrIsEmptyA(szFind2)) {
-		InfoBox(0, L"MsgNotFound", IDS_NOTFOUND);
+		InfoBoxWarn(MB_OK, L"MsgNotFound", IDS_NOTFOUND);
 		return FALSE;
 	}
 
@@ -5171,7 +5236,7 @@ BOOL EditFindNext(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection) {
 	BOOL bSuppressNotFound = FALSE;
 
 	if (iPos == -1 && ttf.chrg.cpMin > 0 && !lpefr->bNoFindWrap && !fExtendSelection) {
-		if (IDOK == InfoBox(MBOKCANCEL, L"MsgFindWrap1", IDS_FIND_WRAPFW)) {
+		if (IDOK == InfoBoxInfo(MB_OKCANCEL, L"MsgFindWrap1", IDS_FIND_WRAPFW)) {
 			ttf.chrg.cpMin = 0;
 			iPos = SciCall_FindText(lpefr->fuFlags, &ttf);
 		} else {
@@ -5182,7 +5247,7 @@ BOOL EditFindNext(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection) {
 	if (iPos == -1) {
 		// notfound
 		if (!bSuppressNotFound) {
-			InfoBox(0, L"MsgNotFound", IDS_NOTFOUND);
+			InfoBoxWarn(MB_OK, L"MsgNotFound", IDS_NOTFOUND);
 		}
 		return FALSE;
 	}
@@ -5213,7 +5278,7 @@ BOOL EditFindPrev(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection) {
 	}
 
 	if (StrIsEmptyA(szFind2)) {
-		InfoBox(0, L"MsgNotFound", IDS_NOTFOUND);
+		InfoBoxWarn(MB_OK, L"MsgNotFound", IDS_NOTFOUND);
 		return FALSE;
 	}
 
@@ -5235,7 +5300,7 @@ BOOL EditFindPrev(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection) {
 	BOOL bSuppressNotFound = FALSE;
 
 	if (iPos == -1 && ttf.chrg.cpMin < iLength && !lpefr->bNoFindWrap && !fExtendSelection) {
-		if (IDOK == InfoBox(MBOKCANCEL, L"MsgFindWrap2", IDS_FIND_WRAPRE)) {
+		if (IDOK == InfoBoxInfo(MB_OKCANCEL, L"MsgFindWrap2", IDS_FIND_WRAPRE)) {
 			ttf.chrg.cpMin = (Sci_PositionCR)iLength;
 			iPos = SciCall_FindText(lpefr->fuFlags, &ttf);
 		} else {
@@ -5246,7 +5311,7 @@ BOOL EditFindPrev(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection) {
 	if (iPos == -1) {
 		// notfound
 		if (!bSuppressNotFound) {
-			InfoBox(0, L"MsgNotFound", IDS_NOTFOUND);
+			InfoBoxWarn(MB_OK, L"MsgNotFound", IDS_NOTFOUND);
 		}
 		return FALSE;
 	}
@@ -5278,7 +5343,7 @@ BOOL EditReplace(HWND hwnd, LPEDITFINDREPLACE lpefr) {
 	}
 
 	if (StrIsEmptyA(szFind2)) {
-		InfoBox(0, L"MsgNotFound", IDS_NOTFOUND);
+		InfoBoxWarn(MB_OK, L"MsgNotFound", IDS_NOTFOUND);
 		return FALSE;
 	}
 
@@ -5315,7 +5380,7 @@ BOOL EditReplace(HWND hwnd, LPEDITFINDREPLACE lpefr) {
 	BOOL bSuppressNotFound = FALSE;
 
 	if (iPos == -1 && ttf.chrg.cpMin > 0 && !lpefr->bNoFindWrap) {
-		if (!lpefr->bNoFindWrap || (IDOK == InfoBox(MBOKCANCEL, L"MsgFindWrap1", IDS_FIND_WRAPFW))) {
+		if (IDOK == InfoBoxInfo(MB_OKCANCEL, L"MsgFindWrap1", IDS_FIND_WRAPFW)) {
 			ttf.chrg.cpMin = 0;
 			iPos = SciCall_FindText(lpefr->fuFlags, &ttf);
 		} else {
@@ -5324,10 +5389,10 @@ BOOL EditReplace(HWND hwnd, LPEDITFINDREPLACE lpefr) {
 	}
 
 	if (iPos == -1) {
-		// notfound
+		// not found
 		LocalFree(pszReplace2);
 		if (!bSuppressNotFound) {
-			InfoBox(0, L"MsgNotFound", IDS_NOTFOUND);
+			InfoBoxWarn(MB_OK, L"MsgNotFound", IDS_NOTFOUND);
 		}
 		return FALSE;
 	}
@@ -5348,7 +5413,7 @@ BOOL EditReplace(HWND hwnd, LPEDITFINDREPLACE lpefr) {
 	bSuppressNotFound = FALSE;
 
 	if (iPos == -1 && ttf.chrg.cpMin > 0 && !lpefr->bNoFindWrap) {
-		if (!lpefr->bNoFindWrap || (IDOK == InfoBox(MBOKCANCEL, L"MsgFindWrap1", IDS_FIND_WRAPFW))) {
+		if (IDOK == InfoBoxInfo(MB_OKCANCEL, L"MsgFindWrap1", IDS_FIND_WRAPFW)) {
 			ttf.chrg.cpMin = 0;
 			iPos = SciCall_FindText(lpefr->fuFlags, &ttf);
 		} else {
@@ -5362,7 +5427,7 @@ BOOL EditReplace(HWND hwnd, LPEDITFINDREPLACE lpefr) {
 		iPos = SciCall_GetTargetEnd();
 		EditSelectEx(iPos, iPos); //?
 		if (!bSuppressNotFound) {
-			InfoBox(0, L"MsgNotFound", IDS_NOTFOUND);
+			InfoBoxWarn(MB_OK, L"MsgNotFound", IDS_NOTFOUND);
 		}
 	}
 
@@ -5473,9 +5538,9 @@ static void ShwowReplaceCount(Sci_Position iCount) {
 		WCHAR tchNum[32];
 		PosToStrW(iCount, tchNum);
 		FormatNumberStr(tchNum);
-		InfoBox(0, L"MsgReplaceCount", IDS_REPLCOUNT, tchNum);
+		InfoBoxInfo(MB_OK, L"MsgReplaceCount", IDS_REPLCOUNT, tchNum);
 	} else {
-		InfoBox(0, L"MsgNotFound", IDS_NOTFOUND);
+		InfoBoxWarn(MB_OK, L"MsgNotFound", IDS_NOTFOUND);
 	}
 }
 
@@ -5500,7 +5565,7 @@ BOOL EditReplaceAll(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bShowInfo) {
 	}
 
 	if (StrIsEmptyA(szFind2)) {
-		InfoBox(0, L"MsgNotFound", IDS_NOTFOUND);
+		InfoBoxWarn(MB_OK, L"MsgNotFound", IDS_NOTFOUND);
 		return FALSE;
 	}
 
@@ -5615,7 +5680,7 @@ BOOL EditReplaceAllInSelection(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bShowInf
 	}
 
 	if (StrIsEmptyA(szFind2)) {
-		InfoBox(0, L"MsgNotFound", IDS_NOTFOUND);
+		InfoBoxWarn(MB_OK, L"MsgNotFound", IDS_NOTFOUND);
 		return FALSE;
 	}
 
@@ -6681,7 +6746,7 @@ void TryBrowseFile(HWND hwnd, LPCWSTR pszFile, BOOL bWarn) {
 		GetModuleFileName(NULL, tchTemp, COUNTOF(tchTemp));
 		PathRemoveFileSpec(tchTemp);
 		PathAppend(tchTemp, tchExeFile);
-		if (PathFileExists(tchTemp)) {
+		if (PathIsFile(tchTemp)) {
 			lstrcpy(tchExeFile, tchTemp);
 		}
 	}
@@ -6712,7 +6777,7 @@ void TryBrowseFile(HWND hwnd, LPCWSTR pszFile, BOOL bWarn) {
 
 	if ((INT_PTR)sei.hInstApp < 32) {
 		if (bWarn) {
-			if (MsgBox(MBYESNOWARN, IDS_ERR_BROWSE) == IDYES) {
+			if (MsgBoxWarn(MB_YESNO, IDS_ERR_BROWSE) == IDYES) {
 				OpenHelpLink(hwnd, IDM_HELP_LATEST_RELEASE);
 			}
 		} else if (StrNotEmpty(pszFile)) {
