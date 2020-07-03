@@ -132,7 +132,7 @@ struct Sorter {
 		indices.push_back(i); // index of last position
 	}
 
-	bool operator()(int a, int b) {
+	bool operator()(int a, int b) const noexcept {
 		const int lenA = indices[a * 2 + 1] - indices[a * 2];
 		const int lenB = indices[b * 2 + 1] - indices[b * 2];
 		const int len = std::min(lenA, lenB);
@@ -208,7 +208,7 @@ std::string AutoComplete::GetValue(int item) const {
 	return std::string(value);
 }
 
-void AutoComplete::Show(bool show) {
+void AutoComplete::Show(bool show) const {
 	lb->Show(show);
 	if (show)
 		lb->Select(0);
@@ -222,8 +222,7 @@ void AutoComplete::Cancel() noexcept {
 	}
 }
 
-
-void AutoComplete::Move(int delta) {
+void AutoComplete::Move(int delta) const {
 	const int count = lb->Length();
 	int current = lb->GetSelection();
 	current += delta;
@@ -300,4 +299,3 @@ void AutoComplete::Select(const char *word) {
 		lb->Select(sortMatrix[location]);
 	}
 }
-

@@ -1,5 +1,5 @@
 #include "EditLexer.h"
-#include "EditStyle.h"
+#include "EditStyleX.h"
 
 // https://docs.microsoft.com/en-us/cpp/assembler/masm/microsoft-macro-assembler-reference
 // https://sourceware.org/binutils/docs/as/
@@ -131,7 +131,7 @@ static KEYWORDLIST Keywords_ASM = {{
 // VMX
 "invept invvpid vmcall vmclear vmlaunch vmresume vmptrld vmptrst vmread vmwrite vmxoff vmxon "
 // AMD
-"lzcnt prefetch prefetchw skinit vmload vmmcall vmrun vmsave "
+"lzcnt tzcnt prefetch prefetchw skinit vmload vmmcall vmrun vmsave "
 "extrq insertq movntsd movntss "
 // AMD 3DNow!
 "femms pavgusb pf2id pf2iw pfacc pfadd pfcmpeq pfcmpge pfcmpgt "
@@ -159,18 +159,18 @@ static KEYWORDLIST Keywords_ASM = {{
 
 static EDITSTYLE Styles_ASM[] = {
 	EDITSTYLE_DEFAULT,
-	{ MULTI_STYLE(SCE_ASM_COMMENT, SCE_ASM_COMMENTLINE, SCE_ASM_COMMENT2, SCE_ASM_COMMENTDIRECTIVE), NP2STYLE_Comment, EDITSTYLE_HOLE(L"Comment"), L"fore:#608060" },
-	{ MULTI_STYLE(SCE_ASM_STRING, SCE_ASM_CHARACTER, SCE_ASM_STRINGEOL, 0), NP2STYLE_String, EDITSTYLE_HOLE(L"String"), L"fore:#008000" },
-	{ SCE_ASM_PREPROCESSOR, NP2STYLE_Preprocessor, EDITSTYLE_HOLE(L"Preprocessor"), L"fore:#FF8000" },
-	{ SCE_ASM_NUMBER, NP2STYLE_Number, EDITSTYLE_HOLE(L"Number"), L"fore:#FF0000" },
-	{ SCE_ASM_OPERATOR, NP2STYLE_Operator, EDITSTYLE_HOLE(L"Operator"), L"fore:#B000B0" },
-	{ SCE_ASM_CPUINSTRUCTION, 63551, EDITSTYLE_HOLE(L"CPU Instruction"), L"fore:#0080FF" },
-	{ SCE_ASM_MATHINSTRUCTION, 63552, EDITSTYLE_HOLE(L"FPU Instruction"), L"fore:#FF0080" },
-	{ SCE_ASM_EXTINSTRUCTION, 63553, EDITSTYLE_HOLE(L"Extended Instruction"), L"fore:#8000FF" },
-	{ SCE_ASM_DIRECTIVE, NP2STYLE_Directive, EDITSTYLE_HOLE(L"Directive"), L"fore:#0000FF" },
-	{ SCE_ASM_DIRECTIVEOPERAND, 63554, EDITSTYLE_HOLE(L"Directive Operand"), L"fore:#0000FF" },
-	{ SCE_ASM_REGISTER, NP2STYLE_Register, EDITSTYLE_HOLE(L"Register"), L"fore:#FF8000" },
-	{ SCE_ASM_LABEL, NP2STYLE_Label, EDITSTYLE_HOLE(L"Label"), L"back:#FFC040" },
+	{ MULTI_STYLE(SCE_ASM_COMMENT, SCE_ASM_COMMENTLINE, SCE_ASM_COMMENT2, SCE_ASM_COMMENTDIRECTIVE), NP2StyleX_Comment, L"fore:#608060" },
+	{ MULTI_STYLE(SCE_ASM_STRING, SCE_ASM_CHARACTER, SCE_ASM_STRINGEOL, 0), NP2StyleX_String, L"fore:#008000" },
+	{ SCE_ASM_PREPROCESSOR, NP2StyleX_Preprocessor, L"fore:#FF8000" },
+	{ SCE_ASM_NUMBER, NP2StyleX_Number, L"fore:#FF0000" },
+	{ SCE_ASM_OPERATOR, NP2StyleX_Operator, L"fore:#B000B0" },
+	{ SCE_ASM_CPUINSTRUCTION, NP2StyleX_CPUInstruction, L"fore:#0080FF" },
+	{ SCE_ASM_MATHINSTRUCTION, NP2StyleX_FPUInstruction, L"fore:#FF0080" },
+	{ SCE_ASM_EXTINSTRUCTION, NP2StyleX_ExtendedInstruction, L"fore:#8000FF" },
+	{ SCE_ASM_DIRECTIVE, NP2StyleX_Directive, L"fore:#0000FF" },
+	{ SCE_ASM_DIRECTIVEOPERAND, NP2StyleX_DirectiveOperand, L"fore:#0000FF" },
+	{ SCE_ASM_REGISTER, NP2StyleX_Register, L"fore:#FF8000" },
+	{ SCE_ASM_LABEL, NP2StyleX_Label, L"back:#FFC040" },
 };
 
 EDITLEXER lexASM = {
@@ -180,4 +180,3 @@ EDITLEXER lexASM = {
 	&Keywords_ASM,
 	Styles_ASM
 };
-

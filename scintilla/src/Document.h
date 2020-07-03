@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2011 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef DOCUMENT_H
-#define DOCUMENT_H
+#pragma once
 
 namespace Scintilla {
 
@@ -173,7 +171,7 @@ constexpr int LevelNumber(int level) noexcept {
 class LexInterface {
 protected:
 	Document *pdoc;
-	ILexer4 *instance;
+	ILexer5 *instance;
 	bool performingStyle;	///< Prevent reentrance
 public:
 	explicit LexInterface(Document *pdoc_) noexcept : pdoc(pdoc_), instance(nullptr), performingStyle(false) {}
@@ -229,6 +227,9 @@ private:
 	int refCount;
 	CellBuffer cb;
 	CharClassify charClass;
+#if 0
+	CharacterCategoryMap charMap;
+#endif
 	std::unique_ptr<CaseFolder> pcf;
 	Sci::Position endStyled;
 	int styleClock;
@@ -299,6 +300,7 @@ public:
 	void Init() override;
 	bool IsActive() const noexcept override;
 	void InsertLine(Sci::Line line) override;
+	void InsertLines(Sci::Line line, Sci::Line lines) override;
 	void RemoveLine(Sci::Line line) override;
 
 	int LineEndTypesSupported() const noexcept;
@@ -335,10 +337,10 @@ public:
 	Sci::Position GetRelativePositionUTF16(Sci::Position positionStart, Sci::Position characterOffset) const noexcept;
 	int SCI_METHOD GetCharacterAndWidth(Sci_Position position, Sci_Position *pWidth) const noexcept override;
 	int SCI_METHOD CodePage() const noexcept override;
-	bool SCI_METHOD IsDBCSLeadByte(char ch) const noexcept override;
-	bool IsDBCSLeadByteNoExcept(char ch) const noexcept;
-	bool IsDBCSLeadByteInvalid(char ch) const noexcept;
-	bool IsDBCSTrailByteInvalid(char ch) const noexcept;
+	bool SCI_METHOD IsDBCSLeadByte(unsigned char ch) const noexcept override;
+	bool IsDBCSLeadByteNoExcept(unsigned char ch) const noexcept;
+	bool IsDBCSLeadByteInvalid(unsigned char ch) const noexcept;
+	bool IsDBCSTrailByteInvalid(unsigned char ch) const noexcept;
 	int DBCSDrawBytes(std::string_view text) const noexcept;
 	int SafeSegment(const char *text, int length, int lengthSegment) const noexcept;
 	EncodingFamily CodePageFamily() const noexcept;
@@ -388,7 +390,7 @@ public:
 	void TentativeCommit() noexcept {
 		cb.TentativeCommit();
 	}
-	void TentativeUndo();
+	void TentativeUndo(bool pendingUpdate = false);
 	bool TentativeActive() const noexcept {
 		return cb.TentativeActive();
 	}
@@ -453,6 +455,8 @@ public:
 	void DeleteMarkFromHandle(int markerHandle);
 	void DeleteAllMarks(int markerNum);
 	Sci::Line LineFromHandle(int markerHandle) const noexcept;
+	int MarkerNumberFromLine(Sci::Line line, int which) const noexcept;
+	int MarkerHandleFromLine(Sci::Line line, int which) const noexcept;
 	Sci_Position SCI_METHOD LineStart(Sci_Position line) const noexcept override;
 	bool IsLineStartPosition(Sci::Position position) const noexcept;
 	Sci_Position SCI_METHOD LineEnd(Sci_Position line) const noexcept override;
@@ -501,6 +505,10 @@ public:
 	void SetCharClasses(const unsigned char *chars, CharClassify::cc newCharClass) noexcept;
 	void SetCharClassesEx(const unsigned char *chars, int length) noexcept;
 	int GetCharsOfClass(CharClassify::cc characterClass, unsigned char *buffer) const noexcept;
+#if 0
+	void SetCharacterCategoryOptimization(int countCharacters);
+	int CharacterCategoryOptimization() const noexcept;
+#endif
 	void SCI_METHOD StartStyling(Sci_Position position) noexcept override;
 	bool SCI_METHOD SetStyleFor(Sci_Position length, unsigned char style) override;
 	bool SCI_METHOD SetStyles(Sci_Position length, const unsigned char *styles) override;
@@ -517,7 +525,7 @@ public:
 	void SCI_METHOD DecorationSetCurrentIndicator(int indicator) noexcept override;
 	void SCI_METHOD DecorationFillRange(Sci_Position position, int value, Sci_Position fillLength) override;
 	LexInterface *GetLexInterface() const noexcept;
-	void SetLexInterface(LexInterface *pLexInterface) noexcept;
+	void SetLexInterface(std::unique_ptr<LexInterface> pLexInterface) noexcept;
 
 	int SCI_METHOD SetLineState(Sci_Position line, int state) override;
 	int SCI_METHOD GetLineState(Sci_Position line) const noexcept override;
@@ -551,7 +559,7 @@ public:
 	int IndentSize() const noexcept {
 		return actualIndentInChars;
 	}
-	Sci::Position BraceMatch(Sci::Position position, Sci::Position maxReStyle) noexcept;
+	Sci::Position BraceMatch(Sci::Position position, Sci::Position maxReStyle) const noexcept;
 
 	bool IsAutoCompletionWordCharacter(unsigned int ch) const noexcept {
 		return WordCharacterClass(ch) == CharClassify::ccWord;
@@ -651,5 +659,3 @@ public:
 };
 
 }
-
-#endif

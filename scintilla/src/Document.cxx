@@ -32,6 +32,7 @@
 #include "Scintilla.h"
 
 #include "CharacterSet.h"
+//#include "CharacterCategory.h"
 #include "Position.h"
 #include "SplitVector.h"
 #include "Partitioning.h"
@@ -94,7 +95,7 @@ void ActionDuration::AddSample(size_t numberActions, double durationOfActions) n
 
 	// Alpha value for exponential smoothing.
 	// Most recent value contributes 25% to smoothed value.
-	const double alpha = 0.25;
+	constexpr double alpha = 0.25;
 
 	const double durationOne = durationOfActions / numberActions;
 	duration = std::clamp(alpha * durationOne + (1.0 - alpha) * duration,
@@ -185,6 +186,13 @@ void Document::InsertLine(Sci::Line line) {
 	}
 }
 
+void Document::InsertLines(Sci::Line line, Sci::Line lines) {
+	for (const auto &pl : perLineData) {
+		if (pl)
+			pl->InsertLines(line, lines);
+	}
+}
+
 void Document::RemoveLine(Sci::Line line) {
 	for (const auto &pl : perLineData) {
 		if (pl)
@@ -193,23 +201,23 @@ void Document::RemoveLine(Sci::Line line) {
 }
 
 LineMarkers *Document::Markers() const noexcept {
-	return static_cast<LineMarkers *>(perLineData[ldMarkers].get());
+	return down_cast<LineMarkers *>(perLineData[ldMarkers].get());
 }
 
 LineLevels *Document::Levels() const noexcept {
-	return static_cast<LineLevels *>(perLineData[ldLevels].get());
+	return down_cast<LineLevels *>(perLineData[ldLevels].get());
 }
 
 LineState *Document::States() const noexcept {
-	return static_cast<LineState *>(perLineData[ldState].get());
+	return down_cast<LineState *>(perLineData[ldState].get());
 }
 
 LineAnnotation *Document::Margins() const noexcept {
-	return static_cast<LineAnnotation *>(perLineData[ldMargin].get());
+	return down_cast<LineAnnotation *>(perLineData[ldMargin].get());
 }
 
 LineAnnotation *Document::Annotations() const noexcept {
-	return static_cast<LineAnnotation *>(perLineData[ldAnnotation].get());
+	return down_cast<LineAnnotation *>(perLineData[ldAnnotation].get());
 }
 
 int Document::LineEndTypesSupported() const noexcept {
@@ -254,7 +262,7 @@ void Document::SetSavePoint() noexcept {
 	NotifySavePoint(true);
 }
 
-void Document::TentativeUndo() {
+void Document::TentativeUndo(bool pendingUpdate) {
 	if (!TentativeActive())
 		return;
 	CheckReadOnly();
@@ -306,8 +314,9 @@ void Document::TentativeUndo() {
 			}
 
 			const bool endSavePoint = cb.IsSavePoint();
-			if (startSavePoint != endSavePoint)
+			if (startSavePoint != endSavePoint && !pendingUpdate) {
 				NotifySavePoint(endSavePoint);
+			}
 
 			cb.TentativeCommit();
 		}
@@ -377,6 +386,14 @@ Sci::Line Document::LineFromHandle(int markerHandle) const noexcept {
 	return Markers()->LineFromHandle(markerHandle);
 }
 
+int Document::MarkerNumberFromLine(Sci::Line line, int which) const noexcept {
+	return Markers()->NumberFromLine(line, which);
+}
+
+int Document::MarkerHandleFromLine(Sci::Line line, int which) const noexcept {
+	return Markers()->HandleFromLine(line, which);
+}
+
 Sci_Position SCI_METHOD Document::LineStart(Sci_Position line) const noexcept {
 	return cb.LineStart(line);
 }
@@ -390,7 +407,7 @@ Sci_Position SCI_METHOD Document::LineEnd(Sci_Position line) const noexcept {
 		return LineStart(line + 1);
 	} else {
 		Sci::Position position = LineStart(line + 1);
-		if (SC_CP_UTF8 == dbcsCodePage) {
+		if (cb.GetLineEndTypes()) {
 			const unsigned char bytes[] = {
 				cb.UCharAt(position - 3),
 				cb.UCharAt(position - 2),
@@ -898,9 +915,9 @@ Document::CharacterExtracted Document::CharacterBefore(Sci::Position position) c
 			Sci::Position startUTF = position;
 			Sci::Position endUTF = position;
 			if (InGoodUTF8(position, startUTF, endUTF)) {
-				const int widthCharBytes = static_cast<int>(endUTF - startUTF);
+				const Sci::Position widthCharBytes = endUTF - startUTF;
 				unsigned char charBytes[UTF8MaxBytes] = { 0, 0, 0, 0 };
-				for (int b = 0; b < widthCharBytes; b++) {
+				for (Sci::Position b = 0; b < widthCharBytes; b++) {
 					charBytes[b] = cb.UCharAt(startUTF + b);
 				}
 				const int utf8status = UTF8ClassifyMulti(charBytes, widthCharBytes);
@@ -1007,20 +1024,20 @@ int SCI_METHOD Document::CodePage() const noexcept {
 	return dbcsCodePage;
 }
 
-bool SCI_METHOD Document::IsDBCSLeadByte(char ch) const noexcept {
+bool SCI_METHOD Document::IsDBCSLeadByte(unsigned char ch) const noexcept {
 	// Used by lexers so must match IDocument method exactly
 	return dbcsCharClass && dbcsCharClass->IsLeadByte(ch);
 }
 
-bool Document::IsDBCSLeadByteNoExcept(char ch) const noexcept {
+bool Document::IsDBCSLeadByteNoExcept(unsigned char ch) const noexcept {
 	return dbcsCharClass->IsLeadByte(ch);
 }
 
-bool Document::IsDBCSLeadByteInvalid(char ch) const noexcept {
+bool Document::IsDBCSLeadByteInvalid(unsigned char ch) const noexcept {
 	return dbcsCharClass->IsLeadByteInvalid(ch);
 }
 
-bool Document::IsDBCSTrailByteInvalid(char ch) const noexcept {
+bool Document::IsDBCSTrailByteInvalid(unsigned char ch) const noexcept {
 	return dbcsCharClass->IsTrailByteInvalid(ch);
 }
 
@@ -1199,13 +1216,17 @@ Sci::Position Document::InsertString(Sci::Position position, const char *s, Sci:
 	const Sci::Line prevLinesTotal = LinesTotal();
 	const bool startSavePoint = cb.IsSavePoint();
 	bool startSequence = false;
+#if InsertString_WithoutPerLine
 	const char *text = nullptr;
-	if (insertLength > 1000 && !IsActive()) {
+	if (insertLength > InsertString_WithoutPerLine && !IsActive()) {
 		// avoid calling InsertLine() or RemoveLine()
 		text = WithoutPerLine(&cb, this).InsertString(position, s, insertLength, startSequence);
 	} else {
 		text = cb.InsertString(position, s, insertLength, startSequence);
 	}
+#else
+	const char *text = cb.InsertString(position, s, insertLength, startSequence);
+#endif
 	if (startSavePoint && cb.IsCollectingUndo())
 		NotifySavePoint(!startSavePoint);
 	ModifiedAt(position);
@@ -1563,7 +1584,7 @@ void Document::Indent(bool forwards, Sci::Line lineBottom, Sci::Line lineTop) {
 std::string Document::TransformLineEnds(const char *s, size_t len, int eolModeWanted) {
 	std::string dest;
 	for (size_t i = 0; (i < len) && (s[i]); i++) {
-		if (s[i] == '\n' || s[i] == '\r') {
+		if (IsEOLChar(s[i])) {
 			if (eolModeWanted == SC_EOL_CR) {
 				dest.push_back('\r');
 			} else if (eolModeWanted == SC_EOL_LF) {
@@ -1676,7 +1697,7 @@ CharClassify::cc Document::WordCharacterClass(unsigned int ch) const noexcept {
 }
 
 /**
- * Used by commmands that want to select whole words.
+ * Used by commands that want to select whole words.
  * Finds the start of word at pos when delta < 0 or the end of the word when delta >= 0.
  */
 Sci::Position Document::ExtendWordSelect(Sci::Position pos, int delta, bool onlyWordCharacters) const noexcept {
@@ -1944,7 +1965,7 @@ Sci::Position Document::FindText(Sci::Position minPos, Sci::Position maxPos, con
 					break;
 			}
 		} else if (SC_CP_UTF8 == dbcsCodePage) {
-			const size_t maxFoldingExpansion = 4;
+			constexpr size_t maxFoldingExpansion = 4;
 			std::vector<char> searchThing((lengthFind + 1) * UTF8MaxBytes * maxFoldingExpansion + 1);
 			const size_t lenSearch =
 				pcf->Fold(searchThing.data(), searchThing.size(), search, lengthFind);
@@ -1996,8 +2017,8 @@ Sci::Position Document::FindText(Sci::Position minPos, Sci::Position maxPos, con
 				}
 			}
 		} else if (dbcsCodePage) {
-			const size_t maxBytesCharacter = 2;
-			const size_t maxFoldingExpansion = 4;
+			constexpr size_t maxBytesCharacter = 2;
+			constexpr size_t maxFoldingExpansion = 4;
 			std::vector<char> searchThing((lengthFind + 1) * maxBytesCharacter * maxFoldingExpansion + 1);
 			const size_t lenSearch = pcf->Fold(searchThing.data(), searchThing.size(), search, lengthFind);
 			while (forward ? (pos < endPos) : (pos >= endPos)) {
@@ -2108,6 +2129,16 @@ int Document::GetCharsOfClass(CharClassify::cc characterClass, unsigned char *bu
     return charClass.GetCharsOfClass(characterClass, buffer);
 }
 
+#if 0
+int Document::GetCharsOfClass(CharClassify::cc characterClass, unsigned char *buffer) const {
+	return charClass.GetCharsOfClass(characterClass, buffer);
+}
+
+void Document::SetCharacterCategoryOptimization(int countCharacters) {
+	charMap.Optimize(countCharacters);
+}
+#endif
+
 void SCI_METHOD Document::StartStyling(Sci_Position position) noexcept {
 	endStyled = position;
 }
@@ -2193,8 +2224,8 @@ LexInterface *Document::GetLexInterface() const noexcept {
 	return pli.get();
 }
 
-void Document::SetLexInterface(LexInterface *pLexInterface) noexcept {
-	pli.reset(pLexInterface);
+void Document::SetLexInterface(std::unique_ptr<LexInterface> pLexInterface) noexcept {
+	pli = std::move(pLexInterface);
 }
 
 int SCI_METHOD Document::SetLineState(Sci_Position line, int state) {
@@ -2499,18 +2530,14 @@ Sci::Position Document::WordPartRight(Sci::Position pos) const noexcept {
 	return pos;
 }
 
-static constexpr bool IsLineEndChar(char c) noexcept {
-	return (c == '\n' || c == '\r');
-}
-
 Sci::Position Document::ExtendStyleRange(Sci::Position pos, int delta, bool singleLine) noexcept {
 	const int sStart = cb.StyleAt(pos);
 	if (delta < 0) {
-		while (pos > 0 && (cb.StyleAt(pos) == sStart) && (!singleLine || !IsLineEndChar(cb.CharAt(pos))))
+		while (pos > 0 && (cb.StyleAt(pos) == sStart) && (!singleLine || !IsEOLChar(cb.CharAt(pos))))
 			pos--;
 		pos++;
 	} else {
-		while (pos < (Length()) && (cb.StyleAt(pos) == sStart) && (!singleLine || !IsLineEndChar(cb.CharAt(pos))))
+		while (pos < (Length()) && (cb.StyleAt(pos) == sStart) && (!singleLine || !IsEOLChar(cb.CharAt(pos))))
 			pos++;
 	}
 	return pos;
@@ -2540,7 +2567,7 @@ static constexpr char BraceOpposite(char ch) noexcept {
 }
 
 // TODO: should be able to extend styled region to find matching brace
-Sci::Position Document::BraceMatch(Sci::Position position, Sci::Position /*maxReStyle*/) noexcept {
+Sci::Position Document::BraceMatch(Sci::Position position, Sci::Position /*maxReStyle*/) const noexcept {
 	const char chBrace = CharAt(position);
 	const char chSeek = BraceOpposite(chBrace);
 	if (chSeek == '\0')
@@ -3016,7 +3043,7 @@ Sci::Position Cxx11RegexFindText(const Document *doc, Sci::Position minPos, Sci:
 	try {
 		//ElapsedPeriod ep;
 		std::regex::flag_type flagsRe = std::regex::ECMAScript;
-		// Flags that apper to have no effect:
+		// Flags that appear to have no effect:
 		// | std::regex::collate | std::regex::extended;
 		if (!caseSensitive)
 			flagsRe = flagsRe | std::regex::icase;

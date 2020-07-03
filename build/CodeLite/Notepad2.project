@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<CodeLite_Project Name="Notepad2" Version="10.0.0">
+<CodeLite_Project Name="Notepad2" Version="11000">
   <Description/>
   <Dependencies/>
   <VirtualDirectory Name="Scintilla">
@@ -25,11 +25,13 @@
       <File Name="../../scintilla/lexers/LexDiff.cxx"/>
       <File Name="../../scintilla/lexers/LexFortran.cxx"/>
       <File Name="../../scintilla/lexers/LexFSharp.cxx"/>
+      <File Name="../../scintilla/lexers/LexGN.cxx"/>
       <File Name="../../scintilla/lexers/LexGraphViz.cxx"/>
       <File Name="../../scintilla/lexers/LexHTML.cxx"/>
-      <File Name="../../scintilla/lexers/LexIni.cxx"/>
       <File Name="../../scintilla/lexers/LexInno.cxx"/>
       <File Name="../../scintilla/lexers/LexJSON.cxx"/>
+      <File Name="../../scintilla/lexers/LexJulia.cxx"/>
+      <File Name="../../scintilla/lexers/LexKotlin.cxx"/>
       <File Name="../../scintilla/lexers/LexLaTeX.cxx"/>
       <File Name="../../scintilla/lexers/LexLisp.cxx"/>
       <File Name="../../scintilla/lexers/LexLLVM.cxx"/>
@@ -41,20 +43,28 @@
       <File Name="../../scintilla/lexers/LexPascal.cxx"/>
       <File Name="../../scintilla/lexers/LexPerl.cxx"/>
       <File Name="../../scintilla/lexers/LexPowerShell.cxx"/>
+      <File Name="../../scintilla/lexers/LexProps.cxx"/>
       <File Name="../../scintilla/lexers/LexPython.cxx"/>
       <File Name="../../scintilla/lexers/LexRuby.cxx"/>
+      <File Name="../../scintilla/lexers/LexRust.cxx"/>
       <File Name="../../scintilla/lexers/LexSmali.cxx"/>
       <File Name="../../scintilla/lexers/LexSQL.cxx"/>
       <File Name="../../scintilla/lexers/LexTCL.cxx"/>
       <File Name="../../scintilla/lexers/LexTexinfo.cxx"/>
+      <File Name="../../scintilla/lexers/LexTOML.cxx"/>
       <File Name="../../scintilla/lexers/LexVB.cxx"/>
       <File Name="../../scintilla/lexers/LexVerilog.cxx"/>
       <File Name="../../scintilla/lexers/LexVHDL.cxx"/>
       <File Name="../../scintilla/lexers/LexVim.cxx"/>
+      <File Name="../../scintilla/lexers/LexWASM.cxx"/>
+      <File Name="../../scintilla/lexers/LexYAML.cxx"/>
     </VirtualDirectory>
     <VirtualDirectory Name="lexlib">
       <File Name="../../scintilla/lexlib/Accessor.cxx"/>
       <File Name="../../scintilla/lexlib/Accessor.h"/>
+      <File Name="../../scintilla/lexlib/CatalogueModules.h"/>
+      <File Name="../../scintilla/lexlib/CharacterCategory.cxx"/>
+      <File Name="../../scintilla/lexlib/CharacterCategory.h"/>
       <File Name="../../scintilla/lexlib/CharacterSet.cxx"/>
       <File Name="../../scintilla/lexlib/CharacterSet.h"/>
       <File Name="../../scintilla/lexlib/DefaultLexer.cxx"/>
@@ -67,6 +77,7 @@
       <File Name="../../scintilla/lexlib/LexerModule.h"/>
       <File Name="../../scintilla/lexlib/LexerSimple.cxx"/>
       <File Name="../../scintilla/lexlib/LexerSimple.h"/>
+      <File Name="../../scintilla/lexlib/LexerUtils.h"/>
       <File Name="../../scintilla/lexlib/OptionSet.h"/>
       <File Name="../../scintilla/lexlib/PropSetSimple.cxx"/>
       <File Name="../../scintilla/lexlib/PropSetSimple.h"/>
@@ -169,6 +180,7 @@
       <File Name="../../src/EditLexers/stlDefault.c"/>
       <File Name="../../src/EditLexers/stlFortran.c"/>
       <File Name="../../src/EditLexers/stlFSharp.c"/>
+      <File Name="../../src/EditLexers/stlGN.c"/>
       <File Name="../../src/EditLexers/stlGo.c"/>
       <File Name="../../src/EditLexers/stlGradle.c"/>
       <File Name="../../src/EditLexers/stlGraphViz.c"/>
@@ -181,6 +193,7 @@
       <File Name="../../src/EditLexers/stlJavaScript.c"/>
       <File Name="../../src/EditLexers/stlJSON.c"/>
       <File Name="../../src/EditLexers/stlJulia.c"/>
+      <File Name="../../src/EditLexers/stlKotlin.c"/>
       <File Name="../../src/EditLexers/stlLaTeX.c"/>
       <File Name="../../src/EditLexers/stlLisp.c"/>
       <File Name="../../src/EditLexers/stlLLVM.c"/>
@@ -195,17 +208,22 @@
       <File Name="../../src/EditLexers/stlPython.c"/>
       <File Name="../../src/EditLexers/stlResource.c"/>
       <File Name="../../src/EditLexers/stlRuby.c"/>
+      <File Name="../../src/EditLexers/stlRust.c"/>
       <File Name="../../src/EditLexers/stlScala.c"/>
       <File Name="../../src/EditLexers/stlSmali.c"/>
       <File Name="../../src/EditLexers/stlSQL.c"/>
       <File Name="../../src/EditLexers/stlTcl.c"/>
+      <File Name="../../src/EditLexers/stlTOML.c"/>
       <File Name="../../src/EditLexers/stlVB.c"/>
       <File Name="../../src/EditLexers/stlVBS.c"/>
       <File Name="../../src/EditLexers/stlVerilog.c"/>
       <File Name="../../src/EditLexers/stlVHDL.c"/>
       <File Name="../../src/EditLexers/stlVim.c"/>
+      <File Name="../../src/EditLexers/stlWASM.c"/>
       <File Name="../../src/EditLexers/stlXML.c"/>
+      <File Name="../../src/EditLexers/stlYAML.c"/>
     </VirtualDirectory>
+    <File Name="../../src/Bridge.cpp"/>
     <File Name="../../src/Dialogs.c"/>
     <File Name="../../src/Dlapi.c"/>
     <File Name="../../src/Edit.c"/>
@@ -213,16 +231,17 @@
     <File Name="../../src/EditEncoding.c"/>
     <File Name="../../src/Helpers.c"/>
     <File Name="../../src/Notepad2.c"/>
-    <File Name="../../src/Bridge.cpp"/>
     <File Name="../../src/Styles.c"/>
   </VirtualDirectory>
   <VirtualDirectory Name="Header Files">
     <File Name="../../src/compiler.h"/>
+    <File Name="../../src/config.h"/>
     <File Name="../../src/Dialogs.h"/>
     <File Name="../../src/Dlapi.h"/>
     <File Name="../../src/Edit.h"/>
     <File Name="../../src/EditLexer.h"/>
     <File Name="../../src/EditLexers/EditStyle.h"/>
+    <File Name="../../src/EditLexers/EditStyleX.h"/>
     <File Name="../../src/Helpers.h"/>
     <File Name="../../src/Notepad2.h"/>
     <File Name="../../src/resource.h"/>
@@ -236,7 +255,7 @@
     <File Name="../../res/Encoding.bmp"/>
     <File Name="../../res/Next.bmp"/>
     <File Name="../../res/Notepad2.ico"/>
-    <File Name="../../res/Open.bmp"/>
+    <File Name="../../res/OpenFolder.bmp"/>
     <File Name="../../res/Pick.bmp"/>
     <File Name="../../res/Prev.bmp"/>
     <File Name="../../res/Run.ico"/>
@@ -252,6 +271,7 @@
         <IncludePath Value="../../scintilla/include"/>
         <IncludePath Value="../../scintilla/lexlib"/>
         <IncludePath Value="../../scintilla/src"/>
+        <Preprocessor Value="_WINDOWS"/>
         <Preprocessor Value="UNICODE"/>
         <Preprocessor Value="_UNICODE"/>
         <Preprocessor Value="SCI_LEXER"/>
@@ -275,13 +295,13 @@
       <ResourceCompiler Options="-DRC_INVOKED;-DUNICODE;-D_UNICODE;"/>
     </GlobalSettings>
     <Configuration Name="Debug_AVX2" CompilerType="MinGW ( gcc )" DebuggerType="GNU gdb debugger" Type="Executable" BuildCmpWithGlobalSettings="append" BuildLnkWithGlobalSettings="append" BuildResWithGlobalSettings="append">
-      <Compiler Options="-g;-O0;-mavx2;-mpopcnt;-mlzcnt;-mbmi" C_Options="-g;-O0;-mavx2;-mpopcnt;-mlzcnt;-mbmi" Assembler="" Required="yes" PreCompiledHeader="" PCHInCommandLine="no" PCHFlags="" PCHFlagsPolicy="0">
+      <Compiler Options="-g;-O0;-mavx2;-mpopcnt;-mbmi" C_Options="-g;-O0;-mavx2;-mpopcnt;-mbmi" Assembler="" Required="yes" PreCompiledHeader="" PCHInCommandLine="no" PCHFlags="" PCHFlagsPolicy="0">
         <Preprocessor Value="_DEBUG"/>
         <Preprocessor Value="_WIN64"/>
         <Preprocessor Value="_WIN32_WINNT=0x0601"/>
         <Preprocessor Value="WINVER=0x0601"/>
       </Compiler>
-      <Linker Options="-O0;-mavx2;-mpopcnt;-mlzcnt;-mbmi;-Wl,--major-os-version,6;-Wl,--minor-os-version,1;-Wl,--subsystem,windows:6.01" Required="yes"/>
+      <Linker Options="-O0;-mavx2;-mpopcnt;-mbmi;-Wl,--major-os-version,6;-Wl,--minor-os-version,1;-Wl,--subsystem,windows:6.01" Required="yes"/>
       <ResourceCompiler Options="-D_DEBUG;-D_WIN64;" Required="no"/>
       <General OutputFile="$(WorkspacePath)/../bin/$(ConfigurationName)/$(ProjectName).exe" IntermediateDirectory="$(WorkspacePath)/../bin/$(ConfigurationName)/obj/$(ProjectName)" Command="./$(ProjectName)" CommandArguments="" UseSeparateDebugArgs="no" DebugArguments="" WorkingDirectory="$(WorkspacePath)/../bin/$(ConfigurationName)" PauseExecWhenProcTerminates="no" IsGUIProgram="yes" IsEnabled="yes"/>
       <BuildSystem Name="Default"/>
@@ -401,13 +421,13 @@
       </Completion>
     </Configuration>
     <Configuration Name="Release_AVX2" CompilerType="MinGW ( gcc )" DebuggerType="GNU gdb debugger" Type="Executable" BuildCmpWithGlobalSettings="append" BuildLnkWithGlobalSettings="append" BuildResWithGlobalSettings="append">
-      <Compiler Options="-O2;-mavx2;-mpopcnt;-mlzcnt;-mbmi;-fno-rtti;-ffast-math;-fomit-frame-pointer" C_Options="-O2;-mavx2;-mpopcnt;-mlzcnt;-mbmi;-ffast-math;-fomit-frame-pointer" Assembler="" Required="yes" PreCompiledHeader="" PCHInCommandLine="no" PCHFlags="" PCHFlagsPolicy="0">
+      <Compiler Options="-O2;-mavx2;-mpopcnt;-mbmi;-fno-rtti;-ffast-math;-fomit-frame-pointer" C_Options="-O2;-mavx2;-mpopcnt;-mbmi;-ffast-math;-fomit-frame-pointer" Assembler="" Required="yes" PreCompiledHeader="" PCHInCommandLine="no" PCHFlags="" PCHFlagsPolicy="0">
         <Preprocessor Value="NDEBUG"/>
         <Preprocessor Value="_WIN64"/>
         <Preprocessor Value="_WIN32_WINNT=0x0601"/>
         <Preprocessor Value="WINVER=0x0601"/>
       </Compiler>
-      <Linker Options="-s;-O2;-mavx2;-mpopcnt;-mlzcnt;-mbmi;-static;-Wl,--gc-sections;-ffast-math;-fno-rtti;-fomit-frame-pointer;-Wl,--major-os-version,6;-Wl,--minor-os-version,1;-Wl,--subsystem,windows:6.01" Required="yes"/>
+      <Linker Options="-s;-O2;-mavx2;-mpopcnt;-mbmi;-static;-Wl,--gc-sections;-ffast-math;-fno-rtti;-fomit-frame-pointer;-Wl,--major-os-version,6;-Wl,--minor-os-version,1;-Wl,--subsystem,windows:6.01" Required="yes"/>
       <ResourceCompiler Options="-D_WIN64" Required="no"/>
       <General OutputFile="$(WorkspacePath)/../bin/$(ConfigurationName)/$(ProjectName).exe" IntermediateDirectory="$(WorkspacePath)/../bin/$(ConfigurationName)/obj/$(ProjectName)" Command="./$(ProjectName)" CommandArguments="" UseSeparateDebugArgs="no" DebugArguments="" WorkingDirectory="$(WorkspacePath)/../bin/$(ConfigurationName)" PauseExecWhenProcTerminates="no" IsGUIProgram="yes" IsEnabled="yes"/>
       <BuildSystem Name="Default"/>

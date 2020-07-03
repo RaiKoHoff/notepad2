@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2011 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef EDITOR_H
-#define EDITOR_H
+#pragma once
 
 namespace Scintilla {
 
@@ -153,6 +151,18 @@ struct WrapPending {
 	}
 };
 
+struct CaretPolicy {
+	int policy;
+	int slop;	// Pixels for X, lines for Y
+	CaretPolicy(uptr_t policy_=0, sptr_t slop_=0) noexcept:
+		policy(static_cast<int>(policy_)), slop(static_cast<int>(slop_)) {}
+};
+
+struct CaretPolicies {
+	CaretPolicy x;
+	CaretPolicy y;
+};
+
 /**
  */
 class Editor : public EditModel, public DocWatcher {
@@ -184,7 +194,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	bool horizontalScrollBarVisible;
 	int scrollWidth;
 	bool verticalScrollBarVisible;
-	bool endAtLastLine;
+	int endAtLastLine;
 	int caretSticky;
 	int marginOptions;
 	bool mouseSelectionRectangularSwitch;
@@ -226,8 +236,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	Sci::Position wordSelectAnchorStartPos;
 	Sci::Position wordSelectAnchorEndPos;
 	Sci::Position wordSelectInitialCaretPos;
-	Sci::Position targetStart;
-	Sci::Position targetEnd;
+	SelectionSegment targetRange;
 	int searchFlags;
 	Sci::Line topLine;
 	Sci::Position posTopLine;
@@ -251,14 +260,9 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 
 	SelectionText drag;
 
-	int caretXPolicy;
-	int caretXSlop;	///< Ensure this many pixels visible on both sides of caret
+	CaretPolicies caretPolicies;
 
-	int caretYPolicy;
-	int caretYSlop;	///< Ensure this many lines visible on both sides of caret
-
-	int visiblePolicy;
-	int visibleSlop;
+	CaretPolicy visiblePolicy;
 
 	Sci::Position searchAnchor;
 
@@ -318,15 +322,15 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	bool UserVirtualSpace() const noexcept {
 		return ((virtualSpaceOptions & SCVS_USERACCESSIBLE) != 0);
 	}
-	Sci::Position CurrentPosition() const;
+	Sci::Position CurrentPosition() const noexcept;
 	bool SelectionEmpty() const noexcept;
-	SelectionPosition SelectionStart();
-	SelectionPosition SelectionEnd();
+	SelectionPosition SelectionStart() noexcept;
+	SelectionPosition SelectionEnd() noexcept;
 	void SetRectangularRange();
 	void ThinRectangularRange();
-	void InvalidateSelection(SelectionRange newMain, bool invalidateWholeSelection = false);
-	void InvalidateWholeSelection();
-	SelectionRange LineSelectionRange(SelectionPosition currentPos_, SelectionPosition anchor_) const noexcept;
+	void InvalidateSelection(SelectionRange newMain, bool invalidateWholeSelection = false) noexcept;
+	void InvalidateWholeSelection() noexcept;
+	SelectionRange LineSelectionRange(SelectionPosition currentPos_, SelectionPosition anchor_, bool withEOL = false) const noexcept;
 	void SetSelection(SelectionPosition currentPos_, SelectionPosition anchor_);
 	void SetSelection(Sci::Position currentPos_, Sci::Position anchor_);
 	void SetSelection(SelectionPosition currentPos_);
@@ -337,22 +341,23 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 		addOne, addEach
 	};
 	void MultipleSelectAdd(AddNumber addNumber);
-	bool RangeContainsProtected(Sci::Position start, Sci::Position end) const;
-	bool SelectionContainsProtected();
-	Sci::Position MovePositionOutsideChar(Sci::Position pos, Sci::Position moveDir, bool checkLineEnd = true) const;
-	SelectionPosition MovePositionOutsideChar(SelectionPosition pos, Sci::Position moveDir, bool checkLineEnd = true) const;
-	void MovedCaret(SelectionPosition newPos, SelectionPosition previousPos, bool ensureVisible);
+	bool RangeContainsProtected(Sci::Position start, Sci::Position end) const noexcept;
+	bool SelectionContainsProtected() const noexcept;
+	Sci::Position MovePositionOutsideChar(Sci::Position pos, Sci::Position moveDir, bool checkLineEnd = true) const noexcept;
+	SelectionPosition MovePositionOutsideChar(SelectionPosition pos, Sci::Position moveDir, bool checkLineEnd = true) const noexcept;
+	void MovedCaret(SelectionPosition newPos, SelectionPosition previousPos,
+		bool ensureVisible, CaretPolicies policies);
 	void MovePositionTo(SelectionPosition newPos, Selection::selTypes selt = Selection::noSel, bool ensureVisible = true);
 	void MovePositionTo(Sci::Position newPos, Selection::selTypes selt = Selection::noSel, bool ensureVisible = true);
-	SelectionPosition MovePositionSoVisible(SelectionPosition pos, int moveDir);
-	SelectionPosition MovePositionSoVisible(Sci::Position pos, int moveDir);
+	SelectionPosition MovePositionSoVisible(SelectionPosition pos, int moveDir) noexcept;
+	SelectionPosition MovePositionSoVisible(Sci::Position pos, int moveDir) noexcept;
 	Point PointMainCaret();
 	void SetLastXChosen();
 
 	void ScrollTo(Sci::Line line, bool moveThumb = true);
 	virtual void ScrollText(Sci::Line linesToMove);
 	void HorizontalScrollTo(int xPos);
-	void VerticalCentreCaret();
+	void VerticalCentreCaret() noexcept;
 	void MoveSelectedLines(int lineDelta);
 	void MoveSelectedLinesUp();
 	void MoveSelectedLinesDown();
@@ -373,7 +378,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 		xysHorizontal = 0x4,
 		xysDefault = xysUseMargin | xysVertical | xysHorizontal
 	};
-	XYScrollPosition XYScrollToMakeVisible(SelectionRange range, XYScrollOptions options);
+	XYScrollPosition XYScrollToMakeVisible(SelectionRange range, XYScrollOptions options, CaretPolicies policies);
 	void SetXYScroll(XYScrollPosition newXY);
 	void EnsureCaretVisible(bool useMargin = true, bool vert = true, bool horiz = true);
 	void ScrollRange(SelectionRange range);
@@ -398,7 +403,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	void RefreshPixMaps(Surface *surfaceWindow);
 	void SCICALL Paint(Surface *surfaceWindow, PRectangle rcArea);
 	Sci::Position FormatRange(bool draw, const Sci_RangeToFormat *pfr);
-	int TextWidth(int style, const char *text);
+	long TextWidth(uptr_t style, const char *text);
 
 	virtual void SetVerticalScrollPos() = 0;
 	virtual void SetHorizontalScrollPos() = 0;
@@ -421,11 +426,11 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	void ClearSelection(bool retainMultipleSelections = false);
 	void ClearAll();
 	void ClearDocumentStyle();
-	virtual void Cut(bool asBinary);
+	virtual void Cut(bool asBinary, bool lineCopy = false);
 	void PasteRectangular(SelectionPosition pos, const char *ptr, Sci::Position len);
 	virtual void Copy(bool asBinary) = 0;
-	virtual void CopyAllowLine();
-	virtual bool CanPaste();
+	void CopyAllowLine();
+	virtual bool CanPaste() noexcept;
 	virtual void Paste(bool asBinary) = 0;
 	void Clear();
 	virtual void SelectAll();
@@ -500,7 +505,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 
 	virtual CaseFolder *CaseFolderForEncoding();
 	Sci::Position FindText(uptr_t wParam, sptr_t lParam);
-	void SearchAnchor();
+	void SearchAnchor() noexcept;
 	Sci::Position SearchText(unsigned int iMessage, uptr_t wParam, sptr_t lParam);
 	Sci::Position SearchInTarget(const char *text, Sci::Position length);
 	void GoToLine(Sci::Line lineNo);
@@ -508,7 +513,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	virtual void CopyToClipboard(const SelectionText &selectedText) = 0;
 	std::string RangeText(Sci::Position start, Sci::Position end) const;
 	void CopySelectionRange(SelectionText *ss, bool allowLineCopy = false);
-	void CopyRangeToClipboard(Sci::Position start, Sci::Position end);
+	void CopyRangeToClipboard(Sci::Position start, Sci::Position end, bool lineCopy = false);
 	void CopyText(size_t length, const char *text);
 	void SetDragPosition(SelectionPosition newPos);
 	virtual void DisplayCursor(Window::Cursor c) noexcept;
@@ -517,7 +522,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	void DropAt(SelectionPosition position, const char *value, size_t lengthValue, bool moving, bool rectangular);
 	void DropAt(SelectionPosition position, const char *value, bool moving, bool rectangular);
 	/** PositionInSelection returns true if position in selection. */
-	bool PositionInSelection(Sci::Position pos);
+	bool PositionInSelection(Sci::Position pos) noexcept;
 	bool SCICALL PointInSelection(Point pt);
 	bool SCICALL PointInSelMargin(Point pt) const noexcept;
 	Window::Cursor GetMarginCursor(Point pt) const noexcept;
@@ -581,11 +586,11 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	Sci::Position GetTag(char *tagValue, int tagNumber);
 	Sci::Position ReplaceTarget(bool replacePatterns, const char *text, Sci::Position length = -1);
 
-	bool PositionIsHotspot(Sci::Position position) const;
+	bool PositionIsHotspot(Sci::Position position) const noexcept;
 	bool SCICALL PointIsHotspot(Point pt);
 	void SetHotSpotRange(const Point *pt);
 	Range GetHotSpotRange() const noexcept override;
-	void SetHoverIndicatorPosition(Sci::Position position);
+	void SetHoverIndicatorPosition(Sci::Position position) noexcept;
 	void SCICALL SetHoverIndicatorPoint(Point pt);
 
 	int CodePage() const noexcept;
@@ -599,7 +604,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	bool ValidMargin(uptr_t wParam) const noexcept;
 	void StyleSetMessage(unsigned int iMessage, uptr_t wParam, sptr_t lParam);
 	sptr_t StyleGetMessage(unsigned int iMessage, uptr_t wParam, sptr_t lParam);
-	void SetSelectionNMessage(unsigned int iMessage, uptr_t wParam, sptr_t lParam);
+	void SetSelectionNMessage(unsigned int iMessage, uptr_t wParam, sptr_t lParam) noexcept;
 
 	static const char *StringFromEOLMode(int eolMode) noexcept;
 
@@ -668,7 +673,7 @@ class AutoSurface {
 private:
 	std::unique_ptr<Surface> surf;
 public:
-	AutoSurface(Editor *ed, int technology = -1) {
+	AutoSurface(const Editor *ed, int technology = -1) {
 		if (ed->wMain.GetID()) {
 			surf.reset(Surface::Allocate(technology != -1 ? technology : ed->technology));
 			surf->Init(ed->wMain.GetID());
@@ -677,10 +682,10 @@ public:
 			surf->SetBidiR2L(ed->BidirectionalR2L());
 		}
 	}
-	AutoSurface(SurfaceID sid, Editor *ed, int technology = -1) {
+	AutoSurface(SurfaceID sid, const Editor *ed, int technology = -1, bool printing = false) {
 		if (ed->wMain.GetID()) {
 			surf.reset(Surface::Allocate(technology != -1 ? technology : ed->technology));
-			surf->Init(sid, ed->wMain.GetID());
+			surf->Init(sid, ed->wMain.GetID(), printing);
 			surf->SetUnicodeMode(SC_CP_UTF8 == ed->CodePage());
 			surf->SetDBCSMode(ed->CodePage());
 			surf->SetBidiR2L(ed->BidirectionalR2L());
@@ -704,5 +709,3 @@ public:
 };
 
 }
-
-#endif

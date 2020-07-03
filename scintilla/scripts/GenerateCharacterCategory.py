@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # Script to generate CharacterCategory.cxx from Python's Unicode data
 # Should be run rarely when a Python with a new version of Unicode data is available.
-# Requires Python 3.3 or later
-# Should not be run with old versions of Python.
 
-import codecs, os, platform, sys, unicodedata
-from collections import OrderedDict
+import sys
+import codecs
+import platform
+import unicodedata
 from enum import IntEnum
 import math
+
 from FileGenerator import Regenerate
 from splitbins import *
 
@@ -101,9 +102,10 @@ def isPrivateChar(c):
 # https://en.wikipedia.org/wiki/CJK_Unified_Ideographs
 # https://en.wikipedia.org/wiki/Katakana
 # https://en.wikipedia.org/wiki/Hangul
-# Chapter 18 East Asia http://www.unicode.org/versions/Unicode12.0.0/ch18.pdf
+# Chapter 18 East Asia http://www.unicode.org/versions/Unicode13.0.0/UnicodeStandard-13.0.pdf
 # Unicode Han Database (Unihan) https://unicode.org/reports/tr38/#BlockListing
 CJKBlockList = [
+	# Table 18-1. Blocks Containing Han Ideographs
 	(0x3400, 0x4DBF), # U+3400..U+4DBF CJK Unified Ideographs Extension A
 	(0x4E00, 0x9FFF), # U+4E00..U+9FFF CJK Unified Ideographs
 	(0xF900, 0xFAFF), # U+F900..U+FAFF CJK Compatibility Ideographs
@@ -114,6 +116,7 @@ CJKBlockList = [
 	(0x2B820, 0x2CEAF), # U+2B820..U+2CEAF CJK Unified Ideographs Extension E
 	(0x2CEB0, 0x2EBEF), # U+2CEB0..U+2EBEF CJK Unified Ideographs Extension F
 	(0x2F800, 0x2FA1F), # U+2F800..U+2FA1F CJK Compatibility Ideographs Supplement
+	(0x30000, 0x3134F), # U+30000..U+3134F CJK Unified Ideographs Extension G
 
 	(0x2E80, 0x2EFF), # U+2E80..U+2EFF CJK Radicals Supplement
 	(0x2F00, 0x2FDF), # U+2F00..U+2FDF Kangxi Radicals
@@ -126,6 +129,8 @@ CJKBlockList = [
 	(0x3300, 0x33FF), # U+3300..U+33FF CJK Compatibility
 	(0xFE30, 0xFE4F), # U+FE30..U+FE4F CJK Compatibility Forms
 	(0xFF5F, 0xFFEF), # U+FF5F..U+FFEF Halfwidth and Fullwidth Forms (without fullwidth ASCII)
+	(0x16FE0, 0x16FFF), # U+16FE0..U+16FFF Ideographic Symbols and Punctuation
+	(0x1F200, 0x1F2FF), # U+1F200..U+1F2FF Enclosed Ideographic Supplement
 	# Japanese
 	(0x3040, 0x309F), # U+3040..U+309F Hiragana
 	(0x30A0, 0x30FF), # U+30A0..U+30FF Katakana
@@ -145,21 +150,21 @@ CJKBlockList = [
 	# Other
 	(0xA000, 0xA48F), # U+A000..U+A48F Yi Syllables
 	(0xA490, 0xA4CF), # U+A490..U+A4CF Yi Radicals
-	(0x16FE0, 0x16FFF), # U+16FE0..U+16FFF Ideographic Symbols and Punctuation
 	(0x17000, 0x187FF), # U+17000..U+187FF Tangut
 	(0x18800, 0x18AFF), # U+18800..U+18AFF Tangut Components
-	(0x1B170, 0x1B2FF), # U+1B170..U+1B2FF Nushu
-	(0x1F200, 0x1F2FF), # U+1F200..U+1F2FF Enclosed Ideographic Supplement
+	(0x18D00, 0x18D8F), # U+18D00..U+18D8F Tangut Supplement
+	(0x18B00, 0x18CFF), # U+18B00..U+18CFF Khitan Small Script
+	(0x1B170, 0x1B2FF), # U+1B170..U+1B2FF Nüshu
 ]
 
 def findCategories(filename):
-	with open(filename, "r", "UTF-8") as infile:
+	with open(filename, "r", encoding="utf-8") as infile:
 		lines = [x.strip() for x in infile.readlines() if "\tcc" in x]
 	values = "".join(lines).replace(" ","").split(",")
 	print(values)
 	return [v[2:] for v in values]
 
-def isCJKLetter(category, ch):
+def isCJKCharacter(category, ch):
 	if category not in CharClassifyMap[CharClassify.ccWord]:
 		return False
 
@@ -180,11 +185,22 @@ def dumpArray(items, step, fmt='%d'):
 		lines.append(line)
 	return lines
 
-def updateCharacterCategory(filename):
-	categories = findCategories("../lexlib/CharacterCategory.h")
-	values = ["// Created with Python %s,  Unicode %s" % (
+def updateCharacterCategory(categories):
+	values = ["// Created with Python %s, Unicode %s" % (
 		platform.python_version(), unicodedata.unidata_version)]
 
+	# catLatin
+	values.append("#if CHARACTERCATEGORY_OPTIMIZE_LATIN1")
+	values.append("const unsigned char catLatin[] = {")
+	table = [categories.index(unicodedata.category(chr(ch))) for ch in range(256)]
+	for i in range(0, len(table), 16):
+		line = ', '.join(str(value) for value in table[i:i+16]) + ','
+		values.append(line)
+	values.append("};")
+	values.append("#endif")
+	values.append("")
+
+	# catRanges
 	startRange = 0
 	category = unicodedata.category(chr(startRange))
 	table = []
@@ -204,10 +220,15 @@ def updateCharacterCategory(filename):
 	value = (sys.maxunicode + 1)*32 + categories.index(category)
 	table.append(value)
 
-	print('catRanges:', len(values), 4*len(values)/1024, math.ceil(math.log2(len(values))))
+	print('catRanges:', len(table), 4*len(table)/1024, math.ceil(math.log2(len(table))))
+	values.append("#if CHARACTERCATEGORY_USE_BINARY_SEARCH")
+	values.append("const int catRanges[] = {")
 	values.extend(["%d," % value for value in table])
+	values.append("};")
+	values.append("")
+	values.append("#else")
 
-	Regenerate(filename, "//", values)
+	return values
 
 def bytesToHex(b):
 	return ''.join('\\x%02X' % ch for ch in b)
@@ -227,7 +248,7 @@ def buildFoldDisplayEllipsis():
 		('cp1361', 1361, 'Johab'),
 	]
 
-	result = OrderedDict()
+	result = {}
 	for encoding, codepage, comment in encodingList:
 		try:
 			value = defaultText.encode(encoding)
@@ -269,7 +290,7 @@ def buildFoldDisplayEllipsis():
 		('cp874', 874, 'Thai (Windows-874)'),
 	]
 
-	result = OrderedDict()
+	result = {}
 	fallback = []
 	for encoding, codepage, comment in encodingList:
 		try:
@@ -354,7 +375,7 @@ def buildANSICharClassifyTable(filename):
 		('cp874', 874, 'Thai (Windows-874)'),
 	]
 
-	result = OrderedDict()
+	result = {}
 	offset = 0
 	for encoding, codepage, comment in encodingList:
 		s, m = buildCharClassify(encoding)
@@ -367,7 +388,7 @@ def buildANSICharClassifyTable(filename):
 		else:
 			result[s]['codepage'].append((codepage, comment))
 
-	output = ["// Created with Python %s,  Unicode %s" % (
+	output = ["// Created with Python %s, Unicode %s" % (
 		platform.python_version(), unicodedata.unidata_version)]
 
 	output.append("static const uint8_t ANSICharClassifyTable[] = {")
@@ -431,7 +452,10 @@ def compressIndexTable(head, indexTable, args):
 		1: 'unsigned char',
 		2: 'unsigned short',
 	}
+
 	prefix = args['table']
+	with_function = args.get('with_function', True)
+
 	# one table
 	if sizeA == sizeC == sizeD:
 		output = []
@@ -456,21 +480,34 @@ def compressIndexTable(head, indexTable, args):
 			'maskC': maskC,
 			'offsetD': len(indexA) + len(indexC)
 		})
-		function = """{function}
-
+		if with_function:
+			function = """{function}
 	ch = ({table}[ch >> {shiftA}] << {shiftA2}) | (ch & {maskA});
 	ch = ({table}[{offsetC} + (ch >> {shiftC})] << {shiftC2}) | (ch & {maskC});
 	return static_cast<{returnType}>({table}[{offsetD} + ch]);
 }}""".format(**args)
+		else:
+			function = """
+constexpr int {table}Shift11 = {shiftA};
+constexpr int {table}Shift12 = {shiftA2};
+constexpr int {table}Mask1 = {maskA};
+constexpr int {table}Offset1 = {offsetC};
+constexpr int {table}Shift21 = {shiftC};
+constexpr int {table}Shift22 = {shiftC2};
+constexpr int {table}Mask2 = {maskC};
+constexpr int {table}Offset2 = {offsetD};
+""".format(**args)
 	# three tables
 	else:
 		output = []
 		output.append("const %s %s1[] = {" % (typemap[sizeA], prefix))
 		output.extend(dumpArray(indexA, 20))
 		output.append("};")
+		output.append("")
 		output.append("const %s %s2[] = {" % (typemap[sizeC], prefix))
 		output.extend(dumpArray(indexC, 20))
 		output.append("};")
+		output.append("")
 		output.append("const %s %s[] = {" % (typemap[sizeD], prefix))
 		output.extend(dumpArray(indexD, 20))
 		output.append("};")
@@ -484,12 +521,21 @@ def compressIndexTable(head, indexTable, args):
 			'shiftC2': shiftC2,
 			'maskC': maskC,
 		})
-		function = """{function}
-
+		if with_function:
+			function = """{function}
 	ch = ({table}1[ch >> {shiftA}] << {shiftA2}) | (ch & {maskA});
 	ch = ({table}2[(ch >> {shiftC})] << {shiftC2}) | (ch & {maskC});
 	return static_cast<{returnType}>({table}[ch]);
 }}""".format(**args)
+		else:
+			function = """
+constexpr int {table}Shift11 = {shiftA};
+constexpr int {table}Shift12 = {shiftA2};
+constexpr int {table}Mask1 = {maskA};
+constexpr int {table}Shift21 = {shiftC};
+constexpr int {table}Shift22 = {shiftC2};
+constexpr int {table}Mask2 = {maskC};
+""".format(**args)
 	return table, function
 
 def runLengthEncode(head, indexTable, valueBit, totalBit=16):
@@ -534,11 +580,11 @@ def updateCharClassifyTable(filename, headfile):
 		uch = chr(ch)
 		category = unicodedata.category(uch)
 		value = ClassifyMap[category]
-		if isCJKLetter(category, ch):
+		if isCJKCharacter(category, ch):
 			value = CharClassify.ccCJKWord
 		indexTable[ch] = int(value)
 
-	output = ["// Created with Python %s,  Unicode %s" % (
+	output = ["// Created with Python %s, Unicode %s" % (
 		platform.python_version(), unicodedata.unidata_version)]
 	head_output = output[:]
 
@@ -560,13 +606,14 @@ def updateCharClassifyTable(filename, headfile):
 	if (ch > maxUnicode) {
 		// Cn
 		return ccSpace;
-	}""",
+	}
+
+	ch -= sizeof(classifyMap);""",
 		'returnType': 'cc'
 	}
 
-	table, function = compressIndexTable('CharClassify Unicode', indexTable, args)
-	for line in table.splitlines():
-		output.append(line)
+	table, function = compressIndexTable('CharClassify Unicode', indexTable[BMPCharacterCharacterCount:], args)
+	output.extend(table.splitlines())
 
 	for line in function.splitlines():
 		head_output.append('\t' + line)
@@ -576,6 +623,7 @@ def updateCharClassifyTable(filename, headfile):
 
 def updateCharacterCategoryTable(filename):
 	categories = findCategories("../lexlib/CharacterCategory.h")
+	output = updateCharacterCategory(categories)
 
 	indexTable = [0] * UnicodeCharacterCount
 	for ch in range(UnicodeCharacterCount):
@@ -584,24 +632,24 @@ def updateCharacterCategoryTable(filename):
 		value = categories.index(category)
 		indexTable[ch] = value
 
-	output = ["// Created with Python %s,  Unicode %s" % (
-		platform.python_version(), unicodedata.unidata_version)]
-
 	args = {
-		'table': 'CharacterCategoryTable',
-		'function': """CharacterCategory CategoriseCharacter(unsigned int ch) noexcept {
-	if (ch > maxUnicode) {
-		// Cn
-		return ccCn;
-	}""",
-		'returnType': 'CharacterCategory'
+		'table': 'catTable',
+		'with_function': False,
 	}
 
 	table, function = compressIndexTable('CharacterCategoryTable', indexTable, args)
-	output.append(table)
-	output.append('')
-	output.append("}\n") # namespace
-	output.append(function)
+	output.append("")
+	output.extend(table.splitlines())
+	output.extend(function.splitlines())
+
+	data = runLengthEncode('CharacterCategoryTable', indexTable[:BMPCharacterCharacterCount], 5)
+	output.append("")
+	output.append(f'const unsigned short CatTableRLE_BMP[] = {{')
+	output.extend(dumpArray(data, 20))
+	output.append("};")
+
+	output.append("")
+	output.append("#endif")
 
 	Regenerate(filename, "//", output)
 
@@ -616,7 +664,7 @@ def getDBCSCharClassify(decode, ch, isReservedOrUDC=None):
 		category = unicodedata.category(uch[0])
 		ch = ord(uch[0])
 		# treat PUA in DBCS as word instead of punctuation or space
-		if isCJKLetter(category, ch) or (category == 'Co' and isPrivateChar(ch)):
+		if isCJKCharacter(category, ch) or (category == 'Co' and isPrivateChar(ch)):
 			return int(CharClassify.ccCJKWord)
 	else:
 		# treat reserved or user-defined characters as word
@@ -661,17 +709,15 @@ def makeDBCSCharClassifyTable(output, encodingList, isReservedOrUDC=None):
 	if (ch > maxDBCSCharacter) {
 		// Cn
 		return CharClassify::ccSpace;
-	}""" % suffix,
+	}
+	""" % suffix,
 			'returnType': 'CharClassify::cc'
 		}
 
 		table, function = compressIndexTable(head, indexTable, args)
-		for line in table.splitlines():
-			output.append(line)
+		output.extend(table.splitlines())
 		output.append('')
-
-		for line in function.splitlines():
-			output.append(line)
+		output.extend(function.splitlines())
 		output.append('')
 
 # https://en.wikipedia.org/wiki/GBK_(character_encoding)
@@ -698,7 +744,7 @@ def isReservedOrUDC_Big5(ch, buf):
 	return False
 
 def updateDBCSCharClassifyTable(filename):
-	output = ["// Created with Python %s,  Unicode %s" % (
+	output = ["// Created with Python %s, Unicode %s" % (
 		platform.python_version(), unicodedata.unidata_version)]
 
 	makeDBCSCharClassifyTable(output, ['cp932', 'shift_jis', 'shift_jis_2004', 'shift_jisx0213'])
@@ -714,5 +760,4 @@ if __name__ == '__main__':
 	buildANSICharClassifyTable('../../src/EditEncoding.c')
 	updateCharClassifyTable("../src/CharClassify.cxx", "../src/CharClassify.h")
 	updateDBCSCharClassifyTable("../src/CharClassify.cxx")
-	#updateCharacterCategoryTable("../lexlib/CharacterCategory.cxx")
-	#updateCharacterCategory("../lexlib/CharacterCategory.cxx")
+	updateCharacterCategoryTable("../lexlib/CharacterCategory.cxx")

@@ -30,7 +30,7 @@ STDMETHODIMP CDropSource::QueryInterface(REFIID iid, PVOID *ppv) noexcept {
 	if (iid == IID_IUnknown || iid == IID_IDropSource) {
 		*ppv = this;
 		AddRef();
-		return NOERROR;
+		return S_OK;
 	}
 	*ppv = nullptr;
 	return E_NOINTERFACE;
@@ -69,7 +69,7 @@ STDMETHODIMP CDropSource::QueryContinueDrag(BOOL fEscapePressed, DWORD grfKeySta
 	if (!(grfKeyState & MK_LBUTTON) && !(grfKeyState & MK_RBUTTON)) {
 		return DRAGDROP_S_DROP;
 	}
-	return NOERROR;
+	return S_OK;
 }
 
 STDMETHODIMP CDropSource::GiveFeedback(DWORD /*dwEffect*/) noexcept {
@@ -80,5 +80,3 @@ STDMETHODIMP CDropSource::GiveFeedback(DWORD /*dwEffect*/) noexcept {
 extern "C" HANDLE CreateDropSource(void) {
 	return (new CDropSource);
 }
-
-// End of DropSource.cpp

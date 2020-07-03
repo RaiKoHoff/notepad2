@@ -1,9 +1,24 @@
-#ifndef NOTEPAD2_COMPILER_H_
-#define NOTEPAD2_COMPILER_H_
+// This file is part of Notepad2.
+// See License.txt for details about distribution and modification.
+#pragma once
 
 #if defined(__cplusplus)
 #undef NULL
 #define NULL	nullptr
+#endif
+
+#ifndef NP2_noexcept
+	#if defined(__cplusplus)
+		#define NP2_noexcept noexcept
+	#else
+		#define NP2_noexcept
+	#endif
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+#define NP2_unreachable()	__builtin_unreachable()
+#else
+#define NP2_unreachable()	__assume(0)
 #endif
 
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__cplusplus)
@@ -42,8 +57,7 @@
 // suppress -Wimplicit-fallthrough in C source
 #if defined(__cplusplus)
 #define FALLTHROUGH_ATTR		[[fallthrough]]
-// TODO: change to Clang 9 once released
-#elif (defined(__GNUC__) && __GNUC__ >= 7) || (defined(__clang__) && __clang_major__ > 9)
+#elif (defined(__GNUC__) && __GNUC__ >= 7) || (defined(__clang__) && __clang_major__ >= 10)
 #define FALLTHROUGH_ATTR		__attribute__((fallthrough))
 #else
 #define FALLTHROUGH_ATTR
@@ -68,21 +82,28 @@
 #define NP2_USE_DESIGNATED_INITIALIZER	1
 #endif
 
-// sdkddkver.h
-#ifndef _WIN32_WINNT_VISTA
-#define _WIN32_WINNT_VISTA					0x0600
-#endif
-#ifndef _WIN32_WINNT_WIN7
-#define _WIN32_WINNT_WIN7					0x0601
-#endif
-#ifndef _WIN32_WINNT_WIN8
-#define _WIN32_WINNT_WIN8					0x0602
-#endif
-#ifndef _WIN32_WINNT_WINBLUE
-#define _WIN32_WINNT_WINBLUE				0x0603
-#endif
-#ifndef _WIN32_WINNT_WIN10
-#define _WIN32_WINNT_WIN10					0x0A00
+#if defined(__cplusplus) || defined(__GNUC__) || defined(__clang__)
+#define EMPTY_BRACE_INITIALIZER			{}
+#else
+#define EMPTY_BRACE_INITIALIZER			{0}
 #endif
 
-#endif // NOTEPAD2_COMPILER_H_
+#define PP_CONCAT_(x, y)	x##y
+#define PP_CONCAT(x, y)		PP_CONCAT_(x, y)
+
+// sdkddkver.h
+#ifndef _WIN32_WINNT_VISTA
+#define _WIN32_WINNT_VISTA				0x0600
+#endif
+#ifndef _WIN32_WINNT_WIN7
+#define _WIN32_WINNT_WIN7				0x0601
+#endif
+#ifndef _WIN32_WINNT_WIN8
+#define _WIN32_WINNT_WIN8				0x0602
+#endif
+#ifndef _WIN32_WINNT_WINBLUE
+#define _WIN32_WINNT_WINBLUE			0x0603
+#endif
+#ifndef _WIN32_WINNT_WIN10
+#define _WIN32_WINNT_WIN10				0x0A00
+#endif

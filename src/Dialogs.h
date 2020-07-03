@@ -17,21 +17,7 @@
 *
 *
 ******************************************************************************/
-
-#ifndef NOTEPAD2_DIALOGS_H_
-#define NOTEPAD2_DIALOGS_H_
-
-#define MBINFO			0
-#define MBWARN			1
-#define MBYESNO			2
-#define MBYESNOWARN		3
-#define MBYESNOCANCEL	4
-#define MBOKCANCEL		8
-
-/**
- * App message used to center MessageBox to the window of the program.
- */
-#define APPM_CENTER_MESSAGE_BOX		(WM_APP + 1)
+#pragma once
 
 extern BOOL bWindowLayoutRTL;
 NP2_inline void InitWindowCommon(HWND hwnd) {
@@ -40,7 +26,12 @@ NP2_inline void InitWindowCommon(HWND hwnd) {
 	}
 }
 
-int 	MsgBox(int iType, UINT uIdMsg, ...);
+int 	MsgBox(UINT uType, UINT uIdMsg, ...);
+#define MsgBoxInfo(uType, uIdMsg, ...)		MsgBox(MB_ICONINFORMATION | (uType), (uIdMsg), ##__VA_ARGS__)
+#define MsgBoxWarn(uType, uIdMsg, ...)		MsgBox(MB_ICONEXCLAMATION | (uType), (uIdMsg), ##__VA_ARGS__)
+#define MsgBoxAsk(uType, uIdMsg, ...)		MsgBox(MB_ICONQUESTION | (uType), (uIdMsg), ##__VA_ARGS__)
+#define MsgBoxLastError(uType, uIdMsg, ...)	MsgBox(MB_ICONEXCLAMATION | MB_SERVICE_NOTIFICATION | (uType), (uIdMsg), ##__VA_ARGS__)
+
 void	DisplayCmdLineHelp(HWND hwnd);
 void	OpenHelpLink(HWND hwnd, int cmd);
 BOOL	GetDirectory(HWND hwndParent, int iTitle, LPWSTR pszFolder, LPCWSTR pszBase);
@@ -65,8 +56,10 @@ void	InitZoomLevelComboBox(HWND hwnd, int nCtlId, int zoomLevel);
 BOOL	GetZoomLevelComboBoxValue(HWND hwnd, int nCtrId, int *zoomLevel);
 void	ZoomLevelDlg(HWND hwnd, BOOL bBottom);
 BOOL	AutoCompletionSettingsDlg(HWND hwnd);
-INT_PTR InfoBox(int iType, LPCWSTR lpstrSetting, UINT uidMessage, ...);
 
-#endif // NOTEPAD2_DIALOGS_H_
+INT_PTR InfoBox(UINT uType, LPCWSTR lpstrSetting, UINT uidMessage, ...);
+#define InfoBoxInfo(uType, lpstrSetting, uidMessage, ...)	InfoBox(MB_ICONINFORMATION | (uType), (lpstrSetting), (uidMessage), ##__VA_ARGS__)
+#define InfoBoxWarn(uType, lpstrSetting, uidMessage, ...)	InfoBox(MB_ICONEXCLAMATION | (uType), (lpstrSetting), (uidMessage), ##__VA_ARGS__)
+#define InfoBoxAsk(uType, lpstrSetting, uidMessage, ...)	InfoBox(MB_ICONQUESTION | (uType), (lpstrSetting), (uidMessage), ##__VA_ARGS__)
 
-// End of Dialogs.h
+void	SystemIntegrationDlg(HWND hwnd);

@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2010 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef WORDLIST_H
-#define WORDLIST_H
+#pragma once
 
 namespace Scintilla {
 
@@ -17,7 +15,6 @@ class WordList {
 	char **words;
 	char *list;
 	int len;
-	bool onlyLineEnds;	///< Delimited by any white space or only line ends
 	// words in [start, end) starts with same character.
 	struct Range {
 		int start;
@@ -25,7 +22,7 @@ class WordList {
 	};
 	Range ranges[128];	// only ASCII, most word starts with character in '_a-zA-Z'
 public:
-	explicit WordList(bool onlyLineEnds_ = false) noexcept;
+	explicit WordList() noexcept;
 	~WordList();
 	operator bool() const noexcept;
 	bool operator!=(const WordList &other) const noexcept;
@@ -34,8 +31,7 @@ public:
 	}
 	int Length() const noexcept;
 	void Clear() noexcept;
-	void Set(const char *s);
-	bool Reset(const char *s);
+	bool Set(const char *s, bool toLower);
 	bool InList(const char *s) const noexcept;
 	bool InListPrefixed(const char *s, char marker) const noexcept;
 	bool InListAbbreviated(const char *s, char marker) const noexcept;
@@ -44,5 +40,3 @@ public:
 };
 
 }
-
-#endif

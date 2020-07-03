@@ -277,7 +277,7 @@ DISTANCE RunStyles<DISTANCE, STYLE>::Find(STYLE value, DISTANCE start) const noe
 	return -1;
 }
 
-#if 0
+#ifdef CHECK_CORRECTNESS
 template <typename DISTANCE, typename STYLE>
 void RunStyles<DISTANCE, STYLE>::Check() const {
 	if (Length() < 0) {

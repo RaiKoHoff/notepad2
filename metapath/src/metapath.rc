@@ -1,6 +1,7 @@
 // Microsoft Visual C++ generated resource script.
 //
 #include "resource.h"
+#include "config.h"
 
 #define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////
@@ -24,10 +25,8 @@
 // English (U.S.) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
-#ifdef _WIN32
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 #pragma code_page(65001)
-#endif //_WIN32
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -59,7 +58,7 @@ IDI_CROSS2              ICON                    "..\\res\\cross2.ico"
 //
 
 IDR_MAINWND             BITMAP                  "..\\res\\Toolbar.bmp"
-IDB_OPEN                BITMAP                  "..\\res\\Open.bmp"
+IDB_OPEN_FOLDER         BITMAP                  "..\\res\\OpenFolder.bmp"
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -77,13 +76,13 @@ IDR_MAINWND MENU
 BEGIN
 	POPUP "+"
 	BEGIN
-		MENUITEM "&Open (Same)",				IDM_FILE_OPENSAME
-		MENUITEM "Open (N&ew)",					IDM_FILE_OPENNEW
+		MENUITEM "&Open (Same Window)",			IDM_FILE_OPENSAME
+		MENUITEM "Open (N&ew Window)",			IDM_FILE_OPENNEW
 		MENUITEM "&Run...",						IDM_FILE_RUN
 		MENUITEM "&Launch",						IDM_FILE_LAUNCH
 		MENUITEM "&Quickview",					IDM_FILE_QUICKVIEW
 		MENUITEM "Open &with...",				IDM_FILE_OPENWITH
-		MENUITEM "&Copy Name",					IDM_POP_COPY_FILENAME
+		MENUITEM "&Copy File Name",				IDM_POP_COPY_FILENAME
 		MENUITEM "Copy Pa&th Name",				IDM_POP_COPY_PATHNAME
 		MENUITEM SEPARATOR
 		MENUITEM "Show in E&xplorer",			IDM_FILE_EXPLORER
@@ -184,6 +183,7 @@ BEGIN
     "P",            ACC_SNAPTOTARGET,       VIRTKEY, CONTROL, NOINVERT
     "Q",            IDM_FILE_QUICKVIEW,     VIRTKEY, CONTROL, NOINVERT
     "R",            IDM_FILE_RUN,           VIRTKEY, CONTROL, NOINVERT
+    "R",            IDM_FILE_RESTART,       VIRTKEY, ALT, NOINVERT
     "S",            IDM_FILE_SAVEAS,        VIRTKEY, CONTROL, NOINVERT
     "S",            IDM_VIEW_STATUSBAR,     VIRTKEY, ALT, NOINVERT
     "T",            IDM_VIEW_ALWAYSONTOP,   VIRTKEY, CONTROL, NOINVERT
@@ -350,7 +350,7 @@ BEGIN
     ICON            IDI_OPTIONS,IDC_STATIC,10,10,20,20
     LTEXT           "Specify general program settings for metapath.",IDC_STATIC,40,15,200,8
     AUTOCHECKBOX    "Open file in same target application window.",IDC_OPENFILE_SAME_WINDOW,10,34,190,10,WS_TABSTOP
-    AUTOCHECKBOX    "&Allow only single mouse-click to open objects.",IDC_SINGLECLICK,10,46,190,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Allow single mouse-click to open objects.",IDC_SINGLECLICK,10,46,190,10,WS_TABSTOP
     AUTOCHECKBOX    "&Enable track selection.",IDC_TRACKSELECT,10,58,100,10,WS_TABSTOP
     AUTOCHECKBOX    "Enable &full row selection.",IDC_FULLROWSELECT,10,70,120,10,WS_TABSTOP
     AUTOCHECKBOX    "Always a&ctivate target window when a file is opened.",IDC_FOCUSEDIT,10,82,220,10,WS_TABSTOP
@@ -388,12 +388,12 @@ END
 
 IDPP_ITEMS DIALOGEX 0, 0, 232, 185
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Items"
+CAPTION "Appearance"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     ICON            IDI_ITEMS,IDC_STATIC,10,10,21,20
-    LTEXT           "Appearance of items in directory list.",IDC_STATIC,40,15,160,8
-    GROUPBOX        "Colors",IDC_STATIC,10,41,205,134
+    LTEXT           "Appearance of metapath.",IDC_STATIC,40,15,160,8
+    GROUPBOX        "Appearance of items in directory list",IDC_STATIC,10,41,205,112
     LTEXT           "Use this text color when NO FILTER is SET:",IDC_STATIC,20,54,170,8
     AUTORADIOBUTTON "Default &windows color.",IDC_COLOR_DEF1,20,68,96,10,WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "Custom &color:",IDC_COLOR_CUST1,20,82,60,10,WS_TABSTOP
@@ -404,6 +404,10 @@ BEGIN
     AUTORADIOBUTTON "C&ustom color:",IDC_COLOR_CUST2,20,133,60,10,WS_TABSTOP
     EDITTEXT        IDC_COLOR_SAMP2,86,130,30,14,ES_AUTOHSCROLL | WS_DISABLED
     PUSHBUTTON      "Pick Color...",IDC_COLOR_PICK2,120,130,60,14
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+    LTEXT           "Language:",IDC_STATIC,10,163,38,10
+    COMBOBOX        IDC_LANGUAGE_LIST,50,160,82,100,CBS_DROPDOWNLIST | CBS_AUTOHSCROLL | WS_VSCROLL | WS_TABSTOP
+#endif
 END
 
 IDPP_PROG DIALOGEX 0, 0, 232, 185
@@ -419,6 +423,13 @@ BEGIN
     LTEXT           "&Favorites Folder (F11):",IDC_STATIC,10,76,120,8
     EDITTEXT        IDC_FAVORITES,10,87,191,14,ES_AUTOHSCROLL
     PUSHBUTTON      "",IDC_BROWSE_F,204,87,14,14,BS_BITMAP
+    GROUPBOX        "System Integration (requires Administrator privileges)",IDC_GROUP_SYSTEM_INTEGRATION,7,111,218,72
+    AUTOCHECKBOX    "Add metapath to Windows Explorer's context menu.",IDC_ENABLE_CONTEXT_MENU,14,124,204,10,WS_TABSTOP
+    LTEXT           "Context menu text:",IDC_STATIC,28,139,70,8
+    EDITTEXT        IDC_CONTEXT_MENU_TEXT,100,136,118,14,ES_AUTOHSCROLL | WS_TABSTOP
+    AUTOCHECKBOX    "Enable Taskbar Jump List.",IDC_ENABLE_JUMP_LIST,14,152,204,10,WS_TABSTOP
+    LTEXT           "Application name:",IDC_STATIC,28,167,70,8
+    EDITTEXT        IDC_APPLICATION_NAME,100,164,118,14,ES_AUTOHSCROLL | WS_TABSTOP
 END
 
 IDD_FINDTARGET DIALOGEX 0, 0, 272, 210
@@ -615,35 +626,39 @@ BEGIN
 	IDS_NUMFILES			"%s Object(s)"
 	IDS_NUMFILES_FILTER		"%s Object(s) | Filter"
 	IDS_SAVEFILE			"Saving ""%s""..."
+    IDS_LINKDESCRIPTION     "Open in metapath"
 END
 
 STRINGTABLE
 BEGIN
-    IDS_ERR_CD              "Directory Access Error\nNo access to specified directory.\nCheck the disk or the network connection."
-    IDS_ERR_FILE            "File Access Error\nNo access to ""%s"".\nThe file may be used by another application.\nCheck the disk or the network connection."
-    IDS_ERR_NEW             "File Access Error\nFile could not be created.\nCheck the disk or the network connection."
-    IDS_ERR_NEWDIR          "Directory Access Error\nDirectory could not be created.\nCheck the disk or the network connection."
-    IDS_ERR_SAVEAS1         "File Save Error\nError saving ""%s"".\nProbably an already existing file is write-protected."
-    IDS_ERR_SAVEAS2         "File Save Error\nError removing read-only attribute of saved file."
-    IDS_ERR_CMDLINE         "metapath\nError accessing file or directory specified in command line."
-    IDS_ERR_STARTUPDIR      "metapath\nNo access to startup directory."
-    IDS_ERR_DROP1           "metapath\nNo access to dropped file or directory."
-    //IDS_ERR_DROP2           "metapath\nOnly a single file or directory can be dropped at a time."
-    IDS_ERR_FAVORITES       "Favorites\nNo access to ""Favorites"" folder.\nSpecify a valid directory in the ""Options"" dialog box."
-    IDS_ERR_LNK_GETPATH     "Link Error\nNo valid filesystem-path available for linked object.\nProbably the link doesn't refer to a file or directory."
-    IDS_ERR_LNK_NOACCESS    "Link Error\nNo access to filesystem-path of linked object.\nCheck the disk or the network connection."
-    IDS_ERR_CREATELINK      "Link Error\nError creating the specified link.\nProbably the destination directory is write-protected."
-    IDS_ERR_FILTER          "File Filter Error\nNo additional filters specified.\nPlease refer to the metapath readme file for more information."
-    IDS_ERR_PREVWINDISABLED "metapath\nExisting metapath window is busy or has an active dialog box.\nDo you want to open another metapath window?"
+    IDS_ERR_CD              "No access to specified directory.\nCheck the disk or the network connection."
+    IDS_ERR_FILE            "No access to ""%s"".\nThe file may be used by another application.\nCheck the disk or the network connection."
+    IDS_ERR_NEW             "File could not be created.\nCheck the disk or the network connection."
+    IDS_ERR_NEWDIR          "Directory could not be created.\nCheck the disk or the network connection."
+    IDS_ERR_SAVEAS1         "Error saving ""%s"".\nProbably an already existing file is write-protected."
+    IDS_ERR_SAVEAS2         "Error removing read-only attribute of saved file."
+    IDS_ERR_CMDLINE         "Error accessing file or directory specified in command line."
+    IDS_ERR_STARTUPDIR      "No access to startup directory."
+    IDS_ERR_DROP1           "No access to dropped file or directory."
+    //IDS_ERR_DROP2           "Only a single file or directory can be dropped at a time."
+    IDS_ERR_FAVORITES       "No access to ""Favorites"" folder.\nSpecify a valid directory in the ""Options"" dialog box."
+    IDS_ERR_LNK_GETPATH     "No valid filesystem-path available for linked object.\nProbably the link doesn't refer to a file or directory."
+    IDS_ERR_LNK_NOACCESS    "No access to filesystem-path of linked object.\nCheck the disk or the network connection."
+    IDS_ERR_CREATELINK      "Error creating the specified link.\nProbably the destination directory is write-protected."
+    IDS_ERR_FILTER          "No additional filters specified.\nPlease refer to the metapath readme file for more information."
+    IDS_ERR_PREVWINDISABLED "Existing metapath window is busy or has an active dialog box.\nDo you want to open another metapath window?"
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+	IDS_CHANGE_LANG_RESTART	"Changing the UI language requires a restart of metapath, restart now?"
+#endif
 END
 
 STRINGTABLE
 BEGIN
-    IDS_ERR_TARGETDISABLED  "metapath\nExisting target window is busy or has an active dialog box.\nWould you like to open a new window?"
-    IDS_ERR_INVALIDTARGET   "metapath\nPlease make sure all the required fields are completed.\nYou will also have to find a target window if the appropriate option is enabled."
-    IDS_ERR_INIOPEN         "metapath\nNo access to metapath configuration file."
-    IDS_ERR_INICREATE       "Save Settings\nError creating configuration file."
-    IDS_ERR_INIWRITE        "Save Settings\nSettings not saved!\nNo write access to configuration file."
+    IDS_ERR_TARGETDISABLED  "Existing target window is busy or has an active dialog box.\nWould you like to open a new window?"
+    IDS_ERR_INVALIDTARGET   "Please make sure all the required fields are completed.\nYou will also have to find a target window if the appropriate option is enabled."
+    IDS_ERR_INIOPEN         "No access to metapath configuration file."
+    IDS_ERR_INICREATE       "Error creating configuration file."
+    IDS_ERR_INIWRITE        "Settings not saved!\nNo write access to configuration file."
 END
 
 STRINGTABLE
@@ -652,8 +667,8 @@ BEGIN
     IDS_GETQUICKVIEWER      "Find Quickview"
     IDS_GETTARGET           "Find Editor"
     IDS_NEWFILE             "New File"
-    IDS_FILTER_ALL          "All files (*.*)\n*.*\n"
-    IDS_FILTER_EXE          "Executable files (*.exe;*.com;*.bat;*.lnk;*.pif)\n*.exe;*.com;*.bat;*.lnk;*.pif\nAll files (*.*)\n*.*\n"
+    IDS_FILTER_ALL          "All Files (*.*)|*.*|"
+    IDS_FILTER_EXE          "Executable Files (*.exe;*.com;*.bat;*.lnk;*.pif)|*.exe;*.com;*.bat;*.lnk;*.pif|All Files (*.*)|*.*|"
     IDS_GETDIRECTORY        "Select a new directory."
     IDS_FAVORITES           "Specify the ""Favorites"" directory."
 END
@@ -663,8 +678,19 @@ BEGIN
     IDS_OPENWITH            "Select the directory with links to your favorite applications."
     IDS_COPYMOVE            "Select a destination directory."
     IDS_CREATELINK          "Select a destination directory for the new link."
-    IDS_SAVESETTINGS        "Save Settings\nThe current program settings have been saved."
+    IDS_SAVESETTINGS        "The current program settings have been saved."
 END
+
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+STRINGTABLE
+BEGIN
+	IDS_LANG_USER_DEFAULT			"System Language"
+	IDS_LANG_ENGLISH_US				"English"
+	IDS_LANG_CHINESE_SIMPLIFIED		"简体中文"
+	IDS_LANG_CHINESE_TRADITIONAL	"繁體中文"
+	IDS_LANG_JAPANESE				"日本語"
+END
+#endif
 
 
 #ifdef APSTUDIO_INVOKED

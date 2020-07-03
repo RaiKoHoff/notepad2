@@ -4,9 +4,9 @@
  **/
 // Copyright 1998-2004 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
+#pragma once
 
-#ifndef CELLBUFFER_H
-#define CELLBUFFER_H
+#define InsertString_WithoutPerLine		1023
 
 namespace Scintilla {
 
@@ -17,6 +17,7 @@ public:
 	virtual void Init() = 0;
 	virtual bool IsActive() const noexcept = 0;
 	virtual void InsertLine(Sci::Line line) = 0;
+	virtual void InsertLines(Sci::Line line, Sci::Line lines) = 0;
 	virtual void RemoveLine(Sci::Line line) = 0;
 };
 
@@ -87,20 +88,18 @@ public:
 	// Tentative actions are used for input composition so that it can be undone cleanly
 	void TentativeStart() noexcept;
 	void TentativeCommit() noexcept;
-	bool TentativeActive() const noexcept {
-		return tentativePoint >= 0;
-	}
-	int TentativeSteps();
+	bool TentativeActive() const noexcept;
+	int TentativeSteps() noexcept;
 
 	/// To perform an undo, StartUndo is called to retrieve the number of steps, then UndoStep is
 	/// called that many times. Similarly for redo.
 	bool CanUndo() const noexcept;
-	int StartUndo();
-	const Action &GetUndoStep() const;
+	int StartUndo() noexcept;
+	const Action &GetUndoStep() const noexcept;
 	void CompletedUndoStep() noexcept;
 	bool CanRedo() const noexcept;
-	int StartRedo();
-	const Action &GetRedoStep() const;
+	int StartRedo() noexcept;
+	const Action &GetRedoStep() const noexcept;
 	void CompletedRedoStep() noexcept;
 };
 
@@ -194,7 +193,7 @@ public:
 	void TentativeStart() noexcept;
 	void TentativeCommit() noexcept;
 	bool TentativeActive() const noexcept;
-	int TentativeSteps();
+	int TentativeSteps() noexcept;
 
 	bool SetUndoCollection(bool collectUndo) noexcept;
 	bool IsCollectingUndo() const noexcept;
@@ -206,15 +205,13 @@ public:
 	/// To perform an undo, StartUndo is called to retrieve the number of steps, then UndoStep is
 	/// called that many times. Similarly for redo.
 	bool CanUndo() const noexcept;
-	int StartUndo();
-	const Action &GetUndoStep() const;
+	int StartUndo() noexcept;
+	const Action &GetUndoStep() const noexcept;
 	void PerformUndoStep();
 	bool CanRedo() const noexcept;
-	int StartRedo();
-	const Action &GetRedoStep() const;
+	int StartRedo() noexcept;
+	const Action &GetRedoStep() const noexcept;
 	void PerformRedoStep();
 };
 
 }
-
-#endif

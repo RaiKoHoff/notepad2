@@ -171,16 +171,16 @@ void XPM::Draw(Surface *surface, PRectangle rc) {
 	}
 }
 
-void XPM::PixelAt(int x, int y, ColourDesired &colour, bool &transparent) const {
+void XPM::PixelAt(int x, int y, ColourDesired &colour, bool &transparent) const noexcept {
 	if (pixels.empty() || (x < 0) || (x >= width) || (y < 0) || (y >= height)) {
-		colour = ColourDesired(0);;
+		colour = ColourDesired(0);
 		transparent = true;
 		return;
 	}
 	const int code = pixels[y * width + x];
 	transparent = code == codeTransparent;
 	if (transparent) {
-		colour = ColourDesired(0);;
+		colour = ColourDesired(0);
 	} else {
 		colour = ColourFromCode(code);
 	}
@@ -262,6 +262,21 @@ void RGBAImage::SetPixel(int x, int y, ColourDesired colour, int alpha) noexcept
 	pixel[1] = colour.GetGreen();
 	pixel[2] = colour.GetBlue();
 	pixel[3] = static_cast<unsigned char>(alpha);
+}
+
+// Transform a block of pixels from RGBA to BGRA with premultiplied alpha.
+// Used for DrawRGBAImage on some platforms.
+void RGBAImage::BGRAFromRGBA(unsigned char *pixelsBGRA, const unsigned char *pixelsRGBA, size_t count) noexcept {
+	for (size_t i = 0; i < count; i++) {
+		const unsigned char alpha = pixelsRGBA[3];
+		// Input is RGBA, output is BGRA with premultiplied alpha
+		pixelsBGRA[2] = (pixelsRGBA[0] * alpha + 127) / 255;
+		pixelsBGRA[1] = (pixelsRGBA[1] * alpha + 127) / 255;
+		pixelsBGRA[0] = (pixelsRGBA[2] * alpha + 127) / 255;
+		pixelsBGRA[3] = alpha;
+		pixelsRGBA += bytesPerPixel;
+		pixelsBGRA += bytesPerPixel;
+	}
 }
 
 RGBAImageSet::RGBAImageSet() noexcept : height(-1), width(-1) {

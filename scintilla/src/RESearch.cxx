@@ -139,7 +139,7 @@
  *                        W: any char except alphanumeric & underscore (see above)
  *
  *      [12]    \xHH    a backslash followed by x and two hexa digits,
- *                      becomes the character whose Ascii code is equal
+ *                      becomes the character whose ASCII code is equal
  *                      to these digits. If not followed by two digits,
  *                      it is 'x' char itself.
  *
@@ -268,7 +268,7 @@ RESearch::RESearch(const CharClassify *charClassTable) {
 	previousPattern = nullptr;
 	previousLength = 0;
 	previousFlags = 0;
-	const unsigned char nul = 0;
+	constexpr unsigned char nul = 0;
 	std::fill(bittab, std::end(bittab), nul);
 	std::fill(tagstk, std::end(tagstk), 0);
 	std::fill(nfa, std::end(nfa), '\0');
@@ -371,7 +371,7 @@ int RESearch::GetBackslashExpression(
 	int &incr) noexcept {
 	// Since error reporting is primitive and messages are not used anyway,
 	// I choose to interpret unexpected syntax in a logical way instead
-	// of reporting errors. Otherwise, we can stick on, eg., PCRE behavior.
+	// of reporting errors. Otherwise, we can stick on, eg., PCRE behaviour.
 	incr = 0;	// Most of the time, will skip the char "naturally".
 	int c;
 	int result = -1;
@@ -993,7 +993,8 @@ Sci::Position RESearch::PMatch(const CharacterIndexer &ci, Sci::Position lp, Sci
 				return NOTFOUND;
 			}
 			lp = e;
-		} break;
+		}
+		break;
 		case REF:
 			n = *ap++;
 			bp = bopat[n];

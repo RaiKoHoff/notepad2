@@ -6,18 +6,19 @@
  **/
 // Copyright 2017 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef DEFAULTLEXER_H
-#define DEFAULTLEXER_H
+#pragma once
 
 namespace Scintilla {
 
 // A simple lexer with no state
-class DefaultLexer : public ILexer4 {
+class DefaultLexer : public ILexer5 {
+	const char *languageName;
+	int language;
 	const LexicalClass *lexClasses;
 	size_t nClasses;
 public:
-	DefaultLexer(const LexicalClass *lexClasses_ = nullptr, size_t nClasses_ = 0);
+	DefaultLexer(const char *languageName_, int language_,
+		const LexicalClass *lexClasses_ = nullptr, size_t nClasses_ = 0) noexcept;
 	virtual ~DefaultLexer();
 	void SCI_METHOD Release() noexcept override;
 	int SCI_METHOD Version() const noexcept override;
@@ -26,7 +27,7 @@ public:
 	const char * SCI_METHOD DescribeProperty(const char *name) const override;
 	Sci_Position SCI_METHOD PropertySet(const char *key, const char *val) override;
 	const char * SCI_METHOD DescribeWordListSets() const noexcept override;
-	Sci_Position SCI_METHOD WordListSet(int n, const char *wl) override;
+	Sci_Position SCI_METHOD WordListSet(int n, bool toLower, const char *wl) override;
 	void SCI_METHOD Lex(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, IDocument *pAccess) override = 0;
 	void SCI_METHOD Fold(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, IDocument *pAccess) override;
 	void *SCI_METHOD PrivateCall(int operation, void *pointer) override;
@@ -44,8 +45,9 @@ public:
 	const char * SCI_METHOD NameOfStyle(int style) const noexcept override;
 	const char * SCI_METHOD TagsOfStyle(int style) const noexcept override;
 	const char * SCI_METHOD DescriptionOfStyle(int style) const noexcept override;
+	// ILexer5 methods
+	const char * SCI_METHOD GetName() const noexcept override;
+	int SCI_METHOD GetIdentifier() const noexcept override;
 };
 
 }
-
-#endif

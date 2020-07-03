@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2004 by Neil Hodgson <neilh@scintilla.org>
 // This file is in the public domain.
-
-#ifndef STYLECONTEXT_H
-#define STYLECONTEXT_H
+#pragma once
 
 namespace Scintilla {
 
@@ -36,10 +34,11 @@ private:
 		}
 		// End of line determined from line end position, allowing CR, LF,
 		// CRLF and Unicode line ends as set by document.
-		if (currentLine < lineDocEnd)
+		if (currentLine < lineDocEnd) {
 			atLineEnd = static_cast<Sci_Position>(currentPos) >= (lineStartNext - 1);
-		else // Last line
+		} else { // Last line
 			atLineEnd = static_cast<Sci_Position>(currentPos) >= lineStartNext;
+		}
 	}
 
 public:
@@ -74,8 +73,8 @@ public:
 	chNext(0),
 	width(0),
 	widthNext(1) {
-		// lexer need enable useUnicode if it wants to detect Unicode identifier (http://www.unicode.org/reports/tr31/)
-		// which requires CharacterCategory from official Scintilla lexlib.
+		// lexer need enable useUnicode if it wants to detect Unicode identifier (https://www.unicode.org/reports/tr31/)
+		// or operator. e.g. using functions from CharacterCategory.
 		if ((useUnicode && styler.Encoding() == encUnicode) || styler.Encoding() == encDBCS) {
 			multiByteAccess = styler.MultiByteAccess();
 		}
@@ -84,8 +83,9 @@ public:
 		currentLine = styler.GetLine(startPos);
 		lineStartNext = styler.LineStart(currentLine + 1);
 		lengthDocument = static_cast<Sci_PositionU>(styler.Length());
-		if (endPos == lengthDocument)
+		if (endPos == lengthDocument) {
 			endPos++;
+		}
 		lineDocEnd = styler.GetLine(lengthDocument);
 		atLineStart = static_cast<Sci_PositionU>(styler.LineStart(currentLine)) == startPos;
 
@@ -163,9 +163,16 @@ public:
 	int GetRelative(Sci_Position n) const noexcept {
 		return static_cast<unsigned char>(styler.SafeGetCharAt(currentPos + n));
 	}
+#if 0
+	[[deprecated]]
+	int GetRelative(Sci_Position n, char chDefault) const noexcept {
+		return static_cast<unsigned char>(styler.SafeGetCharAt(currentPos + n, chDefault));
+	}
+#endif
 	int GetRelativeCharacter(Sci_Position n) noexcept {
-		if (n == 0)
+		if (n == 0) {
 			return ch;
+		}
 		if (multiByteAccess) {
 			if ((currentPosLastRelative != currentPos) ||
 				((n > 0) && ((offsetRelative < 0) || (n < offsetRelative))) ||
@@ -180,10 +187,9 @@ public:
 			currentPosLastRelative = currentPos;
 			offsetRelative = n;
 			return chReturn;
-		} else {
-			// fast version for single byte encodings
-			return static_cast<unsigned char>(styler.SafeGetCharAt(currentPos + n));
 		}
+		// fast version for single byte encodings
+		return static_cast<unsigned char>(styler.SafeGetCharAt(currentPos + n));
 	}
 	bool Match(char ch0) const noexcept {
 		return ch == static_cast<unsigned char>(ch0);
@@ -192,33 +198,37 @@ public:
 		return (ch == static_cast<unsigned char>(ch0)) && (chNext == static_cast<unsigned char>(ch1));
 	}
 	bool Match(const char *s) const noexcept {
-		if (ch != static_cast<unsigned char>(*s))
+		if (ch != static_cast<unsigned char>(*s)) {
 			return false;
+		}
 		s++;
-		if (!*s)
+		if (!*s) {
 			return true;
-		if (chNext != static_cast<unsigned char>(*s))
+		}
+		if (chNext != static_cast<unsigned char>(*s)) {
 			return false;
+		}
 		s++;
-		for (int n = 2; *s; n++) {
-			if (*s != styler.SafeGetCharAt(currentPos + n))
+		for (Sci_PositionU pos = currentPos + 2; *s; s++, pos++) {
+			if (*s != styler.SafeGetCharAt(pos)) {
 				return false;
-			s++;
+			}
 		}
 		return true;
 	}
 	bool MatchIgnoreCase(const char *s) const noexcept;
-	Sci_Position GetCurrent(char *s, Sci_PositionU len) const noexcept {
-		return LexGetRange(styler.GetStartSegment(), currentPos - 1, styler, s, len);
+	void GetCurrent(char *s, Sci_PositionU len) const noexcept {
+		styler.GetRange(styler.GetStartSegment(), currentPos, s, len);
 	}
-	Sci_Position GetCurrentLowered(char *s, Sci_PositionU len) const noexcept {
-		return LexGetRangeLowered(styler.GetStartSegment(), currentPos - 1, styler, s, len);
+	void GetCurrentLowered(char *s, Sci_PositionU len) const noexcept {
+		styler.GetRangeLowered(styler.GetStartSegment(), currentPos, s, len);
 	}
+
 	int GetNextNSChar() const noexcept {
-		if (!IsSpaceOrTab(ch)) {
+		if (!IsWhiteSpace(ch)) {
 			return ch;
 		}
-		if (!IsSpaceOrTab(chNext)) {
+		if (!IsWhiteSpace(chNext)) {
 			return chNext;
 		}
 		return LexGetNextChar(currentPos + 2, styler);
@@ -226,5 +236,3 @@ public:
 };
 
 }
-
-#endif

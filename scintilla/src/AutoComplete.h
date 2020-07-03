@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2003 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef AUTOCOMPLETE_H
-#define AUTOCOMPLETE_H
+#pragma once
 
 namespace Scintilla {
 
@@ -17,7 +15,7 @@ class AutoComplete {
 	std::string stopChars;
 	std::string fillUpChars;
 	char separator;
-	char typesep; // Type seperator
+	char typesep; // Type separator
 	enum {
 		maxItemLen = 1024
 	};
@@ -30,7 +28,7 @@ public:
 	std::unique_ptr<ListBox> lb;
 	Sci::Position posStart;
 	Sci::Position startLen;
-	/// Should autocompletion be canceled if editor's currentPos <= startPos?
+	/// Should autocompletion be cancelled if editor's currentPos <= startPos?
 	bool cancelAtStartPos;
 	bool autoHide;
 	bool dropRestOfWord;
@@ -78,16 +76,14 @@ public:
 	/// Return the value of an item in the list
 	std::string GetValue(int item) const;
 
-	void Show(bool show);
+	void Show(bool show) const;
 	void Cancel() noexcept;
 
 	/// Move the current list element by delta, scrolling appropriately
-	void Move(int delta);
+	void Move(int delta) const;
 
 	/// Select a list element that starts with word as the current element
 	void Select(const char *word);
 };
 
 }
-
-#endif

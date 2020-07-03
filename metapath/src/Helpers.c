@@ -19,6 +19,7 @@
 ******************************************************************************/
 
 #include <windows.h>
+#include <windowsx.h>
 #include <shlwapi.h>
 #include <shlobj.h>
 #include <commctrl.h>
@@ -26,6 +27,7 @@
 #include <vssym32.h>
 #include <psapi.h>
 #include <stdio.h>
+#include "config.h"
 #include "Helpers.h"
 #include "Dlapi.h"
 #include "resource.h"
@@ -51,7 +53,7 @@ void IniClearAllSectionEx(LPCWSTR lpszPrefix, LPCWSTR lpszIniFile, BOOL bDelete)
 	const int len = lstrlen(lpszPrefix);
 
 	while (*p) {
-		if (StrNCaseEqual(p, lpszPrefix, len)) {
+		if (StrHasPrefixCaseEx(p, lpszPrefix, len)) {
 			WritePrivateProfileSection(p, value, lpszIniFile);
 		}
 		p = StrEnd(p) + 1;
@@ -73,17 +75,21 @@ BOOL IniSectionParseArray(IniSection *section, LPWSTR lpCachedIniSection) {
 	int count = 0;
 
 	do {
-		IniKeyValueNode *node = &section->nodeList[count];
 		LPWSTR v = StrChr(p, L'=');
-		*v++ = L'\0';
-		node->key = p;
-		node->value = v;
-		++count;
-		p = StrEnd(v) + 1;
+		if (v != NULL) {
+			*v++ = L'\0';
+			IniKeyValueNode *node = &section->nodeList[count];
+			node->key = p;
+			node->value = v;
+			++count;
+			p = StrEnd(v) + 1;
+		} else {
+			p = StrDup(p) + 1;
+		}
 	} while (*p && count < capacity);
 
 	section->count = count;
-	return TRUE;
+	return count != 0;
 }
 
 BOOL IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection) {
@@ -97,16 +103,24 @@ BOOL IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection) {
 	int count = 0;
 
 	do {
-		IniKeyValueNode *node = &section->nodeList[count];
 		LPWSTR v = StrChr(p, L'=');
-		*v++ = L'\0';
-		const UINT keyLen = (UINT)(v - p - 1);
-		node->hash = keyLen | (p[0] << 8) | (p[1] << 16);
-		node->key = p;
-		node->value = v;
-		++count;
-		p = StrEnd(v) + 1;
+		if (v != NULL) {
+			*v++ = L'\0';
+			const UINT keyLen = (UINT)(v - p - 1);
+			IniKeyValueNode *node = &section->nodeList[count];
+			node->hash = keyLen | (p[0] << 8) | (p[1] << 16);
+			node->key = p;
+			node->value = v;
+			++count;
+			p = StrEnd(v) + 1;
+		} else {
+			p = StrEnd(p) + 1;
+		}
 	} while (*p && count < capacity);
+
+	if (count == 0) {
+		return FALSE;
+	}
 
 	section->count = count;
 	section->head = &section->nodeList[0];
@@ -208,6 +222,51 @@ void IniSectionSetString(IniSectionOnSave *section, LPCWSTR key, LPCWSTR value) 
 	section->next = p;
 }
 
+LPWSTR Registry_GetString(HKEY hKey, LPCWSTR valueName) {
+	LPWSTR lpszText = NULL;
+	DWORD type = REG_SZ;
+	DWORD size = 0;
+
+	LSTATUS status = RegQueryValueEx(hKey, valueName, NULL, &type, NULL, &size);
+	if (status == ERROR_SUCCESS && type == REG_SZ && size != 0) {
+		size = (size + 1)*sizeof(WCHAR);
+		lpszText = (LPWSTR)NP2HeapAlloc(size);
+		status = RegQueryValueEx(hKey, valueName, NULL, &type, (LPBYTE)lpszText, &size);
+		if (status != ERROR_SUCCESS || type != REG_SZ || size == 0) {
+			NP2HeapFree(lpszText);
+			lpszText = NULL;
+		}
+	}
+	return lpszText;
+}
+
+LSTATUS Registry_SetString(HKEY hKey, LPCWSTR valueName, LPCWSTR lpszText) {
+	DWORD len = lstrlen(lpszText);
+	len = len ? ((len + 1)*sizeof(WCHAR)) : 0;
+	LSTATUS status = RegSetValueEx(hKey, valueName, 0, REG_SZ, (const BYTE *)lpszText, len);
+	return status;
+}
+
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+LSTATUS Registry_DeleteTree(HKEY hKey, LPCWSTR lpSubKey) {
+	typedef LSTATUS (WINAPI *RegDeleteTreeSig)(HKEY hKey, LPCWSTR lpSubKey);
+	RegDeleteTreeSig pfnRegDeleteTree = DLLFunctionEx(RegDeleteTreeSig, L"advapi32.dll", "RegDeleteTreeW");
+
+	LSTATUS status;
+	if (pfnRegDeleteTree != NULL) {
+		status = pfnRegDeleteTree(hKey, lpSubKey);
+	} else {
+		status = RegDeleteKey(hKey, lpSubKey);
+		if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND) {
+			// TODO: Deleting a Key with Subkeys on Windows XP.
+			// https://docs.microsoft.com/en-us/windows/win32/sysinfo/deleting-a-key-with-subkeys
+		}
+	}
+
+	return status;
+}
+#endif
+
 int ParseCommaList(LPCWSTR str, int result[], int count) {
 	if (StrIsEmpty(str)) {
 		return 0;
@@ -230,20 +289,44 @@ int ParseCommaList(LPCWSTR str, int result[], int count) {
 	return index;
 }
 
+BOOL FindUserResourcePath(LPCWSTR path, LPWSTR outPath) {
+	// similar to CheckIniFile()
+	WCHAR tchFileExpanded[MAX_PATH];
+	ExpandEnvironmentStrings(path, tchFileExpanded, COUNTOF(tchFileExpanded));
+
+	if (PathIsRelative(tchFileExpanded)) {
+		WCHAR tchBuild[MAX_PATH];
+		// relative to program ini file
+		if (StrNotEmpty(szIniFile)) {
+			lstrcpy(tchBuild, szIniFile);
+			lstrcpy(PathFindFileName(tchBuild), tchFileExpanded);
+			if (PathIsFile(tchBuild)) {
+				lstrcpy(outPath, tchBuild);
+				return TRUE;
+			}
+		}
+
+		// relative to program exe file
+		GetModuleFileName(NULL, tchBuild, COUNTOF(tchBuild));
+		lstrcpy(PathFindFileName(tchBuild), tchFileExpanded);
+		if (PathIsFile(tchBuild)) {
+			lstrcpy(outPath, tchBuild);
+			return TRUE;
+		}
+	} else if (PathIsFile(tchFileExpanded)) {
+		lstrcpy(outPath, tchFileExpanded);
+		return TRUE;
+	}
+	return FALSE;
+}
+
 HBITMAP LoadBitmapFile(LPCWSTR path) {
 	WCHAR szTmp[MAX_PATH];
-	if (PathIsRelative(path)) {
-		GetModuleFileName(NULL, szTmp, COUNTOF(szTmp));
-		PathRemoveFileSpec(szTmp);
-		PathAppend(szTmp, path);
-		path = szTmp;
-	}
-
-	if (!PathFileExists(path)) {
+	if (!FindUserResourcePath(path, szTmp)) {
 		return NULL;
 	}
 
-	HBITMAP hbmp = (HBITMAP)LoadImage(NULL, path, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION | LR_LOADFROMFILE);
+	HBITMAP hbmp = (HBITMAP)LoadImage(NULL, szTmp, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION | LR_LOADFROMFILE);
 	return hbmp;
 }
 
@@ -252,9 +335,6 @@ HBITMAP LoadBitmapFile(LPCWSTR path) {
 // PrivateSetCurrentProcessExplicitAppUserModelID()
 //
 HRESULT PrivateSetCurrentProcessExplicitAppUserModelID(PCWSTR AppID) {
-	if (!IsWin7AndAbove()) {
-		return S_OK;
-	}
 	if (StrIsEmpty(AppID)) {
 		return S_OK;
 	}
@@ -268,12 +348,34 @@ HRESULT PrivateSetCurrentProcessExplicitAppUserModelID(PCWSTR AppID) {
 #else
 	typedef HRESULT (WINAPI *SetCurrentProcessExplicitAppUserModelIDSig)(PCWSTR AppID);
 	SetCurrentProcessExplicitAppUserModelIDSig pfnSetCurrentProcessExplicitAppUserModelID =
-		(SetCurrentProcessExplicitAppUserModelIDSig)GetProcAddress(GetModuleHandle(L"shell32.dll"), "SetCurrentProcessExplicitAppUserModelID");
+		DLLFunctionEx(SetCurrentProcessExplicitAppUserModelIDSig, L"shell32.dll", "SetCurrentProcessExplicitAppUserModelID");
 	if (pfnSetCurrentProcessExplicitAppUserModelID) {
 		return pfnSetCurrentProcessExplicitAppUserModelID(AppID);
 	}
 	return S_OK;
 #endif
+}
+
+//=============================================================================
+//
+// IsElevated()
+//
+BOOL IsElevated(void) {
+	BOOL bIsElevated = FALSE;
+	HANDLE hToken = NULL;
+
+	if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+		TOKEN_ELEVATION te;
+		DWORD dwReturnLength = 0;
+
+		if (GetTokenInformation(hToken, TokenElevation, &te, sizeof(te), &dwReturnLength)) {
+			if (dwReturnLength == sizeof(te)) {
+				bIsElevated = te.TokenIsElevated;
+			}
+		}
+		CloseHandle(hToken);
+	}
+	return bIsElevated;
 }
 
 //=============================================================================
@@ -312,15 +414,6 @@ BOOL Is32bitExe(LPCWSTR lpszExeName) {
 	return (HIWORD(dwExeType) && LOWORD(dwExeType)) != 0;
 }
 */
-
-//=============================================================================
-//
-//  SetTheme()
-//
-BOOL SetTheme(HWND hwnd, LPCWSTR lpszTheme) {
-	const HRESULT hr = SetWindowTheme(hwnd, lpszTheme, NULL);
-	return hr == S_OK;
-}
 
 //=============================================================================
 //
@@ -531,7 +624,7 @@ void SetDlgPos(HWND hDlg, int xDlg, int yDlg) {
 // Resize Dialog Helpers()
 //
 #define RESIZEDLG_PROP_KEY	L"ResizeDlg"
-typedef struct _resizeDlg {
+typedef struct RESIZEDLG {
 	int direction;
 	int cxClient;
 	int cyClient;
@@ -552,7 +645,8 @@ void ResizeDlg_InitEx(HWND hwnd, int cxFrame, int cyFrame, int nIdGrip, int iDir
 	pm->cxClient = rc.right - rc.left;
 	pm->cyClient = rc.bottom - rc.top;
 
-	AdjustWindowRectEx(&rc, GetWindowLong(hwnd, GWL_STYLE) | WS_THICKFRAME, FALSE, 0);
+	const DWORD style = GetWindowStyle(hwnd) | WS_THICKFRAME;
+	AdjustWindowRectEx(&rc, style, FALSE, 0);
 	pm->mmiPtMinX = rc.right - rc.left;
 	pm->mmiPtMinY = rc.bottom - rc.top;
 	// only one direction
@@ -573,7 +667,7 @@ void ResizeDlg_InitEx(HWND hwnd, int cxFrame, int cyFrame, int nIdGrip, int iDir
 
 	SetWindowPos(hwnd, NULL, rc.left, rc.top, cxFrame, cyFrame, SWP_NOZORDER);
 
-	SetWindowLongPtr(hwnd, GWL_STYLE, GetWindowLongPtr(hwnd, GWL_STYLE) | WS_THICKFRAME);
+	SetWindowStyle(hwnd, style);
 	SetWindowPos(hwnd, NULL, 0, 0, 0, 0, SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
 
 	WCHAR wch[64];
@@ -582,7 +676,7 @@ void ResizeDlg_InitEx(HWND hwnd, int cxFrame, int cyFrame, int nIdGrip, int iDir
 	InsertMenu(GetSystemMenu(hwnd, FALSE), SC_CLOSE, MF_BYCOMMAND | MF_SEPARATOR, 0, NULL);
 
 	HWND hwndCtl = GetDlgItem(hwnd, nIdGrip);
-	SetWindowLongPtr(hwndCtl, GWL_STYLE, GetWindowLongPtr(hwndCtl, GWL_STYLE) | SBS_SIZEGRIP | WS_CLIPSIBLINGS);
+	SetWindowStyle(hwndCtl, GetWindowStyle(hwndCtl) | SBS_SIZEGRIP | WS_CLIPSIBLINGS);
 	const int cGrip = GetSystemMetrics(SM_CXHTHUMB);
 	SetWindowPos(hwndCtl, NULL, pm->cxClient - cGrip, pm->cyClient - cGrip, cGrip, cGrip, SWP_NOZORDER);
 }
@@ -671,7 +765,7 @@ void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, WORD wBmpId) {
 	DeleteObject(hBmp);
 	SetRect(&bi.margin, 0, 0, 0, 0);
 	bi.uAlign = BUTTON_IMAGELIST_ALIGN_CENTER;
-	SendMessage(hwndCtl, BCM_SETIMAGELIST, 0, (LPARAM)&bi);
+	Button_SetImageList(hwndCtl, &bi);
 }
 
 //=============================================================================
@@ -681,7 +775,7 @@ void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, WORD wBmpId) {
 void DeleteBitmapButton(HWND hwnd, int nCtlId) {
 	HWND hwndCtl = GetDlgItem(hwnd, nCtlId);
 	BUTTON_IMAGELIST bi;
-	if (SendMessage(hwndCtl, BCM_GETIMAGELIST, 0, (LPARAM)&bi)) {
+	if (Button_GetImageList(hwndCtl, &bi)) {
 		ImageList_Destroy(bi.himl);
 	}
 }
@@ -691,22 +785,22 @@ void DeleteBitmapButton(HWND hwnd, int nCtlId) {
 //  SetWindowTransparentMode()
 //
 void SetWindowTransparentMode(HWND hwnd, BOOL bTransparentMode, int iOpacityLevel) {
-	const LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+	const DWORD exStyle = GetWindowExStyle(hwnd);
 	if (bTransparentMode) {
-		SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+		SetWindowExStyle(hwnd, exStyle | WS_EX_LAYERED);
 		const BYTE bAlpha = (BYTE)(iOpacityLevel * 255 / 100);
 		SetLayeredWindowAttributes(hwnd, 0, bAlpha, LWA_ALPHA);
 	} else {
-		SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
+		SetWindowExStyle(hwnd, exStyle & ~WS_EX_LAYERED);
 	}
 }
 
 void SetWindowLayoutRTL(HWND hwnd, BOOL bRTL) {
-	const LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+	const DWORD exStyle = GetWindowExStyle(hwnd);
 	if (bRTL) {
-		SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYOUTRTL);
+		SetWindowExStyle(hwnd, exStyle | WS_EX_LAYOUTRTL);
 	} else {
-		SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYOUTRTL);
+		SetWindowExStyle(hwnd, exStyle & ~WS_EX_LAYOUTRTL);
 	}
 }
 
@@ -789,6 +883,72 @@ LRESULT SendWMSize(HWND hwnd) {
 	return SendMessage(hwnd, WM_SIZE, SIZE_RESTORED, MAKELPARAM(rc.right, rc.bottom));
 }
 
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName) {
+	if (lang == LANG_USER_DEFAULT) {
+		lang = GetUserDefaultUILanguage();
+	}
+
+	LPCWSTR folder = NULL;
+	const LANGID subLang = SUBLANGID(lang);
+	switch (PRIMARYLANGID(lang)) {
+	case LANG_ENGLISH:
+		break;
+	case LANG_CHINESE:
+		folder = IsChineseTraditionalSubLang(subLang) ? L"zh-Hant" : L"zh-Hans";
+		break;
+	case LANG_JAPANESE:
+		folder = L"ja";
+		break;
+	//case LANG_KOREAN:
+	//	folder = L"ko";
+	//	break;
+	}
+
+	if (folder == NULL) {
+		return NULL;
+	}
+
+	WCHAR path[MAX_PATH];
+	GetModuleFileName(NULL, path, COUNTOF(path));
+	PathRemoveFileSpec(path);
+	PathAppend(path, L"locale");
+	PathAppend(path, folder);
+	PathAppend(path, dllName);
+
+	const DWORD flags = IsVistaAndAbove() ? (LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE) : LOAD_LIBRARY_AS_DATAFILE;
+	HMODULE hDLL = LoadLibraryEx(path, NULL, flags);
+	return hDLL;
+}
+
+#if NP2_ENABLE_TEST_LOCALIZATION_LAYOUT
+void GetLocaleDefaultUIFont(LANGID lang, LPWSTR lpFaceName, WORD *wSize) {
+	LPCWSTR font;
+	const LANGID subLang = SUBLANGID(lang);
+	switch (PRIMARYLANGID(lang)) {
+	default:
+	case LANG_ENGLISH:
+		font = L"Segoe UI";
+		*wSize = 9;
+		break;
+	case LANG_CHINESE:
+		font = IsChineseTraditionalSubLang(subLang) ? L"Microsoft JhengHei UI" : L"Microsoft YaHei UI";
+		*wSize = 9;
+		break;
+	case LANG_JAPANESE:
+		font = L"Meiryo UI";
+		*wSize = 9;
+		break;
+	case LANG_KOREAN:
+		font = L"Malgun Gothic";
+		*wSize = 9;
+		break;
+	}
+	lstrcpy(lpFaceName, font);
+}
+#endif
+#endif
+
 //=============================================================================
 //
 //  PathRelativeToApp()
@@ -803,7 +963,18 @@ void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, int cchDest, BOOL bSrcI
 	GetModuleFileName(NULL, wchAppPath, COUNTOF(wchAppPath));
 	PathRemoveFileSpec(wchAppPath);
 	GetWindowsDirectory(wchWinDir, COUNTOF(wchWinDir));
-	SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, wchUserFiles);
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+	if (S_OK != SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, wchUserFiles)) {
+		return;
+	}
+#else
+	LPWSTR pszPath = NULL;
+	if (S_OK != SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &pszPath)) {
+		return;
+	}
+	lstrcpy(wchUserFiles, pszPath);
+	CoTaskMemFree(pszPath);
+#endif
 
 	if (bUnexpandMyDocs &&
 			!PathIsRelative(lpszSrc) &&
@@ -840,8 +1011,19 @@ void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, int cchDest, BOOL bSrcI
 void PathAbsoluteFromApp(LPCWSTR lpszSrc, LPWSTR lpszDest, int cchDest, BOOL bExpandEnv) {
 	WCHAR wchPath[MAX_PATH];
 
-	if (StrNEqual(lpszSrc, L"%CSIDL:MYDOCUMENTS%", CSTRLEN("%CSIDL:MYDOCUMENTS%"))) {
-		SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, wchPath);
+	if (StrHasPrefix(lpszSrc, L"%CSIDL:MYDOCUMENTS%")) {
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+		if (S_OK != SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, wchPath)) {
+			return;
+		}
+#else
+		LPWSTR pszPath = NULL;
+		if (S_OK != SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &pszPath)) {
+			return;
+		}
+		lstrcpy(wchPath, pszPath);
+		CoTaskMemFree(pszPath);
+#endif
 		PathAppend(wchPath, lpszSrc + CSTRLEN("%CSIDL:MYDOCUMENTS%"));
 	} else {
 		lstrcpyn(wchPath, lpszSrc, COUNTOF(wchPath));
@@ -931,13 +1113,11 @@ BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath, int cchResPath) {
 
 		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (void **)(&ppf)))) {
 			WCHAR wsz[MAX_PATH];
-
-			/*MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pszLnkFile, -1, wsz, MAX_PATH);*/
 			lstrcpy(wsz, pszLnkFile);
 
 			if (SUCCEEDED(ppf->Load(wsz, STGM_READ))) {
 				WIN32_FIND_DATA fd;
-				if (NOERROR == psl->GetPath(pszResPath, cchResPath, &fd, 0)) {
+				if (S_OK == psl->GetPath(pszResPath, cchResPath, &fd, 0)) {
 					// This additional check seems reasonable
 					bSucceeded = StrNotEmpty(pszResPath);
 				}
@@ -952,13 +1132,11 @@ BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath, int cchResPath) {
 
 		if (SUCCEEDED(psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void **)(&ppf)))) {
 			WCHAR wsz[MAX_PATH];
-
-			/*MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pszLnkFile, -1, wsz, MAX_PATH);*/
 			lstrcpy(wsz, pszLnkFile);
 
 			if (SUCCEEDED(ppf->lpVtbl->Load(ppf, wsz, STGM_READ))) {
 				WIN32_FIND_DATA fd;
-				if (NOERROR == psl->lpVtbl->GetPath(psl, pszResPath, cchResPath, &fd, 0)) {
+				if (S_OK == psl->lpVtbl->GetPath(psl, pszResPath, cchResPath, &fd, 0)) {
 					// This additional check seems reasonable
 					bSucceeded = StrNotEmpty(pszResPath);
 				}
@@ -1029,10 +1207,9 @@ BOOL PathCreateLnk(LPCWSTR pszLnkDir, LPCWSTR pszPath) {
 
 		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (void **)(&ppf)))) {
 			WCHAR wsz[MAX_PATH];
-			/*MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, tchLnkFileName, -1, wsz, MAX_PATH);*/
 			lstrcpy(wsz, tchLnkFileName);
 
-			if (NOERROR == psl->SetPath(pszPath) && SUCCEEDED(ppf->Save(wsz, TRUE))) {
+			if (S_OK == psl->SetPath(pszPath) && SUCCEEDED(ppf->Save(wsz, TRUE))) {
 				bSucceeded = TRUE;
 			}
 
@@ -1046,10 +1223,9 @@ BOOL PathCreateLnk(LPCWSTR pszLnkDir, LPCWSTR pszPath) {
 
 		if (SUCCEEDED(psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void **)(&ppf)))) {
 			WCHAR wsz[MAX_PATH];
-			/*MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, tchLnkFileName, -1, wsz, MAX_PATH);*/
 			lstrcpy(wsz, tchLnkFileName);
 
-			if (NOERROR == psl->lpVtbl->SetPath(psl, pszPath) && SUCCEEDED(ppf->lpVtbl->Save(ppf, wsz, TRUE))) {
+			if (S_OK == psl->lpVtbl->SetPath(psl, pszPath) && SUCCEEDED(ppf->lpVtbl->Save(ppf, wsz, TRUE))) {
 				bSucceeded = TRUE;
 			}
 
@@ -1091,7 +1267,7 @@ void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, BOOL bSelect) {
 		LPITEMIDLIST pidlEntry = path ? ILCreateFromPath(path) : NULL;
 		if (pidlEntry) {
 			hr = SHOpenFolderAndSelectItems(pidl, 1, (LPCITEMIDLIST *)(&pidlEntry), 0);
-			ILFree(pidlEntry);
+			CoTaskMemFree((LPVOID)pidlEntry);
 		} else if (!bSelect) {
 #if 0
 			// Use an invalid item to open the folder?
@@ -1115,12 +1291,13 @@ void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, BOOL bSelect) {
 			// open parent folder and select the folder
 			hr = SHOpenFolderAndSelectItems(pidl, 0, NULL, 0);
 		}
-		ILFree(pidl);
+		CoTaskMemFree((LPVOID)pidl);
 		if (hr == S_OK) {
 			return;
 		}
 	}
 
+#if 0
 	if (path == NULL) {
 		path = wchDirectory;
 	}
@@ -1133,6 +1310,7 @@ void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, BOOL bSelect) {
 	lstrcat(szParameters, L"\"");
 	ShellExecute(hwnd, L"open", L"explorer", szParameters, NULL, SW_SHOW);
 	NP2HeapFree(szParameters);
+#endif
 }
 
 //=============================================================================
@@ -1218,7 +1396,7 @@ LPWSTR GetFilenameStr(LPWSTR lpFile) {
 void PrepareFilterStr(LPWSTR lpFilter) {
 	LPWSTR psz = StrEnd(lpFilter);
 	while (psz != lpFilter) {
-		if (*(psz = CharPrev(lpFilter, psz)) == L'\n') {
+		if (*(psz = CharPrev(lpFilter, psz)) == L'|') {
 			*psz = L'\0';
 		}
 	}
@@ -1230,8 +1408,8 @@ void PrepareFilterStr(LPWSTR lpFilter) {
 //
 void StrTab2Space(LPWSTR lpsz) {
 	WCHAR *c = lpsz;
-	while ((c = StrChr(lpsz, L'\t')) != NULL) {
-		*c = L' ';
+	while ((c = StrChr(c, L'\t')) != NULL) {
+		*c++ = L' ';
 	}
 }
 
@@ -1245,7 +1423,7 @@ void PathFixBackslashes(LPWSTR lpsz) {
 		if (*CharPrev(lpsz, c) == L':' && *CharNext(c) == L'/') {
 			c += 2;
 		} else {
-			*c = L'\\';
+			*c++ = L'\\';
 		}
 	}
 }
@@ -1352,7 +1530,12 @@ void FormatNumberStr(LPWSTR lpNumberStr) {
 void GetDefaultFavoritesDir(LPWSTR lpFavDir, int cchFavDir) {
 	LPITEMIDLIST pidl;
 
-	if (NOERROR == SHGetSpecialFolderLocation(NULL, CSIDL_PERSONAL, &pidl)) {
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+	if (S_OK == SHGetFolderLocation(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_DEFAULT, &pidl))
+#else
+	if (S_OK == SHGetKnownFolderIDList(&FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &pidl))
+#endif
+	{
 		SHGetPathFromIDList(pidl, lpFavDir);
 		CoTaskMemFree((LPVOID)pidl);
 	} else {
@@ -1367,7 +1550,12 @@ void GetDefaultFavoritesDir(LPWSTR lpFavDir, int cchFavDir) {
 void GetDefaultOpenWithDir(LPWSTR lpOpenWithDir, int cchOpenWithDir) {
 	LPITEMIDLIST pidl;
 
-	if (NOERROR == SHGetSpecialFolderLocation(NULL, CSIDL_DESKTOPDIRECTORY, &pidl)) {
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+	if (S_OK == SHGetFolderLocation(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_DEFAULT, &pidl))
+#else
+	if (S_OK == SHGetKnownFolderIDList(&FOLDERID_Desktop, KF_FLAG_DEFAULT, NULL, &pidl))
+#endif
+	{
 		SHGetPathFromIDList(pidl, lpOpenWithDir);
 		CoTaskMemFree((LPVOID)pidl);
 	} else {
@@ -1405,7 +1593,7 @@ HDROP CreateDropHandle(LPCWSTR lpFileName) {
 //  Execute a DDE command (Msg, App, Topic)
 //
 //
-HDDEDATA CALLBACK DdeCallback(UINT uType, UINT uFmt, HCONV hconv, HSZ hsz1, HSZ hsz2, HDDEDATA hdata, ULONG_PTR  dwData1, ULONG_PTR  dwData2) {
+HDDEDATA CALLBACK DdeCallback(UINT uType, UINT uFmt, HCONV hconv, HSZ hsz1, HSZ hsz2, HDDEDATA hdata, ULONG_PTR dwData1, ULONG_PTR dwData2) {
 	UNREFERENCED_PARAMETER(uFmt);
 	UNREFERENCED_PARAMETER(hconv);
 	UNREFERENCED_PARAMETER(hsz1);
@@ -1630,7 +1818,7 @@ BOOL MRU_Destroy(LPMRULIST pmru) {
 }
 
 int MRU_Compare(LPCMRULIST pmru, LPCWSTR psz1, LPCWSTR psz2) {
-	return (pmru->iFlags & MRU_NOCASE) ? StrCmpI(psz1, psz2) : StrCmp(psz1, psz2);
+	return (pmru->iFlags & MRUFlags_CaseInsensitive) ? StrCmpI(psz1, psz2) : StrCmp(psz1, psz2);
 }
 
 BOOL MRU_Add(LPMRULIST pmru, LPCWSTR pszNew) {
@@ -1711,13 +1899,6 @@ BOOL MRU_Load(LPMRULIST pmru) {
 		const IniKeyValueNode *node = &pIniSection->nodeList[i];
 		LPCWSTR tchItem = node->value;
 		if (StrNotEmpty(tchItem)) {
-			/*if (pmru->iFlags & MRU_UTF8) {
-				WCHAR wchItem[1024];
-				int cbw = MultiByteToWideChar(CP_UTF7, 0, tchItem, -1, wchItem, COUNTOF(wchItem));
-				WideCharToMultiByte(CP_UTF8, 0, wchItem, cbw, tchItem, COUNTOF(tchItem), NULL, NULL);
-				pmru->pszItems[n++] = StrDup(tchItem);
-			}
-			else*/
 			pmru->pszItems[n++] = StrDup(tchItem);
 		}
 	}
@@ -1745,14 +1926,6 @@ BOOL MRU_Save(LPCMRULIST pmru) {
 	for (int i = 0; i < pmru->iSize; i++) {
 		if (StrNotEmpty(pmru->pszItems[i])) {
 			wsprintf(tchName, L"%02i", i + 1);
-			/*if (pmru->iFlags & MRU_UTF8) {
-				WCHAR  tchItem[1024];
-				WCHAR wchItem[1024];
-				int cbw = MultiByteToWideChar(CP_UTF8, 0, pmru->pszItems[i], -1, wchItem, COUNTOF(wchItem));
-				WideCharToMultiByte(CP_UTF7, 0, wchItem, cbw, tchItem, COUNTOF(tchItem), NULL, NULL);
-				IniSectionSetString(pIniSection, tchName, tchItem);
-			}
-			else*/
 			IniSectionSetString(pIniSection, tchName, pmru->pszItems[i]);
 		}
 	}
@@ -1764,18 +1937,18 @@ BOOL MRU_Save(LPCMRULIST pmru) {
 
 void MRU_LoadToCombobox(HWND hwnd, LPCWSTR pszKey) {
 	WCHAR tch[MAX_PATH];
-	LPMRULIST pmru = MRU_Create(pszKey, MRU_NOCASE, MRU_MAX_COPY_MOVE_HISTORY);
+	LPMRULIST pmru = MRU_Create(pszKey, MRUFlags_CaseInsensitive, MRU_MAX_COPY_MOVE_HISTORY);
 	MRU_Load(pmru);
 	for (int i = 0; i < MRU_GetCount(pmru); i++) {
 		MRU_Enum(pmru, i, tch, COUNTOF(tch));
-		SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)tch);
+		ComboBox_AddString(hwnd, tch);
 	}
 	MRU_Destroy(pmru);
 }
 
 void MRU_AddOneItem(LPCWSTR pszKey, LPCWSTR pszNewItem) {
 	if (StrNotEmpty(pszNewItem)) {
-		LPMRULIST pmru = MRU_Create(pszKey, MRU_NOCASE, MRU_MAX_COPY_MOVE_HISTORY);
+		LPMRULIST pmru = MRU_Create(pszKey, MRUFlags_CaseInsensitive, MRU_MAX_COPY_MOVE_HISTORY);
 		MRU_Load(pmru);
 		MRU_Add(pmru, pszNewItem);
 		MRU_Save(pmru);
@@ -1784,12 +1957,12 @@ void MRU_AddOneItem(LPCWSTR pszKey, LPCWSTR pszNewItem) {
 }
 
 void MRU_ClearCombobox(HWND hwnd, LPCWSTR pszKey) {
-	LPMRULIST pmru = MRU_Create(pszKey, MRU_NOCASE, MRU_MAX_COPY_MOVE_HISTORY);
+	LPMRULIST pmru = MRU_Create(pszKey, MRUFlags_CaseInsensitive, MRU_MAX_COPY_MOVE_HISTORY);
 	MRU_Load(pmru);
 	MRU_Empty(pmru);
 	MRU_Save(pmru);
 	MRU_Destroy(pmru);
-	SendMessage(hwnd, CB_RESETCONTENT, 0, 0);
+	ComboBox_ResetContent(hwnd);
 }
 
 /*
@@ -1798,11 +1971,14 @@ void MRU_ClearCombobox(HWND hwnd, LPCWSTR pszKey) {
   Based on code of MFC helper class CDialogTemplate
 */
 BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
-	BOOL bSucceed = FALSE;
+#if NP2_ENABLE_APP_LOCALIZATION_DLL && NP2_ENABLE_TEST_LOCALIZATION_LAYOUT
+	extern LANGID uiLanguage;
+	GetLocaleDefaultUIFont(uiLanguage, lpFaceName, wSize);
+	return TRUE;
+#else
 
-	HDC hDC = GetDC(NULL);
-	const int iLogPixelsY = GetDeviceCaps(hDC, LOGPIXELSY);
-	ReleaseDC(NULL, hDC);
+	BOOL bSucceed = FALSE;
+	const UINT iLogPixelsY = g_uSystemDPI;
 
 	if (IsAppThemed()) {
 		HTHEME hTheme = OpenThemeData(NULL, L"WINDOWSTYLE;WINDOW");
@@ -1827,7 +2003,7 @@ BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
 		NONCLIENTMETRICS ncm;
 		ZeroMemory(&ncm, sizeof(ncm));
 		ncm.cbSize = sizeof(NONCLIENTMETRICS);
-#if (WINVER >= _WIN32_WINNT_VISTA)
+#if (_WIN32_WINNT >= _WIN32_WINNT_VISTA)
 		if (!IsVistaAndAbove()) {
 			ncm.cbSize -= sizeof(ncm.iPaddedBorderWidth);
 		}
@@ -1850,6 +2026,7 @@ BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
 		lstrcpy(lpFaceName, L"Tahoma");
 	}
 	return bSucceed;
+#endif
 }
 
 static inline BOOL DialogTemplate_IsDialogEx(const DLGTEMPLATE *pTemplate) {
@@ -1874,13 +2051,13 @@ static inline BYTE *DialogTemplate_GetFontSizeField(const DLGTEMPLATE *pTemplate
 		pw = (WORD *)(pTemplate + 1);
 	}
 
-	if (*pw == (WORD) - 1) {
+	if (*pw == (WORD)(-1)) {
 		pw += 2;
 	} else {
 		while (*pw++){}
 	}
 
-	if (*pw == (WORD) - 1) {
+	if (*pw == (WORD)(-1)) {
 		pw += 2;
 	} else {
 		while (*pw++){}
@@ -2140,5 +2317,3 @@ void RestoreWndFromTray(HWND hwnd) {
 	// call to DrawAnimatedRects, or the taskbar will not refresh itself
 	// properly until DAR finished
 }
-
-///   End of Helpers.c

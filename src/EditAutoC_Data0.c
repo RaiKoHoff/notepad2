@@ -13,7 +13,7 @@ static NP2_KEYWORDS kwPHPDoc = {
 "abstract access api author category copyright deprecated example filesource final "
 "global id ignore inheritdoc internal license link method name package param "
 "property property-read property-write return see since source static staticvar "
-"subpackage toc todo throws tutorial type uses var version  "
+"subpackage toc todo throws tutorial type uses var version "
 , // pesudo type
 "resource mixed number callback void scalar "
 ,
@@ -76,24 +76,15 @@ static NP2_KEYWORDS kwXmlStylesheet = {
 , // attribute
 "extension-element-prefixes exclude-result-prefixes xpath-default-namespace default-validation default-collation "
 "input-type-annotations use-attribute-sets use-character-maps character string decimal-separator grouping-separator "
-"infinity minus-sign NaN percent per-mille zero-digit digit pattern-separator href namespace schema-location match  "
+"infinity minus-sign NaN percent per-mille zero-digit digit pattern-separator href namespace schema-location match "
 "collation stylesheet-prefix result-prefix method byte-order-mark cdata-section-elements doctype-public doctype-system "
 "escape-uri-attributes include-content-type indent media-type normalization-form omit-xml-declaration undeclare-prefixes "
 "select as required tunnel elements priority regex flags mode separator test copy-namespaces inherit-namespaces "
-"group-by group-adjacent group-starting-with group-ending-with override terminate level count from format  letter-value "
-"ordinal  grouping-size output-version order stable case-order data-type disable-output-escaping "
+"group-by group-adjacent group-starting-with group-ending-with override terminate level count from format letter-value "
+"ordinal grouping-size output-version order stable case-order data-type disable-output-escaping "
 , // value
 "preserve strip unspecified default omit lax single multiple any alphabetic traditional ascending descending "
 "upper-first lower-first text number xml html xhtml NFC NFD NFKC NFKD fully-normalized none "
-, NULL
-};
-
-// XML DTD SGML
-static NP2_KEYWORDS kwXmlDTD = {
-"DOCTYPE ENTITY ELEMENT ATTLIST ",
-"CDATA PCDATA ID IDREF IDREFS NMTOKEN NMTOKENS ENTITY ENTITIES NOTATION EMPTY SYSTEM PUBLIC ANY "
-,
-"REQUIRED IMPLIED FIXED "
 , NULL
 };
 
@@ -105,7 +96,7 @@ static NP2_KEYWORDS kwAntBuild = {
 , // attribute
 "default basedir " "depends if unless " "id dir includes includesfile excludes excludesfile "
 "value location refid resource file url environment classpath classpathref prefix relative "
-"message " "tofile todir overwrite force includeEmptyDirs " "srcdir destdir   "
+"message " "tofile todir overwrite force includeEmptyDirs " "srcdir destdir "
 , // value
 NULL, NULL
 };
@@ -318,17 +309,17 @@ static NP2_KEYWORDS kwTomcat = {
 static NP2_KEYWORDS kwJavaWebConfig = {
 "web-app distributable context-param filter filter-mapping filter-name filter-class listener listener-class "
 "servlet servlet-mapping servlet-name servlet-class session-config session-timeout mime-mapping mime-type "
-" welcome-file-list welcome-file error-page error-code form-error-page jsp-config jsp-file jsp-property-group "
+"welcome-file-list welcome-file error-page error-code form-error-page jsp-config jsp-file jsp-property-group "
 "secure security-constraint security-role security-role-ref login-config login-timeout form-login-config form-login-page "
 "locale locale-encoding-mapping-list locale-encoding-mapping encoding page-encoding description location include-prelude include-coda "
 "message-destination "
-" module-name absolute-ordering ordering   exception-type  "
-"  async-supported init-param url-pattern  dispatcher   "
-"auth-method realm-name  extension display-name web-resource-collection auth-constraint user-data-constraint "
-"  load-on-startup enabled run-as  multipart-config  cookie-config tracking-mode "
-"domain path comment http-only  max-age transport-guarantee web-resource-name http-method http-method-omission  "
-"   others after before max-file-size max-request-size file-size-threshold "
-"taglib  el-ignored  scripting-invalid is-xml  "
+"module-name absolute-ordering ordering exception-type "
+"async-supported init-param url-pattern dispatcher "
+"auth-method realm-name extension display-name web-resource-collection auth-constraint user-data-constraint "
+"load-on-startup enabled run-as multipart-config cookie-config tracking-mode "
+"domain path comment http-only max-age transport-guarantee web-resource-name http-method http-method-omission "
+"others after before max-file-size max-request-size file-size-threshold "
+"taglib el-ignored scripting-invalid is-xml "
 "deferred-syntax-allowed-as-literal trim-directive-whitespaces default-content-type buffer error-on-undeclared-namespace "
 "taglib-uri taglib-location service-ref-name service-interface service-ref-type wsdl-file jaxrpc-mapping-file service-qname "
 "port-component-ref handler handler-chains service-endpoint-interface enable-mtom mtom-threshold addressing respect-binding "
@@ -336,15 +327,15 @@ static NP2_KEYWORDS kwJavaWebConfig = {
 "handler-class soap-header soap-role port-name service-ref "
 "icon env-entry ejb-ref ejb-local-ref resource-ref resource-env-ref message-destination-ref persistence-context-ref persistence-unit-ref "
 "post-construct pre-destroy data-source lookup-name mapped-name injection-target class-name server-name port-number database-name url "
-"user password property  transactional isolation-level initial-pool-size max-pool-size min-pool-size max-idle-time "
+"user password property transactional isolation-level initial-pool-size max-pool-size min-pool-size max-idle-time "
 "max-statements ejb-ref-name ejb-ref-type local-home local ejb-link ejb-ref-name ejb-ref-type home remote ejb-link env-entry-name "
 "env-entry-type env-entry-value small-icon large-icon injection-target-class injection-target-name lifecycle-callback-class "
-"lifecycle-callback-method  param-name param-value persistence-context-ref-name persistence-unit-name "
+"lifecycle-callback-method param-name param-value persistence-context-ref-name persistence-unit-name "
 "persistence-context-type persistence-property persistence-unit-ref-name resource-env-ref-name resource-env-ref-type res-ref-name "
 "res-type res-auth res-sharing-scope role-name role-link message-destination-name mapped-name lookup-name message-destination-ref-name "
 "message-destination-type message-destination-usage message-destination-link "
 ,
-" metadata-complete  "
+" metadata-complete "
 , NULL
 };
 
@@ -433,7 +424,7 @@ static NP2_KEYWORDS kwPList = {
 // Android Manifest
 static NP2_KEYWORDS kwAndroidManifest = {
 "manifest application activity activity-alias service provider receiver uses-library "
-"intent-filter category action data meta-data grant-uri-permission path-permission  "
+"intent-filter category action data meta-data grant-uri-permission path-permission "
 "compatible-screens screen instrumentation permission permission-group permission-tree "
 "supports-gl-texture supports-screens uses-configuration uses-feature uses-permission uses-sdk "
 , // attribute
@@ -493,79 +484,76 @@ void Style_UpdateLexerKeywords(LPCEDITLEXER pLexNew) {
 		return;
 	}
 	switch (np2LexLangIndex) {
-	case IDM_LANG_XSD:
+	case IDM_LEXER_XSD:
 		np2_LexKeyword = &kwXmlSchema;
 		return;
-	case IDM_LANG_XSLT:
+	case IDM_LEXER_XSLT:
 		np2_LexKeyword = &kwXmlStylesheet;
 		return;
-	case IDM_LANG_DTD:
-		np2_LexKeyword = &kwXmlDTD;
-		return;
 
-	case IDM_LANG_ANT_BUILD:
+	case IDM_LEXER_ANT_BUILD:
 		np2_LexKeyword = &kwAntBuild;
 		return;
-	case IDM_LANG_MAVEN_POM:
+	case IDM_LEXER_MAVEN_POM:
 		np2_LexKeyword = &kwMavenPOM;
 		return;
-	case IDM_LANG_MAVEN_SETTINGS:
+	case IDM_LEXER_MAVEN_SETTINGS:
 		np2_LexKeyword = &kwMavenSettings;
 		return;
-	case IDM_LANG_IVY_MODULE:
+	case IDM_LEXER_IVY_MODULE:
 		np2_LexKeyword = &kwIvyModule;
 		return;
-	case IDM_LANG_IVY_SETTINGS:
+	case IDM_LEXER_IVY_SETTINGS:
 		np2_LexKeyword = &kwIvySettings;
 		return;
-	case IDM_LANG_PMD_RULESET:
+	case IDM_LEXER_PMD_RULESET:
 		np2_LexKeyword = &kwPMDRuleset;
 		return;
-	case IDM_LANG_CHECKSTYLE:
+	case IDM_LEXER_CHECKSTYLE:
 		np2_LexKeyword = &kwCheckstyle;
 		return;
 
-	case IDM_LANG_APACHE:
+	case IDM_LEXER_APACHE:
 		np2_LexKeyword = &kwApache;
 		return;
-	case IDM_LANG_TOMCAT:
+	case IDM_LEXER_TOMCAT:
 		np2_LexKeyword = &kwTomcat;
 		return;
-	case IDM_LANG_WEB_JAVA:
+	case IDM_LEXER_WEB_JAVA:
 		np2_LexKeyword = &kwJavaWebConfig;
 		return;
-	case IDM_LANG_STRUTS:
+	case IDM_LEXER_STRUTS:
 		np2_LexKeyword = &kwStruts;
 		return;
-	case IDM_LANG_HIB_CFG:
+	case IDM_LEXER_HIB_CFG:
 		np2_LexKeyword = &kwHibConfig;
 		return;
-	case IDM_LANG_HIB_MAP:
+	case IDM_LEXER_HIB_MAP:
 		np2_LexKeyword = &kwHibMapping;
 		return;
-	case IDM_LANG_SPRING_BEANS:
+	case IDM_LEXER_SPRING_BEANS:
 		np2_LexKeyword = &kwSpringBeans;
 		return;
-	case IDM_LANG_JBOSS:
+	case IDM_LEXER_JBOSS:
 		return;
 
-	//case IDM_LANG_WEB_NET:
+	//case IDM_LEXER_WEB_NET:
 	//	return;
-	//case IDM_LANG_RESX:
+	//case IDM_LEXER_RESX:
 	//	np2_LexKeyword = &kwXmlSchema;
 	//	return;
-	//case IDM_LANG_XAML:
+	//case IDM_LEXER_XAML:
 	//	return;
 
-	case IDM_LANG_PROPERTY_LIST:
+	case IDM_LEXER_PROPERTY_LIST:
 		np2_LexKeyword = &kwPList;
 		return;
-	case IDM_LANG_ANDROID_MANIFEST:
+	case IDM_LEXER_ANDROID_MANIFEST:
 		np2_LexKeyword = &kwAndroidManifest;
 		return;
-	case IDM_LANG_ANDROID_LAYOUT:
+	case IDM_LEXER_ANDROID_LAYOUT:
 		return;
-		//case IDM_LANG_SVG:
+		//case IDM_LEXER_SVG:
 		//	return;
 	}
 }

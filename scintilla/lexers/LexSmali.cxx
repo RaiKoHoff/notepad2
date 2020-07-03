@@ -1,7 +1,9 @@
-// Lexer for javap, Jasmin, Android Dalvik Smali.
+// This file is part of Notepad2.
+// See License.txt for details about distribution and modification.
+//! Lexer for javap, Jasmin, Android Dalvik Smali.
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include "ILexer.h"
@@ -100,7 +102,7 @@ static void ColouriseSmaliDoc(Sci_PositionU startPos, Sci_Position length, int i
 			state = SCE_SMALI_DEFAULT;
 			break;
 		case SCE_SMALI_NUMBER:
-			if (!(iswordchar(ch) || ((ch == '+' || ch == '-') && IsADigit(chNext)))) {
+			if (!IsDecimalNumber(chPrev, ch, chNext)) {
 				styler.ColourTo(i - 1, state);
 				state = SCE_SMALI_DEFAULT;
 			}
@@ -122,7 +124,7 @@ static void ColouriseSmaliDoc(Sci_PositionU startPos, Sci_Position length, int i
 			break;
 		case SCE_SMALI_DIRECTIVE:
 			if (!IsSmaliWordChar(ch)) {
-				buf[wordLen] = 0;
+				buf[wordLen] = '\0';
 				if (buf[0] == '.') {
 					if (strcmp(buf + 1,"end") == 0 || strcmp(buf + 1,"restart") == 0 || strcmp(buf + 1,"limit") == 0) {
 						nextWordType = kWordType_Directive;
@@ -141,7 +143,6 @@ static void ColouriseSmaliDoc(Sci_PositionU startPos, Sci_Position length, int i
 				}
 				styler.ColourTo(i - 1, state);
 				state = SCE_L_DEFAULT;
-				wordLen = 0;
 			} else if (wordLen < MAX_WORD_LENGTH) {
 				buf[wordLen++] = static_cast<char>(ch);
 			}
@@ -171,7 +172,7 @@ static void ColouriseSmaliDoc(Sci_PositionU startPos, Sci_Position length, int i
 			break;
 		case SCE_SMALI_IDENTIFIER:
 			if (!IsSmaliWordChar(ch)) {
-				buf[wordLen] = 0;
+				buf[wordLen] = '\0';
 				if (nextWordType == kWordType_Directive) {
 					nextWordType = 0;
 					styler.ColourTo(i - 1, SCE_SMALI_DIRECTIVE);
@@ -208,7 +209,6 @@ static void ColouriseSmaliDoc(Sci_PositionU startPos, Sci_Position length, int i
 					}
 					state = SCE_SMALI_DEFAULT;
 				}
-				wordLen = 0;
 			} else if (wordLen < MAX_WORD_LENGTH) {
 				buf[wordLen++] = static_cast<char>(ch);
 			}
@@ -228,7 +228,8 @@ static void ColouriseSmaliDoc(Sci_PositionU startPos, Sci_Position length, int i
 			} else if (ch == ':' || ch == '(' || IsASpace(ch)) {
 				styler.ColourTo(i - 1, (ch == ':' ? SCE_SMALI_FIELD : SCE_SMALI_METHOD));
 				state = SCE_SMALI_DEFAULT;
-			} break;
+			}
+			break;
 		}
 
 		if (state == SCE_SMALI_DEFAULT) {
@@ -242,7 +243,7 @@ static void ColouriseSmaliDoc(Sci_PositionU startPos, Sci_Position length, int i
 			} else if (ch == '/' && chNext == '/') { // javap
 				styler.ColourTo(i - 1, state);
 				state = SCE_SMALI_COMMENTLINE;
-			} else if (ch == ';' && !(chPrev == '>' || iswordchar(chPrev)) && !(chNext == '\r' || chNext == '\n')) { // jasmin
+			} else if (ch == ';' && !(chPrev == '>' || iswordchar(chPrev)) && !IsEOLChar(chNext)) { // jasmin
 				styler.ColourTo(i - 1, state);
 				state = SCE_SMALI_COMMENTLINE;
 			} else if (ch == '\"') {
@@ -257,7 +258,8 @@ static void ColouriseSmaliDoc(Sci_PositionU startPos, Sci_Position length, int i
 			} else if (ch == '.' && visibleChars == 0 && IsAlpha(chNext)) {
 				styler.ColourTo(i - 1, state);
 				state = SCE_SMALI_DIRECTIVE;
-				buf[wordLen++] = static_cast<char>(ch);
+				buf[0] = static_cast<char>(ch);
+				wordLen = 1;
 			} else if ((ch == 'v' || ch == 'p') && IsADigit(chNext)) {
 				styler.ColourTo(i - 1, state);
 				state = SCE_SMALI_REGISTER;
@@ -279,7 +281,8 @@ static void ColouriseSmaliDoc(Sci_PositionU startPos, Sci_Position length, int i
 					styler.ColourTo(i, SCE_SMALI_OPERATOR);
 				}
 				state = SCE_SMALI_IDENTIFIER;
-				buf[wordLen++] = static_cast<char>(ch);
+				buf[0] = static_cast<char>(ch);
+				wordLen = 1;
 			} else if (IsSmaliOp(ch) || (ch == '[' || ch == ']')) {
 				styler.ColourTo(i - 1, state);
 				state = SCE_SMALI_OPERATOR;
@@ -331,8 +334,6 @@ static bool IsAnnotationLine(Sci_Position line, Accessor &styler) noexcept {
 }
 
 static void FoldSmaliDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
 	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
 	const bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;
 

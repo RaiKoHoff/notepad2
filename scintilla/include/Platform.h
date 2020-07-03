@@ -5,9 +5,7 @@
  **/
 // Copyright 1998-2009 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef PLATFORM_H
-#define PLATFORM_H
+#pragma once
 
 // PLAT_GTK = GTK on Linux or Win32
 // PLAT_GTK_WIN32 is defined additionally when running PLAT_GTK under Win32
@@ -91,6 +89,24 @@
 #endif
 
 namespace Scintilla {
+
+// official Scintilla use dynamic_cast, which requires RTTI.
+// When RTTI is enabled, MSVC defines _CPPRTTI,
+// GCC/Clang defines __cpp_rtti (similar to C++20 feature testing macros).
+#if defined(NDEBUG) && !((defined(_MSC_VER) && defined(_CPPRTTI)) || (!defined(_MSC_VER) && defined(__cpp_rtti)))
+#define USE_RTTI	0
+#else
+#define USE_RTTI	1
+#endif
+
+template<typename DerivedPointer, class Base>
+inline DerivedPointer down_cast(Base *ptr) noexcept {
+#if USE_RTTI
+	return dynamic_cast<DerivedPointer>(ptr);
+#else
+	return static_cast<DerivedPointer>(ptr);
+#endif
+}
 
 typedef float XYPOSITION;
 typedef double XYACCUMULATOR;
@@ -363,15 +379,15 @@ public:
 
 class IScreenLine {
 public:
-	virtual std::string_view Text() const = 0;
+	virtual std::string_view Text() const noexcept = 0;
 	virtual size_t Length() const noexcept = 0;
 	virtual size_t RepresentationCount() const = 0;
 	virtual XYPOSITION Width() const noexcept = 0;
 	virtual XYPOSITION Height() const noexcept = 0;
 	virtual XYPOSITION TabWidth() const noexcept = 0;
 	virtual XYPOSITION TabWidthMinimumPixels() const noexcept = 0;
-	virtual const Font *FontOfPosition(size_t position) const = 0;
-	virtual XYPOSITION RepresentationWidth(size_t position) const = 0;
+	virtual const Font *FontOfPosition(size_t position) const noexcept = 0;
+	virtual XYPOSITION RepresentationWidth(size_t position) const noexcept = 0;
 	virtual XYPOSITION TabPositionAfter(XYPOSITION xPosition) const noexcept = 0;
 };
 
@@ -402,7 +418,7 @@ public:
 	static Surface *Allocate(int technology);
 
 	virtual void Init(WindowID wid) noexcept = 0;
-	virtual void Init(SurfaceID sid, WindowID wid) noexcept = 0;
+	virtual void Init(SurfaceID sid, WindowID wid, bool printing = false) noexcept = 0;
 	virtual void InitPixMap(int width, int height, Surface *surface_, WindowID wid) noexcept = 0;
 
 	virtual void Release() noexcept = 0;
@@ -455,6 +471,7 @@ public:
 class Window {
 protected:
 	WindowID wid;
+
 public:
 	Window() noexcept : wid(nullptr), cursorLast(cursorInvalid) {}
 	Window(const Window &source) = delete;
@@ -487,6 +504,7 @@ public:
 	};
 	void SetCursor(Cursor curs) noexcept;
 	PRectangle SCICALL GetMonitorRect(Point pt) const noexcept;
+
 private:
 	Cursor cursorLast;
 };
@@ -529,7 +547,7 @@ public:
 	virtual void Select(int n) = 0;
 	virtual int GetSelection() const noexcept = 0;
 	virtual int Find(const char *prefix) const noexcept = 0;
-	virtual void GetValue(int n, char *value, int len) const = 0;
+	virtual void GetValue(int n, char *value, int len) const noexcept = 0;
 	virtual void RegisterImage(int type, const char *xpm_data) = 0;
 	virtual void RegisterRGBAImage(int type, int width, int height, const unsigned char *pixelsImage) = 0;
 	virtual void ClearRegisteredImages() noexcept = 0;
@@ -553,13 +571,13 @@ public:
 };
 
 #if defined(__clang__)
-# if __has_feature(attribute_analyzer_noreturn)
-#  define CLANG_ANALYZER_NORETURN __attribute__((analyzer_noreturn))
-# else
-#  define CLANG_ANALYZER_NORETURN
-# endif
+	#if __has_feature(attribute_analyzer_noreturn)
+		#define CLANG_ANALYZER_NORETURN __attribute__((analyzer_noreturn))
+	#else
+		#define CLANG_ANALYZER_NORETURN
+	#endif
 #else
-# define CLANG_ANALYZER_NORETURN
+	#define CLANG_ANALYZER_NORETURN
 #endif
 
 /**
@@ -598,5 +616,3 @@ public:
 #endif
 
 }
-
-#endif

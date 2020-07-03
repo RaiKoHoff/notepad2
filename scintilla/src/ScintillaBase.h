@@ -4,17 +4,13 @@
  **/
 // Copyright 1998-2002 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef SCINTILLABASE_H
-#define SCINTILLABASE_H
+#pragma once
 
 namespace Scintilla {
 
 #define SCI_EnablePopupMenu	0
 
-#ifdef SCI_LEXER
 class LexState;
-#endif
 
 /**
  */
@@ -52,9 +48,7 @@ protected:
 	int maxListWidth;		/// Maximum width of list, in average character widths
 	int multiAutoCMode; /// Mode for autocompleting when multiple selections are present
 
-#ifdef SCI_LEXER
 	LexState *DocumentLexState();
-#endif
 
 	ScintillaBase() noexcept;
 	// ~ScintillaBase() in public section
@@ -108,5 +102,3 @@ public:
 };
 
 }
-
-#endif

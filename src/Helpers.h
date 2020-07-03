@@ -17,9 +17,8 @@
 *
 *
 ******************************************************************************/
+#pragma once
 
-#ifndef NOTEPAD2_HELPERS_H_
-#define NOTEPAD2_HELPERS_H_
 #include <stdint.h>
 #include "compiler.h"
 
@@ -108,18 +107,16 @@ NP2_inline BOOL StrCaseEqual(LPCWSTR s1, LPCWSTR s2) {
 	return _wcsicmp(s1, s2) == 0;
 }
 
-NP2_inline BOOL StrNEqual(LPCWSTR s1, LPCWSTR s2, int cch) {
-	return wcsncmp(s1, s2, cch) == 0;
-}
+#define StrHasPrefix(s, prefix)				(wcsncmp((s), (prefix), CSTRLEN(prefix)) == 0)
+#define StrHasPrefixEx(s, prefix, len)		(wcsncmp((s), (prefix), (len)) == 0)
+#define StrHasPrefixCase(s, prefix)			(_wcsnicmp((s), (prefix), CSTRLEN(prefix)) == 0)
+#define StrHasPrefixCaseEx(s, prefix, len)	(_wcsnicmp((s), (prefix), (len)) == 0)
 
-NP2_inline BOOL StrNCaseEqual(LPCWSTR s1, LPCWSTR s2, int cch) {
-	return _wcsnicmp(s1, s2, cch) == 0;
-}
-
-// str MUST NOT be NULL, can be empty
 NP2_inline BOOL StrToFloat(LPCWSTR str, float *value) {
 	LPWSTR end;
 #if defined(__USE_MINGW_STRTOX)
+	// Fix GCC warning when defined __USE_MINGW_ANSI_STDIO as 1:
+	// 'wcstof' is static but used in inline function 'StrToFloat' which is not static.
 	*value = __mingw_wcstof(str, &end);
 #else
 	*value = wcstof(str, &end);
@@ -139,7 +136,6 @@ NP2_inline BOOL CRTStrToInt64(LPCWSTR str, int64_t *value) {
 	return str != end;
 }
 
-// str MUST NOT be NULL, can be empty
 NP2_inline BOOL HexStrToInt(LPCWSTR str, int *value) {
 	LPWSTR end;
 	*value = (int)wcstol(str, &end, 16);
@@ -190,11 +186,9 @@ __attribute__((format(printf, 1, 2)))
 
 extern HINSTANCE g_hInstance;
 extern HANDLE g_hDefaultHeap;
-#if _WIN32_WINNT < _WIN32_WINNT_WIN10
+#if _WIN32_WINNT < _WIN32_WINNT_WIN7
 extern DWORD g_uWinVer;
 #endif
-extern UINT g_uCurrentDPI;
-extern UINT g_uDefaultDPI;
 extern WCHAR szIniFile[MAX_PATH];
 
 // Operating System Version
@@ -227,40 +221,95 @@ extern WCHAR szIniFile[MAX_PATH];
 #endif
 
 #ifndef LOAD_LIBRARY_SEARCH_SYSTEM32
-#define LOAD_LIBRARY_SEARCH_SYSTEM32 0x00000800
+#define LOAD_LIBRARY_SEARCH_SYSTEM32	0x00000800
+#endif
+#ifndef LOAD_LIBRARY_AS_IMAGE_RESOURCE
+#define LOAD_LIBRARY_AS_IMAGE_RESOURCE	0x00000020
+#endif
+
+#if defined(__GNUC__) && __GNUC__ >= 8
+// GCC statement expression
+#define DLLFunction(funcSig, hModule, funcName) __extension__({			\
+	_Pragma("GCC diagnostic push")										\
+	_Pragma("GCC diagnostic ignored \"-Wcast-function-type\"")			\
+	funcSig PP_CONCAT(temp, __LINE__) = (funcSig)GetProcAddress((hModule), (funcName));\
+	_Pragma("GCC diagnostic pop")										\
+	PP_CONCAT(temp, __LINE__);											\
+	})
+#define DLLFunctionEx(funcSig, dllName, funcName) __extension__({		\
+	_Pragma("GCC diagnostic push")										\
+	_Pragma("GCC diagnostic ignored \"-Wcast-function-type\"")			\
+	funcSig PP_CONCAT(temp, __LINE__) = (funcSig)GetProcAddress(GetModuleHandleW(dllName), (funcName));\
+	_Pragma("GCC diagnostic pop")										\
+	PP_CONCAT(temp, __LINE__);											\
+	})
+#else
+#define DLLFunction(funcSig, hModule, funcName)		(funcSig)GetProcAddress((hModule), (funcName))
+#define DLLFunctionEx(funcSig, dllName, funcName)	(funcSig)GetProcAddress(GetModuleHandleW(dllName), (funcName))
 #endif
 
 #ifndef SEE_MASK_NOZONECHECKS
 #define SEE_MASK_NOZONECHECKS		0x00800000		// NTDDI_VERSION >= NTDDI_WINXPSP1
 #endif
-
+#ifndef TVS_EX_DOUBLEBUFFER
+#define TVS_EX_DOUBLEBUFFER			0x0004			// NTDDI_VERSION >= NTDDI_VISTA
+#endif
 #ifndef LCMAP_TITLECASE
-#define LCMAP_TITLECASE				0x00000300		// WINVER >= _WIN32_WINNT_WIN7
+#define LCMAP_TITLECASE				0x00000300		// _WIN32_WINNT >= _WIN32_WINNT_WIN7
 #endif
 
 // High DPI Reference
 // https://docs.microsoft.com/en-us/windows/desktop/hidpi/high-dpi-reference
 #ifndef WM_DPICHANGED
-#define WM_DPICHANGED	0x02E0				// WINVER >= _WIN32_WINNT_WIN7
+#define WM_DPICHANGED	0x02E0				// _WIN32_WINNT >= _WIN32_WINNT_WIN7
 #endif
 #ifndef USER_DEFAULT_SCREEN_DPI
 #define USER_DEFAULT_SCREEN_DPI		96		// _WIN32_WINNT >= _WIN32_WINNT_VISTA
 #endif
-#ifndef DPI_ENUMS_DECLARED
-#define MDT_EFFECTIVE_DPI	0
+
+// use large icon when window DPI is greater than or equal to this value.
+#define NP2_LARGER_ICON_SIZE_DPI	192		// 200%
+
+// current DPI for main/editor window
+extern UINT g_uCurrentDPI;
+// system DPI, same for all monitor.
+extern UINT g_uSystemDPI;
+
+// since Windows 10, version 1607
+#if defined(__aarch64__) || defined(_ARM64_) || defined(_M_ARM64)
+// 1709 was the first version for Windows 10 on ARM64.
+#define NP2_TARGET_ARM64	1
+#define GetWindowDPI(hwnd)					GetDpiForWindow(hwnd)
+#define SystemMetricsForDpi(nIndex, dpi)	GetSystemMetricsForDpi((nIndex), (dpi))
+#define AdjustWindowRectForDpi(lpRect, dwStyle, dwExStyle, dpi) \
+		AdjustWindowRectExForDpi((lpRect), (dwStyle), FALSE, (dwExStyle), (dpi))
+
+#else
+#define NP2_TARGET_ARM64	0
+extern UINT GetWindowDPI(HWND hwnd) NP2_noexcept;
+extern int SystemMetricsForDpi(int nIndex, UINT dpi) NP2_noexcept;
+extern BOOL AdjustWindowRectForDpi(LPRECT lpRect, DWORD dwStyle, DWORD dwExStyle, UINT dpi) NP2_noexcept;
 #endif
 
-NP2_inline int RoundToCurrentDPI(int value)	{
-	return (g_uCurrentDPI == USER_DEFAULT_SCREEN_DPI) ? value : MulDiv(g_uCurrentDPI, value, USER_DEFAULT_SCREEN_DPI);
+NP2_inline DWORD GetIconIndexFlagsForDPI(UINT dpi) {
+	return (dpi >= NP2_LARGER_ICON_SIZE_DPI)
+			? (SHGFI_USEFILEATTRIBUTES | SHGFI_LARGEICON | SHGFI_SYSICONINDEX)
+			: (SHGFI_USEFILEATTRIBUTES | SHGFI_SMALLICON | SHGFI_SYSICONINDEX);
 }
 
-NP2_inline int DefaultToCurrentDPI(int value) {
-	return (g_uCurrentDPI == g_uDefaultDPI) ? value : MulDiv(g_uCurrentDPI, value, g_uDefaultDPI);
+NP2_inline DWORD GetIconHandleFlagsForDPI(UINT dpi) {
+	return (dpi >= NP2_LARGER_ICON_SIZE_DPI)
+			? (SHGFI_USEFILEATTRIBUTES | SHGFI_LARGEICON | SHGFI_ICON)
+			: (SHGFI_USEFILEATTRIBUTES | SHGFI_SMALLICON | SHGFI_ICON);
 }
 
-// https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getsystemmetrics
-// https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getsystemmetricsfordpi
-int GetSystemMetricsEx(int nIndex);
+NP2_inline DWORD GetCurrentIconIndexFlags(void) {
+	return GetIconIndexFlagsForDPI(g_uCurrentDPI);
+}
+
+NP2_inline DWORD GetCurrentIconHandleFlags(void) {
+	return GetIconHandleFlagsForDPI(g_uCurrentDPI);
+}
 
 // https://docs.microsoft.com/en-us/windows/desktop/Memory/comparing-memory-allocation-methods
 // https://blogs.msdn.microsoft.com/oldnewthing/20120316-00/?p=8083/
@@ -346,7 +395,7 @@ NP2_inline BOOL IniSectionIsEmpty(const IniSection *section) {
 	return section->count == 0;
 }
 
-BOOL IniSectionParseArray(IniSection *section, LPWSTR lpCachedIniSection);
+BOOL IniSectionParseArray(IniSection *section, LPWSTR lpCachedIniSection, BOOL quoted);
 BOOL IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection);
 LPCWSTR IniSectionUnsafeGetValue(IniSection *section, LPCWSTR key, int keyLen);
 
@@ -389,6 +438,7 @@ typedef struct IniSectionOnSave {
 } IniSectionOnSave;
 
 void IniSectionSetString(IniSectionOnSave *section, LPCWSTR key, LPCWSTR value);
+void IniSectionSetQuotedString(IniSectionOnSave *section, LPCWSTR key, LPCWSTR value);
 
 NP2_inline void IniSectionSetInt(IniSectionOnSave *section, LPCWSTR key, int i) {
 	WCHAR tch[16];
@@ -418,38 +468,71 @@ NP2_inline void IniSectionSetBoolEx(IniSectionOnSave *section, LPCWSTR key, BOOL
 	}
 }
 
-typedef struct DString {
+#define NP2RegSubKey_ContextMenu	L"*\\shell\\Notepad2"
+#define NP2RegSubKey_JumpList		L"Applications\\Notepad2.exe"
+
+LPWSTR Registry_GetString(HKEY hKey, LPCWSTR valueName);
+LSTATUS Registry_SetString(HKEY hKey, LPCWSTR valueName, LPCWSTR lpszText);
+#define Registry_GetDefaultString(hKey)				Registry_GetString((hKey), NULL)
+#define Registry_SetDefaultString(hKey, lpszText)	Registry_SetString((hKey), NULL, (lpszText))
+NP2_inline LSTATUS Registry_CreateKey(HKEY hKey, LPCWSTR lpSubKey, PHKEY phkResult) {
+	return RegCreateKeyEx(hKey, lpSubKey, 0, NULL, 0, KEY_WRITE, NULL, phkResult, NULL);
+}
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+#define Registry_DeleteTree(hKey, lpSubKey)			RegDeleteTree((hKey), (lpSubKey))
+#else
+LSTATUS Registry_DeleteTree(HKEY hKey, LPCWSTR lpSubKey);
+#endif
+
+
+typedef struct DStringW {
 	LPWSTR buffer;
 	INT capacity;
-} DString;
+} DStringW;
 
-static inline void DString_Free(DString *s) {
+#define DSTRINGW_INIT	{ NULL, 0 };
+
+NP2_inline void DStringW_Free(DStringW *s) {
 	if (s->buffer) {
 		NP2HeapFree(s->buffer);
 	}
 }
 
-int DString_GetWindowText(DString *s, HWND hwnd);
-NP2_inline int DString_GetDlgItemText(DString *s, HWND hwndDlg, int nCtlId) {
-	return DString_GetWindowText(s, GetDlgItem(hwndDlg, nCtlId));
+int DStringW_GetWindowText(DStringW *s, HWND hwnd);
+NP2_inline int DStringW_GetDlgItemText(DStringW *s, HWND hwndDlg, int nCtlId) {
+	return DStringW_GetWindowText(s, GetDlgItem(hwndDlg, nCtlId));
 }
 
 NP2_inline BOOL KeyboardIsKeyDown(int key) {
 	return (GetKeyState(key) & 0x8000) != 0;
 }
 
-UINT GetDefaultDPI(HWND hwnd);
-UINT GetCurrentDPI(HWND hwnd);
 HRESULT PrivateSetCurrentProcessExplicitAppUserModelID(PCWSTR AppID);
 BOOL IsElevated(void);
 
-//BOOL SetTheme(HWND hwnd, LPCWSTR lpszTheme)
-//NP2_inline BOOL SetExplorerTheme(HWND hwnd) {
-//	return SetTheme(hwnd, L"Explorer");
-//}
+#define SetExplorerTheme(hwnd)		SetWindowTheme((hwnd), L"Explorer", NULL)
 
+BOOL FindUserResourcePath(LPCWSTR path, LPWSTR outPath);
 HBITMAP LoadBitmapFile(LPCWSTR path);
-HBITMAP ResizeImageForCurrentDPI(HBITMAP hbmp);
+HBITMAP EnlargeImageForDPI(HBITMAP hbmp, UINT dpi);
+HBITMAP ResizeImageForDPI(HBITMAP hbmp, UINT dpi, int height);
+
+NP2_inline HBITMAP EnlargeImageForCurrentDPI(HBITMAP hbmp) {
+	return EnlargeImageForDPI(hbmp, g_uCurrentDPI);
+}
+
+NP2_inline HBITMAP ResizeImageForCurrentDPI(HBITMAP hbmp, int height) {
+	return ResizeImageForDPI(hbmp, g_uCurrentDPI, height);
+}
+
+NP2_inline HBITMAP ResizeButtonImageForCurrentDPI(HBITMAP hbmp) {
+	return ResizeImageForDPI(hbmp, g_uCurrentDPI, 16);
+}
+
+NP2_inline HBITMAP ResizeToolbarImageForCurrentDPI(HBITMAP hbmp) {
+	return ResizeImageForDPI(hbmp, g_uCurrentDPI, 16);
+}
+
 BOOL BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest);
 BOOL BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha);
 BOOL BitmapGrayScale(HBITMAP hbmp);
@@ -495,10 +578,6 @@ void ResizeDlg_Destroy(HWND hwnd, int *cxFrame, int *cyFrame);
 void ResizeDlg_Size(HWND hwnd, LPARAM lParam, int *cx, int *cy);
 void ResizeDlg_GetMinMaxInfo(HWND hwnd, LPARAM lParam);
 
-#define MAX_RESIZEDLG_ATTR_COUNT	2
-void ResizeDlg_SetAttr(HWND hwnd, int index, int value);
-int ResizeDlg_GetAttr(HWND hwnd, int index);
-
 void ResizeDlg_InitY2Ex(HWND hwnd, int cxFrame, int cyFrame, int nIdGrip, int iDirection, int nCtlId1, int nCtlId2);
 NP2_inline void ResizeDlg_InitY2(HWND hwnd, int cxFrame, int cyFrame, int nIdGrip, int nCtlId1, int nCtlId2) {
 	ResizeDlg_InitY2Ex(hwnd, cxFrame, cyFrame, nIdGrip, ResizeDlgDirection_Both, nCtlId1, nCtlId2);
@@ -520,6 +599,13 @@ void MultilineEditSetup(HWND hwndDlg, int nCtlId);
 void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, WORD wBmpId);
 void MakeColorPickButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, COLORREF crColor);
 void DeleteBitmapButton(HWND hwnd, int nCtlId);
+
+#define SetWindowStyle(hwnd, style)			SetWindowLong(hwnd, GWL_STYLE, (style))
+#define SetWindowExStyle(hwnd, style)		SetWindowLong(hwnd, GWL_EXSTYLE, (style))
+
+#define ComboBox_HasText(hwnd)					(ComboBox_GetTextLength(hwnd) || CB_ERR != ComboBox_GetCurSel(hwnd))
+#define ComboBox_GetEditSelStart(hwnd)			LOWORD(ComboBox_GetEditSel(hwnd))
+#define ComboBox_GetEditSelEnd(hwnd)			HIWORD(ComboBox_GetEditSel(hwnd))
 
 #define StatusSetSimple(hwnd, b)				SendMessage(hwnd, SB_SIMPLE, (b), 0)
 #define StatusSetText(hwnd, nPart, lpszText)	SendMessage(hwnd, SB_SETTEXT, (nPart), (LPARAM)(lpszText))
@@ -548,8 +634,15 @@ NP2_inline void SendWMCommandOrBeep(HWND hwnd, UINT id) {
 	if (IsCmdEnabled(hwnd, id)) {
 		SendWMCommand(hwnd, id);
 	} else {
-		MessageBeep(0);
+		MessageBeep(MB_OK);
 	}
+}
+
+HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName);
+NP2_inline BOOL IsChineseTraditionalSubLang(LANGID subLang) {
+	return subLang == SUBLANG_CHINESE_TRADITIONAL
+		|| subLang == SUBLANG_CHINESE_HONGKONG
+		|| subLang == SUBLANG_CHINESE_MACAU;
 }
 
 #define GetString(id, pb, cb)	LoadString(g_hInstance, id, pb, cb)
@@ -557,13 +650,20 @@ NP2_inline void SendWMCommandOrBeep(HWND hwnd, UINT id) {
 
 /**
  * Variadic Macros
+ * use __VA_ARGS__ instead of ##__VA_ARGS__ to force GCC syntax error
+ * for trailing comma when no format argument is given.
  * https://gcc.gnu.org/onlinedocs/cpp/Variadic-Macros.html
- * https://docs.microsoft.com/en-us/cpp/preprocessor/variadic-macros?view=vs-2017
+ * https://docs.microsoft.com/en-us/cpp/preprocessor/preprocessor-experimental-overview
  */
 #define FormatString(lpOutput, lpFormat, uIdFormat, ...) do {	\
 		GetString((uIdFormat), (lpFormat), COUNTOF(lpFormat));	\
 		wsprintf((lpOutput), (lpFormat), __VA_ARGS__);			\
 	} while (0)
+
+NP2_inline BOOL PathIsFile(LPCWSTR pszPath) {
+	// note: INVALID_FILE_ATTRIBUTES is -1.
+	return (GetFileAttributes(pszPath) & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
 
 void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, int cchDest,
 					   BOOL bSrcIsFile, BOOL bUnexpandEnv, BOOL bUnexpandMyDocs);
@@ -593,6 +693,9 @@ DWORD	GetLongPathNameEx(LPWSTR lpszPath, DWORD cchBuffer);
 DWORD_PTR SHGetFileInfo2(LPCWSTR pszPath, DWORD dwFileAttributes,
 						 SHFILEINFO *psfi, UINT cbFileInfo, UINT uFlags);
 
+// remove '&' from access key, i.e. SHStripMneumonic().
+void	StripMnemonic(LPWSTR pszMenu);
+
 void	FormatNumberStr(LPWSTR lpNumberStr);
 BOOL	SetDlgItemIntEx(HWND hwnd, int nIdItem, UINT uValue);
 
@@ -604,14 +707,18 @@ UINT CodePageFromCharSet(UINT uCharSet);
 
 //==== MRU Functions ==========================================================
 #define MRU_MAXITEMS	32
-#define MRU_NOCASE		1
-#define MRU_UTF8		2
+
+enum {
+	MRUFlags_Default = 0,
+	MRUFlags_CaseInsensitive = 1,
+	MRUFlags_QuoteValue = 2,
+};
 
 // MRU_MAXITEMS * (MAX_PATH + 4)
 #define MAX_INI_SECTION_SIZE_MRU	(8 * 1024)
 
-typedef struct _mrulist {
-	LPCWSTR	szRegKey;
+typedef struct MRULIST {
+	LPCWSTR szRegKey;
 	int		iFlags;
 	int		iSize;
 	LPWSTR pszItems[MRU_MAXITEMS];
@@ -622,6 +729,7 @@ typedef const MRULIST * LPCMRULIST;
 LPMRULIST MRU_Create(LPCWSTR pszRegKey, int iFlags, int iSize);
 BOOL	MRU_Destroy(LPMRULIST pmru);
 BOOL	MRU_Add(LPMRULIST pmru, LPCWSTR pszNew);
+BOOL	MRU_AddMultiline(LPMRULIST pmru, LPCWSTR pszNew);
 BOOL	MRU_AddFile(LPMRULIST pmru, LPCWSTR pszFile, BOOL bRelativePath, BOOL bUnexpandMyDocs);
 BOOL	MRU_Delete(LPMRULIST pmru, int iIndex);
 BOOL	MRU_DeleteFileFromStore(LPCMRULIST pmru, LPCWSTR pszFile);
@@ -661,13 +769,10 @@ HWND	CreateThemedDialogParam(HINSTANCE hInstance, LPCWSTR lpTemplate, HWND hWndP
 
 //==== UnSlash Functions ======================================================
 void TransformBackslashes(char *pszInput, BOOL bRegEx, UINT cpEdit);
-BOOL AddBackslash(char *pszOut, const char *pszInput);
+BOOL AddBackslashA(char *pszOut, const char *pszInput);
+BOOL AddBackslashW(LPWSTR pszOut, LPCWSTR pszInput);
 
 //==== MinimizeToTray Functions - see comments in Helpers.c ===================
 BOOL GetDoAnimateMinimize(void);
 void MinimizeWndToTray(HWND hwnd);
 void RestoreWndFromTray(HWND hwnd);
-
-#endif // NOTEPAD2_HELPERS_H_
-
-// End of Helpers.h

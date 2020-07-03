@@ -26,6 +26,7 @@
 #include "ILexer.h"
 #include "Scintilla.h"
 
+//#include "CharacterCategory.h"
 #include "Position.h"
 #include "UniqueString.h"
 #include "SplitVector.h"
@@ -113,7 +114,7 @@ void LineLayout::Invalidate(validLevel validity_) noexcept {
 		validity = validity_;
 }
 
-int LineLayout::LineStart(int line) const {
+int LineLayout::LineStart(int line) const noexcept {
 	if (line <= 0) {
 		return 0;
 	} else if ((line >= lines) || !lineStarts) {
@@ -123,7 +124,7 @@ int LineLayout::LineStart(int line) const {
 	}
 }
 
-int Scintilla::LineLayout::LineLength(int line) const {
+int Scintilla::LineLayout::LineLength(int line) const noexcept {
 	if (!lineStarts) {
 		return numCharsInLine;
 	} if (line >= lines - 1) {
@@ -133,7 +134,7 @@ int Scintilla::LineLayout::LineLength(int line) const {
 	}
 }
 
-int LineLayout::LineLastVisible(int line, Scope scope) const {
+int LineLayout::LineLastVisible(int line, Scope scope) const noexcept {
 	if (line < 0) {
 		return 0;
 	} else if ((line >= lines - 1) || !lineStarts) {
@@ -143,16 +144,16 @@ int LineLayout::LineLastVisible(int line, Scope scope) const {
 	}
 }
 
-Range LineLayout::SubLineRange(int subLine, Scope scope) const {
+Range LineLayout::SubLineRange(int subLine, Scope scope) const noexcept {
 	return Range(LineStart(subLine), LineLastVisible(subLine, scope));
 }
 
-bool LineLayout::InLine(int offset, int line) const {
+bool LineLayout::InLine(int offset, int line) const noexcept {
 	return ((offset >= LineStart(line)) && (offset < LineStart(line + 1))) ||
 		((offset == numCharsInLine) && (line == (lines - 1)));
 }
 
-int LineLayout::SubLineFromPosition(int posInLine, PointEnd pe) const {
+int LineLayout::SubLineFromPosition(int posInLine, PointEnd pe) const noexcept {
 	if (!lineStarts || (posInLine > maxLineLength)) {
 		return lines - 1;
 	}
@@ -188,7 +189,7 @@ void LineLayout::SetLineStart(int line, int start) {
 }
 
 void LineLayout::SetBracesHighlight(Range rangeLine, const Sci::Position braces[],
-	char bracesMatchStyle, int xHighlight, bool ignoreStyle) {
+	char bracesMatchStyle, int xHighlight, bool ignoreStyle) noexcept {
 	if (!ignoreStyle && rangeLine.ContainsCharacter(braces[0])) {
 		const Sci::Position braceOffset = braces[0] - rangeLine.start;
 		if (braceOffset < numCharsInLine) {
@@ -209,7 +210,7 @@ void LineLayout::SetBracesHighlight(Range rangeLine, const Sci::Position braces[
 	}
 }
 
-void LineLayout::RestoreBracesHighlight(Range rangeLine, const Sci::Position braces[], bool ignoreStyle) {
+void LineLayout::RestoreBracesHighlight(Range rangeLine, const Sci::Position braces[], bool ignoreStyle) noexcept {
 	if (!ignoreStyle && rangeLine.ContainsCharacter(braces[0])) {
 		const Sci::Position braceOffset = braces[0] - rangeLine.start;
 		if (braceOffset < numCharsInLine) {
@@ -225,7 +226,7 @@ void LineLayout::RestoreBracesHighlight(Range rangeLine, const Sci::Position bra
 	xHighlightGuide = 0;
 }
 
-int LineLayout::FindBefore(XYPOSITION x, Range range) const {
+int LineLayout::FindBefore(XYPOSITION x, Range range) const noexcept {
 	Sci::Position lower = range.start;
 	Sci::Position upper = range.end;
 	do {
@@ -240,7 +241,7 @@ int LineLayout::FindBefore(XYPOSITION x, Range range) const {
 	return static_cast<int>(lower);
 }
 
-int LineLayout::FindPositionFromX(XYPOSITION x, Range range, bool charPosition) const {
+int LineLayout::FindPositionFromX(XYPOSITION x, Range range, bool charPosition) const noexcept {
 	int pos = FindBefore(x, range);
 	while (pos < range.end) {
 		if (charPosition) {
@@ -257,7 +258,7 @@ int LineLayout::FindPositionFromX(XYPOSITION x, Range range, bool charPosition) 
 	return static_cast<int>(range.end);
 }
 
-Point LineLayout::PointFromPosition(int posInLine, int lineHeight, PointEnd pe) const {
+Point LineLayout::PointFromPosition(int posInLine, int lineHeight, PointEnd pe) const noexcept {
 	Point pt;
 	// In case of very long line put x at arbitrary large position
 	if (posInLine > maxLineLength) {
@@ -286,7 +287,7 @@ Point LineLayout::PointFromPosition(int posInLine, int lineHeight, PointEnd pe) 
 	return pt;
 }
 
-int LineLayout::EndLineStyle() const {
+int LineLayout::EndLineStyle() const noexcept {
 	return styles[numCharsBeforeEOL > 0 ? numCharsBeforeEOL - 1 : 0];
 }
 
@@ -295,7 +296,7 @@ ScreenLine::ScreenLine(
 	int subLine,
 	const ViewStyle &vs,
 	XYPOSITION width_,
-	int tabWidthMinimumPixels_) :
+	int tabWidthMinimumPixels_) noexcept:
 	ll(ll_),
 	start(ll->LineStart(subLine)),
 	len(ll->LineLength(subLine)),
@@ -307,7 +308,7 @@ ScreenLine::ScreenLine(
 
 ScreenLine::~ScreenLine() = default;
 
-std::string_view ScreenLine::Text() const {
+std::string_view ScreenLine::Text() const noexcept {
 	return std::string_view(&ll->chars[start], len);
 }
 
@@ -318,7 +319,7 @@ size_t ScreenLine::Length() const noexcept {
 size_t ScreenLine::RepresentationCount() const {
 	return std::count_if(&ll->bidiData->widthReprs[start],
 		&ll->bidiData->widthReprs[start + len],
-		[](XYPOSITION w) {return w > 0.0f; });
+		[](XYPOSITION w) noexcept { return w > 0.0f; });
 }
 
 XYPOSITION ScreenLine::Width() const noexcept {
@@ -337,11 +338,11 @@ XYPOSITION ScreenLine::TabWidthMinimumPixels() const noexcept {
 	return static_cast<XYPOSITION>(tabWidthMinimumPixels);
 }
 
-const Font *ScreenLine::FontOfPosition(size_t position) const {
+const Font *ScreenLine::FontOfPosition(size_t position) const noexcept {
 	return &ll->bidiData->stylesFonts[start + position];
 }
 
-XYPOSITION ScreenLine::RepresentationWidth(size_t position) const {
+XYPOSITION ScreenLine::RepresentationWidth(size_t position) const noexcept {
 	return ll->bidiData->widthReprs[start + position];
 }
 
@@ -487,7 +488,7 @@ static unsigned int KeyFromString(const char *charBytes, size_t len) noexcept {
 }
 
 SpecialRepresentations::SpecialRepresentations() noexcept {
-	const unsigned char none = 0;
+	constexpr unsigned char none = 0;
 	std::fill(startByteHasReprs, std::end(startByteHasReprs), none);
 }
 
@@ -536,7 +537,7 @@ bool SpecialRepresentations::Contains(const char *charBytes, size_t len) const {
 
 void SpecialRepresentations::Clear() {
 	mapReprs.clear();
-	const unsigned char none = 0;
+	constexpr unsigned char none = 0;
 	std::fill(startByteHasReprs, std::end(startByteHasReprs), none);
 }
 
@@ -709,7 +710,7 @@ void PositionCacheEntry::Clear() noexcept {
 }
 
 bool PositionCacheEntry::Retrieve(unsigned int styleNumber_, const char *s_,
-	unsigned int len_, XYPOSITION *positions_) const {
+	unsigned int len_, XYPOSITION *positions_) const noexcept {
 	if ((styleNumber == styleNumber_) && (len == len_) &&
 		(memcmp(&positions[len], s_, len) == 0)) {
 		for (unsigned int i = 0; i < len; i++) {

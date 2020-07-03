@@ -1,9 +1,18 @@
-#ifndef NOTEPAD2_COMPILER_H_
-#define NOTEPAD2_COMPILER_H_
+// This file is part of Notepad2.
+// See License.txt for details about distribution and modification.
+#pragma once
 
 #if defined(__cplusplus)
 #undef NULL
 #define NULL	nullptr
+#endif
+
+#ifndef NP2_noexcept
+	#if defined(__cplusplus)
+		#define NP2_noexcept noexcept
+	#else
+		#define NP2_noexcept
+	#endif
 #endif
 
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__cplusplus)
@@ -49,21 +58,22 @@
 #define NP2_inline	inline
 #endif
 
+#define PP_CONCAT_(x, y)	x##y
+#define PP_CONCAT(x, y)		PP_CONCAT_(x, y)
+
 // sdkddkver.h
 #ifndef _WIN32_WINNT_VISTA
-#define _WIN32_WINNT_VISTA					0x0600
+#define _WIN32_WINNT_VISTA				0x0600
 #endif
 #ifndef _WIN32_WINNT_WIN7
-#define _WIN32_WINNT_WIN7					0x0601
+#define _WIN32_WINNT_WIN7				0x0601
 #endif
 #ifndef _WIN32_WINNT_WIN8
-#define _WIN32_WINNT_WIN8					0x0602
+#define _WIN32_WINNT_WIN8				0x0602
 #endif
 #ifndef _WIN32_WINNT_WINBLUE
-#define _WIN32_WINNT_WINBLUE				0x0603
+#define _WIN32_WINNT_WINBLUE			0x0603
 #endif
 #ifndef _WIN32_WINNT_WIN10
-#define _WIN32_WINNT_WIN10					0x0A00
+#define _WIN32_WINNT_WIN10				0x0A00
 #endif
-
-#endif // NOTEPAD2_COMPILER_H_

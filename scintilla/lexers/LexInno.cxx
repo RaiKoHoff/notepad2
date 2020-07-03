@@ -5,8 +5,8 @@
 // Written by Friedrich Vedder <fvedd@t-online.de>, using code from LexOthers.cxx.
 // The License.txt file describes the conditions under which this software may be distributed.
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include "ILexer.h"
@@ -256,8 +256,6 @@ static bool IsSectionEnd(Sci_Position curPos, Accessor &styler) noexcept {
 }
 
 static void FoldInnoDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
 	const bool foldComment = styler.GetPropertyInt("fold.comment", 1) != 0;
 	const bool foldPreprocessor = styler.GetPropertyInt("fold.preprocessor", 1) != 0;
 	//const bool foldCompact = styler.GetPropertyInt("fold.compact", 0) != 0;

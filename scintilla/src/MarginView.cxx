@@ -26,6 +26,7 @@
 #include "ILexer.h"
 #include "Scintilla.h"
 
+//#include "CharacterCategory.h"
 #include "Position.h"
 #include "IntegerRectangle.h"
 #include "UniqueString.h"
@@ -79,10 +80,10 @@ void DrawWrapMarker(Surface *surface, PRectangle rcPlace,
 		int xDir;
 		int yBase;
 		int yDir;
-		void MoveTo(int xRelative, int yRelative) noexcept {
+		void MoveTo(int xRelative, int yRelative) const noexcept {
 			surface->MoveTo(xBase + xDir * xRelative, yBase + yDir * yRelative);
 		}
-		void LineTo(int xRelative, int yRelative) noexcept {
+		void LineTo(int xRelative, int yRelative) const noexcept {
 			surface->LineTo(xBase + xDir * xRelative, yBase + yDir * yRelative);
 		}
 	};
@@ -131,9 +132,9 @@ void MarginView::AllocateGraphics(const ViewStyle &vsDraw) {
 		pixmapSelPatternOffset1.reset(Surface::Allocate(vsDraw.technology));
 }
 
-void MarginView::RefreshPixMaps(Surface *surfaceWindow, WindowID wid, const ViewStyle &vsDraw) {
+void MarginView::RefreshPixMaps(Surface *surfaceWindow, WindowID wid, const ViewStyle &vsDraw) const {
 	if (!pixmapSelPattern->Initialised()) {
-		const int patternSize = 8;
+		constexpr int patternSize = 8;
 		pixmapSelPattern->InitPixMap(patternSize, patternSize, surfaceWindow, wid);
 		pixmapSelPatternOffset1->InitPixMap(patternSize, patternSize, surfaceWindow, wid);
 		// This complex procedure is to reproduce the checkerboard dithered pattern used by windows
@@ -173,7 +174,7 @@ void MarginView::RefreshPixMaps(Surface *surfaceWindow, WindowID wid, const View
 	}
 }
 
-static int SubstituteMarkerIfEmpty(int markerCheck, int markerDefault, const ViewStyle &vs) {
+static int SubstituteMarkerIfEmpty(int markerCheck, int markerDefault, const ViewStyle &vs) noexcept {
 	if (vs.markers[markerCheck].markType == SC_MARK_EMPTY)
 		return markerDefault;
 	return markerCheck;

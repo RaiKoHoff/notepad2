@@ -36,7 +36,145 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\scintilla\lexers\LexAsm.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexAutoIt3.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexBash.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\lexBatch.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexCIL.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexCMake.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexConfig.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexCPP.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexCSS.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexDiff.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexFortran.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexFSharp.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexGN.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexGraphViz.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexHTML.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexInno.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexJSON.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexJulia.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexKotlin.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexLaTeX.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexLisp.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexLLVM.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexLua.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexMakefile.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexMatlab.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexNSIS.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexNull.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexPascal.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexPerl.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexPowerShell.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexProps.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexPython.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexRuby.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexRust.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexSmali.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexSQL.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexTCL.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexTexinfo.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexTOML.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexVB.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexVerilog.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexVHDL.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexVim.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexWASM.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexYAML.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\scintilla\lexlib\Accessor.cxx">
+      <Filter>Scintilla\lexlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexlib\CharacterCategory.cxx">
       <Filter>Scintilla\lexlib</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\lexlib\CharacterSet.cxx">
@@ -96,7 +234,13 @@
     <ClCompile Include="..\..\scintilla\src\Document.cxx">
       <Filter>Scintilla\src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\scintilla\src\EditModel.cxx">
+      <Filter>Scintilla\src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\scintilla\src\Editor.cxx">
+      <Filter>Scintilla\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\src\EditView.cxx">
       <Filter>Scintilla\src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\src\Indicator.cxx">
@@ -106,6 +250,9 @@
       <Filter>Scintilla\src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\src\LineMarker.cxx">
+      <Filter>Scintilla\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\src\MarginView.cxx">
       <Filter>Scintilla\src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\src\PerLine.cxx">
@@ -141,101 +288,17 @@
     <ClCompile Include="..\..\scintilla\src\XPM.cxx">
       <Filter>Scintilla\src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\scintilla\win32\HanjaDic.cxx">
+      <Filter>Scintilla\win32</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\scintilla\win32\PlatWin.cxx">
       <Filter>Scintilla\win32</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\win32\ScintillaWin.cxx">
       <Filter>Scintilla\win32</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexNull.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexAsm.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexAutoIt3.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexBash.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\lexBatch.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexCMake.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexConfig.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexCPP.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexCSS.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexDiff.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexFortran.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexFSharp.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexHTML.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexIni.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexInno.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexJSON.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexLaTeX.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexLua.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexMakefile.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexMatlab.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexPascal.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexPerl.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexPowerShell.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexPython.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexRuby.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexSQL.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexTCL.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexVB.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexVHDL.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexVerilog.cxx">
-      <Filter>Scintilla\lexers</Filter>
+    <ClCompile Include="..\..\src\Bridge.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\Dialogs.c">
       <Filter>Source Files</Filter>
@@ -256,9 +319,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\Notepad2.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\Bridge.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\Styles.c">
@@ -315,6 +375,12 @@
     <ClCompile Include="..\..\src\EditLexers\stlGo.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\EditLexers\stlGN.c">
+      <Filter>Source Files\EditLexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\EditLexers\stlGradle.c">
+      <Filter>Source Files\EditLexers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlGraphViz.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
@@ -345,7 +411,16 @@
     <ClCompile Include="..\..\src\EditLexers\stlJulia.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\EditLexers\stlKotlin.c">
+      <Filter>Source Files\EditLexers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlLaTeX.c">
+      <Filter>Source Files\EditLexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\EditLexers\stlLisp.c">
+      <Filter>Source Files\EditLexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\EditLexers\stlLLVM.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlLua.c">
@@ -381,6 +456,9 @@
     <ClCompile Include="..\..\src\EditLexers\stlRuby.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\EditLexers\stlRust.c">
+      <Filter>Source Files\EditLexers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlScala.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
@@ -391,6 +469,9 @@
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlTcl.c">
+      <Filter>Source Files\EditLexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\EditLexers\stlTOML.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlVB.c">
@@ -405,56 +486,17 @@
     <ClCompile Include="..\..\src\EditLexers\stlVHDL.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\EditLexers\stlXML.c">
-      <Filter>Source Files\EditLexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexTexinfo.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexGraphViz.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexLisp.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexNSIS.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexSmali.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\EditLexers\stlLisp.c">
-      <Filter>Source Files\EditLexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexVim.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexCIL.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlVim.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\scintilla\src\EditModel.cxx">
-      <Filter>Scintilla\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\src\EditView.cxx">
-      <Filter>Scintilla\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\src\MarginView.cxx">
-      <Filter>Scintilla\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\LexLLVM.cxx">
-      <Filter>Scintilla\lexers</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\EditLexers\stlLLVM.c">
+    <ClCompile Include="..\..\src\EditLexers\stlWASM.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\EditLexers\stlGradle.c">
+    <ClCompile Include="..\..\src\EditLexers\stlXML.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\scintilla\win32\HanjaDic.cxx">
-      <Filter>Scintilla\win32</Filter>
+    <ClCompile Include="..\..\src\EditLexers\stlYAML.c">
+      <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -482,6 +524,12 @@
     <ClInclude Include="..\..\scintilla\lexlib\Accessor.h">
       <Filter>Scintilla\lexlib</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\scintilla\lexlib\CatalogueModules.h">
+      <Filter>Scintilla\lexlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\scintilla\lexlib\CharacterCategory.h">
+      <Filter>Scintilla\lexlib</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\scintilla\lexlib\CharacterSet.h">
       <Filter>Scintilla\lexlib</Filter>
     </ClInclude>
@@ -498,6 +546,9 @@
       <Filter>Scintilla\lexlib</Filter>
     </ClInclude>
     <ClInclude Include="..\..\scintilla\lexlib\LexerSimple.h">
+      <Filter>Scintilla\lexlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\scintilla\lexlib\LexerUtils.h">
       <Filter>Scintilla\lexlib</Filter>
     </ClInclude>
     <ClInclude Include="..\..\scintilla\lexlib\OptionSet.h">
@@ -551,7 +602,13 @@
     <ClInclude Include="..\..\scintilla\src\Document.h">
       <Filter>Scintilla\src</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\scintilla\src\EditModel.h">
+      <Filter>Scintilla\src</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\scintilla\src\Editor.h">
+      <Filter>Scintilla\src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\scintilla\src\EditView.h">
       <Filter>Scintilla\src</Filter>
     </ClInclude>
     <ClInclude Include="..\..\scintilla\src\ElapsedPeriod.h">
@@ -572,10 +629,16 @@
     <ClInclude Include="..\..\scintilla\src\LineMarker.h">
       <Filter>Scintilla\src</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\scintilla\src\MarginView.h">
+      <Filter>Scintilla\src</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\scintilla\src\Partitioning.h">
       <Filter>Scintilla\src</Filter>
     </ClInclude>
     <ClInclude Include="..\..\scintilla\src\PerLine.h">
+      <Filter>Scintilla\src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\scintilla\src\Position.h">
       <Filter>Scintilla\src</Filter>
     </ClInclude>
     <ClInclude Include="..\..\scintilla\src\PositionCache.h">
@@ -593,6 +656,9 @@
     <ClInclude Include="..\..\scintilla\src\Selection.h">
       <Filter>Scintilla\src</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\scintilla\src\SparseVector.h">
+      <Filter>Scintilla\src</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\scintilla\src\SplitVector.h">
       <Filter>Scintilla\src</Filter>
     </ClInclude>
@@ -602,13 +668,25 @@
     <ClInclude Include="..\..\scintilla\src\UniConversion.h">
       <Filter>Scintilla\src</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\scintilla\src\UniqueString.h">
+      <Filter>Scintilla\src</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\scintilla\src\ViewStyle.h">
       <Filter>Scintilla\src</Filter>
     </ClInclude>
     <ClInclude Include="..\..\scintilla\src\XPM.h">
       <Filter>Scintilla\src</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\scintilla\win32\HanjaDic.h">
+      <Filter>Scintilla\win32</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\scintilla\win32\PlatWin.h">
+      <Filter>Scintilla\win32</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\src\compiler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\config.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\Dialogs.h">
@@ -626,10 +704,16 @@
     <ClInclude Include="..\..\src\EditLexers/EditStyle.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\EditLexers/EditStyleX.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\src\Helpers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\Notepad2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\Resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\SciCall.h">
@@ -638,38 +722,11 @@
     <ClInclude Include="..\..\src\Styles.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\Resource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\src\Version.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\VersionRev.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\scintilla\src\MarginView.h">
-      <Filter>Scintilla\src</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\scintilla\src\EditModel.h">
-      <Filter>Scintilla\src</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\scintilla\src\EditView.h">
-      <Filter>Scintilla\src</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\scintilla\win32\PlatWin.h">
-      <Filter>Scintilla\win32</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\scintilla\win32\HanjaDic.h">
-      <Filter>Scintilla\win32</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\scintilla\src\Position.h">
-      <Filter>Scintilla\src</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\scintilla\src\SparseVector.h">
-      <Filter>Scintilla\src</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\scintilla\src\UniqueString.h">
-      <Filter>Scintilla\src</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -685,7 +742,7 @@
     <None Include="..\..\res\Notepad2.ico">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="..\..\res\Open.bmp">
+    <None Include="..\..\res\OpenFolder.bmp">
       <Filter>Resource Files</Filter>
     </None>
     <None Include="..\..\res\Pick.bmp">

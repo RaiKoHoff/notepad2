@@ -20,18 +20,16 @@ using namespace Scintilla;
  * Creates an array that points into each word in the string and puts \0 terminators
  * after each word.
  */
-static char **ArrayFromWordList(char *wordlist, size_t slen, int *len, bool onlyLineEnds = false) {
+static char **ArrayFromWordList(char *wordlist, size_t slen, int *len) {
 	int prev = true;
 	int words = 0;
 	// For rapid determination of whether a character is a separator, build
 	// a look up table, for ASCII only.
 	bool wordSeparator[128] = {};	// Initialise all to false.
-	wordSeparator[static_cast<unsigned int>('\r')] = true;
-	wordSeparator[static_cast<unsigned int>('\n')] = true;
-	if (!onlyLineEnds) {
-		wordSeparator[static_cast<unsigned int>(' ')] = true;
-		wordSeparator[static_cast<unsigned int>('\t')] = true;
-	}
+	wordSeparator[static_cast<unsigned char>('\r')] = true;
+	wordSeparator[static_cast<unsigned char>('\n')] = true;
+	wordSeparator[static_cast<unsigned char>(' ')] = true;
+	wordSeparator[static_cast<unsigned char>('\t')] = true;
 
 	char * const end = wordlist + slen;
 	char *s = wordlist;
@@ -71,9 +69,9 @@ static char **ArrayFromWordList(char *wordlist, size_t slen, int *len, bool only
 	return keywords;
 }
 
-WordList::WordList(bool onlyLineEnds_) noexcept :
-	words(nullptr), list(nullptr), len(0), onlyLineEnds(onlyLineEnds_) {
-	// Prevent warnings by static analyzers about uninitialized starts.
+WordList::WordList() noexcept :
+	words(nullptr), list(nullptr), len(0) {
+	// Prevent warnings by static analyzers about uninitialized ranges.
 	ranges[0] = {};
 }
 
@@ -111,49 +109,47 @@ void WordList::Clear() noexcept {
 	len = 0;
 }
 
-void WordList::Set(const char *s) {
+bool WordList::Set(const char *s, bool toLower) {
+	// omitted comparison for Notepad2, we don't care whether the list is same as before or not.
+	// 1. when we call SciCall_SetKeywords(), the document or styles already changed.
+	// 2. the comparison is expensive than rebuild the list, especially for a long list.
+
 	Clear();
 	const size_t lenS = strlen(s) + 1;
 	list = new char[lenS];
 	memcpy(list, s, lenS);
-	words = ArrayFromWordList(list, lenS - 1, &len, onlyLineEnds);
+	if (toLower) {
+		char *p = list;
+		while (*p) {
+			if (*p >= 'A' && *p <= 'Z') {
+				*p += 'a' - 'A';
+			}
+			++p;
+		}
+	}
+
+	words = ArrayFromWordList(list, lenS - 1, &len);
 	std::sort(words, words + len, [](const char *a, const char *b) noexcept {
 		return strcmp(a, b) < 0;
 	});
+
 	memset(ranges, 0, sizeof(ranges));
 	for (int i = 0; i < len;) {
-		const unsigned char indexChar = words[i][0];
+		const unsigned char indexChar = *words[i];
 		const int start = i++;
-		while (words[i][0] == indexChar) {
+		while (static_cast<unsigned char>(*words[i]) == indexChar) {
 			++i;
 		}
 		ranges[indexChar] = {start, i};
 	}
-}
-
-bool WordList::Reset(const char *s) {
-#if 0
-	WordList other;
-	other.Set(s);
-	if (*this == other) {
-		return false;
-	}
-
-	Clear();
-	words = other.words;
-	list = other.list;
-	len = other.len;
-	onlyLineEnds = other.onlyLineEnds;
-	memcpy(ranges, other.ranges, sizeof(ranges));
-	// mark other as released.
-	other.words = nullptr;
-	other.list = nullptr;
-	other.len = 0;
-#else
-	Set(s);
-#endif
 	return true;
 }
+
+/** Threshold for linear search.
+ * Because of cache locality and other metrics, linear search is faster than binary search
+ * when word list contains few words.
+ */
+static constexpr int WordListLinearSearchThreshold = 5;
 
 /** Check whether a string is in the list.
  * List elements are either exact matches or prefixes.
@@ -171,7 +167,7 @@ bool WordList::InList(const char *s) const noexcept {
 	Range r = ranges[firstChar];
 	if (r.end) {
 		int count = r.end - r.start;
-		if (count < 5) {
+		if (count < WordListLinearSearchThreshold) {
 			for (int j = r.start; j < r.end; j++) {
 				const char *a = words[j] + 1;
 				const char *b = s + 1;
@@ -186,7 +182,7 @@ bool WordList::InList(const char *s) const noexcept {
 		} else {
 			int j = r.start;
 			do {
-				const int step = count/2;
+				const int step = count >> 1;
 				const int mid = j + step;
 				const char *a = words[mid] + 1;
 				const char *b = s + 1;
@@ -204,7 +200,7 @@ bool WordList::InList(const char *s) const noexcept {
 				} else {
 					count = step;
 				}
-			} while (count > 0);
+			} while (count != 0);
 		}
 	}
 
@@ -242,7 +238,7 @@ bool WordList::InListPrefixed(const char *s, const char marker) const noexcept {
 	Range r = ranges[firstChar];
 	if (r.end) {
 		int count = r.end - r.start;
-		if (count < 5) {
+		if (count < WordListLinearSearchThreshold) {
 			for (int j = r.start; j < r.end; j++) {
 				const char *a = words[j] + 1;
 				const char *b = s + 1;
@@ -257,7 +253,7 @@ bool WordList::InListPrefixed(const char *s, const char marker) const noexcept {
 		} else {
 			int j = r.start;
 			do {
-				const int step = count/2;
+				const int step = count >> 1;
 				const int mid = j + step;
 				const char *a = words[mid] + 1;
 				const char *b = s + 1;
@@ -275,7 +271,7 @@ bool WordList::InListPrefixed(const char *s, const char marker) const noexcept {
 				} else {
 					count = step;
 				}
-			} while (count > 0);
+			} while (count != 0);
 		}
 	}
 
@@ -417,4 +413,3 @@ bool WordList::InListAbridged(const char *s, const char marker) const noexcept {
 const char *WordList::WordAt(int n) const noexcept {
 	return words[n];
 }
-

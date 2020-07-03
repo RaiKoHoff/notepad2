@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2001 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef VIEWSTYLE_H
-#define VIEWSTYLE_H
+#pragma once
 
 namespace Scintilla {
 
@@ -174,27 +172,27 @@ public:
 	ViewStyle &operator=(const ViewStyle &) = delete;
 	ViewStyle &operator=(ViewStyle &&) = delete;
 	~ViewStyle();
-	void CalculateMarginWidthAndMask();
+	void CalculateMarginWidthAndMask() noexcept;
 	void Init(size_t stylesSize_ = 256);
 	void Refresh(Surface &surface, int tabInChars);
 	void ReleaseAllExtendedStyles() noexcept;
 	int AllocateExtendedStyles(int numberStyles);
 	void EnsureStyle(size_t index);
 	void ResetDefaultStyle();
-	void ClearStyles();
+	void ClearStyles() noexcept;
 	void SetStyleFontName(int styleIndex, const char *name);
 	void SetFontLocaleName(const char *name);
 	bool ProtectionActive() const noexcept;
 	int ExternalMarginWidth() const noexcept;
-	int SCICALL MarginFromLocation(Point pt) const;
+	int SCICALL MarginFromLocation(Point pt) const noexcept;
 	bool ValidStyle(size_t styleIndex) const noexcept;
 	void CalcLargestMarkerHeight() noexcept;
 	int GetFrameWidth() const noexcept;
 	bool IsLineFrameOpaque(bool caretActive, bool lineContainsCaret) const noexcept;
-	ColourOptional Background(MarkerMask marksOfLine, bool caretActive, bool lineContainsCaret) const;
+	ColourOptional Background(MarkerMask marksOfLine, bool caretActive, bool lineContainsCaret) const noexcept;
 	bool SelectionBackgroundDrawn() const noexcept;
 	bool WhitespaceBackgroundDrawn() const noexcept;
-	ColourDesired WrapColour() const;
+	ColourDesired WrapColour() const noexcept;
 
 	bool SetWrapState(int wrapState_) noexcept;
 	bool SetWrapVisualFlags(int wrapVisualFlags_) noexcept;
@@ -221,5 +219,3 @@ private:
 };
 
 }
-
-#endif

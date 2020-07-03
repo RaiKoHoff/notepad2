@@ -42,14 +42,22 @@ const char * SCI_METHOD LexerSimple::DescribeWordListSets() const noexcept {
 
 void SCI_METHOD LexerSimple::Lex(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, IDocument *pAccess) {
 	Accessor astyler(pAccess, &props);
-	module->Lex(startPos, lengthDoc, initStyle, keyWordLists, astyler);
+	module->Lex(startPos, lengthDoc, initStyle, keywordLists, astyler);
 	astyler.Flush();
 }
 
 void SCI_METHOD LexerSimple::Fold(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, IDocument *pAccess) {
 	if (props.GetInt("fold")) {
 		Accessor astyler(pAccess, &props);
-		module->Fold(startPos, lengthDoc, initStyle, keyWordLists, astyler);
+		module->Fold(startPos, lengthDoc, initStyle, keywordLists, astyler);
 		astyler.Flush();
 	}
+}
+
+const char * SCI_METHOD LexerSimple::GetName() const noexcept {
+	return module->languageName;
+}
+
+int SCI_METHOD LexerSimple::GetIdentifier() const noexcept {
+	return module->GetLanguage();
 }

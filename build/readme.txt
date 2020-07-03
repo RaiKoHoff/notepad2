@@ -6,8 +6,17 @@ echo | clang -dM -E -
 echo | clang-cl -Xclang -dM -E -
 echo | gcc -dM -E -
 
+echo | clang -dM -E -xc++ -
+echo | clang-cl -Xclang -dM -E -Xclang -xc++ -
+echo | gcc -dM -E -xc++ -
+
 https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html
--fsanitize=undefined
+-fsanitize=undefined,integer
+
+SetEnvironmentVariable(UBSAN_OPTIONS, L"log_path=" WC_NOTEPAD2 L"-UBSan.log");
+SetEnvironmentVariable(UBSAN_OPTIONS, L"log_path=" WC_METAPATH L"-UBSan.log");
+SetEnvironmentVariable(UBSAN_OPTIONS, L"log_path=" WC_NOTEPAD2 L"-UBSan.log,print_stacktrace=1");
+SetEnvironmentVariable(UBSAN_OPTIONS, L"log_path=" WC_METAPATH L"-UBSan.log,print_stacktrace=1");
 
 /wd4201 /wd4204
 Disabled warnings:

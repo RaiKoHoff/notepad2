@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2001 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef LEXERMODULE_H
-#define LEXERMODULE_H
+#pragma once
 
 namespace Scintilla {
 
@@ -18,7 +16,7 @@ typedef const WordList * const LexerWordList[];
 
 typedef void (*LexerFunction)(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 	LexerWordList keywordLists, Accessor &styler);
-typedef ILexer4 *(*LexerFactoryFunction)();
+typedef ILexer5 *(*LexerFactoryFunction)();
 
 /**
  * A LexerModule is responsible for lexing and folding a particular language.
@@ -27,7 +25,6 @@ typedef ILexer4 *(*LexerFactoryFunction)();
  * The ExternalLexerModule subclass holds lexers loaded from DLLs or shared libraries.
  */
 class LexerModule {
-protected:
 	int language;
 	LexerFunction fnLexer;
 	LexerFunction fnFolder;
@@ -38,20 +35,39 @@ protected:
 
 public:
 	const char *const languageName;
-	LexerModule(
+	constexpr LexerModule(
 		int language_,
 		LexerFunction fnLexer_,
 		const char *languageName_ = nullptr,
 		LexerFunction fnFolder_ = nullptr,
 		const char *const wordListDescriptions_[] = nullptr,
 		const LexicalClass *lexClasses_ = nullptr,
-		size_t nClasses_ = 0) noexcept;
-	LexerModule(
+		size_t nClasses_ = 0) noexcept:
+		language(language_),
+		fnLexer(fnLexer_),
+		fnFolder(fnFolder_),
+		fnFactory(nullptr),
+		wordListDescriptions(wordListDescriptions_),
+		lexClasses(lexClasses_),
+		nClasses(nClasses_),
+		languageName(languageName_) {
+	}
+
+	constexpr LexerModule(
 		int language_,
 		LexerFactoryFunction fnFactory_,
 		const char *languageName_ = nullptr,
-		const char *const wordListDescriptions_[] = nullptr) noexcept;
-	virtual ~LexerModule();
+		const char *const wordListDescriptions_[] = nullptr) noexcept:
+		language(language_),
+		fnLexer(nullptr),
+		fnFolder(nullptr),
+		fnFactory(fnFactory_),
+		wordListDescriptions(wordListDescriptions_),
+		lexClasses(nullptr),
+		nClasses(0),
+		languageName(languageName_) {
+	}
+
 	int GetLanguage() const noexcept;
 
 	// -1 is returned if no WordList information is available
@@ -60,16 +76,14 @@ public:
 	const LexicalClass *LexClasses() const noexcept;
 	size_t NamedStyles() const noexcept;
 
-	ILexer4 *Create() const;
+	ILexer5 *Create() const;
 
-	virtual void Lex(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
+	void Lex(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 		LexerWordList keywordLists, Accessor &styler) const;
-	virtual void Fold(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
+	void Fold(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 		LexerWordList keywordLists, Accessor &styler) const;
 
-	friend class Catalogue;
+	friend class CatalogueModules;
 };
 
 }
-
-#endif

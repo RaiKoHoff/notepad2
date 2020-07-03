@@ -17,9 +17,7 @@
 *
 *
 ******************************************************************************/
-
-#ifndef NOTEPAD2_H_
-#define NOTEPAD2_H_
+#pragma once
 
 //==== Main Window ============================================================
 #define WC_NOTEPAD2 L"Notepad2"
@@ -27,7 +25,7 @@
 
 //==== Data Type for WM_COPYDATA ==============================================
 #define DATA_NOTEPAD2_PARAMS 0xFB10
-typedef struct np2params {
+typedef struct NP2PARAMS {
 	int		flagFileSpecified;
 	int		flagChangeNotify;
 	int		flagLexerSpecified;
@@ -78,19 +76,23 @@ typedef struct np2params {
 #define STATUS_DOCSIZE		6
 #define STATUS_HELP			(255 | SBT_NOBORDERS)
 
+/**
+ * App message used to center MessageBox to the window of the program.
+ */
+#define APPM_CENTER_MESSAGE_BOX		(WM_APP + 1)
 //==== Change Notifications ===================================================
 #define ID_WATCHTIMER		0xA000
-#define APPM_CHANGENOTIFY	(WM_APP + 2)
+#define APPM_CHANGENOTIFY			(WM_APP + 2)
 //#define APPM_CHANGENOTIFYCLEAR	(WM_APP + 3)
 
 //==== Callback Message from System Tray ======================================
-#define APPM_TRAYMESSAGE	(WM_APP + 4)
+#define APPM_TRAYMESSAGE			(WM_APP + 4)
 
 //==== Paste Board Timer ======================================================
-#define ID_PASTEBOARDTIMER	0xA001
+#define ID_PASTEBOARDTIMER			0xA001
 
 //==== Reuse Window Lock Timeout ==============================================
-#define REUSEWINDOWLOCKTIMEOUT 1000
+#define REUSEWINDOWLOCKTIMEOUT		1000
 
 // Settings Version
 enum {
@@ -154,8 +156,7 @@ BOOL CheckIniFile(LPWSTR lpszFile, LPCWSTR lpszModule);
 BOOL CheckIniFileRedirect(LPWSTR lpszFile, LPCWSTR lpszModule, LPCWSTR redirectKey);
 BOOL FindIniFile(void);
 BOOL TestIniFile(void);
-BOOL CreateIniFile(void);
-BOOL CreateIniFileEx(LPCWSTR lpszIniFile);
+BOOL CreateIniFile(LPCWSTR lpszIniFile);
 void FindExtraIniFile(LPWSTR lpszIniFile, LPCWSTR defaultName, LPCWSTR redirectKey);
 
 void UpdateWindowTitle(void);
@@ -165,6 +166,7 @@ void UpdateStatusBarWidth(void);
 void UpdateToolbar(void);
 void UpdateFoldMarginWidth(void);
 void UpdateLineNumberWidth(void);
+void UpdateBookmarkMarginWidth(void);
 
 enum {
 	FullScreenMode_OnStartup = 1,
@@ -206,7 +208,3 @@ void	MsgSize(HWND hwnd, WPARAM wParam, LPARAM lParam);
 void	MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam);
 LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam);
 LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam);
-
-#endif // NOTEPAD2_H_
-
-// End of Notepad2.h

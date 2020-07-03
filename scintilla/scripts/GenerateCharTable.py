@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 import unicodedata
 
+from FileGenerator import Regenerate
+from GenerateCharacterCategory import dumpArray
+
 def GenerateUTF8Table():
+	# for UTF8ClassifyTable in UniConversion.cxx
 	def BytesFromLead(leadByte):
 		# Single byte or invalid
 		if leadByte < 0xC2:
@@ -86,6 +90,7 @@ def GetCharName(ch):
 		return ''
 
 def GenerateUnicodeControlCharacters():
+	# for kUnicodeControlCharacterTable in Edit.c
 	ucc_table = [
 		"\u200E", # U+200E	LRM		Left-to-right mark
 		"\u200F", # U+200F	RLM		Right-to-left mark
@@ -120,6 +125,72 @@ def GenerateUnicodeControlCharacters():
 		utf8str = ''.join('\\x%02x' % b for b in utf8bytes)
 		print(utf8str, 'U+%04X' % ord(ucc), unicodedata.category(ucc), GetCharName(ucc))
 
+def GenerateJsonCharClass():
+	keywords = ["false", "null", "true", "Infinity", "NaN"]
+	wordStart = [item[0] for item in keywords]
+	operator = "{}[]:,+-"
+
+	JsonChar_None = 0
+	JsonChar_Operator = 1
+	JsonChar_OperatorOpen = 2
+	JsonChar_OperatorClose = 3
+	JsonChar_String = 4
+	JsonChar_Digit = 5
+	JsonChar_WordStart = 6
+	JsonChar_Dot = 7
+	JsonChar_Slash = 8
+	JsonChar_Char = 9
+	JsonChar_IDStart = 10
+
+	JsonChar_Number = 0x10
+	JsonChar_ID = 0x20
+
+	table = [JsonChar_None] * 128
+	# https://www.ecma-international.org/ecma-262/#sec-ecmascript-language-lexical-grammar
+	for i in range(0x21, 0x80):
+		ch = chr(i)
+		value = JsonChar_None
+		if ch in operator:
+			if ch in '{[':
+				value = JsonChar_OperatorOpen
+			elif ch in '}]':
+				value = JsonChar_OperatorClose
+			else:
+				if ch in '+-':
+					# SignedInteger in ExponentPart
+					value = JsonChar_Operator | JsonChar_Number
+				else:
+					value = JsonChar_Operator
+		elif ch == '\"':
+			value = JsonChar_String
+		elif ch == '\'':
+			value = JsonChar_Char
+		elif ch == '/':
+			value = JsonChar_Slash
+		elif ch == '.':
+			value = JsonChar_Dot | JsonChar_Number
+		elif ch.isdigit():
+			value = JsonChar_Digit | JsonChar_Number | JsonChar_ID
+		elif ch in wordStart:
+			value = JsonChar_WordStart | JsonChar_Number | JsonChar_ID
+		elif ch.isalpha() or ch == '_':
+			value = JsonChar_IDStart | JsonChar_Number | JsonChar_ID
+		elif ch == '$':
+			value = JsonChar_IDStart | JsonChar_ID
+		elif ch == '@':
+			# JSON-LD
+			value = JsonChar_IDStart | JsonChar_ID
+		elif ch == '\\':
+			# UnicodeEscapeSequence
+			value = JsonChar_ID
+
+		table[i] = value
+
+	table.extend([JsonChar_IDStart | JsonChar_ID]*128)
+	lines = dumpArray(table, 16)
+	Regenerate("../lexers/LexJSON.cxx", "//", lines)
+
 if __name__ == '__main__':
+	#GenerateUTF8Table()
 	GenerateUnicodeControlCharacters();
-	GenerateUTF8Table()
+	GenerateJsonCharClass()

@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # Script to generate line breaking data from
-# http://www.unicode.org/Public/UCD/latest/ucd/LineBreak.txt
+# https://www.unicode.org/Public/UCD/latest/ucd/LineBreak.txt
 
-import sys, platform, unicodedata
+import platform
+import unicodedata
 from enum import IntFlag
 import re
+
 from FileGenerator import Regenerate
 from GenerateCharacterCategory import *
 
 # Unicode Line Breaking Algorithm
-# http://www.unicode.org/reports/tr14/
+# https://www.unicode.org/reports/tr14/
 
 class LineBreak(IntFlag):
 	NonBreak = 0
@@ -19,7 +21,7 @@ class LineBreak(IntFlag):
 
 	RLEValueBit = 2
 
-# http://www.unicode.org/reports/tr14/#Properties
+# https://www.unicode.org/reports/tr14/#Properties
 LineBreakPropertyMap = {
 	LineBreak.NonBreak: [
 		'AL',	# Ordinary Alphabetic and Symbol Characters (XP)
@@ -93,12 +95,17 @@ def readLineBreakFile(filename='LineBreak.txt'):
 	global kUnicodeLineBreak, kUnicodeLineBreakVersion
 
 	data = ['XX'] * UnicodeCharacterCount	# @missing
+	# ID: Ideographic (B/A)
+	# The unassigned code points in the following blocks default to ID:
 	setRange(data, 0x3400, 0x4DBF, 'ID')	# CJK Unified Ideographs Extension A
 	setRange(data, 0x4E00, 0x9FFF, 'ID')	# CJK Unified Ideographs
 	setRange(data, 0xF900, 0xFAFF, 'ID')	# CJK Compatibility Ideographs
 	setRange(data, 0x20000, 0x2FFFD, 'ID')	# Plane 2
 	setRange(data, 0x30000, 0x3FFFD, 'ID')	# Plane 3
 	setRange(data, 0x1F000, 0x1FFFD, 'ID')	# Plane 1 range
+	setRange(data, 0x3130, 0x318F, 'ID')	# Hangul Compatibility Jamo
+	# PR: Prefix Numeric (XA)
+	# 22.1 Currency Symbols
 	setRange(data, 0x20A0, 0x20CF, 'PR')	# Currency Symbols
 
 	version = ''
@@ -157,7 +164,7 @@ def updateUnicodeLineBreak(filename):
 	#runLengthEncode('Unicode LineBreak', indexTable[:BMPCharacterCharacterCount], LineBreak.RLEValueBit)
 	#compressIndexTable('Unicode LineBreak', indexTable, args)
 
-	output = ["// Created with Python %s,  Unicode %s" % (
+	output = ["// Created with Python %s, Unicode %s" % (
 		platform.python_version(), kUnicodeLineBreakVersion)]
 	lines = dumpArray(indexTable[:128], 16)
 	output.extend(lines)

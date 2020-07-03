@@ -1,10 +1,9 @@
-// Lexer for Python.
+// This file is part of Notepad2.
+// See License.txt for details about distribution and modification.
+//! Lexer for Python.
 
-#include <cstring>
 #include <cassert>
-#include <cctype>
-
-#include <algorithm>
+#include <cstring>
 
 #include "ILexer.h"
 #include "Scintilla.h"
@@ -18,21 +17,6 @@
 #include "LexerModule.h"
 
 using namespace Scintilla;
-
-#define		LEX_PY		32	// Python
-#define		LEX_BOO		55	// Boo
-
-/*static const char *const pythonWordListDesc[] = {
-	"Keywords",
-	"Type Keywords",
-	"Built-in Constants",
-	"Decorator",
-	"Build-in Functions",
-	"Attribute",
-	"object Method"
-	"global class",
-	0
-};*/
 
 #define PY_DEF_CLASS 1
 #define PY_DEF_FUNC	2
@@ -133,7 +117,6 @@ static void ColourisePyDoc(Sci_PositionU startPos, Sci_Position length, int init
 	int visibleChars = 0;
 	bool continuationLine = false;
 
-	//const int lexType = styler.GetPropertyInt("lexer.lang.type", LEX_PY);
 	StyleContext sc(startPos, length, initStyle, styler);
 
 	for (; sc.More(); sc.Forward()) {
@@ -151,14 +134,8 @@ static void ColourisePyDoc(Sci_PositionU startPos, Sci_Position length, int init
 			sc.SetState(SCE_PY_DEFAULT);
 			break;
 		case SCE_PY_NUMBER:
-			if (!iswordstart(sc.ch)) {
-				if ((sc.ch == '+' || sc.ch == '-') && (sc.chPrev == 'e' || sc.chPrev == 'E')) {
-					sc.Forward();
-				} else if (sc.ch == '.' && sc.chNext != '.') {
-					sc.ForwardSetState(SCE_PY_DEFAULT);
-				} else {
-					sc.SetState(SCE_PY_DEFAULT);
-				}
+			if (!IsDecimalNumber(sc.chPrev, sc.ch, sc.chNext)) {
+				sc.SetState(SCE_PY_DEFAULT);
 			}
 			break;
 		case SCE_PY_IDENTIFIER:
@@ -176,9 +153,9 @@ static void ColourisePyDoc(Sci_PositionU startPos, Sci_Position length, int init
 				} else if (keywords2.InList(s)) {
 					sc.ChangeState(SCE_PY_WORD2);
 				} else if (keywords_const.InList(s)) {
-					sc.ChangeState(SCE_PY_BUILDIN_CONST);
+					sc.ChangeState(SCE_PY_BUILTIN_CONST);
 				} else if (keywords_func.InListPrefixed(s, '(')) {
-					sc.ChangeState(SCE_PY_BUILDIN_FUNC);
+					sc.ChangeState(SCE_PY_BUILTIN_FUNC);
 				} else if (keywords_attr.InList(s)) {
 					sc.ChangeState(SCE_PY_ATTR);
 				} else if (keywords_objm.InList(s)) {
@@ -350,19 +327,15 @@ static inline bool IsQuoteLine(Sci_Position line, const Accessor &styler) noexce
 	return IsPyTripleStyle(style);
 }
 
-
+// based on original folding code
 static void FoldPyDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
 	const Sci_Position maxPos = startPos + length;
-	const Sci_Position maxLines = (maxPos == styler.Length()) ? styler.GetLine(maxPos) : styler.GetLine(maxPos - 1);	// Requested last line
 	const Sci_Position docLines = styler.GetLine(styler.Length());	// Available last line
+	const Sci_Position maxLines = (maxPos == styler.Length()) ? docLines : styler.GetLine(maxPos - 1);	// Requested last line
 
 	// property fold.quotes.python
 	//	This option enables folding multi-line quoted strings when using the Python lexer.
 	const bool foldQuotes = styler.GetPropertyInt("fold.quotes.python", 1) != 0;
-
-	const bool foldCompact = styler.GetPropertyInt("fold.compact") != 0;
 
 	// Backtrack to previous non-blank line so we can determine indent level
 	// for any white space lines (needed esp. within triple quoted strings)
@@ -375,22 +348,24 @@ static void FoldPyDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWor
 		lineCurrent--;
 		indentCurrent = styler.IndentAmount(lineCurrent, &spaceFlags, nullptr);
 		if (!(indentCurrent & SC_FOLDLEVELWHITEFLAG) && (!IsCommentLine(lineCurrent)) &&
-			(!IsQuoteLine(lineCurrent, styler)))
+			(!IsQuoteLine(lineCurrent, styler))) {
 			break;
+		}
 	}
 	int indentCurrentLevel = indentCurrent & SC_FOLDLEVELNUMBERMASK;
 
 	// Set up initial loop state
 	startPos = styler.LineStart(lineCurrent);
 	int prev_state = SCE_PY_DEFAULT;
-	if (lineCurrent >= 1)
+	if (lineCurrent >= 1) {
 		prev_state = styler.StyleAt(startPos - 1);
+	}
 	int prevQuote = foldQuotes && IsPyTripleStyle(prev_state);
 
 	// Process all characters to end of requested range or end of any triple quote
 	//that hangs over the end of the range.  Cap processing in all cases
 	// to end of document (in case of unclosed quote at end).
-	while ((lineCurrent <= docLines) && ((lineCurrent <= maxLines) || prevQuote)) {
+	while ((lineCurrent <= maxLines) || prevQuote) {
 
 		// Gather info
 		int lev = indentCurrent;
@@ -406,12 +381,15 @@ static void FoldPyDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWor
 		}
 		const int quote_start = (quote && !prevQuote);
 		const int quote_continue = (quote && prevQuote);
-		if (!quote || !prevQuote)
+		if (!quote || !prevQuote) {
 			indentCurrentLevel = indentCurrent & SC_FOLDLEVELNUMBERMASK;
-		if (quote)
+		}
+		if (quote) {
 			indentNext = indentCurrentLevel;
-		if (indentNext & SC_FOLDLEVELWHITEFLAG)
+		}
+		if (indentNext & SC_FOLDLEVELWHITEFLAG) {
 			indentNext = SC_FOLDLEVELWHITEFLAG | indentCurrentLevel;
+		}
 
 		if (quote_start) {
 			// Place fold point at start of triple quoted string
@@ -441,7 +419,7 @@ static void FoldPyDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWor
 		}
 
 		const int levelAfterComments = ((lineNext < docLines) ? indentNext & SC_FOLDLEVELNUMBERMASK : minCommentLevel);
-		const int levelBeforeComments = std::max(indentCurrentLevel, levelAfterComments);
+		const int levelBeforeComments = (indentCurrentLevel > levelAfterComments) ? indentCurrentLevel : levelAfterComments;
 
 		// Now set all the indent levels on the lines we skipped
 		// Do this from end to start.  Once we encounter one line
@@ -453,35 +431,27 @@ static void FoldPyDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWor
 
 		while (--skipLine > lineCurrent) {
 			const int skipLineIndent = styler.IndentAmount(skipLine, &spaceFlags, nullptr);
-
-			if (foldCompact) {
-				if ((skipLineIndent & SC_FOLDLEVELNUMBERMASK) > levelAfterComments)
-					skipLevel = levelBeforeComments;
-
-				const int whiteFlag = skipLineIndent & SC_FOLDLEVELWHITEFLAG;
-
-				styler.SetLevel(skipLine, skipLevel | whiteFlag);
-			} else {
-				if ((skipLineIndent & SC_FOLDLEVELNUMBERMASK) > levelAfterComments &&
-					!(skipLineIndent & SC_FOLDLEVELWHITEFLAG) &&
-					!IsCommentLine(skipLine))
-					skipLevel = levelBeforeComments;
-
-				styler.SetLevel(skipLine, skipLevel);
+			if ((skipLineIndent & SC_FOLDLEVELNUMBERMASK) > levelAfterComments &&
+				!(skipLineIndent & SC_FOLDLEVELWHITEFLAG) &&
+				!IsCommentLine(skipLine)) {
+				skipLevel = levelBeforeComments;
 			}
+
+			styler.SetLevel(skipLine, skipLevel);
 		}
 
 		// Set fold header on non-quote line
 		if (!quote && !(indentCurrent & SC_FOLDLEVELWHITEFLAG)) {
-			if ((indentCurrent & SC_FOLDLEVELNUMBERMASK) < (indentNext & SC_FOLDLEVELNUMBERMASK))
+			if ((indentCurrent & SC_FOLDLEVELNUMBERMASK) < (indentNext & SC_FOLDLEVELNUMBERMASK)) {
 				lev |= SC_FOLDLEVELHEADERFLAG;
+			}
 		}
 
 		// Keep track of triple quote state of previous line
 		prevQuote = quote;
 
 		// Set fold level for this line and move to next line
-		styler.SetLevel(lineCurrent, foldCompact ? lev : lev & ~SC_FOLDLEVELWHITEFLAG);
+		styler.SetLevel(lineCurrent, lev & ~SC_FOLDLEVELWHITEFLAG);
 		indentCurrent = indentNext;
 		lineCurrent = lineNext;
 	}

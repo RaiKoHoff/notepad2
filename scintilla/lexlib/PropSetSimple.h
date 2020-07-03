@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2009 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef PROPSETSIMPLE_H
-#define PROPSETSIMPLE_H
+#pragma once
 
 namespace Scintilla {
 
@@ -19,10 +17,8 @@ public:
 	void Set(const char *key, const char *val, size_t lenKey = -1, size_t lenVal = -1);
 	void SetMultiple(const char *);
 	const char *Get(const char *key) const;
-	int GetExpanded(const char *key, char *result) const;
+	size_t GetExpanded(const char *key, char *result) const;
 	int GetInt(const char *key, int defaultValue = 0) const;
 };
 
 }
-
-#endif

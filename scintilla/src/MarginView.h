@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2014 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef MARGINVIEW_H
-#define MARGINVIEW_H
+#pragma once
 
 namespace Scintilla {
 
@@ -36,11 +34,9 @@ public:
 
 	void DropGraphics(bool freeObjects) noexcept;
 	void AllocateGraphics(const ViewStyle &vsDraw);
-	void RefreshPixMaps(Surface *surfaceWindow, WindowID wid, const ViewStyle &vsDraw);
+	void RefreshPixMaps(Surface *surfaceWindow, WindowID wid, const ViewStyle &vsDraw) const;
 	void SCICALL PaintMargin(Surface *surface, Sci::Line topLine, PRectangle rc, PRectangle rcMargin,
 		const EditModel &model, const ViewStyle &vs);
 };
 
 }
-
-#endif

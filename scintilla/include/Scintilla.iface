@@ -69,7 +69,7 @@
 ##     charrangeresult -> like charrange, but output param
 ##     countedstring
 ##     point -> (x, y)
-##     pointresult  -> like point, but output param
+##     pointresult -> like point, but output param
 ##     rectangle -> {left, top, right, bottom}
 ## Client code should ignore definitions containing types it does not understand, except
 ## for possibly #defining the constants
@@ -157,10 +157,16 @@ fun position GetStyledText=2015(, textrange tr)
 fun bool CanRedo=2016(,)
 
 # Retrieve the line number at which a particular marker is located.
-fun int MarkerLineFromHandle=2017(int markerHandle,)
+fun line MarkerLineFromHandle=2017(int markerHandle,)
 
 # Delete a marker.
 fun void MarkerDeleteHandle=2018(int markerHandle,)
+
+# Retrieve marker handles of a line
+fun int MarkerHandleFromLine=2732(line line, int which)
+
+# Retrieve marker number of a marker handle
+fun int MarkerNumberFromLine=2733(line line, int which)
 
 # Is undo history being collected?
 get bool GetUndoCollection=2019(,)
@@ -294,8 +300,23 @@ val SC_IME_INLINE=1
 # Is the IME displayed in a window or inline?
 get IMEInteraction GetIMEInteraction=2678(,)
 
-# Choose to display the the IME in a winow or inline.
+# Choose to display the IME in a winow or inline.
 set void SetIMEInteraction=2679(IMEInteraction imeInteraction,)
+
+enu Alpha=SC_ALPHA_
+val SC_ALPHA_TRANSPARENT=0
+val SC_ALPHA_OPAQUE=255
+val SC_ALPHA_NOALPHA=256
+
+ali SC_ALPHA_NOALPHA=NO_ALPHA
+
+enu CursorShape=SC_CURSOR
+val SC_CURSORNORMAL=-1
+val SC_CURSORARROW=2
+val SC_CURSORWAIT=4
+val SC_CURSORREVERSEARROW=7
+
+ali SC_CURSORREVERSEARROW=REVERSE_ARROW
 
 enu MarkerSymbol=SC_MARK_
 val MARKER_MAX=31
@@ -394,7 +415,7 @@ set void MarkerSetBack=2042(int markerNumber, colour back)
 # Set the background colour used for a particular marker number when its folding block is selected.
 set void MarkerSetBackSelected=2292(int markerNumber, colour back)
 
-# Enable/disable highlight for current folding bloc (smallest one that contains the caret)
+# Enable/disable highlight for current folding block (smallest one that contains the caret)
 fun void MarkerEnableHighlight=2293(bool enabled,)
 
 # Add a marker to a line, returning an ID which can be used to find or delete the marker.
@@ -1233,12 +1254,24 @@ set void SetTargetStart=2190(position start,)
 # Get the position that starts the target.
 get position GetTargetStart=2191(,)
 
+# Sets the virtual space of the target start
+set void SetTargetStartVirtualSpace=2728(position space,)
+
+# Get the virtual space of the target start
+get position GetTargetStartVirtualSpace=2729(,)
+
 # Sets the position that ends the target which is used for updating the
 # document without affecting the scroll position.
 set void SetTargetEnd=2192(position end,)
 
 # Get the position that ends the target.
 get position GetTargetEnd=2193(,)
+
+# Sets the virtual space of the target end
+set void SetTargetEndVirtualSpace=2730(position space,)
+
+# Get the virtual space of the target end
+get position GetTargetEndVirtualSpace=2731(,)
 
 # Sets both the start and end of the target in one call.
 fun void SetTargetRange=2686(position start, position end)
@@ -1292,7 +1325,7 @@ fun position CallTipPosStart=2203(,)
 set void CallTipSetPosStart=2214(position posStart,)
 
 # Highlight a segment of the definition.
-fun void CallTipSetHlt=2204(int highlightStart, int highlightEnd)
+fun void CallTipSetHlt=2204(position highlightStart, position highlightEnd)
 
 # Set the background colour for the call tip.
 set void CallTipSetBack=2205(colour back,)
@@ -1578,11 +1611,11 @@ fun int TextWidth=2276(int style, string text)
 # Sets the scroll range so that maximum scroll position has
 # the last line at the bottom of the view (default).
 # Setting this to false allows scrolling one page below the last line.
-set void SetEndAtLastLine=2277(bool endAtLastLine,)
+set void SetEndAtLastLine=2277(int endAtLastLine,)
 
 # Retrieve whether the maximum scroll position has the last
 # line at the bottom of the view.
-get bool GetEndAtLastLine=2278(,)
+get int GetEndAtLastLine=2278(,)
 
 # Retrieve the height of a particular line of text in pixels.
 fun int TextHeight=2279(line line,)
@@ -1785,7 +1818,7 @@ fun void DelWordRight=2336(,)
 fun void DelWordRightEnd=2518(,)
 
 # Cut the line containing the caret.
-fun void LineCut=2337(,)
+fun void LineCut=2337(bool lineCopy,)
 
 # Delete the line containing the caret.
 fun void LineDelete=2338(,)
@@ -1854,7 +1887,7 @@ fun void VCHomeWrap=2453(,)
 fun void VCHomeWrapExtend=2454(,)
 
 # Copy the line containing the caret.
-fun void LineCopy=2455(,)
+fun void LineCopy=2455(bool lineCopy,)
 
 # Move the caret inside current view if it's not there already.
 fun void MoveCaretInsideView=2401(,)
@@ -2025,14 +2058,6 @@ set void SetMouseWheelCaptures=2696(bool captures,)
 # Get whether mouse wheel can be active outside the window.
 get bool GetMouseWheelCaptures=2697(,)
 
-enu CursorShape=SC_CURSOR
-val SC_CURSORNORMAL=-1
-val SC_CURSORARROW=2
-val SC_CURSORWAIT=4
-val SC_CURSORREVERSEARROW=7
-
-ali SC_CURSORREVERSEARROW=REVERSE_ARROW
-
 # Sets the cursor to one of the SC_CURSOR* values.
 set void SetCursor=2386(CursorShape cursorType,)
 
@@ -2064,6 +2089,7 @@ fun void WordPartRightExtend=2393(,)
 enu VisiblePolicy=VISIBLE_
 val VISIBLE_SLOP=0x01
 val VISIBLE_STRICT=0x04
+
 # Set the way the display area is determined when a particular line
 # is to be moved to by Find, FindNext, GotoLine, etc.
 fun void SetVisiblePolicy=2394(VisiblePolicy visiblePolicy, int visibleSlop)
@@ -2343,18 +2369,18 @@ fun position EncodedFromUTF8=2449(string utf8, stringresult encoded)
 # multi-byte characters. If beyond end of line, return line end position.
 fun position FindColumn=2456(line line, position column)
 
-# Can the caret preferred x position only be changed by explicit movement commands?
-get CaretSticky GetCaretSticky=2457(,)
-
-# Stop the caret preferred x position changing when the user types.
-set void SetCaretSticky=2458(CaretSticky useCaretStickyBehaviour,)
-
 enu CaretSticky=SC_CARETSTICKY_
 val SC_CARETSTICKY_OFF=0
 val SC_CARETSTICKY_ON=1
 val SC_CARETSTICKY_WHITESPACE=2
 
 ali SC_CARETSTICKY_WHITESPACE=WHITE_SPACE
+
+# Can the caret preferred x position only be changed by explicit movement commands?
+get CaretSticky GetCaretSticky=2457(,)
+
+# Stop the caret preferred x position changing when the user types.
+set void SetCaretSticky=2458(CaretSticky useCaretStickyBehaviour,)
 
 # Switch between sticky and non-sticky: meant to be bound to a key.
 fun void ToggleCaretSticky=2459(,)
@@ -2367,13 +2393,6 @@ get bool GetPasteConvertEndings=2468(,)
 
 # Duplicate the selection. If selection empty duplicate the line containing the caret.
 fun void SelectionDuplicate=2469(,)
-
-enu Alpha=SC_ALPHA_
-val SC_ALPHA_TRANSPARENT=0
-val SC_ALPHA_OPAQUE=255
-val SC_ALPHA_NOALPHA=256
-
-ali SC_ALPHA_NOALPHA=NO_ALPHA
 
 # Set background alpha of the caret line.
 set void SetCaretLineBackAlpha=2470(Alpha alpha,)
@@ -2421,10 +2440,10 @@ fun int IndicatorAllOnFor=2506(position pos,)
 fun int IndicatorValueAt=2507(int indicator, position pos)
 
 # Where does a particular indicator start?
-fun int IndicatorStart=2508(int indicator, position pos)
+fun position IndicatorStart=2508(int indicator, position pos)
 
 # Where does a particular indicator end?
-fun int IndicatorEnd=2509(int indicator, position pos)
+fun position IndicatorEnd=2509(int indicator, position pos)
 
 # Set number of entries in position cache
 set void SetPositionCache=2514(int size,)
@@ -2660,8 +2679,14 @@ set void SetSelectionNStart=2584(int selection, position anchor)
 # Returns the position at the start of the selection.
 get position GetSelectionNStart=2585(int selection,)
 
+# Returns the virtual space at the start of the selection.
+get position GetSelectionNStartVirtualSpace=2726(int selection,)
+
 # Sets the position that ends the selection - this becomes the currentPosition.
 set void SetSelectionNEnd=2586(int selection, position caret)
+
+# Returns the virtual space at the end of the selection.
+get position GetSelectionNEndVirtualSpace=2727(int selection,)
 
 # Returns the position at the end of the selection.
 get position GetSelectionNEnd=2587(int selection,)
@@ -2883,6 +2908,8 @@ set void SetProperty=4004(string key, string value)
 
 # Maximum value of keywordSet parameter of SetKeyWords.
 val KEYWORDSET_MAX=15
+val KEYWORDSET_INDEXMASK=31
+val KEYWORDSET_TOLOWER=32
 
 # Set up the key words used by the lexer.
 set void SetKeyWords=4005(int keyWordSet, string keyWords)
@@ -2981,6 +3008,9 @@ fun int TagsOfStyle=4031(int style, stringresult tags)
 # Retrieve a description of a style.
 # Result is NUL-terminated.
 fun int DescriptionOfStyle=4032(int style, stringresult description)
+
+# Set the lexer from an ILexer*.
+set void SetILexer=4033(, pointer ilexer)
 
 # Notifications
 # Type of modification and the action which caused the modification.

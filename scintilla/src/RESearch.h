@@ -5,9 +5,7 @@
 // Written by Neil Hodgson <neilh@scintilla.org>
 // Based on the work of Ozan S. Yigit.
 // This file is in the public domain.
-
-#ifndef RESEARCH_H
-#define RESEARCH_H
+#pragma once
 
 namespace Scintilla {
 
@@ -23,7 +21,6 @@ public:
 };
 
 class RESearch {
-
 public:
 	explicit RESearch(const CharClassify *charClassTable);
 	// No dynamic allocation so default copy constructor and assignment operator are OK.
@@ -34,32 +31,19 @@ public:
 	const char *Compile(const char *pattern, Sci::Position length, bool caseSensitive, int flags);
 	int Execute(const CharacterIndexer &ci, Sci::Position lp, Sci::Position endp);
 
-	enum {
-		MAXTAG = 10
-	};
-	enum {
-		NOTFOUND = -1
-	};
+	static constexpr int MAXTAG = 10;
+	static constexpr int NOTFOUND = -1;
 
 	Sci::Position bopat[MAXTAG];
 	Sci::Position eopat[MAXTAG];
 	std::string pat[MAXTAG];
 
 private:
-	enum {
-		MAXNFA = 4096
-	};
-	// The following enums are not meant to be changeable.
-	// They are for readability only.
-	enum {
-		MAXCHR = 256
-	};
-	enum {
-		CHRBIT = 8
-	};
-	enum {
-		BITBLK = MAXCHR / CHRBIT
-	};
+	static constexpr int MAXNFA = 4096;
+	// The following constants are not meant to be changeable.
+	static constexpr int MAXCHR = 256;
+	static constexpr int CHRBIT = 8;
+	static constexpr int BITBLK = MAXCHR / CHRBIT;
 
 	void ChSet(unsigned char c) noexcept;
 	void ChSetWithCase(unsigned char c, bool caseSensitive) noexcept;
@@ -88,6 +72,3 @@ private:
 };
 
 }
-
-#endif
-

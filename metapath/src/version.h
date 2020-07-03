@@ -17,9 +17,7 @@
 *
 *
 ******************************************************************************/
-
-#ifndef METAPATH_VERSION_H_
-#define METAPATH_VERSION_H_
+#pragma once
 
 #include "VersionRev.h"
 
@@ -33,8 +31,8 @@
 #define VERSION_FILEVERSION_NUM		VERSION_MAJOR,VERSION_MINOR,VERSION_BUILD,VERSION_REV
 #define VERSION_FILEVERSION			STRINGIFY(VERSION_MAJOR) "." STRINGIFY(VERSION_MINOR) "." \
 									STRINGIFY(VERSION_BUILD) "." STRINGIFY(VERSION_REV)
-#define VERSION_LEGALCOPYRIGHT_SHORT	L"Copyright \xA9 1996-2019"
-#define VERSION_LEGALCOPYRIGHT_LONG		L"\xA9 1996-2019 Florian Balmer"
+#define VERSION_LEGALCOPYRIGHT_SHORT	L"Copyright \xA9 1996-2020"
+#define VERSION_LEGALCOPYRIGHT_LONG		L"\xA9 1996-2020 Florian Balmer"
 #define VERSION_AUTHORNAME			L"Florian Balmer et al."
 #define VERSION_COMPANYNAME			L"Florian Balmer et al."
 #define VERSION_WEBPAGE_DISPLAY		L"flo's freeware - http://www.flos-freeware.ch"
@@ -91,7 +89,5 @@
 	#endif
 #endif
 #define VERSION_FILEVERSION_LONG	MY_APPNAME VERSION_FILEVERSION_ARCH STRINGIFY(VERSION_MAJOR) L"." \
-									STRINGIFY(VERSION_MINOR) L"." STRINGIFY(VERSION_BUILD)  \
+									STRINGIFY(VERSION_MINOR) L"." STRINGIFY(VERSION_BUILD) \
 									L" " VERSION_REV_FULL
-
-#endif // METAPATH_VERSION_H_

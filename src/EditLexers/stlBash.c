@@ -1,5 +1,5 @@
 #include "EditLexer.h"
-#include "EditStyle.h"
+#include "EditStyleX.h"
 
 // https://en.wikipedia.org/wiki/Almquist_shell
 // https://en.wikipedia.org/wiki/Bourne_shell
@@ -9,7 +9,7 @@
 // https://en.wikipedia.org/wiki/Z_shell
 
 static KEYWORDLIST Keywords_Bash = {{
-// build-in
+// built-in
 "alias true false yes no if then fi elif else for function functions in return while "
 "case esac eval ex exec do done du echo EOF "
 // Directory Stack Builtins
@@ -44,25 +44,24 @@ static KEYWORDLIST Keywords_Bash = {{
 
 static EDITSTYLE Styles_Bash[] = {
 	EDITSTYLE_DEFAULT,
-	//{ SCE_SH_ERROR, 63531, EDITSTYLE_HOLE(L"Error"), L"" },
-	{ MULTI_STYLE(SCE_SH_COMMENTLINE, 0, 0, 0), NP2STYLE_Comment, EDITSTYLE_HOLE(L"Comment"), L"fore:#608060" },
-	{ SCE_SH_WORD, NP2STYLE_Keyword, EDITSTYLE_HOLE(L"Keyword"), L"bold; fore:#FF8000" },
-	{ SCE_SH_STRING, 63532, EDITSTYLE_HOLE(L"Double Quoted String"), L"fore:#008080" },
-	{ SCE_SH_CHARACTER, 63533, EDITSTYLE_HOLE(L"Single Quoted String"), L"fore:#800080" },
-	{ SCE_SH_NUMBER, NP2STYLE_Number, EDITSTYLE_HOLE(L"Number"), L"fore:#FF0000" },
-	{ SCE_SH_OPERATOR, NP2STYLE_Operator, EDITSTYLE_HOLE(L"Operator"), L"fore:#B000B0" },
-	{ SCE_SH_SCALAR, 63534, EDITSTYLE_HOLE(L"Scalar"), L"fore:#808000" },
-	{ SCE_SH_PARAM, 63535, EDITSTYLE_HOLE(L"Parameter Expansion"), L"fore:#808000; back:#FFFF99" },
-	{ SCE_SH_BACKTICKS, NP2STYLE_Backticks, EDITSTYLE_HOLE(L"Backticks"), L"fore:#FF0080" },
-	{ SCE_SH_HERE_DELIM, 63537, EDITSTYLE_HOLE(L"Here-doc (Delimiter)"), L"fore:#A46000; back:#FFFFC0; eolfilled" },
-	{ SCE_SH_HERE_Q, 63538, EDITSTYLE_HOLE(L"Here-doc (Single Quoted, q)"), L"fore:#A46000; back:#FFFFC0; eolfilled" },
+	{ MULTI_STYLE(SCE_SH_COMMENTLINE, 0, 0, 0), NP2StyleX_Comment, L"fore:#608060" },
+	{ SCE_SH_WORD, NP2StyleX_Keyword, L"bold; fore:#FF8000" },
+	{ SCE_SH_STRING, NP2StyleX_DoubleQuotedString, L"fore:#008080" },
+	{ SCE_SH_CHARACTER, NP2StyleX_SingleQuotedString, L"fore:#800080" },
+	{ SCE_SH_NUMBER, NP2StyleX_Number, L"fore:#FF0000" },
+	{ SCE_SH_OPERATOR, NP2StyleX_Operator, L"fore:#B000B0" },
+	{ SCE_SH_SCALAR, NP2StyleX_ScalarVar, L"fore:#808000" },
+	{ SCE_SH_PARAM, NP2StyleX_ParameterExpansion, L"fore:#808000; back:#FFFF99" },
+	{ SCE_SH_BACKTICKS, NP2StyleX_Backticks, L"fore:#FF0080" },
+	{ SCE_SH_HERE_DELIM, NP2StyleX_HeredocDelimiter, L"fore:#A46000; back:#FFFFC0; eolfilled" },
+	{ SCE_SH_HERE_Q, NP2StyleX_HeredocSingleQuoted, L"fore:#A46000; back:#FFFFC0; eolfilled" },
+	{ SCE_SH_ERROR, NP2StyleX_ParsingError, L"fore:#C80000; back:#FFFF80" },
 };
 
 EDITLEXER lexBash = {
 	SCLEX_BASH, NP2LEX_BASH,
 	EDITLEXER_HOLE(L"Shell Script", Styles_Bash),
-	L"sh; csh; zsh; bash; tcsh; m4; in",
+	L"sh; csh; zsh; bash; tcsh; m4; in; ac",
 	&Keywords_Bash,
 	Styles_Bash
 };
-

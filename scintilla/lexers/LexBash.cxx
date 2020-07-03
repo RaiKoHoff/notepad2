@@ -6,8 +6,8 @@
 // Adapted from LexPerl by Kein-Hong Man 2004
 // The License.txt file describes the conditions under which this software may be distributed.
 
-#include <cstring>
 #include <cassert>
+#include <cstring>
 #include <cctype>
 
 #include "ILexer.h"
@@ -128,9 +128,9 @@ static void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int in
 	WordList cmdDelimiter;
 	WordList bashStruct;
 	WordList bashStruct_in;
-	cmdDelimiter.Set("| || |& & && ; ;; ( ) { }");
-	bashStruct.Set("if elif fi while until else then do done esac eval");
-	bashStruct_in.Set("for case select");
+	cmdDelimiter.Set("| || |& & && ; ;; ( ) { }", false);
+	bashStruct.Set("if elif fi while until else then do done esac eval", false);
+	bashStruct_in.Set("for case select", false);
 
 	const CharacterSet setWordStart(CharacterSet::setAlpha, "_");
 	// note that [+-] are often parts of identifiers in shell scripts
@@ -158,7 +158,7 @@ static void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int in
 			State = 0;
 			Quote = 0;
 			Quoted = false;
-			Indent = 0;
+			Indent = false;
 			DelimiterLength = 0;
 			Delimiter[0] = '\0';
 		}
@@ -260,8 +260,12 @@ static void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int in
 		// handle line continuation, updates per-line stored state
 		if (sc.atLineStart) {
 			ln = styler.GetLine(sc.currentPos);
-			if (sc.state == SCE_SH_STRING || sc.state == SCE_SH_BACKTICKS || sc.state == SCE_SH_CHARACTER
-				|| sc.state == SCE_SH_HERE_Q || sc.state == SCE_SH_COMMENTLINE || sc.state == SCE_SH_PARAM) {
+			if (sc.state == SCE_SH_STRING
+				|| sc.state == SCE_SH_BACKTICKS
+				|| sc.state == SCE_SH_CHARACTER
+				|| sc.state == SCE_SH_HERE_Q
+				|| sc.state == SCE_SH_COMMENTLINE
+				|| sc.state == SCE_SH_PARAM) {
 				// force backtrack while retaining cmdState
 				styler.SetLineState(ln, BASH_CMD_BODY);
 			} else {
@@ -632,9 +636,10 @@ static void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int in
 			if (sc.ch == '\\') {
 				// Bash can escape any non-newline as a literal
 				sc.SetState(SCE_SH_IDENTIFIER);
-				if (sc.chNext == '\r' || sc.chNext == '\n')
+				if (IsEOLChar(sc.chNext)) {
 					//sc.SetState(SCE_SH_OPERATOR);
 					sc.SetState(SCE_SH_DEFAULT);
+				}
 			} else if (IsADigit(sc.ch)) {
 				sc.SetState(SCE_SH_NUMBER);
 				numBase = BASH_BASE_DECIMAL;
@@ -652,7 +657,7 @@ static void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int in
 				}
 			} else if (setWordStart.Contains(sc.ch)) {
 				sc.SetState(SCE_SH_WORD);
-				//} else if (sc.ch == '#' || (sc.ch == '/' && sc.chNext == '/')) {
+			//} else if (sc.ch == '#' || (sc.ch == '/' && sc.chNext == '/')) {
 			} else if (sc.ch == '#') {
 				if (stylePrev != SCE_SH_WORD && stylePrev != SCE_SH_IDENTIFIER &&
 					(sc.currentPos == 0 || setMetaCharacter.Contains(sc.chPrev))) {
@@ -758,7 +763,9 @@ static void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int in
 					continue;
 				}
 				// handle command delimiters in command START|BODY|WORD state, also TEST if 'test'
-				if (cmdState == BASH_CMD_START || cmdState == BASH_CMD_BODY || cmdState == BASH_CMD_WORD
+				if (cmdState == BASH_CMD_START
+					|| cmdState == BASH_CMD_BODY
+					|| cmdState == BASH_CMD_WORD
 					|| (cmdState == BASH_CMD_TEST && testExprType == 0)) {
 					char s[10];
 					bool isCmdDelim = false;
@@ -803,13 +810,11 @@ static void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int in
 
 #define IsCommentLine(line)	IsLexCommentLine(line, styler, SCE_SH_COMMENTLINE)
 
-#define MAX_BASH_WORD_LEN	15
 static void FoldBashDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWordList, Accessor &styler) {
-	if (styler.GetPropertyInt("fold") == 0)
-		return;
 	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
 	const bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;
 	const bool isCShell = styler.GetPropertyInt("lexer.bash.csh.language") != 0;
+
 	const Sci_PositionU endPos = startPos + length;
 	int visibleChars = 0;
 	int skipHereCh = 0;
@@ -818,8 +823,11 @@ static void FoldBashDoc(Sci_PositionU startPos, Sci_Position length, int, LexerW
 	int levelCurrent = levelPrev;
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
-	char word[MAX_BASH_WORD_LEN + 1] = "";
+
+	constexpr int MaxFoldWordLength = 7 + 1; // foreach
+	char word[MaxFoldWordLength + 1] = "";
 	int wordlen = 0;
+
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
 		const char ch = chNext;
 		chNext = styler.SafeGetCharAt(i + 1);
@@ -835,7 +843,7 @@ static void FoldBashDoc(Sci_PositionU startPos, Sci_Position length, int, LexerW
 		}
 
 		if (style == SCE_SH_WORD) {
-			if (wordlen < MAX_BASH_WORD_LEN) {
+			if (wordlen < MaxFoldWordLength) {
 				word[wordlen++] = ch;
 			}
 			if (styleNext != SCE_SH_WORD) {

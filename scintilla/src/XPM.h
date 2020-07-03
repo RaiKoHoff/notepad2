@@ -4,9 +4,7 @@
  **/
 // Copyright 1998-2003 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef XPM_H
-#define XPM_H
+#pragma once
 
 namespace Scintilla {
 
@@ -40,7 +38,7 @@ public:
 	constexpr int GetWidth() const noexcept {
 		return width;
 	}
-	void PixelAt(int x, int y, ColourDesired &colour, bool &transparent) const;
+	void PixelAt(int x, int y, ColourDesired &colour, bool &transparent) const noexcept;
 private:
 	static std::vector<const char *>LinesFormFromTextForm(const char *textForm);
 };
@@ -54,6 +52,7 @@ class RGBAImage {
 	float scale;
 	std::vector<unsigned char> pixelBytes;
 public:
+	static constexpr size_t bytesPerPixel = 4;
 	RGBAImage(int width_, int height_, float scale_, const unsigned char *pixels_);
 	explicit RGBAImage(const XPM &xpm);
 	RGBAImage(const RGBAImage &) = default;
@@ -79,6 +78,7 @@ public:
 	int CountBytes() const noexcept;
 	const unsigned char *Pixels() const noexcept;
 	void SetPixel(int x, int y, ColourDesired colour, int alpha) noexcept;
+	static void BGRAFromRGBA(unsigned char *pixelsBGRA, const unsigned char *pixelsRGBA, size_t count) noexcept;
 };
 
 /**
@@ -110,5 +110,3 @@ public:
 };
 
 }
-
-#endif

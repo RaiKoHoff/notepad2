@@ -17,15 +17,9 @@
 *
 *
 ******************************************************************************/
+#pragma once
 
-#ifndef METAPATH_DIALOGS_H_
-#define METAPATH_DIALOGS_H_
 #include "compiler.h"
-
-/**
- * App message used to center MessageBox to the window of the program.
- */
-#define APPM_CENTER_MESSAGE_BOX		(WM_APP + 1)
 
 extern BOOL bWindowLayoutRTL;
 NP2_inline void InitWindowCommon(HWND hwnd) {
@@ -34,9 +28,17 @@ NP2_inline void InitWindowCommon(HWND hwnd) {
 	}
 }
 
-int  ErrorMessage(int iLevel, UINT uIdMsg, ...);
+int MsgBox(UINT uType, UINT uIdMsg, ...);
+#define MsgBoxInfo(uType, uIdMsg, ...)		MsgBox(MB_ICONINFORMATION | (uType), (uIdMsg), ##__VA_ARGS__)
+#define MsgBoxWarn(uType, uIdMsg, ...)		MsgBox(MB_ICONEXCLAMATION | (uType), (uIdMsg), ##__VA_ARGS__)
+#define MsgBoxAsk(uType, uIdMsg, ...)		MsgBox(MB_ICONQUESTION | (uType), (uIdMsg), ##__VA_ARGS__)
+
 BOOL GetDirectory(HWND hwndParent, int iTitle, LPWSTR pszFolder, LPCWSTR pszBase);
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
 BOOL GetDirectory2(HWND hwndParent, int iTitle, LPWSTR pszFolder, int iBase);
+#else
+BOOL GetDirectory2(HWND hwndParent, int iTitle, LPWSTR pszFolder, REFKNOWNFOLDERID iBase);
+#endif
 
 void RunDlg(HWND hwnd);
 void GotoDlg(HWND hwnd);
@@ -52,7 +54,3 @@ BOOL OpenWithDlg(HWND hwnd, LPCDLITEM lpdliParam);
 BOOL NewDirDlg(HWND hwnd, LPWSTR pszNewDir);
 
 INT_PTR CALLBACK FindTargetDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam);
-
-#endif // METAPATH_DIALOGS_H_
-
-// End of Dialogs.h

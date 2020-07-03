@@ -1,6 +1,9 @@
 // Microsoft Visual C++ generated resource script.
 //
 #include "resource.h"
+#include "config.h"
+//#include "EditLexer.h"
+//#include "EditLexers/EditStyle.h"
 
 #define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////
@@ -24,10 +27,8 @@
 // English (United States) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
-#ifdef _WIN32
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 #pragma code_page(65001)
-#endif
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -53,7 +54,7 @@ IDI_STYLES              ICON                    "..\\res\\Styles.ico"
 //
 
 IDR_MAINWND             BITMAP                  "..\\res\\Toolbar.bmp"
-IDB_OPEN                BITMAP                  "..\\res\\Open.bmp"
+IDB_OPEN_FOLDER         BITMAP                  "..\\res\\OpenFolder.bmp"
 IDB_NEXT                BITMAP                  "..\\res\\Next.bmp"
 IDB_PREV                BITMAP                  "..\\res\\Prev.bmp"
 IDB_PICK                BITMAP                  "..\\res\\Pick.bmp"
@@ -92,7 +93,7 @@ BEGIN
 		MENUITEM "Re&vert\tF5",						IDM_FILE_REVERT
 		POPUP "Reloa&d"
 		BEGIN
-			MENUITEM "As UFT-&8\tShift+F8",			CMD_RELOADUTF8
+			MENUITEM "As UTF-&8\tShift+F8",			CMD_RELOADUTF8
 			MENUITEM "As &ANSI\tCtrl+Shift+A",		CMD_RELOADANSI
 			MENUITEM "As &OEM\tCtrl+Shift+O",		CMD_RELOADOEM
 			MENUITEM SEPARATOR
@@ -107,12 +108,13 @@ BEGIN
 		POPUP "&Launch"
 		BEGIN
 			MENUITEM "Open Containing &Folder",		IDM_FILE_OPEN_CONTAINING_FOLDER
-			MENUITEM "Reopen As &Administrator",	IDM_FILE_RELAUNCH_ELEVATED
+			MENUITEM "Open As &Administrator",		IDM_FILE_RELAUNCH_ELEVATED
 			MENUITEM SEPARATOR
 			MENUITEM "&New Window\tAlt+N",			IDM_FILE_NEWWINDOW
 			MENUITEM "&Empty Window\tAlt+0",		IDM_FILE_NEWWINDOW2
+			MENUITEM "&Restart",					IDM_FILE_RESTART
 			MENUITEM SEPARATOR
-			MENUITEM "Execute &Document",			IDM_FILE_LAUNCH
+			MENUITEM "Execute &Document\tCtrl+L",	IDM_FILE_LAUNCH
 			MENUITEM "Open &With...",				IDM_FILE_OPENWITH
 			MENUITEM "&Command...\tCtrl+R",			IDM_FILE_RUN
 		END
@@ -247,9 +249,27 @@ BEGIN
 			MENUITEM "In&vert Case\tCtrl+Alt+U",		IDM_EDIT_INVERTCASE
 			MENUITEM "Title &Case\tCtrl+Alt+I",			IDM_EDIT_TITLECASE
 			MENUITEM "&Sentence Case\tCtrl+Alt+O",		IDM_EDIT_SENTENCECASE
+			POPUP "Oth&er Conversions"
+			BEGIN
+				MENUITEM "Halfwidth Form to Full&width",		IDM_EDIT_MAP_FULLWIDTH
+				MENUITEM "Fullwidth Form to H&alfwidth",		IDM_EDIT_MAP_HALFWIDTH
+				MENUITEM SEPARATOR
+				MENUITEM "Chinese Traditional to &Simplified",	IDM_EDIT_MAP_SIMPLIFIED_CHINESE
+				MENUITEM "Chinese Simplified to &Traditional",	IDM_EDIT_MAP_TRADITIONAL_CHINESE
+				MENUITEM SEPARATOR
+				MENUITEM "Japanese Katakana to &Hiragana",		IDM_EDIT_MAP_HIRAGANA
+				MENUITEM "Japanese Hiragana to &Katakana",		IDM_EDIT_MAP_KATAKANA
+				MENUITEM SEPARATOR
+				MENUITEM "Korean Han&gul Decomposition",		IDM_EDIT_MAP_HANGUL_DECOMPOSITION
+				MENUITEM SEPARATOR
+				MENUITEM "&Bengali to Latin",					IDM_EDIT_MAP_BENGALI_LATIN
+				MENUITEM "C&yrillic to Latin",					IDM_EDIT_MAP_CYRILLIC_LATIN
+				MENUITEM "&Devanagari to Latin",				IDM_EDIT_MAP_DEVANAGARI_LATIN
+				MENUITEM "&Malayalam to Latin",					IDM_EDIT_MAP_MALAYALAM_LATIN
+			END
 			MENUITEM SEPARATOR
 			MENUITEM "&Tabify Selection\tCtrl+Shift+T",		IDM_EDIT_CONVERTSPACES
-			MENUITEM "&Untabify Selection\tCtrl+Shift+S",	IDM_EDIT_CONVERTTABS
+			MENUITEM "U&ntabify Selection\tCtrl+Shift+S",	IDM_EDIT_CONVERTTABS
 			MENUITEM "Tabify &Indent\tCtrl+Alt+T",			IDM_EDIT_CONVERTSPACES2
 			MENUITEM "Untabi&fy Indent\tCtrl+Alt+S",		IDM_EDIT_CONVERTTABS2
 			MENUITEM SEPARATOR
@@ -357,15 +377,16 @@ BEGIN
 			MENUITEM SEPARATOR
 			MENUITEM "Find Matching &Brace\tCtrl+B",				IDM_EDIT_FINDMATCHINGBRACE
 			MENUITEM "Select to Matching B&race\tCtrl+Shift+B",		IDM_EDIT_SELTOMATCHINGBRACE
-			//MENUITEM "Select &Word\tCtrl+SP",						IDM_EDIT_SELECTWORD
-			//MENUITEM "Select &Line\tCtrl+Shift+SP",				IDM_EDIT_SELECTLINE
+			MENUITEM "Select &Word\tCtrl+Alt+Space",				IDM_EDIT_SELECTWORD
+			MENUITEM "Select &Lines (Expand Selection)\tCtrl+Shift+Space",	IDM_EDIT_SELECTLINE
+			MENUITEM "Select Lines in &Current Block\tAlt+Shift+]",	IDM_EDIT_SELECTLINE_BLOCK
 			MENUITEM SEPARATOR
 			MENUITEM "Select to Document Star&t",					IDM_EDIT_SELTODOCSTART
 			MENUITEM "Select to Document En&d",						IDM_EDIT_SELTODOCEND
 			MENUITEM "Select to Ne&xt\tCtrl+Alt+F2",				IDM_EDIT_SELTONEXT
 			MENUITEM "Select to Previou&s\tCtrl+Alt+Shift+F2",		IDM_EDIT_SELTOPREV
-			MENUITEM "&Jump to Selection Start\tAlt+,",				CMD_JUMP2SELSTART
-			MENUITEM "J&ump to Selection End\tAlt+.",				CMD_JUMP2SELEND
+			MENUITEM "&Jump to Selection Start\tAlt+Comma (,)",		CMD_JUMP2SELSTART
+			MENUITEM "J&ump to Selection End\tAlt+Period (.)",		CMD_JUMP2SELEND
 		END
 		POPUP "Boo&kmarks"
 		BEGIN
@@ -382,13 +403,6 @@ BEGIN
 	BEGIN
 		MENUITEM "Default &Code Font...\tAlt+F12",	IDM_VIEW_DEFAULT_CODE_FONT
 		MENUITEM "&Default Text Font...",			IDM_VIEW_DEFAULT_TEXT_FONT
-		POPUP "Font &Quality"
-		BEGIN
-			MENUITEM "&Default",					IDM_VIEW_FONTQUALITY_DEFAULT
-			MENUITEM "&None",						IDM_VIEW_FONTQUALITY_NONE
-			MENUITEM "&Standard",					IDM_VIEW_FONTQUALITY_STANDARD
-			MENUITEM "&ClearType",					IDM_VIEW_FONTQUALITY_CLEARTYPE
-		END
 		POPUP "C&aret Style"
 		BEGIN
 			MENUITEM "Block (&OVR Mode)",			IDM_VIEW_CARET_STYLE_BLOCK_OVR
@@ -413,6 +427,7 @@ BEGIN
 		//MENUITEM "S&how CallTips",						IDM_VIEW_SHOWCALLTIPS
 		MENUITEM SEPARATOR
 		MENUITEM "&Visual Brace Matching\tCtrl+Shift+V",	IDM_VIEW_MATCHBRACES
+		MENUITEM "Highlight Current &Block",				IDM_VIEW_HIGHLIGHTCURRENT_BLOCK
 		POPUP "Highlight C&urrent Line"
 		BEGIN
 			MENUITEM "&No Highlight",						IDM_VIEW_HIGHLIGHTCURRENTLINE_NONE
@@ -421,9 +436,6 @@ BEGIN
 			MENUITEM SEPARATOR
 			MENUITEM "Highlight &Subline",					IDM_VIEW_HIGHLIGHTCURRENTLINE_SUBLINE
 		END
-		MENUITEM SEPARATOR
-		MENUITEM "Line &Numbers\tCtrl+Shift+N",		IDM_VIEW_LINENUMBERS
-		MENUITEM "Bookmark/Selection &Margin\tCtrl+Shift+M",	IDM_VIEW_MARGIN
 		POPUP "Mar&k Occurrences"
 		BEGIN
 			MENUITEM "&Off",						IDM_VIEW_MARKOCCURRENCES_OFF
@@ -431,12 +443,10 @@ BEGIN
 			MENUITEM "Match &Whole Word Only",		IDM_VIEW_MARKOCCURRENCES_WORD
 		END
 		MENUITEM SEPARATOR
-		POPUP "Code &Folding"
-		BEGIN
-			MENUITEM "Show Code &Folding\tCtrl+Shift+Alt+F",IDM_VIEW_SHOW_FOLDING
-			MENUITEM "Show Folding &Line",			IDM_VIEW_SHOW_FOLDING_LINE
-			MENUITEM "Show Fold &Ellipsis",			IDM_VIEW_FOLD_DISPALY_TEXT
-		END
+		MENUITEM "Line &Numbers\tCtrl+Shift+N",		IDM_VIEW_LINENUMBERS
+		MENUITEM "Bookmark &Margin\tCtrl+Shift+M",	IDM_VIEW_MARGIN
+		MENUITEM SEPARATOR
+		MENUITEM "Show Code &Folding\tCtrl+Shift+Alt+F",IDM_VIEW_SHOW_FOLDING
 		POPUP "&Toggle Folds"
 		BEGIN
 			MENUITEM "&Current Block\tAlt+C",		IDM_VIEW_FOLD_CURRENT_BLOCK
@@ -460,7 +470,7 @@ BEGIN
 		BEGIN
 			MENUITEM "Zoom &In\tCtrl++",			IDM_VIEW_ZOOMIN
 			MENUITEM "Zoom &Out\tCtrl+-",			IDM_VIEW_ZOOMOUT
-			MENUITEM "Zoom &Level...\tCtrl+.",		IDM_VIEW_ZOOM_LEVEL
+			MENUITEM "Zoom &Level...",				IDM_VIEW_ZOOM_LEVEL
 			MENUITEM "&Reset Zoom\tCtrl+\\",		IDM_VIEW_RESETZOOM
 		END
 		MENUITEM "Toggle Full &Screen\tF11 [Esc]",	IDM_VIEW_TOGGLE_FULLSCREEN
@@ -468,7 +478,9 @@ BEGIN
 	POPUP "Sche&me"
 	BEGIN
 		MENUITEM "&Syntax Scheme...\tF12",			IDM_VIEW_SCHEME
-		MENUITEM "&Customize Schemes...\tCtrl+F12",	IDM_VIEW_SCHEMECONFIG
+		MENUITEM "&Customize Schemes...\tCtrl+F12",	IDM_VIEW_SCHEME_CONFIG
+		MENUITEM "&Favorite Schemes...",			IDM_VIEW_SCHEME_FAVORITE
+		MENUITEM SEPARATOR
 		MENUITEM "Use &2nd Global Styles\tShift+F12",IDM_VIEW_USE2NDGLOBALSTYLE
 		MENUITEM "&Use Default Code Style",			IDM_VIEW_USEDEFAULT_CODESTYLE
 		POPUP "St&yle Theme"
@@ -479,79 +491,79 @@ BEGIN
 		MENUITEM SEPARATOR
 		POPUP "&Text File"
 		BEGIN
-			MENUITEM "&Text File",					IDM_LANG_TEXTFILE
-			MENUITEM "&2nd Text File",				IDM_LANG_2NDTEXTFILE
+			MENUITEM "&Text File",					IDM_LEXER_TEXTFILE
+			MENUITEM "&2nd Text File",				IDM_LEXER_2NDTEXTFILE
 		END
 		POPUP "CSS Style S&heet"
 		BEGIN
-			MENUITEM "&CSS",						IDM_LANG_CSS
-			MENUITEM "&Sassy CSS",					IDM_LANG_SCSS
-			MENUITEM "&Less CSS",					IDM_LANG_LESS
-			MENUITEM "&HSS",						IDM_LANG_HSS
+			MENUITEM "&CSS",						IDM_LEXER_CSS
+			MENUITEM "&Sassy CSS",					IDM_LEXER_SCSS
+			MENUITEM "&Less CSS",					IDM_LEXER_LESS
+			MENUITEM "&HSS",						IDM_LEXER_HSS
 		END
 		POPUP "&Web Source Code"
 		BEGIN
-			MENUITEM "&Web Source Code",			IDM_LANG_WEB
-			MENUITEM "&PHP Page",					IDM_LANG_PHP
-			MENUITEM "&JSP Page",					IDM_LANG_JSP
-			MENUITEM "ASP.NET (&C#)",				IDM_LANG_ASPX_CS
-			MENUITEM "ASP.NET (&VB.NET)",			IDM_LANG_ASPX_VB
-			MENUITEM "ASP (V&BScript)",				IDM_LANG_ASP_VBS
-			MENUITEM "ASP (J&Script)",				IDM_LANG_ASP_JS
+			MENUITEM "&Web Source Code",			IDM_LEXER_WEB
+			MENUITEM "&PHP Page",					IDM_LEXER_PHP
+			MENUITEM "&JSP Page",					IDM_LEXER_JSP
+			MENUITEM "ASP.NET (&C#)",				IDM_LEXER_ASPX_CS
+			MENUITEM "ASP.NET (&VB.NET)",			IDM_LEXER_ASPX_VB
+			MENUITEM "ASP (V&BScript)",				IDM_LEXER_ASP_VBS
+			MENUITEM "ASP (J&Script)",				IDM_LEXER_ASP_JS
 		END
 		POPUP "&Math"
 		BEGIN
-			MENUITEM "&MATLAB",						IDM_LANG_MATLAB
-			MENUITEM "&Octave",						IDM_LANG_OCTAVE
-			MENUITEM "&Scilab",						IDM_LANG_SCILAB
+			MENUITEM "&MATLAB",						IDM_LEXER_MATLAB
+			MENUITEM "&Octave",						IDM_LEXER_OCTAVE
+			MENUITEM "&Scilab",						IDM_LEXER_SCILAB
 		END
 		POPUP "Shell Scri&pt"
 		BEGIN
-			MENUITEM "&Shell Script",				IDM_LANG_BASH
-			MENUITEM "&C Shell",					IDM_LANG_CSHELL
-			MENUITEM "&M4 Macro",					IDM_LANG_M4
+			MENUITEM "&Shell Script",				IDM_LEXER_BASH
+			MENUITEM "&C Shell",					IDM_LEXER_CSHELL
+			MENUITEM "&M4 Macro",					IDM_LEXER_M4
 		END
 		//POPUP "S&QL Dialect"
 		POPUP "&XML Document"
 		BEGIN
-			MENUITEM "&XML Document",				IDM_LANG_XML
-			MENUITEM "XML &Schema",					IDM_LANG_XSD
-			MENUITEM "XSL&T Stylesheet",			IDM_LANG_XSLT
-			MENUITEM "XML &DTD",					IDM_LANG_DTD
+			MENUITEM "&XML Document",				IDM_LEXER_XML
+			MENUITEM "XML &Schema",					IDM_LEXER_XSD
+			MENUITEM "XSL&T Stylesheet",			IDM_LEXER_XSLT
+			MENUITEM "XML &DTD",					IDM_LEXER_DTD
 		END
 		POPUP "XML (&Java)"
 		BEGIN
-			MENUITEM "Ant &Build",					IDM_LANG_ANT_BUILD
-			MENUITEM "Maven &POM",					IDM_LANG_MAVEN_POM
-			MENUITEM "&Maven Settings",				IDM_LANG_MAVEN_SETTINGS
-			MENUITEM "I&vy Module",					IDM_LANG_IVY_MODULE
-			MENUITEM "&Ivy Settings",				IDM_LANG_IVY_SETTINGS
-			MENUITEM "PMD &Ruleset",				IDM_LANG_PMD_RULESET
-			MENUITEM "&Checkstyle",					IDM_LANG_CHECKSTYLE
+			MENUITEM "Ant &Build",					IDM_LEXER_ANT_BUILD
+			MENUITEM "Maven &POM",					IDM_LEXER_MAVEN_POM
+			MENUITEM "&Maven Settings",				IDM_LEXER_MAVEN_SETTINGS
+			MENUITEM "I&vy Module",					IDM_LEXER_IVY_MODULE
+			MENUITEM "&Ivy Settings",				IDM_LEXER_IVY_SETTINGS
+			MENUITEM "PMD &Ruleset",				IDM_LEXER_PMD_RULESET
+			MENUITEM "&Checkstyle",					IDM_LEXER_CHECKSTYLE
 		END
 		POPUP "Web Confi&g"
 		BEGIN
-			MENUITEM "&Apache Config",				IDM_LANG_APACHE
-			MENUITEM "&Tomcat Config",				IDM_LANG_TOMCAT
-			MENUITEM "&Web Config",					IDM_LANG_WEB_JAVA
-			MENUITEM "Str&uts Config",				IDM_LANG_STRUTS
-			MENUITEM "&Hibernate Config",			IDM_LANG_HIB_CFG
-			MENUITEM "Hibernate &Mapping",			IDM_LANG_HIB_MAP
-			MENUITEM "Spring &Beans",				IDM_LANG_SPRING_BEANS
-			MENUITEM "&JBoss Config",				IDM_LANG_JBOSS
+			MENUITEM "&Apache Config",				IDM_LEXER_APACHE
+			MENUITEM "&Tomcat Config",				IDM_LEXER_TOMCAT
+			MENUITEM "&Web Config",					IDM_LEXER_WEB_JAVA
+			MENUITEM "Str&uts Config",				IDM_LEXER_STRUTS
+			MENUITEM "&Hibernate Config",			IDM_LEXER_HIB_CFG
+			MENUITEM "Hibernate &Mapping",			IDM_LEXER_HIB_MAP
+			MENUITEM "Spring &Beans",				IDM_LEXER_SPRING_BEANS
+			MENUITEM "&JBoss Config",				IDM_LEXER_JBOSS
 		END
 		//POPUP "XML (.&NET)"
 		//BEGIN
-		//	MENUITEM "&Web Config",					IDM_LANG_WEB_NET
-		//	MENUITEM "&ResX Resource",				IDM_LANG_RESX
-		//	MENUITEM "WPF &XAML",					IDM_LANG_XAML
+		//	MENUITEM "&Web Config",					IDM_LEXER_WEB_NET
+		//	MENUITEM "&ResX Resource",				IDM_LEXER_RESX
+		//	MENUITEM "WPF &XAML",					IDM_LEXER_XAML
 		//END
 		POPUP "XML (&Others)"
 		BEGIN
-			MENUITEM "&Property List",				IDM_LANG_PROPERTY_LIST
-			MENUITEM "Android &Manifest",			IDM_LANG_ANDROID_MANIFEST
-			MENUITEM "Android &Layout",				IDM_LANG_ANDROID_LAYOUT
-			//MENUITEM "SV&G Document",				IDM_LANG_SVG
+			MENUITEM "&Property List",				IDM_LEXER_PROPERTY_LIST
+			MENUITEM "Android &Manifest",			IDM_LEXER_ANDROID_MANIFEST
+			MENUITEM "Android &Layout",				IDM_LEXER_ANDROID_LAYOUT
+			//MENUITEM "SV&G Document",				IDM_LEXER_SVG
 		END
 	END
 	POPUP "&Settings"
@@ -562,34 +574,35 @@ BEGIN
 		MENUITEM "&Long Line Settings...",			IDM_VIEW_LONGLINESETTINGS
 		MENUITEM "&Auto Completion Settings...",	IDM_VIEW_AUTOCOMPLETION_SETTINGS
 		MENUITEM "Auto Completion I&gnore Case",	IDM_VIEW_AUTOCOMPLETION_IGNORECASE
-		MENUITEM SEPARATOR
-		POPUP "Ren&dering Technology"
-		BEGIN
-			MENUITEM "&Legacy GDI",					IDM_SET_RENDER_TECH_GDI
-			MENUITEM "&Direct2D",					IDM_SET_RENDER_TECH_D2D
-			MENUITEM "Direct2D &Retain",			IDM_SET_RENDER_TECH_D2DRETAIN
-			MENUITEM "Direct2D &GDI DC",			IDM_SET_RENDER_TECH_D2DDC
-		END
-		POPUP "&RTL Layout (GDI)"
-		BEGIN
-			MENUITEM "&Edit Window",				IDM_SET_RTL_LAYOUT_EDIT
-			MENUITEM "&Other Window",				IDM_SET_RTL_LAYOUT_OTHER
-		END
-		POPUP "&Bidirectional (Direct2D)"
-		BEGIN
-			MENUITEM "&None",						IDM_SET_BIDIRECTIONAL_NONE
-			MENUITEM "&Left to Right",				IDM_SET_BIDIRECTIONAL_L2R
-			MENUITEM "&Right to Left",				IDM_SET_BIDIRECTIONAL_R2L
-		END
-		MENUITEM "Use &Inline Mode IME",			IDM_SET_USE_INLINE_IME
+		MENUITEM "Enable Line Selection &Mode",		IDM_SET_LINE_SELECTION_MODE
 		MENUITEM SEPARATOR
 		POPUP "Appearanc&e"
 		BEGIN
 			MENUITEM "S&how Toolbar\tCtrl+F11",		IDM_VIEW_TOOLBAR
-			MENUITEM "Customi&ze Toolbar...",		IDM_VIEW_CUSTOMIZETB
+			MENUITEM "Customi&ze Toolbar...",		IDM_VIEW_CUSTOMIZE_TOOLBAR
+			MENUITEM "&Auto Scale Toolbar",			IDM_VIEW_AUTO_SCALE_TOOLBAR
 			MENUITEM "Show Stat&usbar\tShift+F11",	IDM_VIEW_STATUSBAR
 			MENUITEM SEPARATOR
 			MENUITEM "Transparent &Mode\tCtrl+0",	IDM_VIEW_TRANSPARENT
+			POPUP "Scroll &Past Last Line"
+			BEGIN
+				MENUITEM "&No",						IDM_VIEW_SCROLLPASTLASTLINE_NO
+				MENUITEM "&One Page",				IDM_VIEW_SCROLLPASTLASTLINE_ONE
+				MENUITEM "&Half Page",				IDM_VIEW_SCROLLPASTLASTLINE_HALF
+				MENUITEM "1/&3 Page",				IDM_VIEW_SCROLLPASTLASTLINE_THIRD
+				MENUITEM "1/&4 Page",				IDM_VIEW_SCROLLPASTLASTLINE_QUARTER
+			END
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+			MENUITEM SEPARATOR
+			POPUP "&Language"
+			BEGIN
+				MENUITEM "&System Language",		IDM_LANG_USER_DEFAULT
+				MENUITEM "&English",				IDM_LANG_ENGLISH_US
+				MENUITEM "简体中文(&C)",				IDM_LANG_CHINESE_SIMPLIFIED
+				MENUITEM "繁體中文(&T)",				IDM_LANG_CHINESE_TRADITIONAL
+				MENUITEM "日本語(&J)",				IDM_LANG_JAPANESE
+			END
+#endif
 		END
 		POPUP "Full Scree&n Mode"
 		BEGIN
@@ -630,9 +643,40 @@ BEGIN
 			MENUITEM "Use &metapath to Open Folder",IDM_SET_OPEN_FOLDER_METAPATH
 		END
 		MENUITEM SEPARATOR
+		POPUP "A&dvanced Settings"
+		BEGIN
+			POPUP "Ren&dering Technology"
+			BEGIN
+				MENUITEM "&Legacy GDI",				IDM_SET_RENDER_TECH_GDI
+				MENUITEM "&Direct2D",				IDM_SET_RENDER_TECH_D2D
+				MENUITEM "Direct2D &Retain",		IDM_SET_RENDER_TECH_D2DRETAIN
+				MENUITEM "Direct2D &GDI DC",		IDM_SET_RENDER_TECH_D2DDC
+			END
+			POPUP "Font &Quality"
+			BEGIN
+				MENUITEM "&Default",				IDM_VIEW_FONTQUALITY_DEFAULT
+				MENUITEM "&None",					IDM_VIEW_FONTQUALITY_NONE
+				MENUITEM "&Standard",				IDM_VIEW_FONTQUALITY_STANDARD
+				MENUITEM "&ClearType",				IDM_VIEW_FONTQUALITY_CLEARTYPE
+			END
+			POPUP "&RTL Layout (GDI)"
+			BEGIN
+				MENUITEM "&Edit Window",			IDM_SET_RTL_LAYOUT_EDIT
+				MENUITEM "&Other Window",			IDM_SET_RTL_LAYOUT_OTHER
+			END
+			POPUP "&Bidirectional (Direct2D)"
+			BEGIN
+				MENUITEM "&None",					IDM_SET_BIDIRECTIONAL_NONE
+				MENUITEM "&Left to Right",			IDM_SET_BIDIRECTIONAL_L2R
+				MENUITEM "&Right to Left",			IDM_SET_BIDIRECTIONAL_R2L
+			END
+			MENUITEM "Use &Inline Mode IME",		IDM_SET_USE_INLINE_IME
+			MENUITEM SEPARATOR
+			MENUITEM "&System Integration...",		IDM_SET_SYSTEM_INTEGRATION
+			MENUITEM "&Open Notepad2.ini\tCtrl+F7",	CMD_OPENINIFILE
+		END
 		MENUITEM "Save Settings On E&xit",			IDM_VIEW_SAVESETTINGS
 		MENUITEM "Sa&ve Settings Now\tF7",			IDM_VIEW_SAVESETTINGSNOW
-		MENUITEM "&Open Notepad2.ini\tCtrl+F7",		CMD_OPENINIFILE
 	END
 	POPUP "&Help"
 	BEGIN
@@ -661,7 +705,7 @@ BEGIN
 		MENUITEM "&Paste",						IDM_EDIT_PASTE
 		MENUITEM "&Delete",						IDM_EDIT_DELETE
 		MENUITEM SEPARATOR
-		MENUITEM "&Select All",					IDM_EDIT_SELECTALL
+		MENUITEM "Select &All",					IDM_EDIT_SELECTALL
 		MENUITEM SEPARATOR
 		MENUITEM "Toggle &Fold",				IDM_VIEW_FOLD_CURRENT_BLOCK
 		MENUITEM SEPARATOR
@@ -670,7 +714,8 @@ BEGIN
 	POPUP "+"
 	BEGIN
 		MENUITEM "Show &Toolbar",				IDM_VIEW_TOOLBAR
-		MENUITEM "&Customize Toolbar...",		IDM_VIEW_CUSTOMIZETB
+		MENUITEM "&Customize Toolbar...",		IDM_VIEW_CUSTOMIZE_TOOLBAR
+		MENUITEM "&Auto Scale Toolbar",			IDM_VIEW_AUTO_SCALE_TOOLBAR
 		MENUITEM "Show &Statusbar",				IDM_VIEW_STATUSBAR
 	END
 	POPUP "+"
@@ -772,6 +817,7 @@ BEGIN
     "K",            IDM_EDIT_SWAP,          VIRTKEY, CONTROL, NOINVERT
     "K",            IDM_FILE_ADDTOFAV,      VIRTKEY, ALT, NOINVERT
     "K",            CMD_COPYWINPOS,         VIRTKEY, SHIFT, CONTROL, NOINVERT
+    "L",            IDM_FILE_LAUNCH, 		VIRTKEY, CONTROL, NOINVERT
     "L",            IDM_EDIT_STRIPLASTCHAR, VIRTKEY, ALT, NOINVERT
     "L",            IDM_VIEW_LONGLINEMARKER, VIRTKEY, SHIFT, CONTROL, NOINVERT
     "M",            IDM_FILE_BROWSE,        VIRTKEY, CONTROL, NOINVERT
@@ -821,13 +867,14 @@ BEGIN
     VK_DOWN,        IDM_EDIT_MOVELINEDOWN,  VIRTKEY, ALT, NOINVERT
     VK_ESCAPE,      CMD_ESCAPE,             VIRTKEY, NOINVERT
     VK_ESCAPE,      CMD_SHIFTESC,           VIRTKEY, SHIFT, NOINVERT
+    VK_INSERT,      IDM_EDIT_COPY,          VIRTKEY, CONTROL, NOINVERT
     VK_F1,          IDM_HELP_ABOUT,         VIRTKEY, NOINVERT
     VK_F11,         IDM_VIEW_TOGGLE_FULLSCREEN,      VIRTKEY, NOINVERT
     VK_F11,         IDM_VIEW_TOOLBAR,       VIRTKEY, CONTROL, NOINVERT
     VK_F11,         IDM_VIEW_FULLSCREEN_HIDE_MENU,   VIRTKEY, ALT, NOINVERT
     VK_F11,         IDM_VIEW_STATUSBAR,     VIRTKEY, SHIFT, NOINVERT
     VK_F12,         IDM_VIEW_SCHEME,        VIRTKEY, NOINVERT
-    VK_F12,         IDM_VIEW_SCHEMECONFIG,  VIRTKEY, CONTROL, NOINVERT
+    VK_F12,         IDM_VIEW_SCHEME_CONFIG,  VIRTKEY, CONTROL, NOINVERT
     VK_F12,         IDM_VIEW_DEFAULT_CODE_FONT, VIRTKEY, ALT, NOINVERT
     VK_F12,         IDM_VIEW_USE2NDGLOBALSTYLE, VIRTKEY, SHIFT, NOINVERT
     VK_F2,          IDM_EDIT_SELTONEXT,     VIRTKEY, CONTROL, ALT, NOINVERT
@@ -865,15 +912,15 @@ BEGIN
     VK_OEM_2,       IDM_EDIT_LINECOMMENT,   VIRTKEY, CONTROL, NOINVERT
     VK_OEM_2,       IDM_EDIT_COMPLETEWORD,  VIRTKEY, ALT, NOINVERT
     VK_OEM_5,       IDM_VIEW_RESETZOOM,     VIRTKEY, CONTROL, NOINVERT
+    VK_OEM_6,       IDM_EDIT_SELECTLINE_BLOCK,VIRTKEY, SHIFT, ALT, NOINVERT
     VK_OEM_COMMA,   CMD_JUMP2SELSTART,      VIRTKEY, ALT, NOINVERT
     VK_OEM_MINUS,   IDM_VIEW_ZOOMOUT,       VIRTKEY, CONTROL, NOINVERT
     VK_OEM_MINUS,   CMD_DECREASENUM,        VIRTKEY, CONTROL, ALT, NOINVERT
-    VK_OEM_PERIOD,  IDM_VIEW_ZOOM_LEVEL,    VIRTKEY, CONTROL, NOINVERT
     VK_OEM_PERIOD,  CMD_JUMP2SELEND,        VIRTKEY, ALT, NOINVERT
     VK_OEM_PLUS,    IDM_VIEW_ZOOMIN,        VIRTKEY, CONTROL, NOINVERT
     VK_OEM_PLUS,    CMD_INCREASENUM,        VIRTKEY, CONTROL, ALT, NOINVERT
     VK_RETURN,      CMD_CTRLENTER,          VIRTKEY, SHIFT, CONTROL, NOINVERT
-    VK_SPACE,       IDM_EDIT_SELECTWORD,    VIRTKEY, CONTROL, NOINVERT
+    VK_SPACE,       IDM_EDIT_SELECTWORD,    VIRTKEY, CONTROL, ALT, NOINVERT
     VK_SPACE,       IDM_EDIT_SELECTLINE,    VIRTKEY, SHIFT, CONTROL, NOINVERT
     VK_SUBTRACT,    IDM_VIEW_ZOOMOUT,       VIRTKEY, CONTROL, NOINVERT
     VK_SUBTRACT,    CMD_DECLINELIMIT,       VIRTKEY, ALT, NOINVERT
@@ -1033,20 +1080,38 @@ BEGIN
     SCROLLBAR       IDC_RESIZEGRIP3,7,189,10,10
 END
 
-IDD_DEFENCODING DIALOGEX 0, 0, 209, 119
+IDD_SYSTEM_INTEGRATION DIALOGEX 0, 0, 232, 118
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "System Integration"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    GROUPBOX        "System Integration (requires Administrator privileges)",IDC_GROUP_SYSTEM_INTEGRATION,7,7,218,84
+    AUTOCHECKBOX    "Add Notepad2 to Windows Explorer's context menu.",IDC_ENABLE_CONTEXT_MENU,14,20,204,10,WS_TABSTOP
+    LTEXT           "Context menu text:",IDC_STATIC,28,35,70,8
+    EDITTEXT        IDC_CONTEXT_MENU_TEXT,100,32,118,14,ES_AUTOHSCROLL | WS_TABSTOP
+    AUTOCHECKBOX    "Enable Taskbar Jump List.",IDC_ENABLE_JUMP_LIST,14,48,204,10,WS_TABSTOP
+    LTEXT           "Application name:",IDC_STATIC,28,63,70,8
+    EDITTEXT        IDC_APPLICATION_NAME,100,60,118,14,ES_AUTOHSCROLL | WS_TABSTOP
+    AUTOCHECKBOX    "Replace Windows Notepad via registry.",IDC_REPLACE_WINDOWS_NOTEPAD,14,76,204,10,WS_TABSTOP
+    DEFPUSHBUTTON   "OK",IDOK,119,97,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,175,97,50,14
+END
+
+IDD_DEFENCODING DIALOGEX 0, 0, 209, 129
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Encoding"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     LTEXT           "&Default encoding:",IDC_STATIC,7,7,195,8
     EDITTEXT        IDC_ENCODING_LABEL,7,20,195,14,ES_READONLY | ES_AUTOHSCROLL | WS_TABSTOP
-    CONTROL         "<a>Click here to select default encoding.</a>",IDC_ENCODING_LINK,"SysLink",WS_TABSTOP,7,38,195,10
+    CONTROL         "<a>Click here to &select default encoding.</a>",IDC_ENCODING_LINK,"SysLink",WS_TABSTOP,7,38,195,10
     AUTOCHECKBOX    "Skip statistical &Unicode (UTF-16) detection.",IDC_NOUNICODEDETECTION,7,52,195,10,WS_TABSTOP
-    AUTOCHECKBOX    "Open &ANSI (unknown encoding) files in UTF-8 mode.",IDC_ANSIASUTF8,7,62,195,10,WS_TABSTOP
-    AUTOCHECKBOX    "Open ANSI Art (*.&nfo, *.diz) files in DOS-437 mode.",IDC_NFOASOEM,7,72,195,10,WS_TABSTOP
-    AUTOCHECKBOX    "Don't parse encoding &tags.",IDC_ENCODINGFROMFILEVARS,7,82,195,10,WS_TABSTOP
-    DEFPUSHBUTTON   "OK",IDOK,96,98,50,14
-    PUSHBUTTON      "Cancel",IDCANCEL,152,98,50,14
+    AUTOCHECKBOX    "Open 7-bit &ASCII files in UTF-8 mode.",IDC_ASCIIASUTF8,7,62,195,10,WS_TABSTOP
+    AUTOCHECKBOX    "Open ANSI (unknown encoding) files in UTF-&8 mode.",IDC_ANSIASUTF8,7,72,195,10,WS_TABSTOP
+    AUTOCHECKBOX    "Open ANSI Art (*.&nfo, *.diz) files in DOS-437 mode.",IDC_NFOASOEM,7,82,195,10,WS_TABSTOP
+    AUTOCHECKBOX    "Don't parse encoding &tags.",IDC_ENCODINGFROMFILEVARS,7,92,195,10,WS_TABSTOP
+    DEFPUSHBUTTON   "OK",IDOK,96,108,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,152,108,50,14
 END
 
 IDD_DEFEOLMODE DIALOGEX 0, 0, 196, 80
@@ -1088,9 +1153,9 @@ CAPTION "Goto"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     LTEXT           "&Line (empty or 1 - %s):",IDC_LINE_RANGE,7,7,150,8
-    EDITTEXT        IDC_LINENUM,7,18,90,14,ES_NUMBER | ES_AUTOHSCROLL
+    EDITTEXT        IDC_LINENUM,7,18,90,14,ES_AUTOHSCROLL
     LTEXT           "&Column (empty or 1 - %s):",IDC_COLUMN_RANGE,7,37,150,8
-    EDITTEXT        IDC_COLNUM,7,48,90,14,ES_NUMBER | ES_AUTOHSCROLL
+    EDITTEXT        IDC_COLNUM,7,48,90,14,ES_AUTOHSCROLL
     DEFPUSHBUTTON   "OK",IDOK,109,18,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,109,48,50,14
 END
@@ -1128,10 +1193,10 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSM
 CAPTION "Select Scheme"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    CONTROL         "",IDC_STYLELIST,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS | LVS_AUTOARRANGE | LVS_NOCOLUMNHEADER | WS_BORDER | WS_TABSTOP,7,7,151,162
+    CONTROL         "",IDC_STYLELIST,"SysTreeView32",TVS_SHOWSELALWAYS | TVS_HASBUTTONS | TVS_LINESATROOT | WS_BORDER | WS_HSCROLL | WS_TABSTOP,7,7,151,162
     AUTOCHECKBOX    "Set selected scheme as &default.",IDC_DEFAULTSCHEME,7,171,151,10,WS_TABSTOP
     AUTOCHECKBOX    "&Auto-select by filename extension.",IDC_AUTOSELECT,7,182,151,10,WS_TABSTOP
-    DEFPUSHBUTTON   "OK",IDOK,52,196,50,14,WS_DISABLED
+    DEFPUSHBUTTON   "OK",IDOK,52,196,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,108,196,50,14
     SCROLLBAR       IDC_RESIZEGRIP3,7,198,10,10
 END
@@ -1141,7 +1206,7 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSM
 CAPTION "Customize Schemes"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    CONTROL         "",IDC_STYLELIST,"SysTreeView32",TVS_SHOWSELALWAYS | TVS_SINGLEEXPAND | WS_BORDER | WS_HSCROLL | WS_TABSTOP,7,7,164,224
+    CONTROL         "",IDC_STYLELIST,"SysTreeView32",TVS_FULLROWSELECT | TVS_SHOWSELALWAYS | TVS_HASBUTTONS | TVS_LINESATROOT | WS_BORDER | WS_HSCROLL | WS_TABSTOP,7,7,164,224
     LTEXT           "",IDC_STYLELABEL,181,132,280,8
     EDITTEXT        IDC_STYLEEDIT,181,142,280,18,ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL
     PUSHBUTTON      "For&e...",IDC_STYLEFORE,181,195,46,14
@@ -1159,9 +1224,7 @@ BEGIN
     GROUPBOX        "Info",IDC_INFO_GROUPBOX,181,7,280,122
     ICON            IDI_STYLES,IDC_STATIC,189,19,20,20
     LTEXT           "Customize Schemes",IDC_TITLE,220,25,200,12
-    LTEXT           "Filename extensions must be separated by semicolon (;)",IDC_STATIC,191,44,247,13
-    LTEXT           "Style format:\n\tfont:Name; size:[+|-]nn.mm; weight:nnn; bold; italic; underline; strike;\n\tcharset:dd; locale:Name; case:[Upper|Lower|Camel];\n\tfore:#ffffff; back:#bbbbbb; alpha:aa; eolfilled;",IDC_STATIC,191,60,260,34
-    LTEXT           "Style properties can be copied using copy and paste or drag and drop.\n\nThe ""Preview"" button will not apply any changes.",IDC_STATIC,191,100,260,26
+    EDITTEXT        IDC_STYLEEDIT_HELP,186,40,272,86,ES_READONLY | ES_MULTILINE | NOT WS_BORDER | NOT WS_TABSTOP
     LTEXT           "Associated file&name extensions:|Style &settings:",IDC_STYLELABELS,315,230,152,8,NOT WS_VISIBLE
     LTEXT           "Built-in default value:",IDC_STYLELABEL_DEFAULT,181,162,160,8
     EDITTEXT        IDC_STYLEVALUE_DEFAULT,181,172,280,18,ES_READONLY | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL
@@ -1324,9 +1387,9 @@ CAPTION "Insert HTML/XML Tag"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     LTEXT           "&Opening tag (with attributes):",IDC_STATIC,7,7,130,8
-    EDITTEXT        IDC_MODIFY_LINE_PREFIX,7,18,250,18,ES_MULTILINE | ES_AUTOVSCROLL |  WS_VSCROLL | ES_WANTRETURN
+    EDITTEXT        IDC_MODIFY_LINE_PREFIX,7,18,250,18,ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL | ES_WANTRETURN
     LTEXT           "&Closing tag (can be edited):",IDC_MODIFY_LINE_TIP2,7,41,118,8
-    EDITTEXT        IDC_MODIFY_LINE_APPEND,7,52,250,18,ES_MULTILINE | ES_AUTOVSCROLL |  WS_VSCROLL | ES_WANTRETURN
+    EDITTEXT        IDC_MODIFY_LINE_APPEND,7,52,250,18,ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL | ES_WANTRETURN
     DEFPUSHBUTTON   "OK",IDOK,151,77,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,207,77,50,14
     SCROLLBAR       IDC_RESIZEGRIP2,7,77,10,10
@@ -1340,7 +1403,7 @@ BEGIN
     LTEXT           "Insert &before selection:",IDC_STATIC,7,7,114,8
     EDITTEXT        IDC_MODIFY_LINE_PREFIX,7,18,234,18,ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL | ES_WANTRETURN
     LTEXT           "Insert &after selection:",IDC_MODIFY_LINE_TIP2,7,41,116,8
-    EDITTEXT        IDC_MODIFY_LINE_APPEND,7,52,234,18,ES_MULTILINE |  ES_AUTOVSCROLL | WS_VSCROLL | ES_WANTRETURN
+    EDITTEXT        IDC_MODIFY_LINE_APPEND,7,52,234,18,ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL | ES_WANTRETURN
     DEFPUSHBUTTON   "OK",IDOK,135,77,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,191,77,50,14
     SCROLLBAR       IDC_RESIZEGRIP2,7,77,10,10
@@ -1408,7 +1471,7 @@ CAPTION "Select Encoding"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     LTEXT           "",IDC_ENCODING_LABEL,7,7,173,8
-    CONTROL         "",IDC_ENCODINGLIST,"SysTreeView32",TVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,7,19,173,190
+    CONTROL         "",IDC_ENCODINGLIST,"SysTreeView32",TVS_SHOWSELALWAYS | TVS_HASBUTTONS | TVS_LINESATROOT | WS_BORDER | WS_TABSTOP,7,19,173,190
     DEFPUSHBUTTON   "OK",IDOK,74,217,50,14,WS_DISABLED
     PUSHBUTTON      "Cancel",IDCANCEL,130,217,50,14
     SCROLLBAR       IDC_RESIZEGRIP,7,221,10,10
@@ -1721,9 +1784,9 @@ BEGIN
     IDS_SAVEFILE            "Saving ""%s""..."
     IDS_PRINTFILE           "Printing page %s..."
     IDS_SAVINGSETTINGS      "Saving settings..."
-    IDS_LINKDESCRIPTION     "Edit with Notepad2"
-    IDS_FILTER_ALL          "All files (*.*)|*.*|"
-    IDS_FILTER_EXE          "Executable files (*.exe;*.com;*.bat;*.cmd;*.lnk;*.pif)|*.exe;*.com;*.bat;*.cmd;*.lnk;*.pif|All files (*.*)|*.*|"
+    IDS_LINKDESCRIPTION     "Edit with Notepad&2"
+    IDS_FILTER_ALL          "All Files (*.*)|*.*|"
+    IDS_FILTER_EXE          "Executable Files (*.exe;*.com;*.bat;*.cmd;*.lnk;*.pif)|*.exe;*.com;*.bat;*.cmd;*.lnk;*.pif|All Files (*.*)|*.*|"
 END
 
 STRINGTABLE
@@ -1760,7 +1823,7 @@ $\tEnd of a line\n\
 \\xHH\tCharacter with hexadecimal code HH\n\
 ?\tMatches preceding 0 or 1 times\n*\tMatches preceding 0 or more times\n\
 +\tMatches preceding 1 or more times\n\
-*? or +?\tNon greedy matching of quantifiers ""?"" and ""+""\n\
+*? or +?\tNon-greedy matching of quantifiers ""?"" and ""+""\n\
 (\tStart of a region\n\
 )\tEnd of a region\n\
 \\n\tRefers to a region when replacing (n is 1-9)\n\n\
@@ -1777,7 +1840,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILTER_INI          "Configuration files (*.ini)|*.ini|All files (*.*)|*.*|"
+    IDS_FILTER_INI          "Configuration Files (*.ini)|*.ini|All Files (*.*)|*.*|"
     IDS_OPENWITH            "Select the directory with links to your favorite applications."
     IDS_FAVORITES           "Select the directory with links to your favorite files."
 END
@@ -1830,6 +1893,9 @@ BEGIN
     IDS_ERR_ENCODINGNA      "Code page conversion tables for the selected encoding are not available on your system."
     IDS_ERR_UNICODE         "Error converting this Unicode file.\nData will be lost if the file is saved!"
 	IDS_BINARY_FILE_LOCKED	"This is most likely not a text file, so it is locked for editing\nto prevent accidental editing cause file corruption."
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+	IDS_CHANGE_LANG_RESTART	"Changing the UI language requires a restart of Notepad2, restart now?"
+#endif
 END
 
 STRINGTABLE
@@ -1847,7 +1913,7 @@ file\tMust be the last argument, no quoted spaces by default.\n\
 /l[o|p]\tAuto-reload modified files.\n\
 /q\tForce creation of new files without prompt.\n\
 /s name\tSelect specified syntax scheme.\n\
-/d\tSelect default text scheme.\n\
+/d\tSelect Text File scheme.\n\
 /h\tSelect Web Source Code scheme.\n\
 /x\tSelect XML Document scheme.\n\
 /c\tOpen new window and paste clipboard contents.\n\
@@ -1859,7 +1925,7 @@ file\tMust be the last argument, no quoted spaces by default.\n\
 /i\tStart as tray icon.\n\
 /o\tKeep window on top.\n\
 /f path\tSpecify ini-file (/f0 no ini-file).\n\
-/u\tLaunch with elevated privileges (as Administrator).\n\
+/u\tLaunch with elevated privileges (run as Administrator).\n\
 /z\tSkip next (usable for registry-based Notepad replacement)."
 END
 
@@ -1905,102 +1971,103 @@ END
 // encoding name string format: 'long descriptive name on Select Encoding dialog' + ';' + 'short name on statusbar'
 STRINGTABLE
 BEGIN
-    61000                   "ANSI;ANSI"
-    61001                   "OEM;OEM"
-    61002                   "UTF-16LE with BOM;UTF-16LE BOM"
-    61003                   "UTF-16BE with BOM;UTF-16BE BOM"
-    61004                   "UTF-16LE;UTF-16LE"
-    61005                   "UTF-16BE;UTF-16BE"
-    61006                   "UTF-8;UTF-8"
-    61007                   "UTF-8 with BOM;UTF-8 BOM"
-    61008                   "UTF-7;UTF-7"
-    61009                   "Transparent ASMO (DOS-720);DOS-720"					// Arabic
-    61010                   "ISO 8859-6 (Visual Order);ISO 8859-6"					// Arabic
-    61011                   "ISO 8859-6-I (Logical Order);ISO 8859-6-I"				// Arabic
-    61012                   "Windows-1256;Windows-1256"								// Arabic
-    61013                   "OEM Baltic (DOS-775);DOS-775"							// Baltic Northern European
-    61014                   "Baltic (Latin-4, ISO 8859-4);ISO 8859-4"				// Baltic Northern European
-    61015                   "ANSI Baltic (Windows-1257);Windows-1257"				// Baltic Northern European
-    61016                   "OEM Latin-2 (DOS-852);DOS-852"							// Central European
-    61017                   "Latin-2 (ISO 8859-2);ISO 8859-2"						// Central European
-    61018                   "Mac Latin-2;Mac Latin-2"								// Central European
-    61019                   "Latin-2 (Windows-1250);Windows-1250"					// Central European
-    61020                   "Simplified Chinese (GBK, GB2312);GBK"					// Chinese
-    61021                   "Simplified Chinese (GB18030);GB18030"					// Chinese
-    61022                   "Traditional Chinese (Big5, Big5-HKSCS);Big5"			// Chinese
-    61024                   "Mac Croatian;Mac Croatian"								// Southeast European
-    61025                   "OEM Russian (DOS-866);DOS-866"							// Cyrillic
-    61026                   "ISO 8859-5;ISO 8859-5"									// Cyrillic
-    61027                   "Russian (KOI8-R);KOI8-R"								// Cyrillic
-    61028                   "Ukrainian (KOI8-U);KOI8-U"								// Cyrillic
-    61029                   "Mac Cyrillic;Mac Cyrillic"								// Cyrillic
-    61030                   "Windows-1251;Windows-1251"								// Cyrillic
-    61031                   "Estonian (Baltic Rim, Latin-7, ISO 8859-13);ISO 8859-13"	// Northern European
-    61032                   "OEM French Canadian (DOS-863);DOS-863"					// Western European
-    61033                   "OEM Greek (DOS-737);DOS-737"							// Greek
-    61034                   "ISO 8859-7;ISO 8859-7"									// Greek
-    61035                   "Mac Greek;Mac Greek"									// Greek
-    61036                   "Windows-1253;Windows-1253"								// Greek
-    61037                   "OEM Modern Greek (DOS-869);DOS-869"					// Greek
-    61038                   "OEM Hebrew (DOS-862);DOS-862"							// Hebrew
-    61039                   "ISO 8859-8-I (Logical Order);ISO 8859-8-I"				// Hebrew
-    61040                   "ISO 8859-8 (Visual Order);ISO 8859-8"					// Hebrew
-    61041                   "Mac Hebrew;Mac Hebrew"									// Hebrew
-    61042                   "Windows-1255;Windows-1255"								// Hebrew
-    61043                   "OEM Icelandic (DOS-861);DOS-861"						// Northern European
-    61044                   "Mac Icelandic;Mac Icelandic"							// Northern European
-    61045                   "ISO 2022 (no halfwidth Katakana);ISO-2022-JP"			// Japanese
-    61046                   "Shift-JIS;Shift-JIS"									// Japanese
-    61047                   "Johab;Johab"											// Korean
-    61048                   "Unified Hangul Code;UHC"								// Korean
-    61049                   "Southern European (Latin-3, ISO 8859-3);ISO 8859-3"	// Southern European
-    61050                   "Latin-9 (ISO 8859-15);ISO 8859-15"						// Western European
-    61051                   "Nordic (Latin-6, ISO 8859-10);ISO 8859-10"				// Northern European
-    61052                   "EUC Japanese;EUC-JP"									// Japanese
-    61053                   "EUC Korean;EUC-KR"										// Korean
-    61054                   "South-Eastern European (Latin-10, ISO 8859-16);ISO 8859-16"	// South-Eastern European
-    61055                   "Celtic (Latin-8, ISO 8859-14);ISO 8859-14"				// Western European
-    61056                   "Mac Thai;Mac Thai"										// Southeast Asia
-    61057                   "Thai (TIS-620, Windows-874, ISO 8859-11);TIS-620"		// Southeast Asia
-    61058                   "OEM Turkish (DOS-857);DOS-857"							// Turkish
-    61059                   "Latin-5 (ISO 8859-9);ISO 8859-9"						// Turkish
-    61060                   "Mac Turkish;Mac Turkish"								// Turkish
-    61061                   "Windows-1254;Windows-1254"								// Turkish
-    61062                   "Mac Ukrainian;Mac Ukrainian"							// Cyrillic
-    61063                   "Vietnamese (Windows-1258);Windows-1258"				// Southeast Asia
-    61064                   "OEM Latin-1 (DOS-850);DOS-850"							// Western European
-    61065                   "Latin-1 (ISO 8859-1);ISO 8859-1"						// Western European
-    61066                   "Mac Roman;Mac Roman"									// Western European
-    61067                   "Latin-1 (Windows-1252);Windows-1252"					// Western European
-	61068					"US-Canada (IBM037);EBCDIC (US-Canada)"					// EBCDIC
-	61069					"US-Canada + Euro Symbol (IBM1140);EBCDIC (US-Canada Euro)"	// EBCDIC
-	61070					"International (IBM500);EBCDIC (Intl.)"					// EBCDIC
-	61071					"Latin-2 (IBM870);EBCDIC (Latin-2)"						// EBCDIC
-	61072					"Greek Modern (CP875);EBCDIC (Greek)"					// EBCDIC
-	61073					"Turkish (Latin-5) (IBM1026);EBCDIC (Latin-5)"			// EBCDIC
-	61074					"OEM United States (DOS-437);DOS-437"					// Western European
-    61075                   "OEM Latin-1 + Euro Symbol (DOS-858);DOS-858"			// Western European
-	61076					"OEM Portuguese (DOS-860);DOS-860"						// Western European
-	61077					"Mac Arabic;Mac Arabic"									// Arabic
-	61078					"OEM Arabic (DOS-864);OEM Arabic"						// Arabic
-	61079					"Mac Romanian;Mac Romanian"								// South European
-	61080					"OEM Nordic (DOS-865);DOS-865"							// Northern European
-	61081					"OEM Cyrillic (primarily Russian) (IBM855);OEM Cyrillic"// Cyrillic
-	61082					"Mac Japanese;Mac Japanese"								// Japanese
-	61083					"ISO 2022 (allow 1 byte Kana);CS ISO-2022-JP"			// Japanese
-	61084					"ISO 2022 (allow 1 byte Kana - SO/SI);ISO-2022-JP SI/SO"// Japanese
-	61085					"Mac Korean;Mac Korean"									// Korean
-	61086					"ISO 2022 Korean;ISO-2022-KR"							// Korean
-	61087					"Simplified Chinese (Mac);Mac GB-2312"					// Chinese
-	61088					"Simplified Chinese (HZ-GB2312);HZ-GB2312"				// Chinese
-	61089					"Simplified Chinese (ISO 2022);ISO-2022-CN(S)"			// Chinese
-	61090					"Traditional Chinese (Mac);Mac Big5"					// Chinese
-	61091					"Traditional Chinese (ISO 2022);ISO-2022-CN(T)"			// Chinese
-	61092					"Traditional Chinese (CNS);CNS"							// Chinese
+	IDS_ENCODING_ANSI				"ANSI;ANSI"
+	IDS_ENCODING_OEM				"OEM;OEM"
+	IDS_ENCODING_UTF16LE_BOM		"UTF-16LE with BOM;UTF-16LE BOM"
+	IDS_ENCODING_UTF16BE_BOM		"UTF-16BE with BOM;UTF-16BE BOM"
+	IDS_ENCODING_UTF16LE			"UTF-16LE;UTF-16LE"
+	IDS_ENCODING_UTF16BE			"UTF-16BE;UTF-16BE"
+	IDS_ENCODING_UTF8				"UTF-8;UTF-8"
+	IDS_ENCODING_UTF8BOM			"UTF-8 with BOM;UTF-8 BOM"
+	IDS_ENCODING_UTF7				"UTF-7;UTF-7"
+	IDS_ENCODING_DOS720				"Transparent ASMO (DOS-720);DOS-720"					// Arabic
+	IDS_ENCODING_ISO8859_6			"ISO 8859-6 (Visual Order);ISO 8859-6"					// Arabic
+	IDS_ENCODING_ISO8859_6I			"ISO 8859-6-I (Logical Order);ISO 8859-6-I"				// Arabic
+	IDS_ENCODING_WINDOWS1256		"Windows-1256;Windows-1256"								// Arabic
+	IDS_ENCODING_DOS775				"OEM Baltic (DOS-775);DOS-775"							// Baltic Northern European
+	IDS_ENCODING_ISO8859_4			"Baltic (Latin-4, ISO 8859-4);ISO 8859-4"				// Baltic Northern European
+	IDS_ENCODING_WINDOWS1257		"ANSI Baltic (Windows-1257);Windows-1257"				// Baltic Northern European
+	IDS_ENCODING_DOS852				"OEM Latin-2 (DOS-852);DOS-852"							// Central European
+	IDS_ENCODING_ISO8859_2			"Latin-2 (ISO 8859-2);ISO 8859-2"						// Central European
+	IDS_ENCODING_MAC_LATIN2			"Mac Latin-2;Mac Latin-2"								// Central European
+	IDS_ENCODING_WINDOWS1250		"Latin-2 (Windows-1250);Windows-1250"					// Central European
+	IDS_ENCODING_GBK				"Simplified Chinese (GBK, GB2312);GBK"					// Chinese
+	IDS_ENCODING_GB18030			"Simplified Chinese (GB18030);GB18030"					// Chinese
+	IDS_ENCODING_BIG5				"Traditional Chinese (Big5, Big5-HKSCS);Big5"			// Chinese
+	IDS_ENCODING_MAC_CROATIAN		"Mac Croatian;Mac Croatian"								// Southeast European
+	IDS_ENCODING_DOS866				"OEM Russian (DOS-866);DOS-866"							// Cyrillic
+	IDS_ENCODING_ISO8859_5			"ISO 8859-5;ISO 8859-5"									// Cyrillic
+	IDS_ENCODING_KOI8_R				"Russian (KOI8-R);KOI8-R"								// Cyrillic
+	IDS_ENCODING_KOI8_U				"Ukrainian (KOI8-U);KOI8-U"								// Cyrillic
+	IDS_ENCODING_MAC_CYRILLIC		"Mac Cyrillic;Mac Cyrillic"								// Cyrillic
+	IDS_ENCODING_WINDOWS1251		"Windows-1251;Windows-1251"								// Cyrillic
+	IDS_ENCODING_ISO8859_13			"Estonian (Baltic Rim, Latin-7, ISO 8859-13);ISO 8859-13"// Northern European
+	IDS_ENCODING_DOS863				"OEM French Canadian (DOS-863);DOS-863"					// Western European
+	IDS_ENCODING_DOS737				"OEM Greek (DOS-737);DOS-737"							// Greek
+	IDS_ENCODING_ISO8859_7			"ISO 8859-7;ISO 8859-7"									// Greek
+	IDS_ENCODING_MAC_GREEK			"Mac Greek;Mac Greek"									// Greek
+	IDS_ENCODING_WINDOWS1253		"Windows-1253;Windows-1253"								// Greek
+	IDS_ENCODING_DOS869				"OEM Modern Greek (DOS-869);DOS-869"					// Greek
+	IDS_ENCODING_DOS862				"OEM Hebrew (DOS-862);DOS-862"							// Hebrew
+	IDS_ENCODING_ISO8859_8I			"ISO 8859-8-I (Logical Order);ISO 8859-8-I"				// Hebrew
+	IDS_ENCODING_ISO8859_8			"ISO 8859-8 (Visual Order);ISO 8859-8"					// Hebrew
+	IDS_ENCODING_MAC_HEBREW			"Mac Hebrew;Mac Hebrew"									// Hebrew
+	IDS_ENCODING_WINDOWS1255		"Windows-1255;Windows-1255"								// Hebrew
+	IDS_ENCODING_DOS861				"OEM Icelandic (DOS-861);DOS-861"						// Northern European
+	IDS_ENCODING_MAC_ICELANDIC		"Mac Icelandic;Mac Icelandic"							// Northern European
+	IDS_ENCODING_ISO2022_JP			"ISO 2022 (no halfwidth Katakana);ISO-2022-JP"			// Japanese
+	IDS_ENCODING_SHIFT_JIS			"Shift-JIS;Shift-JIS"									// Japanese
+	IDS_ENCODING_JOHAB				"Johab;Johab"											// Korean
+	IDS_ENCODING_UHC				"Unified Hangul Code;UHC"								// Korean
+	IDS_ENCODING_ISO8859_3			"Southern European (Latin-3, ISO 8859-3);ISO 8859-3"	// Southern European
+	IDS_ENCODING_ISO8859_15			"Latin-9 (ISO 8859-15);ISO 8859-15"						// Western European
+	IDS_ENCODING_ISO8859_10			"Nordic (Latin-6, ISO 8859-10);ISO 8859-10"				// Northern European
+	IDS_ENCODING_EUC_JP				"EUC Japanese;EUC-JP"									// Japanese
+	IDS_ENCODING_EUC_KR				"EUC Korean;EUC-KR"										// Korean
+	IDS_ENCODING_ISO8859_16			"South-Eastern European (Latin-10, ISO 8859-16);ISO 8859-16"// South-Eastern European
+	IDS_ENCODING_ISO8859_14			"Celtic (Latin-8, ISO 8859-14);ISO 8859-14"				// Western European
+	IDS_ENCODING_MAC_THAI			"Mac Thai;Mac Thai"										// Southeast Asia
+	IDS_ENCODING_TIS620				"Thai (TIS-620, Windows-874, ISO 8859-11);TIS-620"		// Southeast Asia
+	IDS_ENCODING_DOS857				"OEM Turkish (DOS-857);DOS-857"							// Turkish
+	IDS_ENCODING_ISO8859_9			"Latin-5 (ISO 8859-9);ISO 8859-9"						// Turkish
+	IDS_ENCODING_MAC_TURKISH		"Mac Turkish;Mac Turkish"								// Turkish
+	IDS_ENCODING_WINDOWS1254		"Windows-1254;Windows-1254"								// Turkish
+	IDS_ENCODING_MAC_UKRAINIAN		"Mac Ukrainian;Mac Ukrainian"							// Cyrillic
+	IDS_ENCODING_WINDOWS1258		"Vietnamese (Windows-1258);Windows-1258"				// Southeast Asia
+	IDS_ENCODING_DOS850				"OEM Latin-1 (DOS-850);DOS-850"							// Western European
+	IDS_ENCODING_ISO8859_1			"Latin-1 (ISO 8859-1);ISO 8859-1"						// Western European
+	IDS_ENCODING_MAC_ROMAN			"Mac Roman;Mac Roman"									// Western European
+	IDS_ENCODING_WINDOWS1252		"Latin-1 (Windows-1252);Windows-1252"					// Western European
+	IDS_ENCODING_IBM037				"US-Canada (IBM037);EBCDIC (US-Canada)"					// EBCDIC
+	IDS_ENCODING_IBM1140			"US-Canada + Euro Symbol (IBM1140);EBCDIC (US-Canada Euro)"// EBCDIC
+	IDS_ENCODING_IBM500				"International (IBM500);EBCDIC (Intl.)"					// EBCDIC
+	IDS_ENCODING_IBM870				"Latin-2 (IBM870);EBCDIC (Latin-2)"						// EBCDIC
+	IDS_ENCODING_CP875				"Greek Modern (CP875);EBCDIC (Greek)"					// EBCDIC
+	IDS_ENCODING_IBM1026			"Turkish (Latin-5) (IBM1026);EBCDIC (Latin-5)"			// EBCDIC
+	IDS_ENCODING_DOS437				"OEM United States (DOS-437);DOS-437"					// Western European
+	IDS_ENCODING_DOS858				"OEM Latin-1 + Euro Symbol (DOS-858);DOS-858"			// Western European
+	IDS_ENCODING_DOS860				"OEM Portuguese (DOS-860);DOS-860"						// Western European
+	IDS_ENCODING_MAC_ARABIC			"Mac Arabic;Mac Arabic"									// Arabic
+	IDS_ENCODING_DOS864				"OEM Arabic (DOS-864);OEM Arabic"						// Arabic
+	IDS_ENCODING_MAC_ROMANIAN		"Mac Romanian;Mac Romanian"								// South European
+	IDS_ENCODING_DOS865				"OEM Nordic (DOS-865);DOS-865"							// Northern European
+	IDS_ENCODING_IBM855				"OEM Cyrillic (primarily Russian) (IBM855);OEM Cyrillic"// Cyrillic
+	IDS_ENCODING_MAC_JAPANESE		"Mac Japanese;Mac Japanese"								// Japanese
+	IDS_ENCODING_CS_ISO2022_JP		"ISO 2022 (allow 1 byte Kana);CS ISO-2022-JP"			// Japanese
+	IDS_ENCODING_ISO2022_JP_SOSI	"ISO 2022 (allow 1 byte Kana - SO/SI);ISO-2022-JP SO/SI"// Japanese
+	IDS_ENCODING_MAC_KOREAN			"Mac Korean;Mac Korean"									// Korean
+	IDS_ENCODING_ISO2022_KR			"ISO 2022 Korean;ISO-2022-KR"							// Korean
+	IDS_ENCODING_MAC_GB2312			"Simplified Chinese (Mac);Mac GB-2312"					// Chinese
+	IDS_ENCODING_HZ_GB2312			"Simplified Chinese (HZ-GB2312);HZ-GB2312"				// Chinese
+	IDS_ENCODING_ISO2022_CNS		"Simplified Chinese (ISO 2022);ISO-2022-CN(S)"			// Chinese
+	IDS_ENCODING_MAC_BIG5			"Traditional Chinese (Mac);Mac Big5"					// Chinese
+	IDS_ENCODING_ISO2022_CNT		"Traditional Chinese (ISO 2022);ISO-2022-CN(T)"			// Chinese
+	IDS_ENCODING_CNS				"Traditional Chinese (CNS);CNS"							// Chinese
 
 	IDS_SELRECT_CURRENT_ENCODING	"Select current file &encoding:"
 	IDS_SELRECT_RELOAD_ENCODING		"Select source &encoding to reload file:"
 	IDS_SELRECT_DEFAULT_ENCODING	"Select default &encoding for new file:"
+
 	IDS_ENCODINGGROUP_UNICODE		"Unicode"
 	IDS_ENCODINGGROUP_WESTERNEURO	"Western European"
 	IDS_ENCODINGGROUP_ARABIC		"Arabic"
@@ -2013,7 +2080,7 @@ BEGIN
 	IDS_ENCODINGGROUP_JAPANESE		"Japanese"
 	IDS_ENCODINGGROUP_KOREAN		"Korean"
 	IDS_ENCODINGGROUP_SOUTHEURO		"South European"
-	IDS_ENCODINGGROUP_SOUTASIA		"Southeast Asia"
+	IDS_ENCODINGGROUP_SOUTHASIA		"Southeast Asia"
 	IDS_ENCODINGGROUP_TURKISH		"Turkish"
 	IDS_ENCODINGGROUP_EBCDIC		"IBM EBCDIC"
 END
@@ -2023,9 +2090,63 @@ BEGIN
 	IDS_EOLMODENAME_CRLF			"Windows (CR+LF)"
 	IDS_EOLMODENAME_LF				"Unix/macOS (LF)"
 	IDS_EOLMODENAME_CR				"Classic Mac OS (CR)"
+
 	IDS_CONFIG_THEME_TITLE_DEFAULT	"Customize Schemes - Default Theme"
 	IDS_CONFIG_THEME_TITLE_DARK		"Customize Schemes - Dark Theme"
+	IDS_FAVORITE_SCHEMES_TITLE		"Favorite Schemes"
+	IDS_CUSTOMIZE_SCHEMES_HELP		"Filename extensions must be separated by semicolon (;)\r\n\
+\r\n\
+Style format:\r\n\
+\tfont:Name; size:[+|-]nn.mm; weight:nnn; bold; italic; underline; strike;\r\n\
+\tcharset:dd; locale:Name; case:[Upper|Lower|Camel];\r\n\
+\tfore:#ffffff; back:#bbbbbb; alpha:aa; outline:aa; eolfilled;\r\n\
+\r\n\
+Style properties can be copied using copy and paste or drag and drop.\r\n\
+\r\n\
+The ""Preview"" button will not apply any changes."
+
 END
+
+#if 0//NP2_ENABLE_LOCALIZE_LEXER_NAME
+// string table for lexers, see EditLexer.h
+STRINGTABLE
+BEGIN
+	NP2LEX_TEXTFILE					"Text File"
+
+	NP2LEX_2NDTEXTFILE				"2nd Text File"
+	NP2LEX_2NDGLOBAL				"2nd Global Styles"
+	NP2LEX_GLOBAL					"Global Styles"
+END
+#endif // NP2_ENABLE_LOCALIZE_LEXER_NAME
+
+#if 0//NP2_ENABLE_LOCALIZE_STYLE_NAME
+// string table for styles, see EditLexers/EditStyleX.h
+STRINGTABLE
+BEGIN
+	NP2STYLE_MarginLineNumber		"Margin and Line Number"
+	NP2STYLE_MatchingBrace			"Matching Brace"
+	NP2STYLE_MatchingBraceError		"Matching Brace Error"
+	NP2STYLE_ControlCharacter		"Control Character"
+	NP2STYLE_IndentationGuide		"Indentation Guide"
+	NP2STYLE_SelectedText			"Selected Text"
+	NP2STYLE_Whitespace				"Whitespace"
+	NP2STYLE_CurrentLine			"Current Line"
+	NP2STYLE_Caret					"Caret"
+	NP2STYLE_LongLineMarker			"Long Line Marker"
+	NP2STYLE_ExtraLineSpacing		"Extra Line Spacing"
+	NP2STYLE_FoldingMarker			"Folding Marker"
+	NP2STYLE_MarkOccurrences		"Mark Occurrences"
+	NP2STYLE_DefaultCodeStyle		"Default Code Style"
+	NP2STYLE_DefaultTextStyle		"Default Text Style"
+	NP2STYLE_FoldEllipsis			"Fold Ellipsis"
+	NP2STYLE_IMEIndicator			"IME Indicator"
+	NP2STYLE_Bookmark				"Bookmark"
+	NP2STYLE_CallTip				"CallTip"
+	NP2STYLE_CurrentBlock			"Current Block"
+
+	NP2STYLE_Default				"Default"
+END
+#endif // NP2_ENABLE_LOCALIZE_STYLE_NAME
 
 
 #ifdef APSTUDIO_INVOKED
@@ -2051,6 +2172,10 @@ END
 
 #endif    // APSTUDIO_INVOKED
 
+#endif    // English (United States) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
 
 #ifndef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////
@@ -2061,5 +2186,3 @@ END
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED
 
-#endif    // English (United States) resources
-/////////////////////////////////////////////////////////////////////////////

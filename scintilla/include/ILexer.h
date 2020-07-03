@@ -4,16 +4,14 @@
  **/
 // Copyright 1998-2010 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
-
-#ifndef ILEXER_H
-#define ILEXER_H
+#pragma once
 
 #include "Sci_Position.h"
 
 namespace Scintilla {
 
 enum {
-	dvRelease4 = 2
+	dvRelease4 = 2,
 };
 
 class IDocument {
@@ -36,7 +34,7 @@ public:
 	virtual void SCI_METHOD DecorationFillRange(Sci_Position position, int value, Sci_Position fillLength) = 0;
 	virtual void SCI_METHOD ChangeLexerState(Sci_Position start, Sci_Position end) = 0;
 	virtual int SCI_METHOD CodePage() const noexcept = 0;
-	virtual bool SCI_METHOD IsDBCSLeadByte(char ch) const noexcept = 0;
+	virtual bool SCI_METHOD IsDBCSLeadByte(unsigned char ch) const noexcept = 0;
 	virtual const char * SCI_METHOD BufferPointer() = 0;
 	virtual int SCI_METHOD GetLineIndentation(Sci_Position line) const noexcept = 0;
 	virtual Sci_Position SCI_METHOD LineEnd(Sci_Position line) const noexcept = 0;
@@ -45,7 +43,8 @@ public:
 };
 
 enum {
-	lvRelease4 = 2
+	lvRelease4 = 2,
+	lvRelease5 = 3,
 };
 
 class ILexer4 {
@@ -57,7 +56,7 @@ public:
 	virtual const char * SCI_METHOD DescribeProperty(const char *name) const = 0;
 	virtual Sci_Position SCI_METHOD PropertySet(const char *key, const char *val) = 0;
 	virtual const char * SCI_METHOD DescribeWordListSets() const noexcept = 0;
-	virtual Sci_Position SCI_METHOD WordListSet(int n, const char *wl) = 0;
+	virtual Sci_Position SCI_METHOD WordListSet(int n, bool toLower, const char *wl) = 0;
 	virtual void SCI_METHOD Lex(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, IDocument *pAccess) = 0;
 	virtual void SCI_METHOD Fold(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, IDocument *pAccess) = 0;
 	virtual void * SCI_METHOD PrivateCall(int operation, void *pointer) = 0;
@@ -77,6 +76,11 @@ public:
 	virtual const char * SCI_METHOD DescriptionOfStyle(int style) const noexcept = 0;
 };
 
-}
+class ILexer5 : public ILexer4 {
+public:
+	virtual const char * SCI_METHOD GetName() const noexcept = 0;
+	virtual int SCI_METHOD GetIdentifier() const noexcept = 0;
+	virtual const char * SCI_METHOD PropertyGet(const char *key) const = 0;
+};
 
-#endif
+}

@@ -17,9 +17,7 @@
 *
 *
 ******************************************************************************/
-
-#ifndef NOTEPAD2_EDIT_H_
-#define NOTEPAD2_EDIT_H_
+#pragma once
 
 // WideCharToMultiByte, UTF8 encoding of U+0800 to U+FFFF
 #define kMaxMultiByteCount	3
@@ -27,7 +25,7 @@
 #define NP2_FIND_REPLACE_LIMIT	2048
 #define NP2_LONG_LINE_LIMIT		4096
 
-typedef struct _editfindreplace {
+typedef struct EDITFINDREPLACE {
 	char	szFind[512];
 	char	szReplace[512];
 	char	szFindUTF8[3 * 512];
@@ -119,7 +117,7 @@ BOOL	EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, struct EditFileIO
 BOOL	EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, struct EditFileIOStatus *status);
 
 void	EditInvertCase(void);
-void	EditTitleCase(void);
+void	EditMapTextCase(UINT menu);
 void	EditSentenceCase(void);
 
 void	EditURLEncode(void);
@@ -162,7 +160,7 @@ void	EditEnsureConsistentLineEndings(void);
 void	EditGetExcerpt(LPWSTR lpszExcerpt, DWORD cchExcerpt);
 
 void	EditSelectWord(void);
-void	EditSelectLine(void);
+void	EditSelectLines(BOOL currentBlock, BOOL lineSelection);
 HWND	EditFindReplaceDlg(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bReplace);
 BOOL	EditFindNext(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection);
 BOOL	EditFindPrev(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection);
@@ -173,6 +171,8 @@ BOOL	EditLineNumDlg(HWND hwnd);
 void	EditModifyLinesDlg(HWND hwnd);
 void	EditEncloseSelectionDlg(HWND hwnd);
 void	EditInsertTagDlg(HWND hwnd);
+void	EditInsertDateTime(BOOL bShort);
+void	EditUpdateTimestampMatchTemplate(HWND hwnd);
 void	EditInsertUnicodeControlCharacter(int menu);
 void	EditShowUnicodeControlCharacter(BOOL bShow);
 BOOL	EditSortDlg(HWND hwnd, int *piSortFlags);
@@ -195,9 +195,18 @@ void	EditPrintSetup(HWND hwnd);
 
 enum {
 	MarkerNumber_Bookmark = 0,
-	IndicatorNumber_MarkOccurrences = 1,
 
-	MarkerBitmask_Bookmark  = 1 << MarkerNumber_Bookmark,
+	// [0, INDICATOR_CONTAINER) are reserved for lexer.
+	IndicatorNumber_MarkOccurrence = INDICATOR_CONTAINER + 0,
+	IndicatorNumber_MatchBrace = INDICATOR_CONTAINER + 1,
+	IndicatorNumber_MatchBraceError = INDICATOR_CONTAINER + 2,
+	// [INDICATOR_IME, INDICATOR_IME_MAX] are reserved for IME.
+
+	MarginNumber_LineNumber = 0,
+	MarginNumber_Bookmark = 1,
+	MarginNumber_CodeFolding = 2,
+
+	MarkerBitmask_Bookmark = 1 << MarkerNumber_Bookmark,
 };
 
 void	EditMarkAll_Clear(void);
@@ -301,9 +310,10 @@ void	EditShowCallTips(Sci_Position position);
 
 #define MAX_ENCODING_LABEL_SIZE		32
 
-typedef struct _np2encoding {
+typedef struct NP2ENCODING {
 	const UINT uFlags;
 	/*const*/UINT uCodePage;
+	// string format: [normal name + ','] + [lower case parse name + ',']+
 	const char * const pszParseNames;
 	const UINT idsName;
 	LPWSTR wchLabel;
@@ -340,7 +350,7 @@ void	Encoding_InitDefaults(void);
 int 	Encoding_MapIniSetting(BOOL bLoad, int iSetting);
 void	Encoding_GetLabel(int iEncoding);
 int 	Encoding_Match(LPCWSTR pwszTest);
-int 	Encoding_MatchA(char *pchTest);
+int 	Encoding_MatchA(LPCSTR pchTest);
 BOOL	Encoding_IsValid(int iTestEncoding);
 void	Encoding_AddToTreeView(HWND hwnd, int idSel, BOOL bRecodeOnly);
 BOOL	Encoding_GetFromTreeView(HWND hwnd, int *pidEncoding, BOOL bQuiet);
@@ -372,7 +382,7 @@ static inline BOOL IsUTF8Signature(const char *p) {
 #define FV_ENCODING				64
 #define FV_MODE					128
 
-typedef struct _filevars {
+typedef struct FILEVARS {
 	int 	mask;
 	int 	iTabWidth;
 	int 	iIndentWidth;
@@ -408,9 +418,5 @@ void FoldToggleLevel(int lev, FOLD_ACTION action);
 void FoldToggleCurrentBlock(FOLD_ACTION action);
 void FoldToggleCurrentLevel(FOLD_ACTION action);
 void FoldToggleDefault(FOLD_ACTION action);
-void FoldClick(Sci_Line ln, int mode);
+void FoldClickAt(Sci_Position pos, int mode);
 void FoldAltArrow(int key, int mode);
-
-#endif //NOTEPAD2_EDIT_H_
-
-// End of Edit.h

@@ -1,5 +1,5 @@
 #include "EditLexer.h"
-#include "EditStyle.h"
+#include "EditStyleX.h"
 
 // https://en.wikipedia.org/wiki/Common_Lisp
 // https://common-lisp.net/
@@ -15,18 +15,17 @@ NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 
 static EDITSTYLE Styles_LISP[] = {
 	EDITSTYLE_DEFAULT,
-	{ SCE_C_WORD, NP2STYLE_Keyword, EDITSTYLE_HOLE(L"Keyword"), L"fore:#FF8000" },
-	{ MULTI_STYLE(SCE_C_STRING, SCE_C_CHARACTER, 0, 0), NP2STYLE_String, EDITSTYLE_HOLE(L"String"), L"fore:#008000" },
-	{ SCE_C_NUMBER, NP2STYLE_Number, EDITSTYLE_HOLE(L"Number"), L"fore:#FF0000" },
-	{ SCE_C_OPERATOR, NP2STYLE_Operator, EDITSTYLE_HOLE(L"Operator"), L"fore:#B000B0" },
-	{ MULTI_STYLE(SCE_C_COMMENTLINE, SCE_C_COMMENT, 0, 0), NP2STYLE_Comment, EDITSTYLE_HOLE(L"Comment"), L"fore:#008000" },
+	{ SCE_C_WORD, NP2StyleX_Keyword, L"fore:#FF8000" },
+	{ MULTI_STYLE(SCE_C_STRING, SCE_C_CHARACTER, 0, 0), NP2StyleX_String, L"fore:#008000" },
+	{ SCE_C_NUMBER, NP2StyleX_Number, L"fore:#FF0000" },
+	{ SCE_C_OPERATOR, NP2StyleX_Operator, L"fore:#B000B0" },
+	{ MULTI_STYLE(SCE_C_COMMENTLINE, SCE_C_COMMENT, 0, 0), NP2StyleX_Comment, L"fore:#008000" },
 };
 
 EDITLEXER lexLisp = {
 	SCLEX_LISP, NP2LEX_LISP,
 	EDITLEXER_HOLE(L"Lisp Script", Styles_LISP),
-	L"lisp; el; lsp; clj; cljs",
+	L"lisp; el; lsp; clj; cljs; scm",
 	&Keywords_LISP,
 	Styles_LISP
 };
-

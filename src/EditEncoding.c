@@ -38,100 +38,100 @@ typedef struct NP2EncodingGroup {
 
 // Encoding
 NP2ENCODING mEncoding[] = {
-	{ NCP_DEFAULT | NCP_RECODE, 0, "ANSI,ANSI,ASCII,", 61000, NULL },
-	{ NCP_8BIT | NCP_RECODE, 0, "OEM,OEM,", 61001, NULL },
-	{ NCP_UNICODE | NCP_UNICODE_BOM, 0, "", 61002, NULL },
-	{ NCP_UNICODE | NCP_UNICODE_REVERSE | NCP_UNICODE_BOM, 0, "", 61003, NULL },
-	{ NCP_UNICODE | NCP_RECODE, 0, "UTF-16,UTF16,Unicode,", 61004, NULL },
-	{ NCP_UNICODE | NCP_UNICODE_REVERSE | NCP_RECODE, 0, "UTF-16BE,UTF16BE,UnicodeBE,", 61005, NULL },
-	{ NCP_UTF8 | NCP_RECODE, 0, "UTF-8,UTF8,", 61006, NULL },
-	{ NCP_UTF8 | NCP_UTF8_SIGN, 0, "UTF-8,UTF8,", 61007, NULL },
-	{ NCP_7BIT | NCP_RECODE, CP_UTF7, "UTF-7,UTF7,", 61008, NULL },
+	{ NCP_DEFAULT | NCP_RECODE, 0, "ANSI,ansi,ascii,", IDS_ENCODING_ANSI, NULL },
+	{ NCP_8BIT | NCP_RECODE, 0, "OEM,oem,", IDS_ENCODING_OEM, NULL },
+	{ NCP_UNICODE | NCP_UNICODE_BOM, 0, "", IDS_ENCODING_UTF16LE_BOM, NULL },
+	{ NCP_UNICODE | NCP_UNICODE_REVERSE | NCP_UNICODE_BOM, 0, "", IDS_ENCODING_UTF16BE_BOM, NULL },
+	{ NCP_UNICODE | NCP_RECODE, 0, "UTF-16,utf16,unicode,", IDS_ENCODING_UTF16LE, NULL },
+	{ NCP_UNICODE | NCP_UNICODE_REVERSE | NCP_RECODE, 0, "UTF-16BE,utf16be,unicodebe,", IDS_ENCODING_UTF16BE, NULL },
+	{ NCP_UTF8 | NCP_RECODE, 0, "UTF-8,utf8,", IDS_ENCODING_UTF8, NULL },
+	{ NCP_UTF8 | NCP_UTF8_SIGN, 0, "UTF-8,utf8,", IDS_ENCODING_UTF8BOM, NULL },
+	{ NCP_7BIT | NCP_RECODE, CP_UTF7, "UTF-7,utf7,", IDS_ENCODING_UTF7, NULL },
 	// Latin-1
-	{ NCP_8BIT | NCP_RECODE, 28591, "ISO-8859-1,ISO88591,cp819,latin1,ibm819,isoir100,latin1,l1,", 61065, NULL },// ISO 8859-1 Latin-1; Western European (ISO)
-	{ NCP_8BIT | NCP_RECODE, 1252, "Windows-1252,Windows1252,cp367,cp819,ibm367,us,xansi,", 61067, NULL },// ANSI Latin-1; Western European (Windows)
+	{ NCP_8BIT | NCP_RECODE, 28591, "ISO-8859-1,iso88591,cp819,latin1,ibm819,isoir100,latin1,l1,", IDS_ENCODING_ISO8859_1, NULL },// ISO 8859-1 Latin-1; Western European (ISO)
+	{ NCP_8BIT | NCP_RECODE, 1252, "Windows-1252,windows1252,cp367,cp819,ibm367,us,xansi,", IDS_ENCODING_WINDOWS1252, NULL },// ANSI Latin-1; Western European (Windows)
 	// Windows ANSI
-	{ NCP_8BIT | NCP_RECODE, 1250, "Windows-1250,Windows1250,xcp1250,", 61019, NULL },// ANSI Central European; Central European (Windows)
-	{ NCP_8BIT | NCP_RECODE, 1251, "Windows-1251,Windows1251,XCP1251,", 61030, NULL },// ANSI Cyrillic; Cyrillic (Windows)
-	{ NCP_8BIT | NCP_RECODE, 1253, "Windows-1253,Windows1253,", 61036, NULL },// ANSI Greek; Greek (Windows)
-	{ NCP_8BIT | NCP_RECODE, 1254, "Windows-1254,Windows1254,", 61061, NULL },// ANSI Turkish; Turkish (Windows)
-	{ NCP_8BIT | NCP_RECODE, 1255, "Windows-1255,Windows1255,", 61042, NULL },// ANSI Hebrew; Hebrew (Windows)
-	{ NCP_8BIT | NCP_RECODE, 1256, "Windows-1256,Windows1256,CP1256", 61012, NULL },// ANSI Arabic; Arabic (Windows)
-	{ NCP_8BIT | NCP_RECODE, 1257, "Windows-1257,Windows1257,", 61015, NULL },// ANSI Baltic; Baltic (Windows)
-	{ NCP_8BIT | NCP_RECODE, 1258, "Windows-1258,Windows-258,", 61063, NULL },// ANSI/OEM Vietnamese; Vietnamese (Windows)
-	{ NCP_8BIT | NCP_RECODE, 874, "Windows-874,Windows874,dos874,iso885911,tis-620,tis620,isoir166", 61057, NULL },// ANSI/OEM Thai (ISO 8859-11); Thai (Windows)
-	{ NCP_8BIT | NCP_RECODE, 932, "Shift_JIS,ShiftJIS,Shiftjs,csshiftjis,cswindows31j,mskanji,xmscp932,xsjis,", 61046, NULL },// ANSI/OEM Japanese; Japanese (Shift-JIS)
-	{ NCP_8BIT | NCP_RECODE, 936, "GB2312,GB2312,chinese,cngb,csgb2312,csgb231280,gb231280,gbk,", 61020, NULL },// ANSI/OEM Simplified Chinese (PRC, Singapore); Chinese Simplified (GB2312)
-	{ NCP_8BIT | NCP_RECODE, 949, "Windows-949,Windows949,ksx1001,ksc56011987,csksc5601,euckr,isoir149,korean,ksc56011989", 61048, NULL },// ANSI/OEM Korean (Unified Hangul Code)
-	{ NCP_8BIT | NCP_RECODE, 950, "BIG5,BIG5,cnbig5,csbig5,xxbig5,", 61022, NULL },// ANSI/OEM Traditional Chinese (Taiwan; Hong Kong SAR, PRC); Chinese Traditional (Big5)
+	{ NCP_8BIT | NCP_RECODE, 1250, "Windows-1250,windows1250,xcp1250,", IDS_ENCODING_WINDOWS1250, NULL },// ANSI Central European; Central European (Windows)
+	{ NCP_8BIT | NCP_RECODE, 1251, "Windows-1251,windows1251,xcp1251,", IDS_ENCODING_WINDOWS1251, NULL },// ANSI Cyrillic; Cyrillic (Windows)
+	{ NCP_8BIT | NCP_RECODE, 1253, "Windows-1253,windows1253,", IDS_ENCODING_WINDOWS1253, NULL },// ANSI Greek; Greek (Windows)
+	{ NCP_8BIT | NCP_RECODE, 1254, "Windows-1254,windows1254,", IDS_ENCODING_WINDOWS1254, NULL },// ANSI Turkish; Turkish (Windows)
+	{ NCP_8BIT | NCP_RECODE, 1255, "Windows-1255,windows1255,", IDS_ENCODING_WINDOWS1255, NULL },// ANSI Hebrew; Hebrew (Windows)
+	{ NCP_8BIT | NCP_RECODE, 1256, "Windows-1256,windows1256,cp1256", IDS_ENCODING_WINDOWS1256, NULL },// ANSI Arabic; Arabic (Windows)
+	{ NCP_8BIT | NCP_RECODE, 1257, "Windows-1257,windows1257,", IDS_ENCODING_WINDOWS1257, NULL },// ANSI Baltic; Baltic (Windows)
+	{ NCP_8BIT | NCP_RECODE, 1258, "Windows-1258,windows1258,", IDS_ENCODING_WINDOWS1258, NULL },// ANSI/OEM Vietnamese; Vietnamese (Windows)
+	{ NCP_8BIT | NCP_RECODE, 874, "Windows-874,windows874,dos874,iso885911,tis-620,tis620,isoir166", IDS_ENCODING_TIS620, NULL },// ANSI/OEM Thai (ISO 8859-11); Thai (Windows)
+	{ NCP_8BIT | NCP_RECODE, 932, "Shift-JIS,shiftjis,shift_jis,csshiftjis,cswindows31j,mskanji,xmscp932,xsjis,", IDS_ENCODING_SHIFT_JIS, NULL },// ANSI/OEM Japanese; Japanese (Shift-JIS)
+	{ NCP_8BIT | NCP_RECODE, 936, "GBK,gbk,gb2312,chinese,cngb,csgb2312,csgb231280,gb231280,", IDS_ENCODING_GBK, NULL },// ANSI/OEM Simplified Chinese (PRC, Singapore); Chinese Simplified (GB2312)
+	{ NCP_8BIT | NCP_RECODE, 949, "Windows-949,windows949,ksx1001,ksc56011987,csksc5601,euckr,isoir149,korean,ksc56011989", IDS_ENCODING_UHC, NULL },// ANSI/OEM Korean (Unified Hangul Code)
+	{ NCP_8BIT | NCP_RECODE, 950, "BIG5,big5,cnbig5,csbig5,xxbig5,", IDS_ENCODING_BIG5, NULL },// ANSI/OEM Traditional Chinese (Taiwan; Hong Kong SAR, PRC); Chinese Traditional (Big5)
 	// ISO-8859
-	{ NCP_8BIT | NCP_RECODE, 28592, "ISO-8859-2,ISO88592,csisolatin2,isoir101,latin2,l2,", 61017, NULL },// Central European (ISO 8859-2); Central European (ISO)
-	{ NCP_8BIT | NCP_RECODE, 28593, "iso-8859-3,iso88593,latin3,isoir109,l3,", 61049, NULL },// Latin-3 (ISO 8859-3)
-	{ NCP_8BIT | NCP_RECODE, 28594, "ISO-8859-4,ISO88594,csisolatin4,isoir110,l4,Latin4,", 61014, NULL },// Baltic (ISO 8859-4); North European
-	{ NCP_8BIT | NCP_RECODE, 28595, "ISO-8859-5,ISO88595,csisolatin5,csisolatincyrillic,cyrillic,isoir144,", 61026, NULL },// Cyrillic (ISO 8859-5)
-	{ NCP_8BIT | NCP_RECODE, 28596, "ISO-8859-6,ISO88596,arabic,csisolatinarabic,ECMA114,isoir127,", 61010, NULL },// Arabic (ISO 8859-6 Visual)
-	{ NCP_8BIT | NCP_RECODE, 28597, "ISO-8859-7,ISO88597,csisolatingreek,ecma118,elot928,greek,greek8,isoir126,", 61034, NULL },// Greek (ISO 8859-7)
-	{ NCP_8BIT | NCP_RECODE, 28598, "iso-8859-8,iso88598,csisolatinhebrew,hebrew,isoir138,visual,", 61040, NULL },// Hebrew (ISO 8859-8); Hebrew (ISO-Visual)
-	{ NCP_8BIT | NCP_RECODE, 28599, "iso-8859-9,iso88599,latin5,isoir148,l5,", 61059, NULL },// Turkish (ISO 8859-9)
-	{ NCP_8BIT | NCP_RECODE, 28600, "ISO-8859-10,ISO885910,Windows-28600,Windows28600,", 61051, NULL },// Nordic (ISO 8859-10)
-	{ NCP_8BIT | NCP_RECODE, 28603, "ISO-8859-13,ISO885913,", 61031, NULL },// Estonian (ISO 8859-13)
-	{ NCP_8BIT | NCP_RECODE, 28604, "ISO-8859-14,ISO885914,Windows-28604,Windows28604,", 61055, NULL },// Celtic (ISO 8859-14)
-	{ NCP_8BIT | NCP_RECODE, 28605, "iso-8859-15,iso885915,latin9,l9,", 61050, NULL },// Latin-9 (ISO 8859-15)
-	{ NCP_8BIT | NCP_RECODE, 28606, "ISO-8859-16,ISO885916,Windows-28606,Windows28606", 61054, NULL },// Latin-10 (ISO 8859-16)
+	{ NCP_8BIT | NCP_RECODE, 28592, "ISO-8859-2,iso88592,csisolatin2,isoir101,latin2,l2,", IDS_ENCODING_ISO8859_2, NULL },// Central European (ISO 8859-2); Central European (ISO)
+	{ NCP_8BIT | NCP_RECODE, 28593, "ISO-8859-3,iso88593,latin3,isoir109,l3,", IDS_ENCODING_ISO8859_3, NULL },// Latin-3 (ISO 8859-3)
+	{ NCP_8BIT | NCP_RECODE, 28594, "ISO-8859-4,iso88594,csisolatin4,isoir110,l4,latin4,", IDS_ENCODING_ISO8859_4, NULL },// Baltic (ISO 8859-4); North European
+	{ NCP_8BIT | NCP_RECODE, 28595, "ISO-8859-5,iso88595,csisolatin5,csisolatincyrillic,cyrillic,isoir144,", IDS_ENCODING_ISO8859_5, NULL },// Cyrillic (ISO 8859-5)
+	{ NCP_8BIT | NCP_RECODE, 28596, "ISO-8859-6,iso88596,arabic,csisolatinarabic,ecma114,isoir127,", IDS_ENCODING_ISO8859_6, NULL },// Arabic (ISO 8859-6 Visual)
+	{ NCP_8BIT | NCP_RECODE, 28597, "ISO-8859-7,iso88597,csisolatingreek,ecma118,elot928,greek,greek8,isoir126,", IDS_ENCODING_ISO8859_7, NULL },// Greek (ISO 8859-7)
+	{ NCP_8BIT | NCP_RECODE, 28598, "ISO-8859-8,iso88598,csisolatinhebrew,hebrew,isoir138,visual,", IDS_ENCODING_ISO8859_8, NULL },// Hebrew (ISO 8859-8); Hebrew (ISO-Visual)
+	{ NCP_8BIT | NCP_RECODE, 28599, "ISO-8859-9,iso88599,latin5,isoir148,l5,", IDS_ENCODING_ISO8859_9, NULL },// Turkish (ISO 8859-9)
+	{ NCP_8BIT | NCP_RECODE, 28600, "ISO-8859-10,iso885910,windows-28600,windows28600,", IDS_ENCODING_ISO8859_10, NULL },// Nordic (ISO 8859-10)
+	{ NCP_8BIT | NCP_RECODE, 28603, "ISO-8859-13,iso885913,", IDS_ENCODING_ISO8859_13, NULL },// Estonian (ISO 8859-13)
+	{ NCP_8BIT | NCP_RECODE, 28604, "ISO-8859-14,iso885914,windows-28604,windows28604,", IDS_ENCODING_ISO8859_14, NULL },// Celtic (ISO 8859-14)
+	{ NCP_8BIT | NCP_RECODE, 28605, "ISO-8859-15,iso885915,latin9,l9,", IDS_ENCODING_ISO8859_15, NULL },// Latin-9 (ISO 8859-15)
+	{ NCP_8BIT | NCP_RECODE, 28606, "ISO-8859-16,iso885916,windows-28606,windows28606", IDS_ENCODING_ISO8859_16, NULL },// Latin-10 (ISO 8859-16)
 	// Other
-	{ NCP_8BIT | NCP_RECODE, 54936, "GB18030,GB18030,", 61021, NULL },// Chinese GB18030
-	{ NCP_8BIT | NCP_RECODE, 20866, "koi8-r,koi8r,cskoi8r,koi,koi8,", 61027, NULL },// Russian (KOI8-R); Cyrillic (KOI8-R)
-	{ NCP_8BIT | NCP_RECODE, 21866, "koi8-u,koi8u,koi8ru,", 61028, NULL },// Ukrainian (KOI8-U); Cyrillic (KOI8-U)
-	{ NCP_8BIT | NCP_RECODE, 20932, "euc-jp,euc-jp,", 61052, NULL },// Japanese (JIS X 0208-1990 & 0212-1990)
-	{ NCP_8BIT | NCP_RECODE, 1361, "johab,johab,", 61047, NULL },// Korean (Johab)
-	{ NCP_8BIT | NCP_RECODE, 51949, "euc-kr,euckr,cseuckr,", 61053, NULL },// Korean (EUC)
-	{ NCP_8BIT | NCP_RECODE, 38596, "ISO-8859-6-I,ISO88596I,", 61011, NULL },// Arabic (ISO 8859-6-I Logical)
-	{ NCP_8BIT | NCP_RECODE, 38598, "iso-8859-8-i,iso88598i,logical,", 61039, NULL },// Hebrew (ISO 8859-8); Hebrew (ISO-Logical)
+	{ NCP_8BIT | NCP_RECODE, 54936, "GB18030,gb18030,", IDS_ENCODING_GB18030, NULL },// Chinese GB18030
+	{ NCP_8BIT | NCP_RECODE, 20866, "koi8-r,koi8r,cskoi8r,koi,koi8,", IDS_ENCODING_KOI8_R, NULL },// Russian (KOI8-R); Cyrillic (KOI8-R)
+	{ NCP_8BIT | NCP_RECODE, 21866, "koi8-u,koi8u,koi8ru,", IDS_ENCODING_KOI8_U, NULL },// Ukrainian (KOI8-U); Cyrillic (KOI8-U)
+	{ NCP_8BIT | NCP_RECODE, 20932, "euc-jp,euc-jp,", IDS_ENCODING_EUC_JP, NULL },// Japanese (JIS X 0208-1990 & 0212-1990)
+	{ NCP_8BIT | NCP_RECODE, 1361, "Johab,johab,", IDS_ENCODING_JOHAB, NULL },// Korean (Johab)
+	{ NCP_8BIT | NCP_RECODE, 51949, "euc-kr,euckr,cseuckr,", IDS_ENCODING_EUC_KR, NULL },// Korean (EUC)
+	{ NCP_8BIT | NCP_RECODE, 38596, "ISO-8859-6-I,iso88596i,", IDS_ENCODING_ISO8859_6I, NULL },// Arabic (ISO 8859-6-I Logical)
+	{ NCP_8BIT | NCP_RECODE, 38598, "ISO-8859-8-I,iso88598i,logical,", IDS_ENCODING_ISO8859_8I, NULL },// Hebrew (ISO 8859-8); Hebrew (ISO-Logical)
 	// OEM
-	{ NCP_8BIT | NCP_RECODE, 437, "ibm437,ibm437,437,cp437,cspc8,codepage437,", 61074, NULL },// OEM United States
-	{ NCP_8BIT | NCP_RECODE, 850, "ibm850,ibm850,", 61064, NULL },// OEM Multilingual Latin-1; Western European (DOS)
-	{ NCP_8BIT | NCP_RECODE, 858, "ibm858,ibm858,ibm00858,", 61075, NULL },// OEM Multilingual Latin-1 + Euro symbol
-	{ NCP_8BIT | NCP_RECODE, 852, "ibm852,ibm852,cp852,", 61016, NULL },// OEM Latin-2; Central European (DOS)
-	{ NCP_8BIT | NCP_RECODE, 720, "DOS-720,DOS720,", 61009, NULL },// Arabic (Transparent ASMO); Arabic (DOS)
-	{ NCP_8BIT | NCP_RECODE, 864, "IBM864,IBM864,", 61078, NULL },// OEM Arabic; Arabic (864)
-	{ NCP_8BIT | NCP_RECODE, 775, "IBM775,IBM775,CP500,", 61013, NULL },// OEM Baltic; Baltic (DOS)
-	{ NCP_8BIT | NCP_RECODE, 855, "ibm855,ibm855,", 61081, NULL },// OEM Cyrillic (primarily Russian)
-	{ NCP_8BIT | NCP_RECODE, 866, "CP866,CP866,IBM866,", 61025, NULL },// OEM Russian; Cyrillic (DOS)
-	{ NCP_8BIT | NCP_RECODE, 863, "IBM863,IBM863,", 61032, NULL },// OEM French Canadian; French Canadian (DOS)
-	{ NCP_8BIT | NCP_RECODE, 737, "IBM737,IBM737,", 61033, NULL },// OEM Greek (formerly 437G); Greek (DOS)
-	{ NCP_8BIT | NCP_RECODE, 869, "IBM869,IBM869,", 61037, NULL },// OEM Modern Greek; Greek, Modern (DOS)
-	{ NCP_8BIT | NCP_RECODE, 862, "dos-862,DOS862,", 61038, NULL },// OEM Hebrew; Hebrew (DOS)
-	{ NCP_8BIT | NCP_RECODE, 861, "ibm861,ibm861,", 61043, NULL },// OEM Icelandic; Icelandic (DOS)
-	{ NCP_8BIT | NCP_RECODE, 865, "ibm865,ibm865,", 61080, NULL },// OEM Nordic; Nordic (DOS)
-	{ NCP_8BIT | NCP_RECODE, 860, "ibm860,ibm860,", 61076, NULL },// OEM Portuguese; Portuguese (DOS)
-	{ NCP_8BIT | NCP_RECODE, 857, "ibm857,ibm857,", 61058, NULL },// OEM Turkish; Turkish (DOS)
+	{ NCP_8BIT | NCP_RECODE, 437, "IBM437,ibm437,437,cp437,cspc8,codepage437,", IDS_ENCODING_DOS437, NULL },// OEM United States
+	{ NCP_8BIT | NCP_RECODE, 850, "IBM850,ibm850,", IDS_ENCODING_DOS850, NULL },// OEM Multilingual Latin-1; Western European (DOS)
+	{ NCP_8BIT | NCP_RECODE, 858, "IBM858,ibm858,ibm00858,", IDS_ENCODING_DOS858, NULL },// OEM Multilingual Latin-1 + Euro symbol
+	{ NCP_8BIT | NCP_RECODE, 852, "IBM852,ibm852,cp852,", IDS_ENCODING_DOS852, NULL },// OEM Latin-2; Central European (DOS)
+	{ NCP_8BIT | NCP_RECODE, 720, "DOS-720,dos720,", IDS_ENCODING_DOS720, NULL },// Arabic (Transparent ASMO); Arabic (DOS)
+	{ NCP_8BIT | NCP_RECODE, 864, "IBM864,ibm864,", IDS_ENCODING_DOS864, NULL },// OEM Arabic; Arabic (864)
+	{ NCP_8BIT | NCP_RECODE, 775, "IBM775,ibm775,cp500,", IDS_ENCODING_DOS775, NULL },// OEM Baltic; Baltic (DOS)
+	{ NCP_8BIT | NCP_RECODE, 855, "IBM855,ibm855,", IDS_ENCODING_IBM855, NULL },// OEM Cyrillic (primarily Russian)
+	{ NCP_8BIT | NCP_RECODE, 866, "CP866,cp866,ibm866,", IDS_ENCODING_DOS866, NULL },// OEM Russian; Cyrillic (DOS)
+	{ NCP_8BIT | NCP_RECODE, 863, "IBM863,ibm863,", IDS_ENCODING_DOS863, NULL },// OEM French Canadian; French Canadian (DOS)
+	{ NCP_8BIT | NCP_RECODE, 737, "IBM737,ibm737,", IDS_ENCODING_DOS737, NULL },// OEM Greek (formerly 437G); Greek (DOS)
+	{ NCP_8BIT | NCP_RECODE, 869, "IBM869,ibm869,", IDS_ENCODING_DOS869, NULL },// OEM Modern Greek; Greek, Modern (DOS)
+	{ NCP_8BIT | NCP_RECODE, 862, "DOS-862,dos862,", IDS_ENCODING_DOS862, NULL },// OEM Hebrew; Hebrew (DOS)
+	{ NCP_8BIT | NCP_RECODE, 861, "IBM861,ibm861,", IDS_ENCODING_DOS861, NULL },// OEM Icelandic; Icelandic (DOS)
+	{ NCP_8BIT | NCP_RECODE, 865, "IBM865,ibm865,", IDS_ENCODING_DOS865, NULL },// OEM Nordic; Nordic (DOS)
+	{ NCP_8BIT | NCP_RECODE, 860, "IBM860,ibm860,", IDS_ENCODING_DOS860, NULL },// OEM Portuguese; Portuguese (DOS)
+	{ NCP_8BIT | NCP_RECODE, 857, "IBM857,ibm857,", IDS_ENCODING_DOS857, NULL },// OEM Turkish; Turkish (DOS)
 	// Mac
-	{ NCP_8BIT | NCP_RECODE, 10000, "Macintosh,Macintosh,", 61066, NULL },// MAC Roman; Western European (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10029, "x-mac-ce,xmacce,", 61018, NULL },// MAC Latin-2; Central European (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10004, "x-mac-arabic,xmacarabic,", 61077, NULL },// Arabic (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10008, "x-mac-chinesesimp,xmacchinesesimp,", 61087, NULL },// MAC Simplified Chinese (GB 2312); Chinese Simplified (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10002, "x-mac-chinesetrad,xmacchinesetrad,", 61090, NULL },// MAC Traditional Chinese (Big5); Chinese Traditional (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10082, "x-mac-croatian,xmaccroatian,", 61024, NULL },// Croatian (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10007, "x-mac-cyrillic,xmaccyrillic,", 61029, NULL },// Cyrillic (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10006, "x-mac-greek,xmacgreek,", 61035, NULL },// Greek (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10005, "x-mac-hebrew,xmachebrew,", 61041, NULL },// Hebrew (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10079, "x-mac-icelandic,xmacicelandic,", 61044, NULL },// Icelandic (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10001, "x-mac-japanese,xmacjapanese,", 61082, NULL },// Japanese (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10003, "x-mac-korean,xmackorean,", 61085, NULL },// Korean (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10021, "x-mac-thai,xmacthai,", 61056, NULL },// Thai (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10081, "x-mac-turkish,xmacturkish,", 61060, NULL },// Turkish (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10010, "x-mac-romanian,xmacromanian,", 61079, NULL },// Romanian (Mac)
-	{ NCP_8BIT | NCP_RECODE, 10017, "x-mac-ukrainian,xmacukrainian,", 61062, NULL },// Ukrainian (Mac)
-	//{ NCP_8BIT | NCP_RECODE, 708, ",ASMO-708,ASMO-708,", 0, NULL },// Arabic (ASMO 708); ISO 8859-6
-	//{ NCP_8BIT | NCP_RECODE, 709, ",ASMO-709,ASMO-709,", 0, NULL },// Arabic (ASMO-449+, BCON V4)
-	//{ NCP_8BIT | NCP_RECODE, 710, ",ASMO-710,ASMO-710,", 0, NULL },// Arabic - Transparent Arabic
-	//{ NCP_8BIT | NCP_RECODE, 29001, "x-Europa,x-Europa,", 0, NULL },// Europa 3
-	{ NCP_8BIT | NCP_RECODE, 37, "ebcdic-cp-us,ebcdiccpus,ebcdiccpca,ebcdiccpwt,ebcdiccpnl,ibm037,cp037,", 61068, NULL },// IBM EBCDIC US-Canada
-	{ NCP_8BIT | NCP_RECODE, 1140, "x-ebcdic-cp-us-euro,xebcdiccpuseuro,", 61069, NULL },// IBM EBCDIC US-Canada (037 + Euro symbol); IBM EBCDIC (US-Canada-Euro)
-	{ NCP_8BIT | NCP_RECODE, 500, "x-ebcdic-international,xebcdicinternational,", 61070, NULL },// IBM EBCDIC International
-	{ NCP_8BIT | NCP_RECODE, 870, "CP870,cp870,ebcdiccproece,ebcdiccpyu,csibm870,ibm870,", 61071, NULL },// IBM EBCDIC Multilingual/ROECE (Latin-2); IBM EBCDIC Multilingual Latin-2
-	{ NCP_8BIT | NCP_RECODE, 875, "x-EBCDIC-GreekModern,xebcdicgreekmodern,", 61072, NULL },// IBM EBCDIC Greek Modern
-	{ NCP_8BIT | NCP_RECODE, 1026, "CP1026,cp1026,csibm1026,ibm1026,", 61073, NULL },// IBM EBCDIC Turkish (Latin-5)
+	{ NCP_8BIT | NCP_RECODE, 10000, "Macintosh,macintosh,", IDS_ENCODING_MAC_ROMAN, NULL },// MAC Roman; Western European (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10029, "x-mac-ce,xmacce,", IDS_ENCODING_MAC_LATIN2, NULL },// MAC Latin-2; Central European (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10004, "x-mac-arabic,xmacarabic,", IDS_ENCODING_MAC_ARABIC, NULL },// Arabic (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10008, "x-mac-chinesesimp,xmacchinesesimp,", IDS_ENCODING_MAC_GB2312, NULL },// MAC Simplified Chinese (GB 2312); Chinese Simplified (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10002, "x-mac-chinesetrad,xmacchinesetrad,", IDS_ENCODING_MAC_BIG5, NULL },// MAC Traditional Chinese (Big5); Chinese Traditional (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10082, "x-mac-croatian,xmaccroatian,", IDS_ENCODING_MAC_CROATIAN, NULL },// Croatian (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10007, "x-mac-cyrillic,xmaccyrillic,", IDS_ENCODING_MAC_CYRILLIC, NULL },// Cyrillic (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10006, "x-mac-greek,xmacgreek,", IDS_ENCODING_MAC_GREEK, NULL },// Greek (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10005, "x-mac-hebrew,xmachebrew,", IDS_ENCODING_MAC_HEBREW, NULL },// Hebrew (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10079, "x-mac-icelandic,xmacicelandic,", IDS_ENCODING_MAC_ICELANDIC, NULL },// Icelandic (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10001, "x-mac-japanese,xmacjapanese,", IDS_ENCODING_MAC_JAPANESE, NULL },// Japanese (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10003, "x-mac-korean,xmackorean,", IDS_ENCODING_MAC_KOREAN, NULL },// Korean (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10021, "x-mac-thai,xmacthai,", IDS_ENCODING_MAC_THAI, NULL },// Thai (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10081, "x-mac-turkish,xmacturkish,", IDS_ENCODING_MAC_TURKISH, NULL },// Turkish (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10010, "x-mac-romanian,xmacromanian,", IDS_ENCODING_MAC_ROMANIAN, NULL },// Romanian (Mac)
+	{ NCP_8BIT | NCP_RECODE, 10017, "x-mac-ukrainian,xmacukrainian,", IDS_ENCODING_MAC_UKRAINIAN, NULL },// Ukrainian (Mac)
+	//{ NCP_8BIT | NCP_RECODE, 708, ",ASMO-708,asmo-708,", 0, NULL },// Arabic (ASMO 708); ISO 8859-6
+	//{ NCP_8BIT | NCP_RECODE, 709, ",ASMO-709,asmo-709,", 0, NULL },// Arabic (ASMO-449+, BCON V4)
+	//{ NCP_8BIT | NCP_RECODE, 710, ",ASMO-710,asmo-710,", 0, NULL },// Arabic - Transparent Arabic
+	//{ NCP_8BIT | NCP_RECODE, 29001, "x-Europa,x-europa,", 0, NULL },// Europa 3
+	{ NCP_8BIT | NCP_RECODE, 37, "ebcdic-cp-us,ebcdiccpus,ebcdiccpca,ebcdiccpwt,ebcdiccpnl,ibm037,cp037,", IDS_ENCODING_IBM037, NULL },// IBM EBCDIC US-Canada
+	{ NCP_8BIT | NCP_RECODE, 1140, "x-ebcdic-cp-us-euro,xebcdiccpuseuro,", IDS_ENCODING_IBM1140, NULL },// IBM EBCDIC US-Canada (037 + Euro symbol); IBM EBCDIC (US-Canada-Euro)
+	{ NCP_8BIT | NCP_RECODE, 500, "x-ebcdic-international,xebcdicinternational,", IDS_ENCODING_IBM500, NULL },// IBM EBCDIC International
+	{ NCP_8BIT | NCP_RECODE, 870, "CP870,cp870,ebcdiccproece,ebcdiccpyu,csibm870,ibm870,", IDS_ENCODING_IBM870, NULL },// IBM EBCDIC Multilingual/ROECE (Latin-2); IBM EBCDIC Multilingual Latin-2
+	{ NCP_8BIT | NCP_RECODE, 875, "x-EBCDIC-GreekModern,xebcdicgreekmodern,", IDS_ENCODING_CP875, NULL },// IBM EBCDIC Greek Modern
+	{ NCP_8BIT | NCP_RECODE, 1026, "CP1026,cp1026,csibm1026,ibm1026,", IDS_ENCODING_IBM1026, NULL },// IBM EBCDIC Turkish (Latin-5)
 	//{ NCP_8BIT | NCP_RECODE, 1047, "IBM01047,ibm01047,", 00000, NULL },// IBM EBCDIC Latin-1/Open System
 	//{ NCP_8BIT | NCP_RECODE, 1141, "x-ebcdic-germany-euro,xebcdicgermanyeuro,", 00000, NULL },// IBM EBCDIC Germany (20273 + Euro symbol); IBM EBCDIC (Germany-Euro)
 	//{ NCP_8BIT | NCP_RECODE, 1142, "x-ebcdic-denmarknorway-euro,xebcdicdenmarknorwayeuro,", 00000, NULL },// IBM EBCDIC Denmark-Norway (20277 + Euro symbol); IBM EBCDIC (Denmark-Norway-Euro)
@@ -171,16 +171,16 @@ NP2ENCODING mEncoding[] = {
 	//{ NCP_7BIT | NCP_RECODE, 20106, "x-IA5-German,xia5german,", 00000, NULL },// German (IA5) (7-bit)
 	//{ NCP_7BIT | NCP_RECODE, 20107, "x-IA5-Swedish,xia5swedish,", 00000, NULL },// Swedish (IA5) (7-bit)
 	//{ NCP_7BIT | NCP_RECODE, 20108, "x-IA5-Norwegian,xia5norwegian,", 00000, NULL },// Norwegian (IA5) (7-bit)
-	//{ NCP_8BIT | NCP_RECODE, 20936, "X-CP20936,XCP20936,", 00000, NULL },// Simplified Chinese (GB2312); Chinese Simplified (GB2312-80)
+	//{ NCP_8BIT | NCP_RECODE, 20936, "X-CP20936,xcp20936,", 00000, NULL },// Simplified Chinese (GB2312); Chinese Simplified (GB2312-80)
 	//{ NCP_8BIT | NCP_RECODE, 20949, "x-cp20949,x-cp20949,", 00000, NULL },// Korean Wansung
-	{ NCP_7BIT | NCP_RECODE, 52936, "HZ-GB-2312,HZGB2312,hz,", 61088, NULL },// HZ-GB2312 Simplified Chinese; Chinese Simplified (HZ)
-	{ NCP_7BIT | NCP_RECODE, 50220, "iso-2022-jp,iso2022jp,", 61045, NULL },// ISO 2022 Japanese with no halfwidth Katakana; Japanese (JIS)
-	{ NCP_7BIT | NCP_RECODE, 50221, "csISO2022JP,csiso2022jp,", 61083, NULL },// ISO 2022 Japanese with halfwidth Katakana; Japanese (JIS-Allow 1 byte Kana)
-	{ NCP_7BIT | NCP_RECODE, 50222, "_iso-2022-jp$SIO,iso2022jpSIO,", 61084, NULL },// ISO 2022 Japanese JIS X 0201-1989; Japanese (JIS-Allow 1 byte Kana - SO/SI)
-	{ NCP_7BIT | NCP_RECODE, 50225, "iso-2022-kr,iso2022kr,csiso2022kr,", 61086, NULL },// Korean (ISO-2022-KR)
-	{ NCP_7BIT | NCP_RECODE, 50227, "x-cp50227,xcp50227,", 61089, NULL },// Chinese Simplified (ISO-2022)
-	{ NCP_7BIT | NCP_RECODE, 50229, "iso-2022-cn,iso2022cn,", 61091, NULL },// Chinese Traditional (ISO-2022)
-	{ NCP_8BIT | NCP_RECODE, 20000, "x-Chinese-CNS,xchinesecns,", 61092, NULL },// Chinese Traditional (CNS);  CNS Taiwan
+	{ NCP_7BIT | NCP_RECODE, 52936, "HZ-GB-2312,hzgb2312,hz,", IDS_ENCODING_HZ_GB2312, NULL },// HZ-GB2312 Simplified Chinese; Chinese Simplified (HZ)
+	{ NCP_7BIT | NCP_RECODE, 50220, "ISO-2022-JP,iso2022jp,", IDS_ENCODING_ISO2022_JP, NULL },// ISO 2022 Japanese with no halfwidth Katakana; Japanese (JIS)
+	{ NCP_7BIT | NCP_RECODE, 50221, "csISO2022JP,csiso2022jp,", IDS_ENCODING_CS_ISO2022_JP, NULL },// ISO 2022 Japanese with halfwidth Katakana; Japanese (JIS-Allow 1 byte Kana)
+	{ NCP_7BIT | NCP_RECODE, 50222, "_iso-2022-jp$SIO,iso2022jpsio,", IDS_ENCODING_ISO2022_JP_SOSI, NULL },// ISO 2022 Japanese JIS X 0201-1989; Japanese (JIS-Allow 1 byte Kana - SO/SI)
+	{ NCP_7BIT | NCP_RECODE, 50225, "ISO-2022-KR,iso2022kr,csiso2022kr,", IDS_ENCODING_ISO2022_KR, NULL },// Korean (ISO-2022-KR)
+	{ NCP_7BIT | NCP_RECODE, 50227, "x-cp50227,xcp50227,", IDS_ENCODING_ISO2022_CNS, NULL },// Chinese Simplified (ISO-2022)
+	{ NCP_7BIT | NCP_RECODE, 50229, "ISO-2022-CN,iso2022cn,", IDS_ENCODING_ISO2022_CNT, NULL },// Chinese Traditional (ISO-2022)
+	{ NCP_8BIT | NCP_RECODE, 20000, "x-Chinese-CNS,xchinesecns,", IDS_ENCODING_CNS, NULL },// Chinese Traditional (CNS);  CNS Taiwan
 	//{ NCP_8BIT | NCP_RECODE, 20001, "x-cp20001,x-cp20001,", 00000, NULL },// TCA Taiwan
 	//{ NCP_8BIT | NCP_RECODE, 20002, "x-Chinese-Eten,xchineseeten,", 00000, NULL },// Chinese Traditional (Eten); Eten Taiwan
 	//{ NCP_8BIT | NCP_RECODE, 20003, "x-cp20003,x-cp20003,", 00000, NULL },// IBM5550 Taiwan
@@ -318,7 +318,7 @@ static NP2EncodingGroup sEncodingGroupList[] = {
 		28606,		// Latin-10, ISO 8859-16
 		10082,		// Mac (Croatian)
 	}},
-	{ FALSE, IDS_ENCODINGGROUP_SOUTASIA, { // Southeast Asia
+	{ FALSE, IDS_ENCODINGGROUP_SOUTHASIA, { // Southeast Asia
 		874,		// Thai TIS-620, ISO 8859-11
 		10021,		// Mac (Thai)
 		1258,		// Vietnamese Windows-1258
@@ -342,7 +342,7 @@ static NP2EncodingGroup sEncodingGroupList[] = {
 };
 
 //++Autogenerated -- start of section automatically generated
-// Created with Python 3.7.3,  Unicode 11.0.0
+// Created with Python 3.8.0, Unicode 12.1.0
 static const uint8_t ANSICharClassifyTable[] = {
 // Central European (Windows-1250)
 0x33, 0xFF, 0xEC, 0xAA, 0xFC, 0xFF, 0xEC, 0xAA, 0xB8, 0xFB, 0xEF, 0xB3, 0xBF, 0xFB, 0xEB, 0xAE,
@@ -478,11 +478,11 @@ BOOL EditSetNewEncoding(int iCurrentEncoding, int iNewEncoding, BOOL bNoUI, BOOL
 		if (SciCall_GetLength() == 0) {
 			const BOOL bIsEmptyUndoHistory = !(SciCall_CanUndo() || SciCall_CanRedo());
 
-			if (bNoUI || bIsEmptyUndoHistory || InfoBox(MBYESNO, L"MsgConv2", IDS_ASK_ENCODING2) == IDYES) {
+			if (bNoUI || bIsEmptyUndoHistory || InfoBoxWarn(MB_YESNO, L"MsgConv2", IDS_ASK_ENCODING2) == IDYES) {
 				EditConvertText(cpSrc, cpDest, bSetSavePoint);
 				return TRUE;
 			}
-		} else if (bNoUI || InfoBox(MBYESNO, L"MsgConv1", IDS_ASK_ENCODING) == IDYES) {
+		} else if (bNoUI || InfoBoxWarn(MB_YESNO, L"MsgConv1", IDS_ASK_ENCODING) == IDYES) {
 			BeginWaitCursor();
 			EditConvertText(cpSrc, cpDest, FALSE);
 			EndWaitCursor();
@@ -531,12 +531,10 @@ void Encoding_InitDefaults(void) {
 	g_DOSEncoding = CPI_OEM;
 
 	// Try to set the DOS encoding to DOS-437 if the default OEMCP is not DOS-437
-	if (oemcp != 437) {
+	if (oemcp != 437 && IsValidCodePage(437)) {
 		for (int i = CPI_UTF7 + 1; i < (int)COUNTOF(mEncoding); ++i) {
 			if (mEncoding[i].uCodePage == 437) {
-				if (IsValidCodePage(i)) {
-					g_DOSEncoding = i;
-				}
+				g_DOSEncoding = i;
 				break;
 			}
 		}
@@ -629,32 +627,30 @@ void Encoding_GetLabel(int iEncoding) {
 
 int Encoding_Match(LPCWSTR pwszTest) {
 	char tchTest[256];
-	WideCharToMultiByte(CP_ACP, 0, pwszTest, -1, tchTest, COUNTOF(tchTest), NULL, NULL);
+	WideCharToMultiByte(CP_UTF8, 0, pwszTest, -1, tchTest, COUNTOF(tchTest), NULL, NULL);
 	return Encoding_MatchA(tchTest);
 }
 
-int Encoding_MatchA(char *pchTest) {
+int Encoding_MatchA(LPCSTR pchTest) {
 	char chTest[256];
-	char *pchSrc = pchTest;
+	LPCSTR pchSrc = pchTest;
 	char *pchDst = chTest;
 
 	*pchDst++ = ',';
 	while (*pchSrc) {
-		if (isalnum((unsigned char)(*pchSrc))) {
-			if (*pchSrc >= 'A' && *pchSrc <= 'Z') {
-				*pchDst++ = (char)(*pchSrc + 'a' - 'A');
-			} else {
-				*pchDst++ = *pchSrc;
-			}
+		if (*pchSrc >= 'A' && *pchSrc <= 'Z') {
+			*pchDst++ = (char)(*pchSrc + 'a' - 'A');
+		} else {
+			*pchDst++ = *pchSrc;
 		}
 		pchSrc++;
 	}
 
 	*pchDst++ = ',';
-	*pchDst = 0;
+	*pchDst = '\0';
 
 	for (int i = 0; i < (int)COUNTOF(mEncoding); i++) {
-		if (StrStrIA(mEncoding[i].pszParseNames, chTest)) {
+		if (strstr(mEncoding[i].pszParseNames, chTest)) {
 			if (IsValidEncoding(i)) {
 				return i;
 			}
@@ -669,7 +665,7 @@ BOOL Encoding_IsValid(int iTestEncoding) {
 	return iTestEncoding >= 0 && iTestEncoding < (int)COUNTOF(mEncoding) && IsValidEncoding(iTestEncoding);
 }
 
-typedef struct _ee {
+typedef struct ENCODINGENTRY {
 	int id;
 	WCHAR wch[256];
 } ENCODINGENTRY, *PENCODINGENTRY;
@@ -739,8 +735,9 @@ void Encoding_AddToTreeView(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 	WCHAR wchBuf[256];
 	TVINSERTSTRUCT tvis;
 	ZeroMemory(&tvis, sizeof(TVINSERTSTRUCT));
-	tvis.hInsertAfter = TVI_LAST;
 	tvis.item.mask = TVIF_TEXT | TVIF_IMAGE | TVIF_SELECTEDIMAGE | TVIF_PARAM;
+
+	HTREEITEM hParent = TVI_FIRST;
 	HTREEITEM hSelNode = NULL;
 	HTREEITEM hSelParent = NULL;
 
@@ -760,27 +757,32 @@ void Encoding_AddToTreeView(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 		} else if (id == CPI_OEM) {
 			StrCatBuff(wchBuf, wchOEM, COUNTOF(wchBuf));
 		}
+
+		tvis.hInsertAfter = hParent;
 		tvis.item.pszText = wchBuf;
 		tvis.item.iImage = IsValidEncoding(id) ? 0 : 1;
 		tvis.item.iSelectedImage = tvis.item.iImage;
 		tvis.item.lParam = 1 + id;
 
-		HTREEITEM hTreeNode = (HTREEITEM)TreeView_InsertItem(hwnd, &tvis);
+		hParent = TreeView_InsertItem(hwnd, &tvis);
 		if (idSel == id) {
-			hSelNode = hTreeNode;
+			hSelNode = hParent;
 		}
 	}
 
 	for (UINT i = 0; i < COUNTOF(sEncodingGroupList); i++) {
 		const NP2EncodingGroup *group = &sEncodingGroupList[pEE[i].id];
 		tvis.hParent = NULL;
+		tvis.hInsertAfter = hParent;
 		tvis.item.pszText = pEE[i].wch;
 		tvis.item.iImage = 2; // folder
 		tvis.item.iSelectedImage = 2;
 		tvis.item.lParam = 0; // group
 
-		HTREEITEM hParent = (HTREEITEM)TreeView_InsertItem(hwnd, &tvis);
+		hParent = TreeView_InsertItem(hwnd, &tvis);
 		tvis.hParent = hParent;
+
+		HTREEITEM hTreeNode = TVI_FIRST;
 		BOOL expand = i < 2; // Unicode, Western European
 
 		for (UINT j = 0; j < COUNTOF(group->encodings); j++) {
@@ -795,12 +797,13 @@ void Encoding_AddToTreeView(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 					*pwsz = L'\0';
 				}
 
+				tvis.hInsertAfter = hTreeNode;
 				tvis.item.pszText = wchBuf;
 				tvis.item.iImage = IsValidEncoding(id) ? 0 : 1;
 				tvis.item.iSelectedImage = tvis.item.iImage;
 				tvis.item.lParam = 1 + id;
 
-				HTREEITEM hTreeNode = (HTREEITEM)TreeView_InsertItem(hwnd, &tvis);
+				hTreeNode = TreeView_InsertItem(hwnd, &tvis);
 				if (idSel == id) {
 					hSelNode = hTreeNode;
 					hSelParent = hParent;
@@ -816,10 +819,10 @@ void Encoding_AddToTreeView(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 		}
 	}
 
-	TreeView_Select(hwnd, hSelNode, TVGN_CARET);
 	if (hSelParent != NULL) {
 		TreeView_EnsureVisible(hwnd, hSelParent);
 	}
+	TreeView_Select(hwnd, hSelNode, TVGN_CARET);
 	NP2HeapFree(pEE);
 }
 
@@ -838,7 +841,7 @@ BOOL Encoding_GetFromTreeView(HWND hwnd, int *pidEncoding, BOOL bQuiet) {
 				return TRUE;
 			}
 			if (!bQuiet) {
-				MsgBox(MBWARN, IDS_ERR_ENCODINGNA);
+				MsgBoxWarn(MB_OK, IDS_ERR_ENCODINGNA);
 			}
 		}
 	}
@@ -915,7 +918,7 @@ BOOL Encoding_GetFromListView(HWND hwnd, int *pidEncoding) {
 			*pidEncoding = (int)lvi.lParam;
 			return TRUE;
 		}
-		MsgBox(MBWARN, IDS_ERR_ENCODINGNA);
+		MsgBoxWarn(MB_OK, IDS_ERR_ENCODINGNA);
 	}
 
 	return FALSE;
@@ -945,7 +948,7 @@ void Encoding_AddToComboboxEx(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 		if (!bRecodeOnly || (mEncoding[id].uFlags & NCP_RECODE)) {
 			WCHAR *pwsz;
 
-			cbei.iItem = SendMessage(hwnd, CB_GETCOUNT, 0, 0);
+			cbei.iItem = ComboBox_GetCount(hwnd);
 			if ((pwsz = StrChr(pEE[i].wch, L';')) != NULL) {
 				lstrcpyn(wchBuf, CharNext(pwsz), COUNTOF(wchBuf));
 				if ((pwsz = StrChr(wchBuf, L';')) != NULL) {
@@ -974,14 +977,14 @@ void Encoding_AddToComboboxEx(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 	NP2HeapFree(pEE);
 
 	if (iSelItem != -1) {
-		SendMessage(hwnd, CB_SETCURSEL, iSelItem, 0);
+		ComboBox_SetCurSel(hwnd, iSelItem);
 	}
 }
 
 BOOL Encoding_GetFromComboboxEx(HWND hwnd, int *pidEncoding) {
 	COMBOBOXEXITEM cbei;
 
-	cbei.iItem = SendMessage(hwnd, CB_GETCURSEL, 0, 0);
+	cbei.iItem = ComboBox_GetCurSel(hwnd);
 	cbei.mask = CBEIF_LPARAM;
 
 	if (SendMessage(hwnd, CBEM_GETITEM, 0, (LPARAM)&cbei)) {
@@ -989,7 +992,7 @@ BOOL Encoding_GetFromComboboxEx(HWND hwnd, int *pidEncoding) {
 			*pidEncoding = (int)cbei.lParam;
 			return TRUE;
 		}
-		MsgBox(MBWARN, IDS_ERR_ENCODINGNA);
+		MsgBoxWarn(MB_OK, IDS_ERR_ENCODINGNA);
 	}
 
 	return FALSE;
@@ -1136,23 +1139,13 @@ BOOL IsUTF8(const char *pTest, DWORD nLength) {
 	UINT state = UTF8_ACCEPT;
 
 	{
-#if NP2_USE_AVX2
-#define ALIGNMENT	sizeof(__m256i)
-#elif NP2_USE_SSE2
-#define ALIGNMENT	sizeof(__m128i)
-#elif defined(_WIN64)
-#define ALIGNMENT	sizeof(uint64_t)
-#else
-#define ALIGNMENT	sizeof(uint32_t)
-#endif
-		const uint8_t * const ptr = (const uint8_t *)align_ptr_ex(pt, ALIGNMENT);
+		const uint8_t * const ptr = (const uint8_t *)align_ptr_ex(pt, NP2_ALIGNED_LOAD_ALIGNMENT);
 		while (pt < ptr) {
 			state = utf8_dfa[256 + state + utf8_dfa[*pt++]];
 		}
 		if (state == UTF8_REJECT) {
 			return FALSE;
 		}
-#undef ALIGNMENT
 	}
 
 	{
@@ -1162,14 +1155,10 @@ BOOL IsUTF8(const char *pTest, DWORD nLength) {
 			const uint32_t mask = _mm256_movemask_epi8(chunk);
 			if (mask) {
 				// skip leading and trailing ASCII
-#if defined(__clang__) || defined(__GNUC__)
-				const int trailing = __builtin_ctz(mask);
-				const int leading = __builtin_clz(mask) ^ 31;
-#else
-				const DWORD trailing = _tzcnt_u32(mask);
-				//! on CPU that not support LZCNT, BSR is executed, which will yield incorrect result.
-				const DWORD leading = __lzcnt(mask) ^ 31;
-#endif
+				const DWORD trailing = np2_ctz(mask);
+				DWORD leading;
+				_BitScanReverse(&leading, mask);
+
 				const uint8_t *temp = pt + trailing;
 				const uint8_t * const endPtr = pt + leading + 1;
 				do {
@@ -1188,15 +1177,10 @@ BOOL IsUTF8(const char *pTest, DWORD nLength) {
 			const uint32_t mask = _mm_movemask_epi8(chunk);
 			if (mask) {
 				// skip leading and trailing ASCII
-#if defined(__clang__) || defined(__GNUC__)
-				const int trailing = __builtin_ctz(mask);
-				const int leading = __builtin_clz(mask) ^ 31;
-#else
-				DWORD trailing;
-				_BitScanForward(&trailing, mask);
+				const DWORD trailing = np2_ctz(mask);
 				DWORD leading;
 				_BitScanReverse(&leading, mask);
-#endif
+
 				const uint8_t *temp = pt + trailing;
 				const uint8_t * const endPtr = pt + leading + 1;
 				do {
@@ -1216,7 +1200,7 @@ BOOL IsUTF8(const char *pTest, DWORD nLength) {
 			const uint64_t val = *temp;
 			if (val & UINT64_C(0x8080808080808080)) {
 #if 0
-				pt = (const uint8_t *)temp
+				pt = (const uint8_t *)temp;
 				state = utf8_dfa[256 + state + utf8_dfa[pt[0]]];
 				state = utf8_dfa[256 + state + utf8_dfa[pt[1]]];
 				state = utf8_dfa[256 + state + utf8_dfa[pt[2]]];
@@ -1251,7 +1235,7 @@ BOOL IsUTF8(const char *pTest, DWORD nLength) {
 			const uint32_t val = *temp;
 			if (val & 0x80808080U) {
 #if 0
-				pt = (const uint8_t *)temp
+				pt = (const uint8_t *)temp;
 				state = utf8_dfa[256 + state + utf8_dfa[pt[0]]];
 				state = utf8_dfa[256 + state + utf8_dfa[pt[1]]];
 				state = utf8_dfa[256 + state + utf8_dfa[pt[2]]];
@@ -1291,23 +1275,13 @@ BOOL IsUTF7(const char *pTest, DWORD nLength) {
 	const uint8_t * const end = pt + nLength;
 
 	{
-#if NP2_USE_AVX2
-#define ALIGNMENT	sizeof(__m256i)
-#elif NP2_USE_SSE2
-#define ALIGNMENT	sizeof(__m128i)
-#elif defined(_WIN64)
-#define ALIGNMENT	sizeof(uint64_t)
-#else
-#define ALIGNMENT	sizeof(uint32_t)
-#endif
-		const uint8_t * const ptr = (const uint8_t *)align_ptr_ex(pt, ALIGNMENT);
+		const uint8_t * const ptr = (const uint8_t *)align_ptr_ex(pt, NP2_ALIGNED_LOAD_ALIGNMENT);
 		while (pt < ptr && (*pt & 0x80) == 0) {
 			++pt;
 		}
 		if (pt != ptr) {
 			return FALSE;
 		}
-#undef ALIGNMENT
 	}
 
 	{
@@ -1504,5 +1478,3 @@ int FileVars_GetEncoding(LPCFILEVARS lpfv) {
 	}
 	return -1;
 }
-
-// End of EditEncoding.c

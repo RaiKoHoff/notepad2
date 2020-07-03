@@ -17,9 +17,8 @@
 *
 *
 ******************************************************************************/
+#pragma once
 
-#ifndef METAPATH_HELPERS_H_
-#define METAPATH_HELPERS_H_
 #include "compiler.h"
 
 NP2_inline int min_i(int x, int y) {
@@ -62,13 +61,10 @@ NP2_inline BOOL StrCaseEqual(LPCWSTR s1, LPCWSTR s2) {
 	return _wcsicmp(s1, s2) == 0;
 }
 
-NP2_inline BOOL StrNEqual(LPCWSTR s1, LPCWSTR s2, int cch) {
-	return wcsncmp(s1, s2, cch) == 0;
-}
-
-NP2_inline BOOL StrNCaseEqual(LPCWSTR s1, LPCWSTR s2, int cch) {
-	return _wcsnicmp(s1, s2, cch) == 0;
-}
+#define StrHasPrefix(s, prefix)				(wcsncmp((s), (prefix), CSTRLEN(prefix)) == 0)
+#define StrHasPrefixEx(s, prefix, len)		(wcsncmp((s), (prefix), (len)) == 0)
+#define StrHasPrefixCase(s, prefix)			(_wcsnicmp((s), (prefix), CSTRLEN(prefix)) == 0)
+#define StrHasPrefixCaseEx(s, prefix, len)	(_wcsnicmp((s), (prefix), (len)) == 0)
 
 NP2_inline BOOL CRTStrToInt(LPCWSTR str, int *value) {
 	LPWSTR end;
@@ -80,7 +76,7 @@ int ParseCommaList(LPCWSTR str, int result[], int count);
 
 extern HINSTANCE g_hInstance;
 extern HANDLE g_hDefaultHeap;
-#if _WIN32_WINNT < _WIN32_WINNT_WIN10
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
 extern DWORD g_uWinVer;
 #endif
 
@@ -112,6 +108,38 @@ extern DWORD g_uWinVer;
 #else
 #define IsWin10AndAbove()	(g_uWinVer >= _WIN32_WINNT_WIN10)
 #endif
+
+#ifndef LOAD_LIBRARY_AS_IMAGE_RESOURCE
+#define LOAD_LIBRARY_AS_IMAGE_RESOURCE	0x00000020
+#endif
+
+#if defined(__GNUC__) && __GNUC__ >= 8
+// GCC statement expression
+#define DLLFunction(funcSig, hModule, funcName) __extension__({			\
+	_Pragma("GCC diagnostic push")										\
+	_Pragma("GCC diagnostic ignored \"-Wcast-function-type\"")			\
+	funcSig PP_CONCAT(temp, __LINE__) = (funcSig)GetProcAddress((hModule), (funcName));\
+	_Pragma("GCC diagnostic pop")										\
+	PP_CONCAT(temp, __LINE__);											\
+	})
+#define DLLFunctionEx(funcSig, dllName, funcName) __extension__({		\
+	_Pragma("GCC diagnostic push")										\
+	_Pragma("GCC diagnostic ignored \"-Wcast-function-type\"")			\
+	funcSig PP_CONCAT(temp, __LINE__) = (funcSig)GetProcAddress(GetModuleHandleW(dllName), (funcName));\
+	_Pragma("GCC diagnostic pop")										\
+	PP_CONCAT(temp, __LINE__);											\
+	})
+#else
+#define DLLFunction(funcSig, hModule, funcName)		(funcSig)GetProcAddress((hModule), (funcName))
+#define DLLFunctionEx(funcSig, dllName, funcName)	(funcSig)GetProcAddress(GetModuleHandleW(dllName), (funcName))
+#endif
+
+#ifndef USER_DEFAULT_SCREEN_DPI
+#define USER_DEFAULT_SCREEN_DPI		96		// _WIN32_WINNT >= _WIN32_WINNT_VISTA
+#endif
+
+// system DPI, same for all monitor.
+extern UINT g_uSystemDPI;
 
 // https://docs.microsoft.com/en-us/windows/desktop/Memory/comparing-memory-allocation-methods
 // https://blogs.msdn.microsoft.com/oldnewthing/20120316-00/?p=8083/
@@ -268,6 +296,23 @@ NP2_inline void IniSectionSetBoolEx(IniSectionOnSave *section, LPCWSTR key, BOOL
 	}
 }
 
+#define NP2RegSubKey_ContextMenu	L"Folder\\shell\\metapath"
+#define NP2RegSubKey_JumpList		L"Applications\\metapath.exe"
+
+LPWSTR Registry_GetString(HKEY hKey, LPCWSTR valueName);
+LSTATUS Registry_SetString(HKEY hKey, LPCWSTR valueName, LPCWSTR lpszText);
+#define Registry_GetDefaultString(hKey)				Registry_GetString((hKey), NULL)
+#define Registry_SetDefaultString(hKey, lpszText)	Registry_SetString((hKey), NULL, (lpszText))
+NP2_inline LSTATUS Registry_CreateKey(HKEY hKey, LPCWSTR lpSubKey, PHKEY phkResult) {
+	return RegCreateKeyEx(hKey, lpSubKey, 0, NULL, 0, KEY_WRITE, NULL, phkResult, NULL);
+}
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+#define Registry_DeleteTree(hKey, lpSubKey)			RegDeleteTree((hKey), (lpSubKey))
+#else
+LSTATUS Registry_DeleteTree(HKEY hKey, LPCWSTR lpSubKey);
+#endif
+
+
 NP2_inline BOOL KeyboardIsKeyDown(int key) {
 	return (GetKeyState(key) & 0x8000) != 0;
 }
@@ -281,16 +326,14 @@ NP2_inline void EndWaitCursor(void) {
 }
 
 HRESULT PrivateSetCurrentProcessExplicitAppUserModelID(PCWSTR AppID);
+BOOL IsElevated(void);
 BOOL ExeNameFromWnd(HWND hwnd, LPWSTR szExeName, int cchExeName);
 //BOOL Is32bitExe(LPCWSTR lpszExeName);
-BOOL SetTheme(HWND hwnd, LPCWSTR lpszTheme);
-NP2_inline BOOL SetExplorerTheme(HWND hwnd) {
-	return SetTheme(hwnd, L"Explorer");
-}
-NP2_inline BOOL SetListViewTheme(HWND hwnd) {
-	return SetTheme(hwnd, L"Listview");
-}
 
+#define SetExplorerTheme(hwnd)		SetWindowTheme((hwnd), L"Explorer", NULL)
+#define SetListViewTheme(hwnd)		SetWindowTheme((hwnd), L"Listview", NULL)
+
+BOOL FindUserResourcePath(LPCWSTR path, LPWSTR outPath);
 HBITMAP LoadBitmapFile(LPCWSTR path);
 BOOL BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest);
 BOOL BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha);
@@ -333,6 +376,13 @@ void SetWindowLayoutRTL(HWND hwnd, BOOL bRTL);
 #define SendWMCommand(hwnd, id)				SendWMCommandEx(hwnd, (id), 1)
 #define PostWMCommand(hwnd, id)				PostMessage(hwnd, WM_COMMAND, MAKEWPARAM((id), 1), 0)
 
+#define SetWindowStyle(hwnd, style)			SetWindowLong(hwnd, GWL_STYLE, (style))
+#define SetWindowExStyle(hwnd, style)		SetWindowLong(hwnd, GWL_EXSTYLE, (style))
+
+#define ComboBox_HasText(hwnd)					(ComboBox_GetTextLength(hwnd) || CB_ERR != ComboBox_GetCurSel(hwnd))
+#define ComboBox_GetEditSelStart(hwnd)			LOWORD(ComboBox_GetEditSel(hwnd))
+#define ComboBox_GetEditSelEnd(hwnd)			HIWORD(ComboBox_GetEditSel(hwnd))
+
 #define StatusSetSimple(hwnd, b)				SendMessage(hwnd, SB_SIMPLE, (b), 0)
 #define StatusSetText(hwnd, nPart, lpszText)	SendMessage(hwnd, SB_SETTEXT, (nPart), (LPARAM)(lpszText))
 
@@ -353,18 +403,32 @@ LRESULT SendWMSize(HWND hwnd);
 
 #define IsButtonChecked(hwnd, uId)	(IsDlgButtonChecked(hwnd, (uId)) == BST_CHECKED)
 
+HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName);
+NP2_inline BOOL IsChineseTraditionalSubLang(LANGID subLang) {
+	return subLang == SUBLANG_CHINESE_TRADITIONAL
+		|| subLang == SUBLANG_CHINESE_HONGKONG
+		|| subLang == SUBLANG_CHINESE_MACAU;
+}
+
 #define GetString(id, pb, cb)	LoadString(g_hInstance, id, pb, cb)
 #define StrEnd(pStart)			((pStart) + lstrlen(pStart))
 
 /**
  * Variadic Macros
+ * use __VA_ARGS__ instead of ##__VA_ARGS__ to force GCC syntax error
+ * for trailing comma when no format argument is given.
  * https://gcc.gnu.org/onlinedocs/cpp/Variadic-Macros.html
- * https://docs.microsoft.com/en-us/cpp/preprocessor/variadic-macros?view=vs-2017
+ * https://docs.microsoft.com/en-us/cpp/preprocessor/preprocessor-experimental-overview
  */
 #define FormatString(lpOutput, lpFormat, uIdFormat, ...) do {	\
 		GetString((uIdFormat), (lpFormat), COUNTOF(lpFormat));	\
 		wsprintf((lpOutput), (lpFormat), __VA_ARGS__);			\
 	} while (0)
+
+NP2_inline BOOL PathIsFile(LPCWSTR pszPath) {
+	// note: INVALID_FILE_ATTRIBUTES is -1.
+	return (GetFileAttributes(pszPath) & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
 
 void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, int cchDest, BOOL bSrcIsFile,
 					   BOOL bUnexpandEnv, BOOL bUnexpandMyDocs);
@@ -403,7 +467,7 @@ BOOL ExecDDECommand(LPCWSTR lpszCmdLine, LPCWSTR lpszDDEMsg, LPCWSTR lpszDDEApp,
 //==== History Functions ======================================================
 #define HISTORY_ITEMS 50
 
-typedef struct tagHISTORY {
+typedef struct HISTORY {
 	WCHAR *psz[HISTORY_ITEMS]; // Strings
 	int  iCurItem;            // Current Item
 } HISTORY, *PHISTORY, *LPHISTORY;
@@ -420,18 +484,21 @@ BOOL History_CanBack(LCPHISTORY ph);
 void History_UpdateToolbar(LCPHISTORY ph, HWND hwnd, int cmdBack, int cmdForward);
 
 //==== MRU Functions ==========================================================
-#define MRU_MAXITEMS 24
-#define MRU_NOCASE    1
-#define MRU_UTF8      2
+#define MRU_MAXITEMS	24
+
+enum {
+	MRUFlags_Default = 0,
+	MRUFlags_CaseInsensitive = 1,
+};
 
 #define MRU_MAX_COPY_MOVE_HISTORY	24
 // MRU_MAXITEMS * (MAX_PATH + 4)
 #define MAX_INI_SECTION_SIZE_MRU	(8 * 1024)
 
-typedef struct _mrulist {
+typedef struct MRULIST {
 	LPCWSTR szRegKey;
-	int   iFlags;
-	int   iSize;
+	int		iFlags;
+	int		iSize;
 	LPWSTR pszItems[MRU_MAXITEMS];
 } MRULIST, *PMRULIST, *LPMRULIST;
 
@@ -480,7 +547,3 @@ INT_PTR ThemedDialogBoxParam(HINSTANCE hInstance, LPCWSTR lpTemplate, HWND hWndP
 BOOL GetDoAnimateMinimize(void);
 void MinimizeWndToTray(HWND hwnd);
 void RestoreWndFromTray(HWND hwnd);
-
-#endif // METAPATH_HELPERS_H_
-
-///   End of Helpers.h

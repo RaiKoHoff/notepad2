@@ -25,6 +25,8 @@
 #include <shlobj.h>
 #include <shellapi.h>
 #include <commdlg.h>
+#include <uxtheme.h>
+#include "config.h"
 #include "Helpers.h"
 #include "metapath.h"
 #include "Dlapi.h"
@@ -32,42 +34,45 @@
 #include "resource.h"
 #include "version.h"
 
+extern HWND hwndMain;
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+extern LANGID uiLanguage;
+#endif
+
 //=============================================================================
 //
-//  ErrorMessage()
+// MsgBox()
 //
-//  L"Title\nMessage Text"
-//
-extern HWND hwndMain;
-
-int ErrorMessage(int iLevel, UINT uIdMsg, ...) {
+int MsgBox(UINT uType, UINT uIdMsg, ...) {
+	WCHAR szBuf[256 * 2];
 	WCHAR szText[256 * 2];
-	WCHAR szTitle[256 * 2];
 
-	GetString(uIdMsg, szText, COUNTOF(szText));
+	GetString(uIdMsg, szBuf, COUNTOF(szBuf));
 
 	va_list va;
 	va_start(va, uIdMsg);
-	wvsprintf(szTitle, szText, va);
+	wvsprintf(szText, szBuf, va);
 	va_end(va);
 
-	WCHAR *c = StrChr(szTitle, L'\n');
-	if (c) {
-		lstrcpy(szText, (c + 1));
-		*c = L'\0';
-	} else {
-		lstrcpy(szText, szTitle);
-		lstrcpy(szTitle, L"");
-	}
+	WCHAR szTitle[128];
+	GetString(IDS_APPTITLE, szTitle, COUNTOF(szTitle));
 
 	HWND hwnd;
 	if ((hwnd = GetActiveWindow()) == NULL) {
 		hwnd = hwndMain;
 	}
 
-	const int iIcon = (iLevel > 1) ? MB_ICONEXCLAMATION : MB_ICONINFORMATION;
+	uType |= MB_SETFOREGROUND;
+	if (bWindowLayoutRTL) {
+		uType |= MB_RTLREADING;
+	}
+
 	PostMessage(hwndMain, APPM_CENTER_MESSAGE_BOX, (WPARAM)hwnd, 0);
-	return MessageBoxEx(hwnd, szText, szTitle, MB_SETFOREGROUND | iIcon, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT));
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+	return MessageBoxEx(hwnd, szText, szTitle, uType, uiLanguage);
+#else
+	return MessageBoxEx(hwnd, szText, szTitle, uType, LANG_USER_DEFAULT);
+#endif
 }
 
 //=============================================================================
@@ -125,14 +130,23 @@ BOOL GetDirectory(HWND hwndParent, int iTitle, LPWSTR pszFolder, LPCWSTR pszBase
 //
 // GetDirectory2()
 //
-BOOL GetDirectory2(HWND hwndParent, int iTitle, LPWSTR pszFolder, int iBase) {
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+BOOL GetDirectory2(HWND hwndParent, int iTitle, LPWSTR pszFolder, int iBase)
+#else
+BOOL GetDirectory2(HWND hwndParent, int iTitle, LPWSTR pszFolder, REFKNOWNFOLDERID iBase)
+#endif
+{
 	WCHAR szTitle[256];
 	lstrcpy(szTitle, L"");
 	GetString(iTitle, szTitle, COUNTOF(szTitle));
 
 	LPITEMIDLIST pidlRoot;
-	if (NOERROR != SHGetSpecialFolderLocation(hwndParent, iBase, &pidlRoot)) {
-		CoTaskMemFree((LPVOID)pidlRoot);
+#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+	if (S_OK != SHGetFolderLocation(hwndParent, iBase, NULL, SHGFP_TYPE_DEFAULT, &pidlRoot))
+#else
+	if (S_OK != SHGetKnownFolderIDList(iBase, KF_FLAG_DEFAULT, NULL, &pidlRoot))
+#endif
+	{
 		return FALSE;
 	}
 
@@ -173,18 +187,19 @@ INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) 
 	switch (umsg) {
 	case WM_INITDIALOG: {
 		ResizeDlg_InitX(hwnd, cxRunDlg, IDC_RESIZEGRIP3);
-		MakeBitmapButton(hwnd, IDC_SEARCHEXE, g_hInstance, IDB_OPEN);
+		MakeBitmapButton(hwnd, IDC_SEARCHEXE, g_hInstance, IDB_OPEN_FOLDER);
 
+		HWND hwndCtl = GetDlgItem(hwnd, IDC_COMMANDLINE);
 		DLITEM dli;
 		dli.mask = DLI_FILENAME;
 		if (DirList_GetItem(hwndDirList, -1, &dli) != -1) {
 			LPWSTR psz = GetFilenameStr(dli.szFileName);
 			QuotateFilenameStr(psz);
-			SetDlgItemText(hwnd, IDC_COMMANDLINE, psz);
+			Edit_SetText(hwndCtl, psz);
 		}
 
-		SendDlgItemMessage(hwnd, IDC_COMMANDLINE, EM_LIMITTEXT, MAX_PATH - 1, 0);
-		SHAutoComplete(GetDlgItem(hwnd, IDC_COMMANDLINE), SHACF_FILESYSTEM);
+		Edit_LimitText(hwndCtl, MAX_PATH - 1);
+		SHAutoComplete(hwndCtl, SHACF_FILESYSTEM);
 		CenterDlgInParent(hwnd);
 	}
 	return TRUE;
@@ -338,16 +353,16 @@ INT_PTR CALLBACK GotoDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 		ResizeDlg_InitX(hwnd, cxGotoDlg, IDC_RESIZEGRIP);
 
 		HWND hwndGoto = GetDlgItem(hwnd, IDC_GOTO);
-		SendMessage(hwndGoto, CB_LIMITTEXT, MAX_PATH - 1, 0);
-		SendMessage(hwndGoto, CB_SETEXTENDEDUI, TRUE, 0);
+		ComboBox_LimitText(hwndGoto, MAX_PATH - 1);
+		ComboBox_SetExtendedUI(hwndGoto, TRUE);
 
 		for (int i = 0; i < HISTORY_ITEMS; i++) {
 			if (mHistory.psz[i]) {
-				const int iItem = (int)SendMessage(hwndGoto, CB_FINDSTRINGEXACT, (WPARAM)(-1), (LPARAM)mHistory.psz[i]);
-				if (iItem != LB_ERR) {
-					SendMessage(hwndGoto, CB_DELETESTRING, iItem, 0);
+				const int iItem = ComboBox_FindStringExact(hwndGoto, -1, mHistory.psz[i]);
+				if (iItem != CB_ERR) {
+					ComboBox_DeleteString(hwndGoto, iItem);
 				}
-				SendMessage(hwndGoto, CB_INSERTSTRING, 0, (LPARAM)mHistory.psz[i]);
+				ComboBox_InsertString(hwndGoto, 0, mHistory.psz[i]);
 			}
 		}
 
@@ -389,29 +404,26 @@ INT_PTR CALLBACK GotoDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 
 	case WM_COMMAND:
 		switch (LOWORD(wParam)) {
-		case IDC_GOTO:
-			EnableWindow(GetDlgItem(hwnd, IDOK),
-						 (GetWindowTextLength(GetDlgItem(hwnd, IDC_GOTO)) ||
-						  CB_ERR != SendDlgItemMessage(hwnd, IDC_GOTO, CB_GETCURSEL, 0, 0)));
+		case IDC_GOTO: {
+			HWND hwndGoto = GetDlgItem(hwnd, IDC_GOTO);
+			EnableWindow(GetDlgItem(hwnd, IDOK), ComboBox_HasText(hwndGoto));
 
 			if (HIWORD(wParam) == CBN_CLOSEUP) {
-				LONG lSelEnd = 0;
-				SendDlgItemMessage(hwnd, IDC_GOTO, CB_GETEDITSEL, 0, (LPARAM)&lSelEnd);
-				SendDlgItemMessage(hwnd, IDC_GOTO, CB_SETEDITSEL, 0, MAKELPARAM(lSelEnd, lSelEnd));
+				const DWORD lSelEnd = ComboBox_GetEditSelEnd(hwndGoto);
+				ComboBox_SetEditSel(hwndGoto, lSelEnd, lSelEnd);
 			}
-			break;
+		}
+		break;
 
 		case IDOK: {
 			WCHAR tch[MAX_PATH];
-
-			if (GetDlgItemText(hwnd, IDC_GOTO, tch, MAX_PATH)) {
+			HWND hwndGoto = GetDlgItem(hwnd, IDC_GOTO);
+			if (ComboBox_GetText(hwndGoto, tch, MAX_PATH)) {
 				EndDialog(hwnd, IDOK);
 				PathUnquoteSpaces(tch);
 				DisplayPath(tch, IDS_ERR_CMDLINE);
 			} else {
-				EnableWindow(GetDlgItem(hwnd, IDOK),
-							 (GetWindowTextLength(GetDlgItem(hwnd, IDC_GOTO)) ||
-							  CB_ERR != SendDlgItemMessage(hwnd, IDC_GOTO, CB_GETCURSEL, 0, 0)));
+				EnableWindow(GetDlgItem(hwnd, IDOK), ComboBox_HasText(hwndGoto));
 			}
 		}
 		break;
@@ -766,6 +778,10 @@ extern BOOL     bDefColorFilter;
 extern COLORREF colorNoFilter;
 extern COLORREF colorFilter;
 extern COLORREF colorCustom[16];
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+extern UINT		languageResID;
+#endif
+extern WCHAR g_wchAppUserModelID[64];
 
 static INT_PTR CALLBACK ItemsPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) {
 	static BOOL m_bDefColorNoFilter;
@@ -780,7 +796,7 @@ static INT_PTR CALLBACK ItemsPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARA
 	CHOOSECOLOR cc;
 
 	switch (umsg) {
-	case WM_INITDIALOG:
+	case WM_INITDIALOG: {
 		m_bDefColorNoFilter = bDefColorNoFilter;
 		m_bDefColorFilter = bDefColorFilter;
 
@@ -803,7 +819,19 @@ static INT_PTR CALLBACK ItemsPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARA
 		} else {
 			CheckRadioButton(hwnd, IDC_COLOR_DEF2, IDC_COLOR_CUST2, IDC_COLOR_CUST2);
 		}
-		return TRUE;
+
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+		HWND hwndCtl = GetDlgItem(hwnd, IDC_LANGUAGE_LIST);
+		WCHAR szText[128];
+		for (UINT rid = IDS_LANG_USER_DEFAULT; rid <= IDS_LANG_LAST_LANGUAGE; rid++) {
+			GetString(rid, szText, COUNTOF(szText));
+			ComboBox_AddString(hwndCtl, szText);
+		}
+		ComboBox_SetCurSel(hwndCtl, languageResID - IDS_LANG_USER_DEFAULT);
+		ComboBox_SetExtendedUI(hwndCtl, TRUE);
+#endif
+	}
+	return TRUE;
 
 	case WM_DESTROY:
 		DeleteObject(m_hbrNoFilter);
@@ -873,6 +901,9 @@ static INT_PTR CALLBACK ItemsPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARA
 			colorNoFilter = m_colorNoFilter;
 			colorFilter = m_colorFilter;
 
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+			SetUILanguage((UINT)SendDlgItemMessage(hwnd, IDC_LANGUAGE_LIST, CB_GETCURSEL, 0, 0) + IDS_LANG_USER_DEFAULT);
+#endif
 			SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_NOERROR);
 			return TRUE;
 		}
@@ -891,6 +922,122 @@ static INT_PTR CALLBACK ItemsPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARA
 	return FALSE;
 }
 
+/*
+HKEY_CLASSES_ROOT\Folder\shell\metapath
+	(Default)				REG_SZ		Open in metapath
+	icon					REG_SZ		metapath.exe
+	command
+		(Default)			REG_SZ		"metapath.exe" "%1"
+
+HKEY_CLASSES_ROOT\Applications\metapath.exe
+	AppUserModelID			REG_SZ		metapath File Browser
+	FriendlyAppName			REG_SZ		metapath File Browser
+	shell\open\command
+		(Default)			REG_SZ		"metapath.exe" "%1"
+*/
+
+enum {
+	SystemIntegration_ContextMenu = 1,
+	SystemIntegration_JumpList = 2,
+};
+
+struct SystemIntegrationInfo {
+	LPWSTR lpszText;
+	LPWSTR lpszName;
+};
+
+int GetSystemIntegrationStatus(struct SystemIntegrationInfo *info) {
+	int mask = 0;
+	WCHAR tchModule[MAX_PATH];
+	GetModuleFileName(NULL, tchModule, COUNTOF(tchModule));
+
+	// context menu
+	HKEY hKey;
+	LSTATUS status = RegOpenKeyEx(HKEY_CLASSES_ROOT, NP2RegSubKey_ContextMenu, 0, KEY_READ, &hKey);
+	if (status == ERROR_SUCCESS) {
+		info->lpszText = Registry_GetDefaultString(hKey);
+		HKEY hSubKey;
+		status = RegOpenKeyEx(hKey, L"command", 0, KEY_READ, &hSubKey);
+		if (status == ERROR_SUCCESS) {
+			LPWSTR command = Registry_GetDefaultString(hSubKey);
+			if (command != NULL) {
+				if (StrStrI(command, tchModule) != NULL) {
+					mask |= SystemIntegration_ContextMenu;
+				}
+				NP2HeapFree(command);
+			}
+			RegCloseKey(hSubKey);
+		}
+		RegCloseKey(hKey);
+	}
+
+	// jump list
+	status = RegOpenKeyEx(HKEY_CLASSES_ROOT, NP2RegSubKey_JumpList, 0, KEY_READ, &hKey);
+	if (status == ERROR_SUCCESS) {
+		info->lpszName = Registry_GetString(hKey, L"FriendlyAppName");
+		HKEY hSubKey;
+		status = RegOpenKeyEx(hKey, L"shell\\open\\command", 0, KEY_READ, &hSubKey);
+		if (status == ERROR_SUCCESS) {
+			LPWSTR command = Registry_GetDefaultString(hSubKey);
+			if (command != NULL) {
+				LPWSTR userId = Registry_GetString(hKey, L"AppUserModelID");
+				if (userId != NULL && StrEqual(userId, g_wchAppUserModelID) && StrStrI(command, tchModule) != NULL) {
+					mask |= SystemIntegration_JumpList;
+				}
+				if (userId != NULL) {
+					NP2HeapFree(userId);
+				}
+				NP2HeapFree(command);
+			}
+			RegCloseKey(hSubKey);
+		}
+		RegCloseKey(hKey);
+	}
+
+	return mask;
+}
+
+void UpdateSystemIntegrationStatus(int mask, LPCWSTR lpszText, LPCWSTR lpszName) {
+	WCHAR tchModule[MAX_PATH];
+	GetModuleFileName(NULL, tchModule, COUNTOF(tchModule));
+	WCHAR command[300];
+	wsprintf(command, L"\"%s\" \"%%1\"", tchModule);
+
+	// context menu
+	if (mask & SystemIntegration_ContextMenu) {
+		HKEY hSubKey;
+		const LSTATUS status = Registry_CreateKey(HKEY_CLASSES_ROOT, NP2RegSubKey_ContextMenu L"\\command", &hSubKey);
+		if (status == ERROR_SUCCESS) {
+			HKEY hKey;
+			RegOpenKeyEx(HKEY_CLASSES_ROOT, NP2RegSubKey_ContextMenu, 0, KEY_WRITE, &hKey);
+			Registry_SetDefaultString(hKey, lpszText);
+			Registry_SetString(hKey, L"icon", tchModule);
+			Registry_SetDefaultString(hSubKey, command);
+			RegCloseKey(hKey);
+			RegCloseKey(hSubKey);
+		}
+	} else {
+		Registry_DeleteTree(HKEY_CLASSES_ROOT, NP2RegSubKey_ContextMenu);
+	}
+
+	// jump list
+	if (mask & SystemIntegration_JumpList) {
+		HKEY hSubKey;
+		const LSTATUS status = Registry_CreateKey(HKEY_CLASSES_ROOT, NP2RegSubKey_JumpList L"\\shell\\open\\command", &hSubKey);
+		if (status == ERROR_SUCCESS) {
+			HKEY hKey;
+			RegOpenKeyEx(HKEY_CLASSES_ROOT, NP2RegSubKey_JumpList, 0, KEY_WRITE, &hKey);
+			Registry_SetString(hKey, L"AppUserModelID", g_wchAppUserModelID);
+			Registry_SetString(hKey, L"FriendlyAppName", lpszName);
+			Registry_SetDefaultString(hSubKey, command);
+			RegCloseKey(hKey);
+			RegCloseKey(hSubKey);
+		}
+	} else {
+		Registry_DeleteTree(HKEY_CLASSES_ROOT, NP2RegSubKey_JumpList);
+	}
+}
+
 //=============================================================================
 //
 //  ProgPageProc
@@ -899,8 +1046,8 @@ static INT_PTR CALLBACK ItemsPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARA
 static INT_PTR CALLBACK ProgPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) {
 	switch (umsg) {
 	case WM_INITDIALOG: {
-		MakeBitmapButton(hwnd, IDC_BROWSE_Q, g_hInstance, IDB_OPEN);
-		MakeBitmapButton(hwnd, IDC_BROWSE_F, g_hInstance, IDB_OPEN);
+		MakeBitmapButton(hwnd, IDC_BROWSE_Q, g_hInstance, IDB_OPEN_FOLDER);
+		MakeBitmapButton(hwnd, IDC_BROWSE_F, g_hInstance, IDB_OPEN_FOLDER);
 
 		WCHAR tch[MAX_PATH];
 		lstrcpy(tch, szQuickview);
@@ -909,13 +1056,51 @@ static INT_PTR CALLBACK ProgPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM
 			StrCatBuff(tch, L" ", COUNTOF(tch));
 			StrCatBuff(tch, szQuickviewParams, COUNTOF(tch));
 		}
-		SendDlgItemMessage(hwnd, IDC_QUICKVIEW, EM_LIMITTEXT, MAX_PATH - 2, 0);
-		SetDlgItemText(hwnd, IDC_QUICKVIEW, tch);
-		SHAutoComplete(GetDlgItem(hwnd, IDC_QUICKVIEW), SHACF_FILESYSTEM);
 
-		SendDlgItemMessage(hwnd, IDC_FAVORITES, EM_LIMITTEXT, MAX_PATH - 2, 0);
-		SetDlgItemText(hwnd, IDC_FAVORITES, tchFavoritesDir);
-		SHAutoComplete(GetDlgItem(hwnd, IDC_FAVORITES), SHACF_FILESYSTEM);
+		HWND hwndCtl = GetDlgItem(hwnd, IDC_QUICKVIEW);
+		Edit_LimitText(hwndCtl, MAX_PATH - 2);
+		Edit_SetText(hwndCtl, tch);
+		SHAutoComplete(hwndCtl, SHACF_FILESYSTEM);
+
+		hwndCtl = GetDlgItem(hwnd, IDC_FAVORITES);
+		Edit_LimitText(hwndCtl, MAX_PATH - 2);
+		Edit_SetText(hwndCtl, tchFavoritesDir);
+		SHAutoComplete(hwndCtl, SHACF_FILESYSTEM);
+
+		struct SystemIntegrationInfo info = {NULL, NULL};
+		const int mask = GetSystemIntegrationStatus(&info);
+
+		hwndCtl = GetDlgItem(hwnd, IDC_CONTEXT_MENU_TEXT);
+		if (StrIsEmpty(info.lpszText)) {
+			WCHAR wch[128];
+			GetString(IDS_LINKDESCRIPTION, wch, COUNTOF(wch));
+			Edit_SetText(hwndCtl, wch);
+		} else {
+			Edit_SetText(hwndCtl, info.lpszText);
+		}
+
+		HWND hwndName = GetDlgItem(hwnd, IDC_APPLICATION_NAME);
+		Edit_SetText(hwndName, StrIsEmpty(info.lpszName)? g_wchAppUserModelID : info.lpszName);
+		if (info.lpszText) {
+			NP2HeapFree(info.lpszText);
+		}
+		if (info.lpszName) {
+			NP2HeapFree(info.lpszName);
+		}
+
+		if (mask & SystemIntegration_ContextMenu) {
+			CheckDlgButton(hwnd, IDC_ENABLE_CONTEXT_MENU, BST_CHECKED);
+		}
+		if (mask & SystemIntegration_JumpList) {
+			CheckDlgButton(hwnd, IDC_ENABLE_JUMP_LIST, BST_CHECKED);
+		}
+
+		if (IsVistaAndAbove() && !IsElevated()) {
+			EnableWindow(GetDlgItem(hwnd, IDC_ENABLE_CONTEXT_MENU), FALSE);
+			Edit_SetReadOnly(hwndCtl, TRUE);
+			EnableWindow(GetDlgItem(hwnd, IDC_ENABLE_JUMP_LIST), FALSE);
+			Edit_SetReadOnly(hwndName, TRUE);
+		}
 	}
 	return TRUE;
 
@@ -1000,6 +1185,25 @@ static INT_PTR CALLBACK ProgPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM
 				GetDefaultFavoritesDir(tchFavoritesDir, COUNTOF(tchFavoritesDir));
 			} else {
 				StrTrim(tchFavoritesDir, L" \"");
+			}
+
+			if (IsWindowEnabled(GetDlgItem(hwnd, IDC_ENABLE_CONTEXT_MENU))) {
+				int mask = 0;
+				if (IsButtonChecked(hwnd, IDC_ENABLE_CONTEXT_MENU)) {
+					mask |= SystemIntegration_ContextMenu;
+				}
+				if (IsButtonChecked(hwnd, IDC_ENABLE_JUMP_LIST)) {
+					mask |= SystemIntegration_JumpList;
+				}
+
+				GetDlgItemText(hwnd, IDC_CONTEXT_MENU_TEXT, tch, COUNTOF(tch));
+				TrimString(tch);
+
+				WCHAR wchName[128];
+				GetDlgItemText(hwnd, IDC_APPLICATION_NAME, wchName, COUNTOF(wchName));
+				TrimString(wchName);
+
+				UpdateSystemIntegrationStatus(mask, tch, wchName);
 			}
 
 			SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_NOERROR);
@@ -1126,8 +1330,9 @@ INT_PTR CALLBACK GetFilterDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lP
 		ResizeDlg_InitX(hwnd, cxFileFilterDlg, IDC_RESIZEGRIP3);
 		MakeBitmapButton(hwnd, IDC_BROWSEFILTER, NULL, OBM_COMBO);
 
-		SendDlgItemMessage(hwnd, IDC_FILTER, EM_LIMITTEXT, COUNTOF(tchFilter) - 1, 0);
-		SetDlgItemText(hwnd, IDC_FILTER, tchFilter);
+		HWND hwndCtl = GetDlgItem(hwnd, IDC_FILTER);
+		Edit_LimitText(hwndCtl, COUNTOF(tchFilter) - 1);
+		Edit_SetText(hwndCtl, tchFilter);
 
 		CheckDlgButton(hwnd, IDC_NEGFILTER, bNegFilter);
 
@@ -1220,18 +1425,18 @@ INT_PTR CALLBACK GetFilterDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lP
 								SetDlgItemText(hwnd, IDC_FILTER, tchValue + 1);
 								CheckDlgButton(hwnd, IDC_NEGFILTER, TRUE);
 							} else {
-								MessageBeep(0);
+								MessageBeep(MB_OK);
 							}
 						} else {
 							SetDlgItemText(hwnd, IDC_FILTER, tchValue);
 							CheckDlgButton(hwnd, IDC_NEGFILTER, FALSE);
 						}
 					} else {
-						MessageBeep(0);
+						MessageBeep(MB_OK);
 					}
 				}
 			} else {
-				ErrorMessage(0, IDS_ERR_FILTER);
+				MsgBoxInfo(MB_OK, IDS_ERR_FILTER);
 			}
 
 			DestroyMenu(hMenu);
@@ -1281,7 +1486,7 @@ BOOL GetFilterDlg(HWND hwnd) {
 }
 
 // Data structure used in file operation dialogs
-typedef struct tagFILEOPDLGDATA {
+typedef struct FILEOPDLGDATA {
 	WCHAR szSource[MAX_PATH];
 	WCHAR szDestination[MAX_PATH];
 	UINT wFunc;
@@ -1303,9 +1508,11 @@ INT_PTR CALLBACK RenameFileDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 		const LPCFILEOPDLGDATA lpfod = (LPCFILEOPDLGDATA)lParam;
 
 		SetDlgItemText(hwnd, IDC_OLDNAME, lpfod->szSource);
-		SetDlgItemText(hwnd, IDC_NEWNAME, lpfod->szSource);
-		SendDlgItemMessage(hwnd, IDC_NEWNAME, EM_LIMITTEXT, MAX_PATH - 1, 0);
-		SendDlgItemMessage(hwnd, IDC_NEWNAME, EM_SETMODIFY, 0, 0);
+
+		HWND hwndCtl = GetDlgItem(hwnd, IDC_NEWNAME);
+		Edit_SetText(hwndCtl, lpfod->szSource);
+		Edit_LimitText(hwndCtl, MAX_PATH - 1);
+		Edit_SetModify(hwndCtl, FALSE);
 
 		CenterDlgInParent(hwnd);
 	}
@@ -1339,15 +1546,17 @@ INT_PTR CALLBACK RenameFileDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 			EnableWindow(GetDlgItem(hwnd, IDOK), GetWindowTextLength(GetDlgItem(hwnd, IDC_NEWNAME)));
 			break;
 
-		case IDOK:
-			if (!SendDlgItemMessage(hwnd, IDC_NEWNAME, EM_GETMODIFY, 0, 0)) {
+		case IDOK: {
+			HWND hwndCtl = GetDlgItem(hwnd, IDC_NEWNAME);
+			if (!Edit_GetModify(hwndCtl)) {
 				EndDialog(hwnd, IDCANCEL);
 			} else {
 				LPFILEOPDLGDATA lpfod = (LPFILEOPDLGDATA)GetWindowLongPtr(hwnd, DWLP_USER);
-				GetDlgItemText(hwnd, IDC_NEWNAME, lpfod->szDestination, COUNTOF(lpfod->szDestination) - 1);
+				Edit_GetText(hwndCtl, lpfod->szDestination, COUNTOF(lpfod->szDestination) - 1);
 				EndDialog(hwnd, IDOK);
 			}
-			break;
+		}
+		break;
 
 		case IDCANCEL:
 			EndDialog(hwnd, IDCANCEL);
@@ -1426,17 +1635,16 @@ INT_PTR CALLBACK CopyMoveDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lPa
 		SetWindowLongPtr(hwnd, DWLP_USER, lParam);
 
 		ResizeDlg_InitX(hwnd, cxCopyMoveDlg, IDC_RESIZEGRIP5);
-		MakeBitmapButton(hwnd, IDC_BROWSEDESTINATION, g_hInstance, IDB_OPEN);
+		MakeBitmapButton(hwnd, IDC_BROWSEDESTINATION, g_hInstance, IDB_OPEN_FOLDER);
 
 		const LPCFILEOPDLGDATA lpfod = (LPCFILEOPDLGDATA)lParam;
+		SetDlgItemText(hwnd, IDC_SOURCE, lpfod->szSource);
+
 		HWND hwndDest = GetDlgItem(hwnd, IDC_DESTINATION);
 		MRU_LoadToCombobox(hwndDest, MRU_KEY_COPY_MOVE_HISTORY);
-		SendMessage(hwndDest, CB_SETCURSEL, 0, 0);
-
-		SetDlgItemText(hwnd, IDC_SOURCE, lpfod->szSource);
-		SendMessage(hwndDest, CB_LIMITTEXT, MAX_PATH - 1, 0);
-
-		SendMessage(hwndDest, CB_SETEXTENDEDUI, TRUE, 0);
+		ComboBox_SetCurSel(hwndDest, 0);
+		ComboBox_LimitText(hwndDest, MAX_PATH - 1);
+		ComboBox_SetExtendedUI(hwndDest, TRUE);
 
 		if (lpfod->wFunc == FO_COPY) {
 			CheckRadioButton(hwnd, IDC_FUNCCOPY, IDC_FUNCMOVE, IDC_FUNCCOPY);
@@ -1483,20 +1691,21 @@ INT_PTR CALLBACK CopyMoveDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lPa
 		LPNMHDR pnmhdr = (LPNMHDR)lParam;
 		if (pnmhdr->idFrom == IDC_EMPTY_MRU && (pnmhdr->code == NM_CLICK || pnmhdr->code == NM_RETURN)) {
 			WCHAR tch[MAX_PATH];
-			GetDlgItemText(hwnd, IDC_DESTINATION, tch, COUNTOF(tch));
-			MRU_ClearCombobox(GetDlgItem(hwnd, IDC_DESTINATION), MRU_KEY_COPY_MOVE_HISTORY);
-			SetDlgItemText(hwnd, IDC_DESTINATION, tch);
+			HWND hwndDest = GetDlgItem(hwnd, IDC_DESTINATION);
+			ComboBox_GetText(hwndDest, tch, COUNTOF(tch));
+			MRU_ClearCombobox(hwndDest, MRU_KEY_COPY_MOVE_HISTORY);
+			ComboBox_SetText(hwndDest, tch);
 		}
 	}
 	return TRUE;
 
 	case WM_COMMAND:
 		switch (LOWORD(wParam)) {
-		case IDC_DESTINATION:
-			EnableWindow(GetDlgItem(hwnd, IDOK),
-						 (GetWindowTextLength(GetDlgItem(hwnd, IDC_DESTINATION)) ||
-						  CB_ERR != SendDlgItemMessage(hwnd, IDC_DESTINATION, CB_GETCURSEL, 0, 0)));
-			break;
+		case IDC_DESTINATION: {
+			HWND hwndDest = GetDlgItem(hwnd, IDC_DESTINATION);
+			EnableWindow(GetDlgItem(hwnd, IDOK), ComboBox_HasText(hwndDest));
+		}
+		break;
 
 		case IDC_BROWSEDESTINATION: {
 			WCHAR tch[MAX_PATH];
@@ -1512,13 +1721,12 @@ INT_PTR CALLBACK CopyMoveDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lPa
 		case IDOK: {
 			/*text*/
 			LPFILEOPDLGDATA lpfod = (LPFILEOPDLGDATA)GetWindowLongPtr(hwnd, DWLP_USER);
-			if (GetDlgItemText(hwnd, IDC_DESTINATION, lpfod->szDestination, COUNTOF(lpfod->szDestination) - 1)) {
+			HWND hwndDest = GetDlgItem(hwnd, IDC_DESTINATION);
+			if (ComboBox_GetText(hwndDest, lpfod->szDestination, COUNTOF(lpfod->szDestination) - 1)) {
 				lpfod->wFunc = IsButtonChecked(hwnd, IDC_FUNCCOPY) ? FO_COPY : FO_MOVE;
 				EndDialog(hwnd, IDOK);
 			} else {
-				EnableWindow(GetDlgItem(hwnd, IDOK),
-							 (GetWindowTextLength(GetDlgItem(hwnd, IDC_DESTINATION)) ||
-							  CB_ERR != SendDlgItemMessage(hwnd, IDC_DESTINATION, CB_GETCURSEL, 0, 0)));
+				EnableWindow(GetDlgItem(hwnd, IDOK), ComboBox_HasText(hwndDest));
 			}
 		}
 		break;
@@ -1633,7 +1841,7 @@ INT_PTR CALLBACK OpenWithDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lPa
 		DirList_StartIconThread(hwndLV);
 		ListView_SetItemState(hwndLV, 0, LVIS_FOCUSED, LVIS_FOCUSED);
 
-		MakeBitmapButton(hwnd, IDC_GETOPENWITHDIR, g_hInstance, IDB_OPEN);
+		MakeBitmapButton(hwnd, IDC_GETOPENWITHDIR, g_hInstance, IDB_OPEN_FOLDER);
 
 		CenterDlgInParent(hwnd);
 	}
@@ -1721,7 +1929,7 @@ INT_PTR CALLBACK OpenWithDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lPa
 			if (lpdli->ntype != DLE_NONE) {
 				EndDialog(hwnd, IDOK);
 			} else {
-				MessageBeep(0);
+				MessageBeep(MB_OK);
 			}
 		}
 		break;
@@ -1931,9 +2139,7 @@ static INT_PTR CALLBACK FindWinDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 		break;
 
 	case WM_LBUTTONDOWN: {
-		POINT pt;
-		pt.x = GET_X_LPARAM(lParam);
-		pt.y = GET_Y_LPARAM(lParam);
+		const POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 		if (GetDlgCtrlID((ChildWindowFromPoint(hwnd, pt))) == IDC_CROSSCURSOR) {
 			SetCapture(hwnd);
 			bHasCapture = TRUE;
@@ -1974,7 +2180,7 @@ static INT_PTR CALLBACK FindWinDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 			GetCursorPos(&pt);
 
 			HWND hwndFind = WindowFromPoint(pt);
-			while (GetWindowLongPtr(hwndFind, GWL_STYLE) & WS_CHILD) {
+			while (GetWindowStyle(hwndFind) & WS_CHILD) {
 				hwndFind = GetParent(hwndFind);
 			}
 
@@ -2014,7 +2220,8 @@ static INT_PTR CALLBACK FindWinDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 				lstrcpyn(pTargetWndClassBuf, tch, COUNTOF(tch));
 			}
 			EndDialog(hwnd, IDOK);
-		} break;
+		}
+		break;
 
 		case IDCANCEL:
 			EndDialog(hwnd, IDCANCEL);
@@ -2093,12 +2300,13 @@ INT_PTR CALLBACK FindTargetDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 		//}
 
 		// Bitmap for the Browse button
-		MakeBitmapButton(hwnd, IDC_BROWSE, g_hInstance, IDB_OPEN);
+		MakeBitmapButton(hwnd, IDC_BROWSE, g_hInstance, IDB_OPEN_FOLDER);
 		//MakeBitmapButton(hwnd, IDC_FINDWIN, g_hInstance, IDB_BROWSE);
 
 		// initialize edit controls
-		SendDlgItemMessage(hwnd, IDC_TARGETPATH, EM_LIMITTEXT, MAX_PATH - 1, 0);
-		SHAutoComplete(GetDlgItem(hwnd, IDC_TARGETPATH), SHACF_FILESYSTEM | SHACF_URLMRU);
+		HWND hwndCtl = GetDlgItem(hwnd, IDC_TARGETPATH);
+		Edit_LimitText(hwndCtl, MAX_PATH - 1);
+		SHAutoComplete(hwndCtl, SHACF_FILESYSTEM | SHACF_URLMRU);
 
 		SendDlgItemMessage(hwnd, IDC_DDEMSG, EM_LIMITTEXT, 128, 0);
 		SendDlgItemMessage(hwnd, IDC_DDEAPP, EM_LIMITTEXT, 128, 0);
@@ -2281,7 +2489,7 @@ INT_PTR CALLBACK FindTargetDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 					 (GetDlgItemText(hwnd, IDC_DDEMSG, tch, COUNTOF(tch)) == 0 ||
 					  GetDlgItemText(hwnd, IDC_DDEAPP, tch, COUNTOF(tch)) == 0 ||
 					  GetDlgItemText(hwnd, IDC_DDETOPIC, tch, COUNTOF(tch)) == 0))) {
-				ErrorMessage(1, IDS_ERR_INVALIDTARGET);
+				MsgBoxInfo(MB_OK, IDS_ERR_INVALIDTARGET);
 			} else {
 				IniSectionOnSave section;
 				WCHAR *pIniSectionBuf = (WCHAR *)NP2HeapAlloc(sizeof(WCHAR) * MAX_INI_SECTION_SIZE_TARGET_APPLICATION);
@@ -2362,5 +2570,3 @@ INT_PTR CALLBACK FindTargetDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 
 	return FALSE;
 }
-
-// End of Dialogs.c

@@ -27,17 +27,17 @@ static const char styleSubable[] = { 0 };
 LexerBase::LexerBase(const LexicalClass *lexClasses_, size_t nClasses_) :
 	lexClasses(lexClasses_), nClasses(nClasses_) {
 	for (int wl = 0; wl < numWordLists; wl++) {
-		keyWordLists[wl] = new WordList;
+		keywordLists[wl] = new WordList;
 	}
-	keyWordLists[numWordLists] = nullptr;
+	keywordLists[numWordLists] = nullptr;
 }
 
 LexerBase::~LexerBase() {
 	for (int wl = 0; wl < numWordLists; wl++) {
-		delete keyWordLists[wl];
-		keyWordLists[wl] = nullptr;
+		delete keywordLists[wl];
+		keywordLists[wl] = nullptr;
 	}
-	keyWordLists[numWordLists] = nullptr;
+	keywordLists[numWordLists] = nullptr;
 }
 
 void SCI_METHOD LexerBase::Release() noexcept {
@@ -45,7 +45,7 @@ void SCI_METHOD LexerBase::Release() noexcept {
 }
 
 int SCI_METHOD LexerBase::Version() const noexcept {
-	return lvRelease4;
+	return lvRelease5;
 }
 
 const char * SCI_METHOD LexerBase::PropertyNames() const noexcept {
@@ -65,18 +65,21 @@ Sci_Position SCI_METHOD LexerBase::PropertySet(const char *key, const char *val)
 	if (strcmp(val, valOld) != 0) {
 		props.Set(key, val, strlen(key), strlen(val));
 		return 0;
-	} else {
-		return -1;
 	}
+	return -1;
+}
+
+const char *SCI_METHOD LexerBase::PropertyGet(const char *key) const {
+	return props.Get(key);
 }
 
 const char * SCI_METHOD LexerBase::DescribeWordListSets() const noexcept {
 	return "";
 }
 
-Sci_Position SCI_METHOD LexerBase::WordListSet(int n, const char *wl) {
+Sci_Position SCI_METHOD LexerBase::WordListSet(int n, bool toLower, const char *wl) {
 	if (n < numWordLists) {
-		if (keyWordLists[n]->Reset(wl)) {
+		if (keywordLists[n]->Set(wl, toLower)) {
 			return 0;
 		}
 	}
@@ -139,4 +142,14 @@ const char * SCI_METHOD LexerBase::TagsOfStyle(int style) const noexcept {
 
 const char * SCI_METHOD LexerBase::DescriptionOfStyle(int style) const noexcept {
 	return (style < NamedStyles()) ? lexClasses[style].description : "";
+}
+
+// ILexer5 methods
+
+const char *SCI_METHOD LexerBase::GetName() const noexcept {
+	return "";
+}
+
+int SCI_METHOD LexerBase::GetIdentifier() const noexcept {
+	return SCLEX_AUTOMATIC;
 }

@@ -126,7 +126,7 @@ struct WordNode {
 // TODO: since the tree is sorted, nodes greater than some level can be deleted to reduce total words.
 // or only limit word count in WordList_GetList().
 
-// Andersson Tree, source from http://www.eternallyconfuzzled.com/tuts/datastructures/jsw_tut_andersson.aspx
+// Andersson Tree, source from https://www.eternallyconfuzzled.com/tuts/datastructures/jsw_tut_andersson.aspx
 // see also https://en.wikipedia.org/wiki/AA_tree
 #define aa_tree_skew(t) \
 	if ((t)->level && (t)->left && (t)->level == (t)->left->level) {\
@@ -261,12 +261,12 @@ void WordList_Free(struct WordList *pWList) {
 	}
 }
 
-void WordList_GetList(struct WordList *pWList, char* *pList) {
+char* WordList_GetList(struct WordList *pWList) {
 	struct WordNode *root = pWList->pListHead;
 	struct WordNode *path[NP2_TREE_HEIGHT_LIMIT] = { NULL };
 	int top = 0;
 	char *buf = (char *)NP2HeapAlloc(pWList->nTotalLen + 1);// additional separator
-	*pList = buf;
+	char * const pList = buf;
 
 	while (root || top > 0) {
 		if (root) {
@@ -281,14 +281,15 @@ void WordList_GetList(struct WordList *pWList, char* *pList) {
 		}
 	}
 	// trim last separator char
-	if (buf && buf != *pList) {
-		*(--buf) = 0;
+	if (buf != pList) {
+		*(--buf) = '\0';
 	}
+	return pList;
 }
 
 struct WordList *WordList_Alloc(LPCSTR pRoot, int iRootLen, BOOL bIgnoreCase) {
 	struct WordList *pWList = (struct WordList *)NP2HeapAlloc(sizeof(struct WordList));
-	pWList->pListHead =  NULL;
+	pWList->pListHead = NULL;
 	pWList->pWordStart = pRoot;
 	pWList->nWordCount = 0;
 	pWList->nTotalLen = 0;
@@ -400,6 +401,49 @@ static inline void WordList_AddList(struct WordList *pWList, LPCSTR pList) {
 	}
 }
 
+void WordList_AddSubWord(struct WordList *pWList, LPSTR pWord, int wordLength, int iRootLen) {
+	/*
+	when pRoot is 'b', split 'bugprone-branch-clone' as following:
+	1. first hyphen: 'bugprone-branch-clone' => 'bugprone', 'branch-clone'.
+	2. second hyphen: 'bugprone-branch-clone' => 'bugprone-branch'; 'branch-clone' => 'branch'.
+	*/
+
+	LPCSTR words[8];
+	int starts[8];
+	UINT count = 0;
+
+	for (int i = 0; i < wordLength - 1; i++) {
+		const char ch = pWord[i];
+		if (ch == '.' || ch == '-' || ch == ':') {
+			if (i >= iRootLen) {
+				pWord[i] = '\0';
+				WordList_AddWord(pWList, pWord, i);
+				for (UINT j = 0; j < count; j++) {
+					const int subLen = i - starts[j];
+					if (subLen >= iRootLen) {
+						WordList_AddWord(pWList, words[j], subLen);
+					}
+				}
+				pWord[i] = ch;
+			}
+			if (ch != '.' && (pWord[i + 1] == '>' || pWord[i + 1] == ':')) {
+				++i;
+			}
+
+			const int subLen = wordLength - (i + 1);
+			LPCSTR pSubRoot = pWord + i + 1;
+			if (subLen >= iRootLen && WordList_StartsWith(pWList, pSubRoot)) {
+				WordList_AddWord(pWList, pSubRoot, subLen);
+				if (count < COUNTOF(words)) {
+					words[count] = pSubRoot;
+					starts[count] = i + 1;
+					++count;
+				}
+			}
+		}
+	}
+}
+
 
 static inline BOOL IsASpaceOrTab(int ch) {
 	return ch == ' ' || ch == '\t';
@@ -466,12 +510,15 @@ BOOL IsDocWordChar(int ch) {
 	}
 
 	switch (pLexCurrent->rid) {
+	case NP2LEX_TEXTFILE:
+	case NP2LEX_2NDTEXTFILE:
 	case NP2LEX_ANSI:
 	case NP2LEX_CSS:
 	case NP2LEX_DOT:
 	case NP2LEX_LISP:
 	case NP2LEX_SMALI:
 		return (ch == '-');
+
 	case NP2LEX_ASM:
 	case NP2LEX_FORTRAN:
 		return (ch == '#' || ch == '%');
@@ -481,6 +528,7 @@ BOOL IsDocWordChar(int ch) {
 	case NP2LEX_BASH:
 	case NP2LEX_BATCH:
 	case NP2LEX_HTML:
+	case NP2LEX_GN:
 	case NP2LEX_PHP:
 	case NP2LEX_PS1:
 		return (ch == '-' || ch == '$');
@@ -501,6 +549,9 @@ BOOL IsDocWordChar(int ch) {
 		return (ch == '#');
 
 	case NP2LEX_JAVA:
+	case NP2LEX_JULIA:
+	case NP2LEX_KOTLIN:
+	case NP2LEX_RUST:
 		return (ch == '$' || ch == '@' || ch == ':');
 
 	case NP2LEX_GROOVY:
@@ -513,7 +564,8 @@ BOOL IsDocWordChar(int ch) {
 		return (ch == '$' || ch == '@');
 
 	case NP2LEX_LLVM:
-		return (ch == '@' || ch == '%');
+	case NP2LEX_WASM:
+		return (ch == '@' || ch == '%' || ch == '$' || ch == '-');
 
 	case NP2LEX_MAKE:
 	case NP2LEX_NSIS:
@@ -547,11 +599,8 @@ static inline BOOL IsOperatorStyle(int style) {
 		return style == SCE_CONF_OPERATOR;
 	case SCLEX_CPP:
 	case SCLEX_GRAPHVIZ:
-	case SCLEX_JSON:
 	case SCLEX_LISP:
-	case SCLEX_LLVM:
 	case SCLEX_NSIS:
-	case SCLEX_VIM:
 		return style == SCE_C_OPERATOR;
 	case SCLEX_CSS:
 		return style == SCE_CSS_OPERATOR;
@@ -561,12 +610,25 @@ static inline BOOL IsOperatorStyle(int style) {
 	case SCLEX_FSHARP:
 		return style == SCE_FSHARP_OPERATOR;
 
+	case SCLEX_GN:
+		return style == SCE_GN_OPERATOR;
+
 	case SCLEX_HTML:
 		return style == SCE_HPHP_OPERATOR || style == SCE_HJ_SYMBOLS || style == SCE_HJA_SYMBOLS;
+
+	case SCLEX_JSON:
+		return style == SCE_JSON_OPERATOR;
+	case SCLEX_JULIA:
+		return style == SCE_JULIA_OPERATOR || style == SCE_JULIA_OPERATOR2;
+
+	case SCLEX_KOTLIN:
+		return style == SCE_KOTLIN_OPERATOR || style == SCE_KOTLIN_OPERATOR2;
 
 	case SCLEX_LATEX:
 	case SCLEX_TEXINFO:
 		return style == SCE_L_OPERATOR;
+	case SCLEX_LLVM:
+		return style == SCE_LLVM_OPERATOR;
 	case SCLEX_LUA:
 		return style == SCE_LUA_OPERATOR;
 
@@ -586,6 +648,8 @@ static inline BOOL IsOperatorStyle(int style) {
 
 	case SCLEX_RUBY:
 		return style == SCE_RB_OPERATOR;
+	case SCLEX_RUST:
+		return style == SCE_RUST_OPERATOR;
 
 	case SCLEX_SMALI:
 		return style == SCE_SMALI_OPERATOR;
@@ -594,6 +658,8 @@ static inline BOOL IsOperatorStyle(int style) {
 
 	case SCLEX_TCL:
 		return style == SCE_TCL_OPERATOR;
+	case SCLEX_TOML:
+		return style == SCE_TOML_OPERATOR;
 
 	case SCLEX_VB:
 	case SCLEX_VBSCRIPT:
@@ -602,6 +668,14 @@ static inline BOOL IsOperatorStyle(int style) {
 		return style == SCE_V_OPERATOR;
 	case SCLEX_VHDL:
 		return style == SCE_VHDL_OPERATOR;
+	case SCLEX_VIM:
+		return style == SCE_VIM_OPERATOR;
+
+	case SCLEX_WASM:
+		return style == SCE_WASM_OPERATOR;
+
+	case SCLEX_YAML:
+		return style == SCE_YAML_OPERATOR;
 	}
 	return FALSE;
 }
@@ -614,13 +688,13 @@ static inline BOOL IsWordStyleToIgnore(int style) {
 			|| style == SCE_C_PREPROCESSOR;
 
 	case SCLEX_JSON:
-		return style == SCE_C_WORD;
+		return style == SCE_JSON_KEYWORD;
 
 	case SCLEX_PYTHON:
 		return style == SCE_PY_WORD
 			|| style == SCE_PY_WORD2
-			|| style == SCE_PY_BUILDIN_CONST
-			|| style == SCE_PY_BUILDIN_FUNC
+			|| style == SCE_PY_BUILTIN_CONST
+			|| style == SCE_PY_BUILTIN_FUNC
 			|| style == SCE_PY_ATTR
 			|| style == SCE_PY_OBJ_FUNC;
 
@@ -649,6 +723,9 @@ static inline BOOL IsStringFormatChar(int ch, int style) {
 
 	case SCLEX_FSHARP:
 		return style != SCE_FSHARP_OPERATOR;
+
+	case SCLEX_JULIA:
+		return style != SCE_JULIA_OPERATOR && style != SCE_JULIA_OPERATOR2;
 
 	case SCLEX_LUA:
 		return style != SCE_LUA_OPERATOR;
@@ -710,11 +787,15 @@ static inline BOOL NeedSpaceAfterKeyword(const char *word, Sci_Position length) 
 #define HTML_TEXT_BLOCK_PYTHON	4
 #define HTML_TEXT_BLOCK_PHP		5
 #define HTML_TEXT_BLOCK_CSS		6
+#define HTML_TEXT_BLOCK_SGML	7
 
-static int GetCurrentHtmlTextBlock(void) {
-	const Sci_Position iCurrentPos = SciCall_GetCurrentPos();
-	const int iCurrentStyle = SciCall_GetStyleAt(iCurrentPos);
+extern EDITLEXER lexCSS;
+extern EDITLEXER lexJS;
+extern EDITLEXER lexPHP;
+extern EDITLEXER lexPython;
+extern EDITLEXER lexVBS;
 
+static int GetCurrentHtmlTextBlockEx(int iCurrentStyle) {
 	if (iCurrentStyle == SCE_H_CDATA) {
 		return HTML_TEXT_BLOCK_CDATA;
 	}
@@ -730,13 +811,19 @@ static int GetCurrentHtmlTextBlock(void) {
 		|| (iCurrentStyle >= SCE_HPA_START && iCurrentStyle <= SCE_HPA_IDENTIFIER)) {
 		return HTML_TEXT_BLOCK_PYTHON;
 	}
-	if ((iCurrentStyle >= SCE_HPHP_DEFAULT && iCurrentStyle <= SCE_HPHP_OPERATOR)
-		|| iCurrentStyle == SCE_HPHP_HEREDOC
-		|| iCurrentStyle == SCE_HPHP_NOWDOC
-		|| iCurrentStyle == SCE_HPHP_COMPLEX_VARIABLE) {
+	if ((iCurrentStyle >= SCE_HPHP_DEFAULT && iCurrentStyle <= SCE_HPHP_COMPLEX_VARIABLE)) {
 		return HTML_TEXT_BLOCK_PHP;
 	}
+	if ((iCurrentStyle >= SCE_H_SGML_DEFAULT && iCurrentStyle <= SCE_H_SGML_BLOCK_DEFAULT)) {
+		return HTML_TEXT_BLOCK_SGML;
+	}
 	return HTML_TEXT_BLOCK_TAG;
+}
+
+static int GetCurrentHtmlTextBlock(void) {
+	const Sci_Position iCurrentPos = SciCall_GetCurrentPos();
+	const int iCurrentStyle = SciCall_GetStyleAt(iCurrentPos);
+	return GetCurrentHtmlTextBlockEx(iCurrentStyle);
 }
 
 static void EscapeRegex(LPSTR pszOut, LPCSTR pszIn) {
@@ -811,25 +898,27 @@ void AutoC_AddDocWord(struct WordList *pWList, BOOL bIgnoreCase, char prefix) {
 			while (wordEnd < iDocLen) {
 				const int ch = SciCall_GetCharAt(wordEnd);
 				if (!(ch == ':' || ch == '.' || ch == '-')) {
+					if (ch == '!' && pLexCurrent->iLexer == SCLEX_RUST && style == SCE_RUST_MACRO) {
+						// macro: println!()
+						++wordEnd;
+					}
 					break;
 				}
 
-				BOOL bFound = FALSE;
+				const Sci_Position before = wordEnd;
 				Sci_Position width = 0;
 				int chNext = SciCall_GetCharacterAndWidth(wordEnd + 1, &width);
 				if ((ch == '-' && chNext == '>') || (ch == ':' && chNext == ':')) {
 					chNext = SciCall_GetCharacterAndWidth(wordEnd + 2, &width);
 					if (IsAutoCompletionWordCharacter(chNext)) {
-						bFound = TRUE;
 						wordEnd += 2;
 					}
 				} else if (ch == '.' || (ch == '-' && !IsOperatorStyle(SciCall_GetStyleAt(wordEnd)))) {
 					if (IsAutoCompletionWordCharacter(chNext)) {
-						bFound = TRUE;
 						++wordEnd;
 					}
 				}
-				if (!bFound) {
+				if (wordEnd == before) {
 					break;
 				}
 
@@ -842,17 +931,20 @@ void AutoC_AddDocWord(struct WordList *pWList, BOOL bIgnoreCase, char prefix) {
 				}
 
 				wordEnd = SciCall_WordEndPosition(wordEnd, TRUE);
+				if (wordEnd - iPosFind > NP2_AUTOC_MAX_WORD_LENGTH) {
+					wordEnd = before;
+					break;
+				}
 				bSubWord = TRUE;
 			}
 
-			Sci_Position wordLength = wordEnd - iPosFind;
-			if (wordLength >= iRootLen) {
+			if (wordEnd - iPosFind >= iRootLen) {
 				char *pWord = pWList->wordBuf + NP2DefaultPointerAlignment;
 				BOOL bChanged = FALSE;
 				tr.lpstrText = pWord;
 				tr.chrg.cpMin = (Sci_PositionCR)iPosFind;
-				tr.chrg.cpMax = (Sci_PositionCR)((wordLength > NP2_AUTOC_MAX_WORD_LENGTH)? iPosFind + NP2_AUTOC_MAX_WORD_LENGTH : wordEnd);
-				SciCall_GetTextRange(&tr);
+				tr.chrg.cpMax = (Sci_PositionCR)min_pos(iPosFind + NP2_AUTOC_MAX_WORD_LENGTH, wordEnd);
+				int wordLength = (int)SciCall_GetTextRange(&tr);
 
 				Sci_Position before = SciCall_PositionBefore(iPosFind);
 				if (before + 1 == iPosFind) {
@@ -903,32 +995,31 @@ void AutoC_AddDocWord(struct WordList *pWList, BOOL bIgnoreCase, char prefix) {
 						}
 					}
 
-					if (SciCall_GetCharAt(wordEnd) == '(') {
+					const int chWordEnd = SciCall_GetCharAt(wordEnd);
+					if ((pLexCurrent->iLexer == SCLEX_JULIA || pLexCurrent->iLexer == SCLEX_RUST) && chWordEnd == '!') {
+						const int chNext = SciCall_GetCharAt(wordEnd + 1);
+						if (chNext == '(') {
+							wordEnd += 2;
+							pWord[wordLength++] = '!';
+							pWord[wordLength++] = '(';
+							pWord[wordLength++] = ')';
+						}
+					}
+					else if (chWordEnd == '(') {
 						if (space && NeedSpaceAfterKeyword(pWord, wordLength)) {
 							pWord[wordLength++] = ' ';
 						}
 
 						pWord[wordLength++] = '(';
 						pWord[wordLength++] = ')';
+						wordEnd++;
 					}
 
 					if (wordLength >= iRootLen) {
 						pWord[wordLength] = '\0';
-						WordList_AddWord(pWList, pWord, (int)wordLength);
+						WordList_AddWord(pWList, pWord, wordLength);
 						if (bSubWord) {
-							for (int i = 0; i < (int)wordLength - 1; i++) {
-								const char ch = pWord[i];
-								if (ch == '.' || ch == '-' || ch == ':') {
-									if (i >= iRootLen) {
-										pWord[i] = '\0';
-										WordList_AddWord(pWList, pWord, i);
-										pWord[i] = ch;
-									}
-									if (ch != '.' && (pWord[i + 1] == '>' || pWord[i + 1] == ':')) {
-										++i;
-									}
-								}
-							}
+							WordList_AddSubWord(pWList, pWord, wordLength, iRootLen);
 						}
 					}
 				}
@@ -959,33 +1050,64 @@ void AutoC_AddKeyword(struct WordList *pWList, int iCurrentStyle) {
 		WordList_AddList(pWList, (*np2_LexKeyword)[2]);
 		WordList_AddList(pWList, (*np2_LexKeyword)[3]);
 	}
+
+	// embedded script
+	if (pLexCurrent->rid == NP2LEX_HTML) {
+		const int block = GetCurrentHtmlTextBlockEx(iCurrentStyle);
+		PEDITLEXER pLex = NULL;
+		switch (block) {
+		case HTML_TEXT_BLOCK_JS:
+			pLex = &lexJS;
+			break;
+		case HTML_TEXT_BLOCK_VBS:
+			pLex = &lexVBS;
+			break;
+		case HTML_TEXT_BLOCK_PYTHON:
+			pLex = &lexPython;
+			break;
+		case HTML_TEXT_BLOCK_PHP:
+			pLex = &lexPHP;
+			break;
+		case HTML_TEXT_BLOCK_CSS:
+			pLex = &lexCSS;
+			break;
+		}
+		if (pLex != NULL) {
+			for (int i = 0; i < NUMKEYWORD; i++) {
+				const char *pKeywords = pLex->pKeyWords->pszKeyWords[i];
+				if (StrNotEmptyA(pKeywords)) {
+					WordList_AddListEx(pWList, pKeywords);
+				}
+			}
+		}
+	}
 }
 
 #define AutoC_AddSpecWord_Finish	1
 #define AutoC_AddSpecWord_Keyword	2
 INT AutoC_AddSpecWord(struct WordList *pWList, int iCurrentStyle, int ch, int chPrev) {
 	if (pLexCurrent->iLexer == SCLEX_CPP && IsCppCommentStyle(iCurrentStyle) && np2_LexKeyword) {
-		if ((ch == '@' && (*np2_LexKeyword == kwJavaDoc || *np2_LexKeyword == kwPHPDoc || *np2_LexKeyword == kwDoxyDoc))
-				|| (ch == '\\' && *np2_LexKeyword == kwDoxyDoc)
-				|| ((ch == '<' || chPrev == '<') && *np2_LexKeyword == kwNETDoc)) {
+		if ((ch == '@' && (np2_LexKeyword == &kwJavaDoc || np2_LexKeyword == &kwPHPDoc || np2_LexKeyword == &kwDoxyDoc))
+				|| (ch == '\\' && np2_LexKeyword == &kwDoxyDoc)
+				|| ((ch == '<' || chPrev == '<') && np2_LexKeyword == &kwNETDoc)) {
 			WordList_AddList(pWList, (*np2_LexKeyword)[0]);
 			WordList_AddList(pWList, (*np2_LexKeyword)[1]);
 			WordList_AddList(pWList, (*np2_LexKeyword)[2]);
 			WordList_AddList(pWList, (*np2_LexKeyword)[3]);
 			return AutoC_AddSpecWord_Finish;
 		}
-	} else if ((pLexCurrent->rid == NP2LEX_HTML || pLexCurrent->rid == NP2LEX_XML || pLexCurrent->rid == NP2LEX_CONF)
+	}
+	else if ((pLexCurrent->rid == NP2LEX_HTML || pLexCurrent->rid == NP2LEX_XML || pLexCurrent->rid == NP2LEX_CONF)
 			   && ((ch == '<') || (chPrev == '<' && ch == '/'))) {
-		if (pLexCurrent->rid == NP2LEX_HTML || pLexCurrent->rid == NP2LEX_CONF) { // HTML Tag
-			WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[0]);// HTML Tag
-		} else {
-			WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[3]);// XML Tag
+		WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[0]);// Tag
+		if (pLexCurrent->rid == NP2LEX_XML) {
 			if (np2_LexKeyword) { // XML Tag
 				WordList_AddList(pWList, (*np2_LexKeyword)[0]);
 			}
 		}
 		return AutoC_AddSpecWord_Keyword; // application defined tags
-	} else if ((pLexCurrent->iLexer == SCLEX_CPP && iCurrentStyle == SCE_C_DEFAULT)
+	}
+	else if ((pLexCurrent->iLexer == SCLEX_CPP && iCurrentStyle == SCE_C_DEFAULT)
 			   || (pLexCurrent->iLexer == SCLEX_PYTHON && iCurrentStyle == SCE_PY_DEFAULT)
 			   || (pLexCurrent->rid == NP2LEX_VB && iCurrentStyle == SCE_B_DEFAULT)
 			   || (pLexCurrent->iLexer == SCLEX_SMALI && iCurrentStyle == SCE_C_DEFAULT)) {
@@ -1023,6 +1145,19 @@ INT AutoC_AddSpecWord(struct WordList *pWList, int iCurrentStyle, int ch, int ch
 		//else if (chPrev == '-' && ch == '>') {
 		//	WordList_AddList(pWList, "C/C++pointer PHP-variable");
 		//}
+	}
+	else if (pLexCurrent->iLexer == SCLEX_JULIA && ch == '@' && iCurrentStyle == SCE_JULIA_DEFAULT) {
+		WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[6]); // macro
+		return AutoC_AddSpecWord_Keyword;
+	}
+	else if (pLexCurrent->iLexer == SCLEX_KOTLIN && ch == '@') {
+		if (iCurrentStyle == SCE_KOTLIN_DEFAULT) {
+			WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[4]); // annotation
+			return AutoC_AddSpecWord_Keyword;
+		} else if (iCurrentStyle >= SCE_KOTLIN_COMMENTLINE && iCurrentStyle <= SCE_KOTLIN_COMMENTDOCWORD) {
+			WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[6]); // KDoc
+			return AutoC_AddSpecWord_Finish;
+		}
 	}
 	return 0;
 }
@@ -1269,8 +1404,7 @@ static BOOL EditCompleteWordCore(int iCondition, BOOL autoInsert) {
 
 	if (bShow && bUpdated) {
 		autoCompletionConfig.iPreviousItemCount = pWList->nWordCount;
-		char *pList = NULL;
-		WordList_GetList(pWList, &pList);
+		char *pList = WordList_GetList(pWList);
 		SciCall_AutoCSetOrder(SC_ORDER_PRESORTED); // pre-sorted
 		SciCall_AutoCSetIgnoreCase(bIgnoreCase); // case sensitivity
 		//if (bIgnoreCase) {
@@ -1320,6 +1454,7 @@ static BOOL CanAutoCloseSingleQuote(int chPrev, int iCurrentStyle) {
 	const int iLexer = pLexCurrent->iLexer;
 	if (chPrev >= 0x80	// someone's
 		|| (iLexer == SCLEX_CPP && iCurrentStyle == SCE_C_NUMBER)
+		|| (iLexer == SCLEX_JULIA && iCurrentStyle == SCE_MAT_OPERATOR) // transpose operator
 		|| (iLexer == SCLEX_LISP && iCurrentStyle == SCE_C_OPERATOR)
 		|| (iLexer == SCLEX_MATLAB && iCurrentStyle == SCE_MAT_OPERATOR) // transpose operator
 		|| (iLexer == SCLEX_PERL && iCurrentStyle == SCE_PL_OPERATOR && chPrev == '&') // SCE_PL_IDENTIFIER
@@ -1333,7 +1468,7 @@ static BOOL CanAutoCloseSingleQuote(int chPrev, int iCurrentStyle) {
 	// someone's, don't
 	if (isalnum(chPrev)) {
 		// character prefix
-		if (pLexCurrent->rid == NP2LEX_CPP || pLexCurrent->rid == NP2LEX_RC || iLexer == SCLEX_PYTHON || iLexer == SCLEX_SQL) {
+		if (pLexCurrent->rid == NP2LEX_CPP || pLexCurrent->rid == NP2LEX_RC || iLexer == SCLEX_PYTHON || iLexer == SCLEX_SQL || iLexer == SCLEX_RUST) {
 			const int lower = chPrev | 0x20;
 			const int chPrev2 = SciCall_GetCharAt(SciCall_GetCurrentPos() - 3);
 			const BOOL bSubWord = chPrev2 >= 0x80 || isalnum(chPrev2);
@@ -1349,8 +1484,15 @@ static BOOL CanAutoCloseSingleQuote(int chPrev, int iCurrentStyle) {
 
 			case SCLEX_SQL:
 				return (lower == 'q' || lower == 'x' || lower == 'b') && !bSubWord;
+
+			case SCLEX_RUST:
+				return chPrev == 'b' && !bSubWord; // bytes
 			}
 		}
+		return FALSE;
+	}
+	if (iLexer == SCLEX_RUST) {
+		// lifetime
 		return FALSE;
 	}
 
@@ -1400,7 +1542,7 @@ void EditAutoCloseBraceQuote(int ch) {
 	case '<':
 		if ((mask & AutoInsertAngleBracket) && (pLexCurrent->rid == NP2LEX_CPP || pLexCurrent->rid == NP2LEX_CSHARP || pLexCurrent->rid == NP2LEX_JAVA)) {
 			// geriatric type, template
-			if (iCurrentStyle == SCE_C_CLASS || iCurrentStyle == SCE_C_INTERFACE || iCurrentStyle ==  SCE_C_STRUCT) {
+			if (iCurrentStyle == SCE_C_CLASS || iCurrentStyle == SCE_C_INTERFACE || iCurrentStyle == SCE_C_STRUCT) {
 				tchIns[0] = '>';
 			}
 		}
@@ -1545,6 +1687,8 @@ BOOL IsIndentKeywordStyle(int style) {
 
 	//case SCLEX_INNOSETUP:
 	//	return style == SCE_INNO_KEYWORD_PASCAL;
+	case SCLEX_JULIA:
+		return style == SCE_JULIA_WORD;
 	case SCLEX_LUA:
 		return style == SCE_LUA_WORD;
 	case SCLEX_MAKEFILE:
@@ -1588,7 +1732,7 @@ const char *EditKeywordIndent(const char *head, int *indent) {
 	switch (pLexCurrent->iLexer) {
 	//case SCLEX_AU3:
 	case SCLEX_BASH:
-		if (np2LexLangIndex == IDM_LANG_CSHELL) {
+		if (np2LexLangIndex == IDM_LEXER_CSHELL) {
 			if (!strcmp(word, "if")) {
 				*indent = 2;
 				endPart = "endif";
@@ -1634,6 +1778,27 @@ const char *EditKeywordIndent(const char *head, int *indent) {
 	//case SCLEX_CPP:
 
 	//case SCLEX_INNOSETUP:
+
+	case SCLEX_JULIA:
+		if (!strcmp(word, "function")
+			|| !strcmp(word, "begin")
+			|| !strcmp(word, "do")
+			|| !strcmp(word, "for")
+			|| !strcmp(word, "if")
+			|| !strcmp(word, "let")
+			|| !strcmp(word, "macro")
+			|| !strcmp(word, "module")
+			|| !strcmp(word, "quote")
+			|| !strcmp(word, "struct")
+			|| !strcmp(word, "try")
+			|| !strcmp(word, "type")
+			|| !strcmp(word, "while")
+			|| !strcmp(word, "baremodule")) {
+			*indent = 2;
+			endPart = "end";
+		}
+		break;
+
 	case SCLEX_LUA:
 		if (!strcmp(word, "function") || !strcmp(word, "if") || !strcmp(word, "do")) {
 			*indent = 2;
@@ -1658,7 +1823,7 @@ const char *EditKeywordIndent(const char *head, int *indent) {
 			*indent = 1;
 		} else if (!strcmp(word, "if") || !strcmp(word, "for") || !strcmp(word, "while") || !strcmp(word, "switch") || !strcmp(word, "try")) {
 			*indent = 2;
-			if (pLexCurrent->rid == NP2LEX_OCTAVE || np2LexLangIndex == IDM_LANG_OCTAVE) {
+			if (pLexCurrent->rid == NP2LEX_OCTAVE || np2LexLangIndex == IDM_LEXER_OCTAVE) {
 				if (strcmp(word, "if") == 0) {
 					endPart = "endif";
 				} else if (strcmp(word, "for") == 0) {
@@ -1906,7 +2071,8 @@ void EditToggleCommentLine(void) {
 			break;
 		}
 		EditToggleLineComments(ch, FALSE);
-	} break;
+	}
+	break;
 
 	case SCLEX_AU3:
 	case SCLEX_INNOSETUP:
@@ -1917,7 +2083,7 @@ void EditToggleCommentLine(void) {
 		break;
 
 	case SCLEX_BASH:
-		EditToggleLineComments(((np2LexLangIndex == IDM_LANG_M4)? L"dnl " : L"#"), FALSE);
+		EditToggleLineComments(((np2LexLangIndex == IDM_LEXER_M4)? L"dnl " : L"#"), FALSE);
 		break;
 
 	case SCLEX_BATCH:
@@ -1929,16 +2095,27 @@ void EditToggleCommentLine(void) {
 	case SCLEX_FSHARP:
 	case SCLEX_GRAPHVIZ:
 	case SCLEX_JSON:
+	case SCLEX_KOTLIN:
 	case SCLEX_PASCAL:
+	case SCLEX_RUST:
 	case SCLEX_VERILOG:
 		EditToggleLineComments(L"//", FALSE);
 		break;
 
 	case SCLEX_CMAKE:
 	case SCLEX_CONF:
+	case SCLEX_GN:
+	case SCLEX_JULIA:
+	case SCLEX_MAKEFILE:
+	case SCLEX_NSIS:
 	case SCLEX_PERL:
 	case SCLEX_POWERSHELL:
+	case SCLEX_PYTHON:
+	case SCLEX_RUBY:
+	case SCLEX_SMALI:
 	case SCLEX_TCL:
+	case SCLEX_TOML:
+	case SCLEX_YAML:
 		EditToggleLineComments(L"#", FALSE);
 		break;
 
@@ -1977,7 +2154,8 @@ void EditToggleCommentLine(void) {
 			EditToggleLineComments(L"//", FALSE);
 			break;
 		}
-	} break;
+	}
+	break;
 
 	case SCLEX_LATEX:
 		EditToggleLineComments(L"%", FALSE);
@@ -1988,18 +2166,8 @@ void EditToggleCommentLine(void) {
 		EditToggleLineComments(L"--", FALSE);
 		break;
 
-	case SCLEX_MAKEFILE:
-	case SCLEX_NSIS:
-	case SCLEX_PYTHON:
-	case SCLEX_RUBY:
-	case SCLEX_SMALI:
-		EditToggleLineComments(L"#", FALSE);
-		break;
-
 	case SCLEX_MATLAB:
-		if (pLexCurrent->rid == NP2LEX_JULIA) {
-			EditToggleLineComments(L"#", FALSE);
-		} else if (pLexCurrent->rid == NP2LEX_SCILAB || np2LexLangIndex == IDM_LANG_SCILAB) {
+		if (pLexCurrent->rid == NP2LEX_SCILAB || np2LexLangIndex == IDM_LEXER_SCILAB) {
 			EditToggleLineComments(L"//", FALSE);
 		} else {
 			EditToggleLineComments(L"%", FALSE);
@@ -2021,6 +2189,10 @@ void EditToggleCommentLine(void) {
 
 	case SCLEX_VIM:
 		EditToggleLineComments(L"\"", FALSE);
+		break;
+
+	case SCLEX_WASM:
+		EditToggleLineComments(L";;", FALSE);
 		break;
 	}
 }
@@ -2056,7 +2228,9 @@ void EditToggleCommentBlock(void) {
 	case SCLEX_CSS:
 	case SCLEX_GRAPHVIZ:
 	case SCLEX_JSON:
+	case SCLEX_KOTLIN:
 	case SCLEX_NSIS:
+	case SCLEX_RUST:
 	case SCLEX_SQL:
 	case SCLEX_VERILOG:
 	case SCLEX_VHDL:
@@ -2109,12 +2283,23 @@ void EditToggleCommentBlock(void) {
 		case HTML_TEXT_BLOCK_CSS:
 			EditEncloseSelection(L"/*", L"*/");
 			break;
+
+		case HTML_TEXT_BLOCK_SGML:
+			// A brief SGML tutorial
+			// https://www.w3.org/TR/WD-html40-970708/intro/sgmltut.html
+			EditEncloseSelection(L"--", L"--");
+			break;
 		}
-	} break;
+	}
+	break;
 
 	case SCLEX_INNOSETUP:
 	case SCLEX_PASCAL:
 		EditEncloseSelection(L"{", L"}");
+		break;
+
+	case SCLEX_JULIA:
+		EditEncloseSelection(L"#=", L"=#");
 		break;
 
 	case SCLEX_LATEX:
@@ -2130,9 +2315,7 @@ void EditToggleCommentBlock(void) {
 		break;
 
 	case SCLEX_MATLAB:
-		if (pLexCurrent->rid == NP2LEX_JULIA) {
-			EditEncloseSelectionNewLine(L"#=", L"=#");
-		} else if (pLexCurrent->rid == NP2LEX_SCILAB || np2LexLangIndex == IDM_LANG_SCILAB) {
+		if (pLexCurrent->rid == NP2LEX_SCILAB || np2LexLangIndex == IDM_LEXER_SCILAB) {
 			EditEncloseSelection(L"/*", L"*/");
 		} else {
 			EditEncloseSelectionNewLine(L"%{", L"%}");
@@ -2146,6 +2329,10 @@ void EditToggleCommentBlock(void) {
 	case SCLEX_TCL:
 		EditEncloseSelectionNewLine(L"if (0) {", L"}");
 		break;
+
+	case SCLEX_WASM:
+		EditEncloseSelection(L"(;", L";)");
+		break;
 	}
 }
 
@@ -2157,11 +2344,11 @@ void EditInsertScriptShebangLine(void) {
 	switch (pLexCurrent->iLexer) {
 	case SCLEX_BASH:
 		switch (np2LexLangIndex) {
-		case IDM_LANG_CSHELL:
+		case IDM_LEXER_CSHELL:
 			prefix = "#!/bin/csh";
 			break;
 
-		case IDM_LANG_M4:
+		case IDM_LEXER_M4:
 			name = "m4";
 			break;
 
@@ -2199,6 +2386,10 @@ void EditInsertScriptShebangLine(void) {
 		}
 		break;
 
+	//case SCLEX_KOTLIN:
+	//	name = "kotlin";
+	//	break;
+
 	case SCLEX_LUA:
 		name = "lua";
 		break;
@@ -2214,6 +2405,10 @@ void EditInsertScriptShebangLine(void) {
 	case SCLEX_RUBY:
 		name = "ruby";
 		break;
+
+	//case SCLEX_RUST:
+	//	name = "rust";
+	//	break;
 
 	case SCLEX_TCL:
 		name = "wish";
@@ -2252,5 +2447,3 @@ void EditShowCallTips(Sci_Position position) {
 	NP2HeapFree(pLine);
 	NP2HeapFree(text);
 }
-
-// End of EditAutoC.c
