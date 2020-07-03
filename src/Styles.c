@@ -1071,7 +1071,7 @@ void Style_OnDPIChanged(PEDITLEXER pLex) {
 	// whitespace dot size
 	LPCWSTR szValue = pLexGlobal->Styles[GlobalStyleIndex_Whitespace].szValue;
 	int iValue = 0;
-	Style_StrGetRawSize(szValue, &iValue);
+	Style_StrGetSize(szValue, &iValue);
 	iValue = ScaleStylePixel(iValue, scale, 1);
 	SciCall_SetWhitespaceSize(iValue);
 
@@ -1083,7 +1083,7 @@ void Style_OnDPIChanged(PEDITLEXER pLex) {
 	// Extra Line Spacing
 	szValue = (pLex->rid != NP2LEX_ANSI)? pLexGlobal->Styles[GlobalStyleIndex_ExtraLineSpacing].szValue
 		: pLex->Styles[ANSIArtStyleIndex_ExtraLineSpacing].szValue;
-	if (Style_StrGetRawSize(szValue, &iValue) && iValue != 0) {
+	if (Style_StrGetSize(szValue, &iValue) && iValue != 0) {
 		int iAscent;
 		int iDescent;
 		if (iValue > 0) {
@@ -1241,6 +1241,11 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 	case NP2LEX_GN:
 		attr[3] = KeywordAttr_NoLexer;		// target variables
 		attr[4] = KeywordAttr_NoLexer;		// placeholders
+		break;
+	case NP2LEX_GO:
+		attr[7] = KeywordAttr_NoLexer;		// variables
+		attr[8] = KeywordAttr_NoLexer;		// function
+		attr[9] = KeywordAttr_NoLexer;		// package
 		break;
 	case NP2LEX_JULIA:
 		attr[1] = KeywordAttr_NoAutoComp;	// code fold
@@ -1586,6 +1591,10 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	}
 
 	SciCall_SetSelEOLFilled(Style_StrGetEOLFilled(szValue));
+	if (!Style_StrGetSize(szValue, &iValue)) {
+		iValue = 100;
+	}
+	SciCall_SetEOLSelectedWidth(iValue);
 	//! end Selection
 
 	//! begin Whitespace
@@ -1918,9 +1927,6 @@ PEDITLEXER Style_SniffShebang(char *pchText) {
 			}
 			if (!strncmp(name, "py", 2)) {
 				return &lexPython;
-			}
-			if (!strncmp(name, "go", 2)) {
-				return &lexGo;
 			}
 		}
 	}
@@ -3020,7 +3026,7 @@ void Style_HighlightCurrentLine(void) {
 		if (Style_StrGetColor(outline, szValue, &rgb)) {
 			int size = 0;
 			if (outline) {
-				Style_StrGetRawSize(szValue, &size);
+				Style_StrGetSize(szValue, &size);
 				size = ScaleStylePixel(size, g_uCurrentDPI*iZoomLevel, 1);
 			}
 
@@ -3291,7 +3297,7 @@ BOOL Style_StrGetFontSize(LPCWSTR lpszStyle, int *size) {
 	return FALSE;
 }
 
-BOOL Style_StrGetRawSize(LPCWSTR lpszStyle, int *size) {
+BOOL Style_StrGetSize(LPCWSTR lpszStyle, int *size) {
 	LPCWSTR p = StrStr(lpszStyle, L"size:");
 
 	if (p != NULL) {

@@ -581,111 +581,18 @@ BOOL IsAutoCompletionWordCharacter(int ch) {
 	return (ch < 0x80) ? IsDocWordChar(ch) : SciCall_IsAutoCompletionWordCharacter(ch);
 }
 
-static inline BOOL IsOperatorStyle(int style) {
-	switch (pLexCurrent->iLexer) {
-	case SCLEX_ASM:
-		return style == SCE_ASM_OPERATOR;
-	case SCLEX_AU3:
-		return style == SCE_AU3_OPERATOR;
-
-	case SCLEX_BASH:
-		return style == SCE_SH_OPERATOR;
-	case SCLEX_BATCH:
-		return style == SCE_BAT_OPERATOR;
-
-	case SCLEX_CMAKE:
-		return style == SCE_CMAKE_OPERATOR;
-	case SCLEX_CONF:
-		return style == SCE_CONF_OPERATOR;
-	case SCLEX_CPP:
-	case SCLEX_GRAPHVIZ:
-	case SCLEX_LISP:
-	case SCLEX_NSIS:
-		return style == SCE_C_OPERATOR;
-	case SCLEX_CSS:
-		return style == SCE_CSS_OPERATOR;
-
-	case SCLEX_FORTRAN:
-		return style == SCE_F_OPERATOR;
-	case SCLEX_FSHARP:
-		return style == SCE_FSHARP_OPERATOR;
-
-	case SCLEX_GN:
-		return style == SCE_GN_OPERATOR;
-
-	case SCLEX_HTML:
-		return style == SCE_HPHP_OPERATOR || style == SCE_HJ_SYMBOLS || style == SCE_HJA_SYMBOLS;
-
-	case SCLEX_JSON:
-		return style == SCE_JSON_OPERATOR;
-	case SCLEX_JULIA:
-		return style == SCE_JULIA_OPERATOR || style == SCE_JULIA_OPERATOR2;
-
-	case SCLEX_KOTLIN:
-		return style == SCE_KOTLIN_OPERATOR || style == SCE_KOTLIN_OPERATOR2;
-
-	case SCLEX_LATEX:
-	case SCLEX_TEXINFO:
-		return style == SCE_L_OPERATOR;
-	case SCLEX_LLVM:
-		return style == SCE_LLVM_OPERATOR;
-	case SCLEX_LUA:
-		return style == SCE_LUA_OPERATOR;
-
-	case SCLEX_MAKEFILE:
-		return style == SCE_MAKE_OPERATOR;
-	case SCLEX_MATLAB:
-		return style == SCE_MAT_OPERATOR;
-
-	case SCLEX_PASCAL:
-		return style == SCE_PAS_OPERATOR;
-	case SCLEX_PERL:
-		return style == SCE_PL_OPERATOR;
-	case SCLEX_POWERSHELL:
-		return style == SCE_POWERSHELL_OPERATOR;
-	case SCLEX_PYTHON:
-		return style == SCE_PY_OPERATOR;
-
-	case SCLEX_RUBY:
-		return style == SCE_RB_OPERATOR;
-	case SCLEX_RUST:
-		return style == SCE_RUST_OPERATOR;
-
-	case SCLEX_SMALI:
-		return style == SCE_SMALI_OPERATOR;
-	case SCLEX_SQL:
-		return style == SCE_SQL_OPERATOR;
-
-	case SCLEX_TCL:
-		return style == SCE_TCL_OPERATOR;
-	case SCLEX_TOML:
-		return style == SCE_TOML_OPERATOR;
-
-	case SCLEX_VB:
-	case SCLEX_VBSCRIPT:
-		return style == SCE_B_OPERATOR;
-	case SCLEX_VERILOG:
-		return style == SCE_V_OPERATOR;
-	case SCLEX_VHDL:
-		return style == SCE_VHDL_OPERATOR;
-	case SCLEX_VIM:
-		return style == SCE_VIM_OPERATOR;
-
-	case SCLEX_WASM:
-		return style == SCE_WASM_OPERATOR;
-
-	case SCLEX_YAML:
-		return style == SCE_YAML_OPERATOR;
-	}
-	return FALSE;
-}
-
 static inline BOOL IsWordStyleToIgnore(int style) {
 	switch (pLexCurrent->iLexer) {
 	case SCLEX_CPP:
 		return style == SCE_C_WORD
 			|| style == SCE_C_WORD2
 			|| style == SCE_C_PREPROCESSOR;
+
+	case SCLEX_GO:
+		return style == SCE_GO_WORD
+			|| style == SCE_GO_WORD2
+			|| style == SCE_GO_BUILTIN_FUNC
+			|| style == SCE_GO_FORMAT_SPECIFIER;
 
 	case SCLEX_JSON:
 		return style == SCE_JSON_KEYWORD;
@@ -913,7 +820,7 @@ void AutoC_AddDocWord(struct WordList *pWList, BOOL bIgnoreCase, char prefix) {
 					if (IsAutoCompletionWordCharacter(chNext)) {
 						wordEnd += 2;
 					}
-				} else if (ch == '.' || (ch == '-' && !IsOperatorStyle(SciCall_GetStyleAt(wordEnd)))) {
+				} else if (ch == '.' || (ch == '-' && style == SciCall_GetStyleAt(wordEnd))) {
 					if (IsAutoCompletionWordCharacter(chNext)) {
 						++wordEnd;
 					}
@@ -1821,6 +1728,7 @@ const char *EditKeywordIndent(const char *head, int *indent) {
 	case SCLEX_MATLAB:
 		if (!strcmp(word, "function")) {
 			*indent = 1;
+			// 'end' is optional
 		} else if (!strcmp(word, "if") || !strcmp(word, "for") || !strcmp(word, "while") || !strcmp(word, "switch") || !strcmp(word, "try")) {
 			*indent = 2;
 			if (pLexCurrent->rid == NP2LEX_OCTAVE || np2LexLangIndex == IDM_LEXER_OCTAVE) {
@@ -1974,6 +1882,20 @@ void EditAutoIndent(void) {
 			iIndentLen += 1;
 		}
 
+		if (indent == 2 && endPart) {
+			const int level = SciCall_GetFoldLevel(iCurLine);
+			if (!(level & SC_FOLDLEVELHEADERFLAG)) {
+				const Sci_Line parent = SciCall_GetFoldParent(iCurLine);
+				if (parent >= 0 && parent + 1 == iCurLine) {
+					const Sci_Line child = SciCall_GetLastChild(parent);
+					// TODO: check endPart is on this line
+					if (SciCall_GetLineLength(child)) {
+						indent = 1;
+					}
+				}
+			}
+		}
+
 		Sci_Position iIndentPos = iCurPos;
 		if (indent) {
 			int pad = iIndentWidth;
@@ -2093,6 +2015,7 @@ void EditToggleCommentLine(void) {
 	case SCLEX_CIL:
 	case SCLEX_CSS:
 	case SCLEX_FSHARP:
+	case SCLEX_GO:
 	case SCLEX_GRAPHVIZ:
 	case SCLEX_JSON:
 	case SCLEX_KOTLIN:
@@ -2226,6 +2149,7 @@ void EditToggleCommentBlock(void) {
 	case SCLEX_ASM:
 	case SCLEX_CIL:
 	case SCLEX_CSS:
+	case SCLEX_GO:
 	case SCLEX_GRAPHVIZ:
 	case SCLEX_JSON:
 	case SCLEX_KOTLIN:
@@ -2362,10 +2286,6 @@ void EditInsertScriptShebangLine(void) {
 		switch (pLexCurrent->rid) {
 		case NP2LEX_AWK:
 			name = "awk";
-			break;
-
-		case NP2LEX_GO:
-			name = "go";
 			break;
 
 		case NP2LEX_GROOVY:

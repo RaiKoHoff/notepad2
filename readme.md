@@ -45,7 +45,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* Vala
 	* C/C++, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#cc)
 		* Objective-C/C++, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#objective-cc)
-		* [C Standard Library](../master/tools/lang/C.c), up to C11.
+		* [C Standard Library](../master/tools/lang/C.c), up to C2x.
 		* [C++ STL](../master/tools/lang/CPP.cpp), up to C++20.
 	* CSS Style Sheet
 		* Sassy CSS
@@ -62,7 +62,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* Fortran
 		* GNU Fortran
 	* [GN Build](../master/tools/lang/GN.gn), up to GN 2019-03-13.
-	* Go
+	* [Go](../master/tools/lang/Go.go), up to Go 1.14.
 	* Gradle, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#gradle)
 	* GraphViz Dot, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#graphviz)
 		* blockdiag, seqdiag, actdiag and nwdiag
@@ -195,9 +195,9 @@ Latest development builds (artifacts in Release configuration for each compiler 
 * [Scintilla's website](https://www.scintilla.org/)
 * [Build Notepad2 and metapath](https://github.com/zufuliu/notepad2/wiki/Build-Notepad2)
 * [Localization](https://github.com/zufuliu/notepad2/wiki/Localization)
-	* [简体中文](https://github.com/zufuliu/notepad2/tree/master/locale/zh-Hans)
-	* [繁體中文](https://github.com/zufuliu/notepad2/tree/master/locale/zh-Hant)
 	* [日本語](https://github.com/maboroshin/notepad2)
+	* [中文 (繁體)](https://github.com/zufuliu/notepad2/tree/master/locale/zh-Hant)
+	* [中文 (简体)](https://github.com/zufuliu/notepad2/tree/master/locale/zh-Hans)
 	* [한국어](https://teus.me/category/IT/Notepad2)
 * [Notepad2 Wiki](https://github.com/zufuliu/notepad2/wiki)
 * Other projects based on (original) Notepad2 or Notepad2-mod:

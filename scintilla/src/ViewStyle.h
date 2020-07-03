@@ -102,6 +102,7 @@ public:
 	int selAlpha;
 	int selAdditionalAlpha;
 	bool selEOLFilled;
+	int eolSelectedWidth;
 	ForeBackColours whitespaceColours;
 	int controlCharSymbol;
 	XYPOSITION controlCharWidth;
@@ -145,6 +146,8 @@ public:
 	int marginStyleOffset;
 	int annotationVisible;
 	int annotationStyleOffset;
+	int eolAnnotationVisible;
+	int eolAnnotationStyleOffset;
 	bool braceHighlightIndicatorSet;
 	bool braceBadLightIndicatorSet;
 	int braceHighlightIndicator;
