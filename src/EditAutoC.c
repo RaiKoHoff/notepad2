@@ -12,7 +12,7 @@
 #include "Edit.h"
 #include "Styles.h"
 #include "resource.h"
-#include "EditAutoC_Data0.c"
+#include "EditAutoC_Data0.c" // NOLINT(bugprone-suspicious-include)
 
 #define NP2_AUTOC_USE_STRING_ORDER	1
 // scintilla/src/AutoComplete.h AutoComplete::maxItemLen
@@ -1406,19 +1406,46 @@ static BOOL CanAutoCloseSingleQuote(int chPrev, int iCurrentStyle) {
 	return TRUE;
 }
 
+BOOL EditIsOpenBraceMatched(Sci_Position pos, Sci_Position startPos) {
+	// SciCall_GetEndStyled() is SciCall_GetCurrentPos() - 1
+#if 0
+	// style current line, ensure brace matching on current line matched with style
+	const Sci_Line iLine = SciCall_LineFromPosition(pos);
+	SciCall_EnsureStyledTo(SciCall_PositionFromLine(iLine + 1));
+#else
+	// only find close brace with same style in next 1KiB text
+	const Sci_Position iDocLen = SciCall_GetLength();
+	SciCall_EnsureStyledTo(min_pos(iDocLen, pos + 1024));
+#endif
+	// find next close brace
+	const Sci_Position iPos = SciCall_BraceMatchNext(pos, startPos);
+	if (iPos != -1) {
+		// style may not matched when iPos > SciCall_GetEndStyled() (e.g. iPos on next line), see Document::BraceMatch()
+#if 0
+		SciCall_EnsureStyledTo(iPos + 1);
+#endif
+		// TODO: retry when style not matched
+		if (SciCall_GetStyleAt(pos) == SciCall_GetStyleAt(iPos)) {
+			// check whether next close brace already matched
+			return pos == 0 || SciCall_BraceMatchNext(iPos, SciCall_PositionBefore(pos)) == -1;
+		}
+	}
+	return FALSE;
+}
+
 void EditAutoCloseBraceQuote(int ch) {
 	const Sci_Position iCurPos = SciCall_GetCurrentPos();
 	const int chPrev = SciCall_GetCharAt(iCurPos - 2);
 	const int chNext = SciCall_GetCharAt(iCurPos);
-	const int iCurrentStyle = SciCall_GetStyleAt(iCurPos - 2);
+	const int iPrevStyle = SciCall_GetStyleAt(iCurPos - 2);
 	const int iNextStyle = SciCall_GetStyleAt(iCurPos);
 
 	if (pLexCurrent->iLexer == SCLEX_CPP) {
 		// within char
-		if (iCurrentStyle == SCE_C_CHARACTER && iNextStyle == SCE_C_CHARACTER && pLexCurrent->rid != NP2LEX_PHP) {
+		if (iPrevStyle == SCE_C_CHARACTER && iNextStyle == SCE_C_CHARACTER && pLexCurrent->rid != NP2LEX_PHP) {
 			return;
 		}
-		if (ch == '`' && !IsCppStringStyle(iCurrentStyle)) {
+		if (ch == '`' && !IsCppStringStyle(iPrevStyle)) {
 			return;
 		}
 	}
@@ -1429,39 +1456,43 @@ void EditAutoCloseBraceQuote(int ch) {
 	}
 
 	const int mask = autoCompletionConfig.fAutoInsertMask;
-	char tchIns[2] = "";
+	char fillChar = '\0';
+	BOOL closeBrace = FALSE;
 	switch (ch) {
 	case '(':
 		if (mask & AutoInsertParenthesis) {
-			tchIns[0] = ')';
+			fillChar = ')';
+			closeBrace = TRUE;
 		}
 		break;
 	case '[':
-		if ((mask & AutoInsertSquareBracket) && !(pLexCurrent->rid == NP2LEX_SMALI)) { // Smali array type
-			tchIns[0] = ']';
+		if ((mask & AutoInsertSquareBracket) && !(pLexCurrent->rid == NP2LEX_SMALI)) { // JVM array type
+			fillChar = ']';
+			closeBrace = TRUE;
 		}
 		break;
 	case '{':
 		if (mask & AutoInsertBrace) {
-			tchIns[0] = '}';
+			fillChar = '}';
+			closeBrace = TRUE;
 		}
 		break;
 	case '<':
 		if ((mask & AutoInsertAngleBracket) && (pLexCurrent->rid == NP2LEX_CPP || pLexCurrent->rid == NP2LEX_CSHARP || pLexCurrent->rid == NP2LEX_JAVA)) {
 			// geriatric type, template
-			if (iCurrentStyle == SCE_C_CLASS || iCurrentStyle == SCE_C_INTERFACE || iCurrentStyle == SCE_C_STRUCT) {
-				tchIns[0] = '>';
+			if (iPrevStyle == SCE_C_CLASS || iPrevStyle == SCE_C_INTERFACE || iPrevStyle == SCE_C_STRUCT) {
+				fillChar = '>';
 			}
 		}
 		break;
 	case '\"':
 		if ((mask & AutoInsertDoubleQuote)) {
-			tchIns[0] = '\"';
+			fillChar = '\"';
 		}
 		break;
 	case '\'':
-		if ((mask & AutoInsertSingleQuote) && CanAutoCloseSingleQuote(chPrev, iCurrentStyle)) {
-			tchIns[0] = '\'';
+		if ((mask & AutoInsertSingleQuote) && CanAutoCloseSingleQuote(chPrev, iPrevStyle)) {
+			fillChar = '\'';
 		}
 		break;
 	case '`':
@@ -1470,28 +1501,41 @@ void EditAutoCloseBraceQuote(int ch) {
 		//|| pLexCurrent->iLexer == SCLEX_MAKEFILE
 		//|| pLexCurrent->iLexer == SCLEX_SQL
 		//) {
-		//	tchIns[0] = '`';
+		//	fillChar = '`';
 		//} else if (0) {
-		//	tchIns[0] = '\'';
+		//	fillChar = '\'';
 		//}
 		if (mask & AutoInsertBacktick) {
-			tchIns[0] = '`';
+			fillChar = '`';
 		}
 		break;
 	case ',':
 		if ((mask & AutoInsertSpaceAfterComma) && !(chNext == ' ' || chNext == '\t' || (chPrev == '\'' && chNext == '\'') || (chPrev == '\"' && chNext == '\"'))) {
-			tchIns[0] = ' ';
+			fillChar = ' ';
 		}
 		break;
 	default:
 		break;
 	}
-	if (tchIns[0]) {
+
+	if (fillChar) {
+		if (closeBrace && EditIsOpenBraceMatched(iCurPos - 1, iCurPos)) {
+			return;
+		}
+		// TODO: auto escape quotes inside string
+		//else if (ch == fillChar) {
+		//}
+
+		const char tchIns[4] = { fillChar };
 		SciCall_BeginUndoAction();
 		SciCall_ReplaceSel(tchIns);
 		const Sci_Position iCurrentPos = (ch == ',') ? iCurPos + 1 : iCurPos;
 		SciCall_SetSel(iCurrentPos, iCurrentPos);
 		SciCall_EndUndoAction();
+		if (closeBrace) {
+			// fix brace matching
+			SciCall_EnsureStyledTo(iCurPos + 1);
+		}
 	}
 }
 
@@ -1858,8 +1902,8 @@ void EditAutoIndent(void) {
 
 		iIndentLen = 0;
 		ch = SciCall_GetCharAt(SciCall_PositionFromLine(iCurLine));
-		const BOOL closeBraces = (ch == '}' || ch == ']' || ch == ')');
-		if (indent == 2 && !closeBraces) {
+		const BOOL closeBrace = (ch == '}' || ch == ']' || ch == ')');
+		if (indent == 2 && !closeBrace) {
 			indent = 1;
 		}
 

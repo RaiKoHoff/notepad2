@@ -1356,7 +1356,7 @@ static BOOL EditTitleCase(LPWSTR pszTextW, int cchTextW) {
 //
 // EditMapTextCase()
 //
-void EditMapTextCase(UINT menu) {
+void EditMapTextCase(int menu) {
 	const Sci_Position iSelCount = SciCall_GetSelTextLength() - 1;
 	if (iSelCount == 0) {
 		return;
@@ -4334,33 +4334,17 @@ void EditJumpTo(Sci_Line iNewLine, Sci_Position iNewCol) {
 	const Sci_Line iMaxLine = SciCall_GetLineCount();
 
 	// Jumpt to end with line set to -1
-	if (iNewLine < 0) {
+	if (iNewLine < 0 || iNewLine >= iMaxLine) {
 		SciCall_DocumentEnd();
 		return;
 	}
 
-	// Line maximum is iMaxLine
-	iNewLine = min_pos(iNewLine, iMaxLine);
-
-	// Column minimum is 1
-	iNewCol = max_pos(iNewCol, 1);
-
-	if (iNewLine > 0 && iNewLine <= iMaxLine && iNewCol > 0) {
-		Sci_Position iNewPos = SciCall_PositionFromLine(iNewLine - 1);
-		const Sci_Position iLineEndPos = SciCall_GetLineEndPosition(iNewLine - 1);
-
-		while (iNewCol - 1 > SciCall_GetColumn(iNewPos)) {
-			if (iNewPos >= iLineEndPos) {
-				break;
-			}
-
-			iNewPos = SciCall_PositionAfter(iNewPos);
-		}
-
-		iNewPos = min_pos(iNewPos, iLineEndPos);
-		EditSelectEx(-1, iNewPos); // SciCall_GotoPos(pos) is equivalent to SciCall_SetSel(-1, pos)
-		SciCall_ChooseCaretX();
-	}
+	const Sci_Position iLineEndPos = SciCall_GetLineEndPosition(iNewLine - 1);
+	iNewCol = min_pos(iNewCol, iLineEndPos);
+	const Sci_Position iNewPos = SciCall_FindColumn(iNewLine - 1, iNewCol - 1);
+	// SciCall_GotoPos(pos) is equivalent to SciCall_SetSel(-1, pos)
+	EditSelectEx(-1, iNewPos);
+	SciCall_ChooseCaretX();
 }
 
 //=============================================================================
@@ -4371,10 +4355,13 @@ void EditSelectEx(Sci_Position iAnchorPos, Sci_Position iCurrentPos) {
 	const Sci_Line iNewLine = SciCall_LineFromPosition(iCurrentPos);
 	const Sci_Line iAnchorLine = SciCall_LineFromPosition(iAnchorPos);
 
-	// Ensure that the first and last lines of a selection are always unfolded
-	// This needs to be done *before* the SciCall_SetSel() message
-	SciCall_EnsureVisible(iAnchorLine);
-	if (iAnchorLine != iNewLine) {
+	if (iAnchorLine == iNewLine) {
+		// TODO: center current line on screen when it's not visible
+		SciCall_EnsureVisible(iAnchorLine);
+	} else {
+		// Ensure that the first and last lines of a selection are always unfolded
+		// This needs to be done *before* the SciCall_SetSel() message
+		SciCall_EnsureVisible(iAnchorLine);
 		SciCall_EnsureVisible(iNewLine);
 	}
 
@@ -5900,18 +5887,7 @@ static INT_PTR CALLBACK EditLineNumDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, 
 				} else {
 					PostMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)(GetDlgItem(hwnd, IDC_COLNUM)), 1);
 				}
-			} else if (iNewLine > 0 && iNewLine <= iMaxLine && iNewCol > 0) {
-				//Sci_Position iNewPos = SciCall_PositionFromLine(iNewLine - 1);
-				//const Sci_Position iLineEndPos = SciCall_GetLineEndPosition(iNewLine - 1);
-				//while (iNewCol-1 > SciCall_GetColumn(iNewPos)) {
-				//	if (iNewPos >= iLineEndPos) {
-				//		break;
-				//	}
-				//	iNewPos = SciCall_PositionAfter(iNewPos);
-				//}
-				//iNewPos = min_pos(iNewPos, iLineEndPos);
-				//SciCall_GotoPos(iNewPos);
-				//SciCall_ChooseCaretX();
+			} else if (iNewLine > 0 && iNewLine <= iMaxLine) {
 				EditJumpTo(iNewLine, iNewCol);
 				EndDialog(hwnd, IDOK);
 			} else {
@@ -7546,7 +7522,6 @@ void FoldToggleCurrentBlock(FOLD_ACTION action) {
 }
 
 void FoldToggleCurrentLevel(FOLD_ACTION action) {
-	SciCall_ColouriseAll();
 	Sci_Line line = SciCall_LineFromPosition(SciCall_GetCurrentPos());
 	int level = SciCall_GetFoldLevel(line);
 
@@ -7726,5 +7701,108 @@ void FoldAltArrow(int key, int mode) {
 				FoldPerformAction(ln, mode, FOLD_ACTION_EXPAND);
 			}
 		}
+	}
+}
+
+void EditGotoBlock(int menu) {
+	const Sci_Position iCurPos = SciCall_GetCurrentPos();
+	const Sci_Line iCurLine = SciCall_LineFromPosition(iCurPos);
+
+	Sci_Line iLine = iCurLine;
+	int level = SciCall_GetFoldLevel(iLine);
+	if (!(level & SC_FOLDLEVELHEADERFLAG)) {
+		iLine = SciCall_GetFoldParent(iLine);
+	}
+
+	switch (menu) {
+	case IDM_EDIT_GOTO_BLOCK_START:
+		break;
+
+	case IDM_EDIT_GOTO_BLOCK_END:
+		if (iLine >= 0) {
+			iLine = SciCall_GetLastChild(iLine);
+		}
+		break;
+
+	case IDM_EDIT_GOTO_PREVIOUS_BLOCK:
+	case IDM_EDIT_GOTO_PREV_SIBLING_BLOCK: {
+		BOOL sibling = menu == IDM_EDIT_GOTO_PREV_SIBLING_BLOCK;
+		Sci_Line line = iCurLine - 1;
+		Sci_Line first = -1;
+		level &= SC_FOLDLEVELNUMBERMASK;
+
+		while (line >= 0) {
+			const int lev = SciCall_GetFoldLevel(line);
+			 if ((lev & SC_FOLDLEVELHEADERFLAG) && line != iLine) {
+				if (sibling) {
+					if (first < 0) {
+						first = line;
+					}
+					if (level >= (lev & SC_FOLDLEVELNUMBERMASK)) {
+						iLine = line;
+						sibling = FALSE;
+						break;
+					}
+					line = SciCall_GetFoldParent(line);
+					continue;
+				}
+
+				iLine = line;
+				break;
+			}
+			--line;
+		}
+		if (sibling && first >= 0) {
+			iLine = first;
+		}
+	}
+	break;
+
+	case IDM_EDIT_GOTO_NEXT_BLOCK:
+	case IDM_EDIT_GOTO_NEXT_SIBLING_BLOCK: {
+		SciCall_ColouriseAll();
+		const Sci_Line lineCount = SciCall_GetLineCount();
+		if (iLine >= 0) {
+			iLine = SciCall_GetLastChild(iLine);
+		}
+
+		BOOL sibling = menu == IDM_EDIT_GOTO_NEXT_SIBLING_BLOCK;
+		Sci_Line line = iCurLine + 1;
+		Sci_Line first = -1;
+		if (sibling && iLine > 0 && (level & SC_FOLDLEVELHEADERFLAG)) {
+			line = iLine + 1;
+		}
+		level &= SC_FOLDLEVELNUMBERMASK;
+
+		while (line < lineCount) {
+			const int lev = SciCall_GetFoldLevel(line);
+			if (lev & SC_FOLDLEVELHEADERFLAG) {
+				if (sibling) {
+					if (first < 0) {
+						first = line;
+					}
+					if (level >= (lev & SC_FOLDLEVELNUMBERMASK)) {
+						iLine = line;
+						sibling = FALSE;
+						break;
+					}
+					line = SciCall_GetLastChild(line);
+				} else {
+					iLine = line;
+					break;
+				}
+			}
+			++line;
+		}
+		if (sibling && first >= 0) {
+			iLine = first;
+		}
+	}
+	break;
+	}
+
+	if (iLine >= 0 && iLine != iCurLine) {
+		const Sci_Position column = SciCall_GetColumn(iCurPos);
+		EditJumpTo(iLine + 1, column + 1);
 	}
 }

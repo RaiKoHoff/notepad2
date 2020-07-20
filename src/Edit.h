@@ -114,7 +114,7 @@ BOOL	EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, struct EditFileIO
 BOOL	EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, struct EditFileIOStatus *status);
 
 void	EditInvertCase(void);
-void	EditMapTextCase(UINT menu);
+void	EditMapTextCase(int menu);
 void	EditSentenceCase(void);
 
 void	EditURLEncode(void);
@@ -276,6 +276,7 @@ void	EditCompleteUpdateConfig(void);
 BOOL	IsDocWordChar(int ch);
 BOOL	IsAutoCompletionWordCharacter(int ch);
 void	EditCompleteWord(int iCondition, BOOL autoInsert);
+BOOL	EditIsOpenBraceMatched(Sci_Position pos, Sci_Position startPos);
 void	EditAutoCloseBraceQuote(int ch);
 void	EditAutoCloseXMLTag(void);
 void	EditAutoIndent(void);
@@ -417,3 +418,4 @@ void FoldToggleCurrentLevel(FOLD_ACTION action);
 void FoldToggleDefault(FOLD_ACTION action);
 void FoldClickAt(Sci_Position pos, int mode);
 void FoldAltArrow(int key, int mode);
+void EditGotoBlock(int menu);

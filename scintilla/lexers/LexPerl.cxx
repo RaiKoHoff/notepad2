@@ -343,7 +343,7 @@ static int InputSymbolScan(StyleContext &sc) noexcept {
 		if (c == '\r' || c == '\n') {
 			return 0;
 		} else if (c == '>') {
-			if (sc.Match("<=>"))	// '<=>' case
+			if (sc.Match('<', '=', '>'))	// '<=>' case
 				return 0;
 			return sLen;
 		}
@@ -355,8 +355,8 @@ static void InterpolateSegment(StyleContext &sc, int maxSeg, bool isPattern = fa
 	// interpolate a segment (with no active backslashes or delimiters within)
 	// switch in or out of an interpolation style or continue current style
 	// commit variable patterns if found, trim segment, repeat until done
-	const CharacterSet setWordStart(CharacterSet::setAlpha, "_", 0x80, true);
-	const CharacterSet setWord(CharacterSet::setAlphaNum, "_", 0x80, true);
+	const CharacterSet setWordStart(CharacterSet::setAlpha, "_", true);
+	const CharacterSet setWord(CharacterSet::setAlphaNum, "_", true);
 	const CharacterSet setSpecialVar(CharacterSet::setNone, "\"$;<>&`'+,./\\%:=~!?@[]");
 	const CharacterSet setControlVar(CharacterSet::setNone, "ACDEFHILMNOPRSTVWX");
 
@@ -450,8 +450,8 @@ static void ColourisePerlDoc(Sci_PositionU startPos, Sci_Position length, int in
 	// keywords that forces /PATTERN/ at all times; should track vim's behaviour
 	const WordList &reWords = *keywordLists[1];
 
-	const CharacterSet setWordStart(CharacterSet::setAlpha, "_", 0x80, true);
-	const CharacterSet setWord(CharacterSet::setAlphaNum, "_", 0x80, true);
+	const CharacterSet setWordStart(CharacterSet::setAlpha, "_", true);
+	const CharacterSet setWord(CharacterSet::setAlphaNum, "_", true);
 
 	// charset classes
 	const CharacterSet setSingleCharOp(CharacterSet::setNone, "rwxoRWXOezsfdlpSbctugkTBMAC");
@@ -462,9 +462,9 @@ static void ColourisePerlDoc(Sci_PositionU startPos, Sci_Position length, int in
 	const CharacterSet setPreferRE(CharacterSet::setNone, "*/<%");
 	// setArray and setHash also accepts chars for special vars like $_,
 	// which are then truncated when the next char does not match setVar
-	const CharacterSet setVar(CharacterSet::setAlphaNum, "#$_'", 0x80, true);
-	const CharacterSet setArray(CharacterSet::setAlpha, "#$_+-", 0x80, true);
-	const CharacterSet setHash(CharacterSet::setAlpha, "#$_!^+-", 0x80, true);
+	const CharacterSet setVar(CharacterSet::setAlphaNum, "#$_'", true);
+	const CharacterSet setArray(CharacterSet::setAlpha, "#$_+-", true);
+	const CharacterSet setHash(CharacterSet::setAlpha, "#$_!^+-", true);
 	const CharacterSet &setPOD = setModifiers;
 	const CharacterSet setNonHereDoc(CharacterSet::setDigits, "=$@");
 	const CharacterSet setHereDocDelim(CharacterSet::setAlphaNum, "_");
@@ -814,7 +814,7 @@ static void ColourisePerlDoc(Sci_PositionU startPos, Sci_Position length, int in
 						if (sc.ch != '\r') {	// skip CR if CRLF
 							int i = 0;			// else append char, possibly an extended char
 							while (i < sc.width) {
-								HereDoc.Append(static_cast<unsigned char>(styler.SafeGetCharAt(sc.currentPos + i)));
+								HereDoc.Append(sc.GetRelative(i));
 								i++;
 							}
 						}
@@ -1090,7 +1090,7 @@ static void ColourisePerlDoc(Sci_PositionU startPos, Sci_Position length, int in
 		break;
 		case SCE_PL_FORMAT: {
 			sc.Complete();
-			if (sc.Match('.')) {
+			if (sc.ch == '.') {
 				sc.Forward();
 				if (sc.atLineEnd || ((sc.ch == '\r' && sc.chNext == '\n')))
 					sc.SetState(SCE_PL_DEFAULT);
@@ -1309,7 +1309,6 @@ static void ColourisePerlDoc(Sci_PositionU startPos, Sci_Position length, int in
 				bool hereDocSpace = false;		// for: SCALAR [whitespace] '<<'
 				Sci_PositionU bk = (sc.currentPos > 0) ? sc.currentPos - 1 : 0;
 				sc.Complete();
-				styler.Flush();
 				if (styler.StyleAt(bk) == SCE_PL_DEFAULT)
 					hereDocSpace = true;
 				skipWhitespaceComment(styler, bk);

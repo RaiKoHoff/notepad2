@@ -118,7 +118,7 @@
 #define NP2STYLE_Important				63410
 
 #define NP2STYLE_Class					63420
-#define NP2STYLE_Struct					63421
+#define NP2STYLE_Structure				63421
 #define NP2STYLE_Union					63422
 #define NP2STYLE_Interface				63423
 #define NP2STYLE_Trait					63424
@@ -148,7 +148,6 @@
 #define NP2STYLE_DocCommentTagHTML		63450
 #define NP2STYLE_ReservedWord			63451
 #define NP2STYLE_EscapeSequence			63452
-#define NP2STYLE_Placeholder			63453
 #define NP2STYLE_Placeholder			63453
 #define NP2STYLE_FormatSpecifier		63454
 #define NP2STYLE_TaskMarker				63455

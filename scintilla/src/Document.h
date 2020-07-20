@@ -16,7 +16,7 @@ class LineLevels;
 class LineState;
 class LineAnnotation;
 
-enum EncodingFamily {
+enum class EncodingFamily {
 	efEightBit, efUnicode, efDBCS
 };
 
@@ -262,9 +262,9 @@ private:
 public:
 
 	struct CharacterExtracted {
-		unsigned int character;
-		unsigned int widthBytes;
-		CharacterExtracted(unsigned int character_, unsigned int widthBytes_) noexcept :
+		int character;
+		int widthBytes;
+		CharacterExtracted(int character_, int widthBytes_) noexcept :
 			character(character_), widthBytes(widthBytes_) {}
 		// For DBCS characters turn 2 bytes into an int
 		static CharacterExtracted DBCS(unsigned char lead, unsigned char trail) noexcept {
@@ -565,7 +565,7 @@ public:
 	int IndentSize() const noexcept {
 		return actualIndentInChars;
 	}
-	Sci::Position BraceMatch(Sci::Position position, Sci::Position maxReStyle) const noexcept;
+	Sci::Position BraceMatch(Sci::Position position, Sci::Position maxReStyle, Sci::Position startPos, bool useStartPos) const noexcept;
 
 	bool IsAutoCompletionWordCharacter(unsigned int ch) const noexcept {
 		return WordCharacterClass(ch) == CharClassify::ccWord;

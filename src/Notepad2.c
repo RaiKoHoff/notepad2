@@ -2165,6 +2165,9 @@ void ValidateUILangauge(void) {
 	case LANG_GERMAN:
 		languageMenu = IDM_LANG_GERMAN;
 		break;
+	case LANG_ITALIAN:
+		languageMenu = IDM_LANG_ITALIAN;
+		break;
 	case LANG_JAPANESE:
 		languageMenu = IDM_LANG_JAPANESE;
 		break;
@@ -2176,7 +2179,7 @@ void ValidateUILangauge(void) {
 	}
 }
 
-void SetUILanguage(UINT menu) {
+void SetUILanguage(int menu) {
 	LANGID lang = uiLanguage;
 	switch (menu) {
 	case IDM_LANG_USER_DEFAULT:
@@ -2193,6 +2196,9 @@ void SetUILanguage(UINT menu) {
 		break;
 	case LANG_GERMAN:
 		lang = MAKELANGID(LANG_GERMAN, SUBLANG_GERMAN);
+		break;
+	case IDM_LANG_ITALIAN:
+		lang = MAKELANGID(LANG_ITALIAN, SUBLANG_ITALIAN);
 		break;
 	case IDM_LANG_JAPANESE:
 		lang = MAKELANGID(LANG_JAPANESE, SUBLANG_DEFAULT);
@@ -2460,6 +2466,12 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	EnableCmd(hmenu, BME_EDIT_BOOKMARKTOGGLE, i);
 	EnableCmd(hmenu, BME_EDIT_BOOKMARKCLEAR, i);
 	EnableCmd(hmenu, IDM_EDIT_GOTOLINE, nonEmpty);
+	EnableCmd(hmenu, IDM_EDIT_GOTO_BLOCK_START, nonEmpty);
+	EnableCmd(hmenu, IDM_EDIT_GOTO_BLOCK_END, nonEmpty);
+	EnableCmd(hmenu, IDM_EDIT_GOTO_PREVIOUS_BLOCK, nonEmpty);
+	EnableCmd(hmenu, IDM_EDIT_GOTO_NEXT_BLOCK, nonEmpty);
+	EnableCmd(hmenu, IDM_EDIT_GOTO_PREV_SIBLING_BLOCK, nonEmpty);
+	EnableCmd(hmenu, IDM_EDIT_GOTO_NEXT_SIBLING_BLOCK, nonEmpty);
 	EnableCmd(hmenu, IDM_EDIT_DELETELINELEFT, i);
 	EnableCmd(hmenu, IDM_EDIT_DELETELINERIGHT, i);
 	EnableCmd(hmenu, CMD_CTRLBACK, i);
@@ -3680,12 +3692,12 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		Sci_Position iPos = SciCall_GetCurrentPos();
 		int ch = SciCall_GetCharAt(iPos);
 		if (IsBraceMatchChar(ch)) {
-			iBrace2 = SciCall_BraceMatch(iPos, 0);
+			iBrace2 = SciCall_BraceMatch(iPos);
 		} else { // Try one before
 			iPos = SciCall_PositionBefore(iPos);
 			ch = SciCall_GetCharAt(iPos);
 			if (IsBraceMatchChar(ch)) {
-				iBrace2 = SciCall_BraceMatch(iPos, 0);
+				iBrace2 = SciCall_BraceMatch(iPos);
 			}
 		}
 		if (iBrace2 != -1) {
@@ -3699,12 +3711,12 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		Sci_Position iPos = SciCall_GetCurrentPos();
 		int ch = SciCall_GetCharAt(iPos);
 		if (IsBraceMatchChar(ch)) {
-			iBrace2 = SciCall_BraceMatch(iPos, 0);
+			iBrace2 = SciCall_BraceMatch(iPos);
 		} else { // Try one before
 			iPos = SciCall_PositionBefore(iPos);
 			ch = SciCall_GetCharAt(iPos);
 			if (IsBraceMatchChar(ch)) {
-				iBrace2 = SciCall_BraceMatch(iPos, 0);
+				iBrace2 = SciCall_BraceMatch(iPos);
 			}
 		}
 		if (iBrace2 != -1) {
@@ -3866,6 +3878,19 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_EDIT_GOTOLINE:
 		EditLineNumDlg(hwndEdit);
+		break;
+
+	//case IDM_EDIT_NAVIGATE_BACKWARD:
+	//case IDM_EDIT_NAVIGATE_FORWARD:
+	//	break;
+
+	case IDM_EDIT_GOTO_BLOCK_START:
+	case IDM_EDIT_GOTO_BLOCK_END:
+	case IDM_EDIT_GOTO_PREVIOUS_BLOCK:
+	case IDM_EDIT_GOTO_NEXT_BLOCK:
+	case IDM_EDIT_GOTO_PREV_SIBLING_BLOCK:
+	case IDM_EDIT_GOTO_NEXT_SIBLING_BLOCK:
+		EditGotoBlock(LOWORD(wParam));
 		break;
 
 	case IDM_VIEW_SCHEME:
@@ -4879,7 +4904,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	UNREFERENCED_PARAMETER(wParam);
 
 	LPNMHDR pnmh = (LPNMHDR)lParam;
-	const struct SCNotification *scn = (struct SCNotification *)lParam;
+	const struct SCNotification * const scn = (struct SCNotification *)lParam;
 
 	switch (pnmh->idFrom) {
 	case IDC_EDIT:
@@ -4912,7 +4937,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 					Sci_Position iPos = SciCall_GetCurrentPos();
 					int ch = SciCall_GetCharAt(iPos);
 					if (IsBraceMatchChar(ch)) {
-						const Sci_Position iBrace2 = SciCall_BraceMatch(iPos, 0);
+						const Sci_Position iBrace2 = SciCall_BraceMatch(iPos);
 						if (iBrace2 != -1) {
 							const Sci_Position col1 = SciCall_GetColumn(iPos);
 							const Sci_Position col2 = SciCall_GetColumn(iBrace2);
@@ -4926,7 +4951,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 						iPos = SciCall_PositionBefore(iPos);
 						ch = SciCall_GetCharAt(iPos);
 						if (IsBraceMatchChar(ch)) {
-							const Sci_Position iBrace2 = SciCall_BraceMatch(iPos, 0);
+							const Sci_Position iBrace2 = SciCall_BraceMatch(iPos);
 							if (iBrace2 != -1) {
 								const Sci_Position col1 = SciCall_GetColumn(iPos);
 								const Sci_Position col2 = SciCall_GetColumn(iBrace2);
@@ -4993,16 +5018,43 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			// function/array/template/generic
 			LPSTR braces = (LPSTR)strpbrk(text, "([{<");
 			const Sci_Position iCurPos = SciCall_GetCurrentPos();
-			const int ch = SciCall_GetCharAt(iCurPos);
-			if (braces != NULL && *braces == ch) {
-				*braces = L'\0'; // unsafe
-			}
-			const Sci_Position iNewPos = scn->position + ((braces == NULL) ? (Sci_Position)strlen(text) : (braces - text + 1));
+			Sci_Position offset;
+			BOOL closeBrace = FALSE;
+			if (braces != NULL) {
+				Sci_Position iPos = iCurPos;
+				int ch = SciCall_GetCharAt(iPos);
+				while (ch == ' ' || ch == '\t') {
+					++iPos;
+					ch = SciCall_GetCharAt(iPos);
+				}
 
+				offset = braces - text + 1;
+				const char brace = *braces;
+				if (brace == ch) {
+					*braces = L'\0'; // delete open and close braces
+					offset += iPos - iCurPos;
+				} else {
+					const int chNext = (brace == '(') ? ')' : brace + 2;
+					if (ch == chNext) {
+						if (SciCall_BraceMatchNext(iPos, SciCall_PositionBefore(iCurPos)) == -1) {
+							*(braces + 1) = L'\0'; // delete close brace
+						}
+					} else {
+						closeBrace = brace != '<' && braces[1] == chNext;
+					}
+				}
+			} else {
+				offset = strlen(text);
+			}
+
+			const Sci_Position iNewPos = scn->position + offset;
 			SciCall_BeginUndoAction();
 			SciCall_SetSel(scn->position, iCurPos);
 			SciCall_ReplaceSel(text);
 			SciCall_SetSel(iNewPos, iNewPos);
+			if (closeBrace && EditIsOpenBraceMatched(iNewPos - 1, iNewPos + 1)) {
+				SciCall_Clear(); // delete close brace
+			}
 			SciCall_EndUndoAction();
 			SciCall_AutoCCancel();
 		}
