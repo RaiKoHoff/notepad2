@@ -27,7 +27,7 @@
 #define NP2StyleX_IMEIndicator			EDITSTYLE_HOLE(IMEIndicator, L"IME Indicator")
 #define NP2StyleX_Bookmark				EDITSTYLE_HOLE(Bookmark, L"Bookmark")
 #define NP2StyleX_CallTip				EDITSTYLE_HOLE(CallTip, L"CallTip")
-#define NP2StyleX_CurrentBlock			EDITSTYLE_HOLE(CurrentBlock, L"Current Block")
+#define NP2StyleX_CodeFolding			EDITSTYLE_HOLE(CodeFolding, L"Code Folding")
 
 #define NP2StyleX_Default				EDITSTYLE_HOLE(Default, L"Default")
 #define NP2StyleX_Comment				EDITSTYLE_HOLE(Comment, L"Comment")
@@ -126,7 +126,7 @@
 #define NP2StyleX_Important				EDITSTYLE_HOLE(Important, L"Important")
 
 #define NP2StyleX_Class					EDITSTYLE_HOLE(Class, L"Class")
-#define NP2StyleX_Struct				EDITSTYLE_HOLE(Struct, L"Struct")
+#define NP2StyleX_Structure				EDITSTYLE_HOLE(Structure, L"Structure")
 #define NP2StyleX_Union					EDITSTYLE_HOLE(Union, L"Union")
 #define NP2StyleX_Interface				EDITSTYLE_HOLE(Interface, L"Interface")
 #define NP2StyleX_Trait					EDITSTYLE_HOLE(Trait, L"Trait")
@@ -157,6 +157,8 @@
 #define NP2StyleX_ReservedWord			EDITSTYLE_HOLE(ReservedWord, L"Reserved Word")
 #define NP2StyleX_EscapeSequence		EDITSTYLE_HOLE(EscapeSequence, L"Escape Sequence")
 #define NP2StyleX_Placeholder			EDITSTYLE_HOLE(Placeholder, L"Placeholder")
+#define NP2StyleX_FormatSpecifier		EDITSTYLE_HOLE(FormatSpecifier, L"Format Specifier")
+#define NP2StyleX_TaskMarker			EDITSTYLE_HOLE(TaskMarker, L"Task Marker")
 
 #define NP2StyleX_BracketArgument		EDITSTYLE_HOLE(BracketArgument, L"Bracket Argument")
 

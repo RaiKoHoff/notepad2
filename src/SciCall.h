@@ -260,8 +260,8 @@ NP2_inline Sci_Line SciCall_GetLineCount(void) {
 	return SciCall(SCI_GETLINECOUNT, 0, 0);
 }
 
-NP2_inline void SciCall_SetInitLineCount(Sci_Line lineCount) {
-	SciCall(SCI_SETINITLINECOUNT, lineCount, 0);
+NP2_inline void SciCall_AllocateLines(Sci_Line lineCount) {
+	SciCall(SCI_ALLOCATELINES, lineCount, 0);
 }
 
 NP2_inline void SciCall_SetSel(Sci_Position anchor, Sci_Position caret) {
@@ -677,6 +677,10 @@ NP2_inline void SciCall_SetSelEOLFilled(BOOL filled) {
 	SciCall(SCI_SETSELEOLFILLED, filled, 0);
 }
 
+NP2_inline void SciCall_SetEOLSelectedWidth(int percent) {
+	SciCall(SCI_SETEOLSELECTEDWIDTH, percent, 0);
+}
+
 NP2_inline void SciCall_SetCaretFore(COLORREF fore) {
 	SciCall(SCI_SETCARETFORE, fore, 0);
 }
@@ -825,8 +829,12 @@ NP2_inline void SciCall_BraceBadLightIndicator(BOOL useSetting, int indicator) {
 	SciCall(SCI_BRACEBADLIGHTINDICATOR, useSetting, indicator);
 }
 
-NP2_inline Sci_Position SciCall_BraceMatch(Sci_Position pos, int maxReStyle) {
-	return SciCall(SCI_BRACEMATCH, pos, maxReStyle);
+NP2_inline Sci_Position SciCall_BraceMatch(Sci_Position pos) {
+	return SciCall(SCI_BRACEMATCH, pos, 0);
+}
+
+NP2_inline Sci_Position SciCall_BraceMatchNext(Sci_Position pos, Sci_Position startPos) {
+	return SciCall(SCI_BRACEMATCHNEXT, pos, startPos);
 }
 
 // Tabs and Indentation Guides
@@ -1327,6 +1335,10 @@ NP2_inline void SciCall_Colourise(Sci_Position start, Sci_Position end) {
 
 NP2_inline void SciCall_ColouriseAll(void) {
 	SciCall_Colourise(0, -1);
+}
+
+NP2_inline void SciCall_EnsureStyledTo(Sci_Position end) {
+	SciCall_Colourise(0, end);
 }
 
 NP2_inline void SciCall_SetProperty(const char *key, const char *value) {

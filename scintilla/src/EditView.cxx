@@ -59,16 +59,10 @@
 
 using namespace Scintilla;
 
-static constexpr bool IsControlCharacter(unsigned char ch) noexcept {
-	// iscntrl returns true for lots of characters > 127 which are displayable
-	// currently only check C0 control characters in [00 .. 1F]
-	return ch < ' ';
-}
-
 PrintParameters::PrintParameters() noexcept {
 	magnification = 100;
 	colourMode = SC_PRINT_NORMAL;
-	wrapState = eWrapWord;
+	wrapState = WrapMode::word;
 }
 
 namespace Scintilla {
@@ -321,9 +315,7 @@ void EditView::RefreshPixMaps(Surface *surfaceWindow, WindowID wid, const ViewSt
 		pixmapIndentGuideHighlight->InitPixMap(1, vsDraw.lineHeight + 1, surfaceWindow, wid);
 		const PRectangle rcIG = PRectangle::FromInts(0, 0, 1, vsDraw.lineHeight);
 		pixmapIndentGuide->FillRectangle(rcIG, vsDraw.styles[STYLE_INDENTGUIDE].back);
-		pixmapIndentGuide->PenColour(vsDraw.styles[STYLE_INDENTGUIDE].fore);
 		pixmapIndentGuideHighlight->FillRectangle(rcIG, vsDraw.styles[STYLE_BRACELIGHT].back);
-		pixmapIndentGuideHighlight->PenColour(vsDraw.styles[STYLE_BRACELIGHT].fore);
 		for (int stripe = 1; stripe < vsDraw.lineHeight + 1; stripe += 2) {
 			const PRectangle rcPixel = PRectangle::FromInts(0, stripe, 1, stripe + 1);
 			pixmapIndentGuide->FillRectangle(rcPixel, vsDraw.styles[STYLE_INDENTGUIDE].fore);
@@ -410,6 +402,12 @@ inline WrapBreak GetWrapBreakEx(unsigned int ch, bool isUtf8) noexcept {
 	return WrapBreak::Undefined;
 }
 
+constexpr bool IsControlCharacter(unsigned char ch) noexcept {
+	// iscntrl() returns true for lots of characters > 127 which are displayable,
+	// currently only check C0 control characters.
+	return ch < 32 || ch == 127;
+}
+
 }
 
 /**
@@ -429,7 +427,7 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 	if (posLineEnd > (posLineStart + ll->maxLineLength)) {
 		posLineEnd = posLineStart + ll->maxLineLength;
 	}
-	if (ll->validity == LineLayout::llCheckTextAndStyle) {
+	if (ll->validity == LineLayout::ValidLevel::checkTextAndStyle) {
 		Sci::Position lineLength = posLineEnd - posLineStart;
 		if (!vstyle.viewEOL) {
 			lineLength = model.pdoc->LineEnd(line) - posLineStart;
@@ -468,15 +466,15 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 			}
 			allSame = allSame && (ll->styles[numCharsInLine] == styleByte);	// For eolFilled
 			if (allSame) {
-				ll->validity = LineLayout::llPositions;
+				ll->validity = LineLayout::ValidLevel::positions;
 			} else {
-				ll->validity = LineLayout::llInvalid;
+				ll->validity = LineLayout::ValidLevel::invalid;
 			}
 		} else {
-			ll->validity = LineLayout::llInvalid;
+			ll->validity = LineLayout::ValidLevel::invalid;
 		}
 	}
-	if (ll->validity == LineLayout::llInvalid) {
+	if (ll->validity == LineLayout::ValidLevel::invalid) {
 		ll->widthLine = LineLayout::wrapWidthInfinite;
 		ll->lines = 1;
 		if (vstyle.edgeState == EDGE_BACKGROUND) {
@@ -562,13 +560,13 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 		}
 		ll->numCharsInLine = numCharsInLine;
 		ll->numCharsBeforeEOL = numCharsBeforeEOL;
-		ll->validity = LineLayout::llPositions;
+		ll->validity = LineLayout::ValidLevel::positions;
 	}
 	// Hard to cope when too narrow, so just assume there is space
 	if (width < 20) {
 		width = 20;
 	}
-	if ((ll->validity == LineLayout::llPositions) || (ll->widthLine != width)) {
+	if ((ll->validity == LineLayout::ValidLevel::positions) || (ll->widthLine != width)) {
 		ll->widthLine = width;
 		if (width == LineLayout::wrapWidthInfinite) {
 			ll->lines = 1;
@@ -648,7 +646,7 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 					continue;
 				}
 				switch (wrapState) {
-				case eWrapAuto:
+				case WrapMode::automatic:
 					// style boundary and space
 					if (ll->styles[p] != ll->styles[p - 1]) {
 						lastGoodBreak = p;
@@ -693,7 +691,7 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 					}
 					break;
 
-				case eWrapWord:
+				case WrapMode::word:
 					if (ll->styles[p] != ll->styles[p - 1]) {
 						lastGoodBreak = p;
 						validateCache = true;
@@ -724,13 +722,13 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 					}
 					break;
 
-				case eWrapWhitespace:
+				case WrapMode::whitespace:
 					if (IsSpaceOrTab(ll->chars[p - 1]) && !IsSpaceOrTab(ll->chars[p])) {
 						lastGoodBreak = p;
 					}
 					break;
 
-				case eWrapChar:
+				case WrapMode::character:
 					if ((ll->styles[p] != ll->styles[p - 1]) || IsSpaceOrTab(ll->chars[p - 1])) {
 						lastGoodBreak = p;
 					} else {
@@ -747,7 +745,7 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 			}
 			ll->lines++;
 		}
-		ll->validity = LineLayout::llLines;
+		ll->validity = LineLayout::ValidLevel::lines;
 	}
 }
 
@@ -1205,9 +1203,11 @@ void EditView::DrawEOL(Surface *surface, const EditModel &model, const ViewStyle
 		rcSegment.left = rcLine.left;
 	rcSegment.right = rcLine.right;
 
-	const bool fillRemainder = !lastSubLine || !model.GetFoldDisplayText(line);
+	const bool drawEOLAnnotationStyledText = (vsDraw.eolAnnotationVisible != EOLANNOTATION_HIDDEN) && model.pdoc->EOLAnnotationStyledText(line).text;
+	const bool fillRemainder = (!lastSubLine || (!model.GetFoldDisplayText(line) && !drawEOLAnnotationStyledText));
 	if (fillRemainder) {
 		// Fill the remainder of the line
+		rcSegment.left -= vsDraw.aveCharWidth*(100 - vsDraw.eolSelectedWidth)/100;
 		FillLineRemainder(surface, model, vsDraw, ll, line, rcSegment, subLine);
 	}
 
@@ -1437,6 +1437,94 @@ void EditView::DrawFoldDisplayText(Surface *surface, const EditModel &model, con
 	if (phase & drawSelectionTranslucent) {
 		if (eolInSelection && vsDraw.selColours.back.isSet && (line < model.pdoc->LinesTotal() - 1) && alpha != SC_ALPHA_NOALPHA) {
 			SimpleAlphaRectangle(surface, rcBox, SelectionBackground(vsDraw, eolInSelection == 1, model.primarySelection), alpha);
+		}
+	}
+}
+
+void EditView::DrawEOLAnnotationText(Surface *surface, const EditModel &model, const ViewStyle &vsDraw, const LineLayout *ll, Sci::Line line, int xStart, PRectangle rcLine, int subLine, XYACCUMULATOR subLineStart, DrawPhase phase) {
+	const bool lastSubLine = subLine == (ll->lines - 1);
+	if (!lastSubLine)
+		return;
+
+	if (vsDraw.eolAnnotationVisible == EOLANNOTATION_HIDDEN) {
+		return;
+	}
+	const StyledText stEOLAnnotation = model.pdoc->EOLAnnotationStyledText(line);
+	if (!stEOLAnnotation.text || !ValidStyledText(vsDraw, vsDraw.eolAnnotationStyleOffset, stEOLAnnotation)) {
+		return;
+	}
+	const std::string_view eolAnnotationText(stEOLAnnotation.text, stEOLAnnotation.length);
+	const size_t style = stEOLAnnotation.style + vsDraw.eolAnnotationStyleOffset;
+
+	PRectangle rcSegment = rcLine;
+	FontAlias fontText = vsDraw.styles[style].font;
+	const XYPOSITION widthEOLAnnotationText = surface->WidthText(fontText, eolAnnotationText);
+
+	const XYPOSITION spaceWidth = vsDraw.styles[ll->EndLineStyle()].spaceWidth;
+	const XYPOSITION virtualSpace = model.sel.VirtualSpaceFor(
+		model.pdoc->LineEnd(line)) * spaceWidth;
+	rcSegment.left = xStart +
+		static_cast<XYPOSITION>(ll->positions[ll->numCharsInLine] - subLineStart)
+		+ virtualSpace + vsDraw.aveCharWidth;
+
+	const char *textFoldDisplay = model.GetFoldDisplayText(line);
+	if (textFoldDisplay) {
+		const std::string_view foldDisplayText(textFoldDisplay);
+		rcSegment.left += (surface->WidthText(fontText, foldDisplayText) + vsDraw.aveCharWidth);
+	}
+	rcSegment.right = rcSegment.left + widthEOLAnnotationText;
+
+	const ColourOptional background = vsDraw.Background(model.pdoc->GetMark(line), model.caret.active, ll->containsCaret);
+	ColourDesired textFore = vsDraw.styles[style].fore;
+	const ColourDesired textBack = TextBackground(model, vsDraw, ll, background, false,
+											false, static_cast<int>(style), -1);
+
+	if (model.trackLineWidth) {
+		if (rcSegment.right + 1> lineWidthMaxSeen) {
+			// EOL Annotation text border drawn on rcSegment.right with width 1 is the last visible object of the line
+			lineWidthMaxSeen = static_cast<int>(rcSegment.right + 1);
+		}
+	}
+
+	if (phase & drawBack) {
+		surface->FillRectangle(rcSegment, textBack);
+
+		// Fill Remainder of the line
+		PRectangle rcRemainder = rcSegment;
+		rcRemainder.left = rcRemainder.right;
+		if (rcRemainder.left < rcLine.left)
+			rcRemainder.left = rcLine.left;
+		rcRemainder.right = rcLine.right;
+		FillLineRemainder(surface, model, vsDraw, ll, line, rcRemainder, subLine);
+	}
+
+	if (phase & drawText) {
+		if (phasesDraw != phasesOne) {
+			surface->DrawTextTransparent(rcSegment, fontText,
+			rcSegment.top + vsDraw.maxAscent, eolAnnotationText,
+			textFore);
+		} else {
+			surface->DrawTextNoClip(rcSegment, fontText,
+			rcSegment.top + vsDraw.maxAscent, eolAnnotationText,
+			textFore, textBack);
+		}
+	}
+
+	if (phase & drawIndicatorsFore) {
+		if (vsDraw.eolAnnotationVisible == EOLANNOTATION_BOXED ) {
+			surface->PenColour(textFore);
+			PRectangle rcBox = rcSegment;
+			rcBox.left = std::round(rcSegment.left);
+			rcBox.right = std::round(rcSegment.right);
+			const IntegerRectangle ircBox(rcBox);
+			surface->MoveTo(ircBox.left, ircBox.top);
+			surface->LineTo(ircBox.left, ircBox.bottom);
+			surface->MoveTo(ircBox.right, ircBox.top);
+			surface->LineTo(ircBox.right, ircBox.bottom);
+			surface->MoveTo(ircBox.left, ircBox.top);
+			surface->LineTo(ircBox.right, ircBox.top);
+			surface->MoveTo(ircBox.left, ircBox.bottom - 1);
+			surface->LineTo(ircBox.right, ircBox.bottom - 1);
 		}
 	}
 }
@@ -2208,6 +2296,7 @@ void EditView::DrawLine(Surface *surface, const EditModel &model, const ViewStyl
 			DrawBackground(surface, model, vsDraw, ll, rcLine, lineRange, posLineStart, xStart,
 				subLine, background);
 			DrawFoldDisplayText(surface, model, vsDraw, ll, line, xStart, rcLine, subLine, subLineStart, drawBack);
+			DrawEOLAnnotationText(surface, model, vsDraw, ll, line, xStart, rcLine, subLine, subLineStart, drawBack);
 			phase = static_cast<DrawPhase>(phase & ~drawBack);	// Remove drawBack to not draw again in DrawFoldDisplayText
 			DrawEOL(surface, model, vsDraw, ll, rcLine, line, lineRange.end,
 				xStart, subLine, subLineStart, background);
@@ -2238,6 +2327,7 @@ void EditView::DrawLine(Surface *surface, const EditModel &model, const ViewStyl
 	}
 
 	DrawFoldDisplayText(surface, model, vsDraw, ll, line, xStart, rcLine, subLine, subLineStart, phase);
+	DrawEOLAnnotationText(surface, model, vsDraw, ll, line, xStart, rcLine, subLine, subLineStart, phase);
 
 	if (phasesDraw == phasesOne) {
 		DrawEOL(surface, model, vsDraw, ll, rcLine, line, lineRange.end,
@@ -2627,7 +2717,7 @@ Sci::Position EditView::FormatRange(bool draw, const Sci_RangeToFormat *pfr, Sur
 	Sci::Position nPrintPos = pfr->chrg.cpMin;
 	int visibleLine = 0;
 	int widthPrint = pfr->rc.right - pfr->rc.left - vsPrint.fixedColumnWidth;
-	if (printParameters.wrapState == eWrapNone)
+	if (printParameters.wrapState == WrapMode::none)
 		widthPrint = LineLayout::wrapWidthInfinite;
 
 	while (lineDoc <= linePrintLast && ypos < pfr->rc.bottom) {

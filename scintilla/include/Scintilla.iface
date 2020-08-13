@@ -300,7 +300,7 @@ val SC_IME_INLINE=1
 # Is the IME displayed in a window or inline?
 get IMEInteraction GetIMEInteraction=2678(,)
 
-# Choose to display the IME in a winow or inline.
+# Choose to display the IME in a window or inline.
 set void SetIMEInteraction=2679(IMEInteraction imeInteraction,)
 
 enu Alpha=SC_ALPHA_
@@ -587,7 +587,7 @@ fun void StyleResetDefault=2058(,)
 set void StyleSetUnderline=2059(int style, bool underline)
 
 # Set a style to be strike or not.
-set void StyleSetStrike=3501(int style, bool strike)
+set void StyleSetStrike=2474(int style, bool strike)
 
 enu CaseVisible=SC_CASE_
 val SC_CASE_MIXED=0
@@ -620,9 +620,6 @@ get bool StyleGetEOLFilled=2487(int style,)
 
 # Get is a style underlined or not.
 get bool StyleGetUnderline=2488(int style,)
-
-# Get is a style strike or not.
-get bool StyleGetStrike=3502(int style,)
 
 # Get is a style mixed case, or to force upper or lower case.
 get CaseVisible StyleGetCase=2489(int style,)
@@ -687,6 +684,9 @@ get bool GetSelEOLFilled=2479(,)
 
 # Set the selection to have its end of line filled or not.
 set void SetSelEOLFilled=2480(bool filled,)
+
+# Set the eol-is-selected rectangle width.
+set void SetEOLSelectedWidth=2475(int percent,)
 
 # Set the foreground colour of the caret.
 set void SetCaretFore=2069(colour fore,)
@@ -1128,8 +1128,8 @@ fun position GetLine=2153(line line, stringresult text)
 # Returns the number of lines in the document. There is always at least one.
 get line GetLineCount=2154(,)
 
-# set initial number of lines of the document.
-set void SetInitLineCount=2089(line lineCount,)
+# Enlarge the number of lines allocated.
+set void AllocateLines=2089(line lines,)
 
 # Sets the size in pixels of the left margin.
 set void SetMarginLeft=2155(, int pixelWidth)
@@ -1911,6 +1911,9 @@ fun void BraceBadLightIndicator=2499(bool useSetting, int indicator)
 # The maxReStyle must be 0 for now. It may be defined in a future release.
 fun position BraceMatch=2353(position pos, int maxReStyle)
 
+# Similar to BraceMatch, but matching starts at the explicit start position.
+fun position BraceMatchNext=2369(position pos, position startPos)
+
 # Are the end of line characters visible?
 get bool GetViewEOL=2355(,)
 
@@ -2406,8 +2409,8 @@ val CARETSTYLE_LINE=1
 val CARETSTYLE_BLOCK=2
 val CARETSTYLE_OVERSTRIKE_BAR=0
 val CARETSTYLE_OVERSTRIKE_BLOCK=0x10
-val CARETSTYLE_BLOCK_AFTER=0x100
 val CARETSTYLE_INS_MASK=0xF
+val CARETSTYLE_BLOCK_AFTER=0x100
 
 # Set the style of the caret to be drawn.
 set void SetCaretStyle=2512(CaretStyle caretStyle,)
@@ -2888,6 +2891,38 @@ get int GetRepresentation=2666(string encodedCharacter, stringresult representat
 # Remove a character representation.
 fun void ClearRepresentation=2667(string encodedCharacter,)
 
+# Set the end of line annotation text for a line
+set void EOLAnnotationSetText=2740(line line, string text)
+
+# Get the end of line annotation text for a line
+get int EOLAnnotationGetText=2741(line line, stringresult text)
+
+# Set the style number for the end of line annotations for a line
+set void EOLAnnotationSetStyle=2742(line line, int style)
+
+# Get the style number for the end of line annotations for a line
+get int EOLAnnotationGetStyle=2743(line line,)
+
+# Clear the end of annotations from all lines
+fun void EOLAnnotationClearAll=2744(,)
+
+enu EOLAnnotationVisible=EOLANNOTATION_
+val EOLANNOTATION_HIDDEN=0
+val EOLANNOTATION_STANDARD=1
+val EOLANNOTATION_BOXED=2
+
+# Set the visibility for the end of line annotations for a view
+set void EOLAnnotationSetVisible=2745(EOLAnnotationVisible visible,)
+
+# Get the visibility for the end of line annotations for a view
+get EOLAnnotationVisible EOLAnnotationGetVisible=2746(,)
+
+# Get the start of the range of style numbers used for end of line annotations
+set void EOLAnnotationSetStyleOffset=2747(int style,)
+
+# Get the start of the range of style numbers used for end of line annotations
+get int EOLAnnotationGetStyleOffset=2748(,)
+
 # Start notifying the container of all key presses and commands.
 fun void StartRecord=3001(,)
 
@@ -3040,7 +3075,8 @@ val SC_MOD_CONTAINER=0x40000
 val SC_MOD_LEXERSTATE=0x80000
 val SC_MOD_INSERTCHECK=0x100000
 val SC_MOD_CHANGETABSTOPS=0x200000
-val SC_MODEVENTMASKALL=0x3FFFFF
+val SC_MOD_CHANGEEOLANNOTATION=0x400000
+val SC_MODEVENTMASKALL=0x7FFFFF
 
 ali SC_MOD_INSERTTEXT=INSERT_TEXT
 ali SC_MOD_DELETETEXT=DELETE_TEXT
@@ -3060,6 +3096,7 @@ ali SC_MOD_CHANGEANNOTATION=CHANGE_ANNOTATION
 ali SC_MOD_LEXERSTATE=LEXER_STATE
 ali SC_MOD_INSERTCHECK=INSERT_CHECK
 ali SC_MOD_CHANGETABSTOPS=CHANGE_TAB_STOPS
+ali SC_MOD_CHANGEEOLANNOTATION=CHANGE_E_O_L_ANNOTATION
 ali SC_MODEVENTMASKALL=EVENT_MASK_ALL
 
 enu Update=SC_UPDATE_

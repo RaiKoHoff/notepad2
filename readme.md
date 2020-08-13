@@ -37,21 +37,18 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* NASM
 	* Asymptote Vector Graphics Language
 	* AutoIt Script
-	* AWK
-		* GNU AWK
+	* AWK, GNU AWK
 	* Batch Script, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#batch)
-	* C#, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#c)
-		* C# Doc
-		* Vala
+	* C#, Vala, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#c)
 	* C/C++, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#cc)
 		* Objective-C/C++, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#objective-cc)
-		* [C Standard Library](../master/tools/lang/C.c), up to C11.
+		* [C Standard Library](../master/tools/lang/C.c), up to C2x.
 		* [C++ STL](../master/tools/lang/CPP.cpp), up to C++20.
 	* CSS Style Sheet
 		* Sassy CSS
 		* Less CSS
 		* HSS
-	* [CMake](../master/tools/lang/CMake.cmake), [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#cmake), up to 3.16
+	* [CMake](../master/tools/lang/CMake.cmake), up to CMake 3.18. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#cmake)
 	* Common Intermediate Language
 	* Configuration / Properties File
 		* Apache Configuration File
@@ -59,10 +56,9 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* Diff/Patch File
 	* Doxygen
 	* F#
-	* Fortran
-		* GNU Fortran
+	* Fortran, GNU Fortran
 	* [GN Build](../master/tools/lang/GN.gn), up to GN 2019-03-13.
-	* Go
+	* [Go](../master/tools/lang/Go.go), up to Go 1.14.
 	* Gradle, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#gradle)
 	* GraphViz Dot, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#graphviz)
 		* blockdiag, seqdiag, actdiag and nwdiag
@@ -77,11 +73,9 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* Inno Setup
 	* Boost Jam
 	* Java, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#java)
-		* JavaDoc
-	* [JavaScript](../master/tools/lang/JavaScript.js), up to ECMAScript 2018, 9ed.
+	* [JavaScript](../master/tools/lang/JavaScript.js), up to ECMAScript 2020 (11th edition) with [Web APIs](https://developer.mozilla.org/en-US/docs/Web/API).
 	* JSON and JSON5 Document
-	* Julia Script, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#julia)
-		* [Julia Base and Standard Library](../master/tools/lang/Julia.jl), up to 1.2.
+	* [Julia Script](../master/tools/lang/Julia.jl), up to Julia 1.2. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#julia)
 	* [Kotlin](../master/tools/lang/Kotlin.kt), up to Kotlin 1.3
 	* LaTeX
 	* Lisp Script (Common Lisp, Clojure, Scheme, etc.)
@@ -98,8 +92,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* Scilab
 		* Gnuplot
 	* NSIS
-	* Pascal
-		* Delphi
+	* Pascal, Delphi
 	* Perl, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#perl)
 	* PowerShell
 	* Python, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#python)
@@ -108,11 +101,9 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* Jython
 		* Boo
 	* PHP Script, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#php)
-		* PHPDoc
 	* Windows Rescouce Script
 	* [Ruby](../master/tools/lang/Ruby.rb), [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#ruby)
-	* Rust, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#rust)
-		* [Rust Standard Library](../master/tools/lang/Rust.rs), up to 1.38.
+	* [Rust](../master/tools/lang/Rust.rs), up to Rust 1.38. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#rust)
 	* Scala Script
 	* Shell Script
 		* Bash likes (sh, bash, dash, ash, zsh, ksh), [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#shell-script)
@@ -124,14 +115,12 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* TCL, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#tcl)
 	* Texinfo
 	* TOML File
-	* Visual Basic
-		* VB6
-		* VB.NET
+	* Visual Basic, VB6, VB.NET
 	* VBScript
 	* VHDL
 	* Verilog HDL
 	* [Vim Script](../master/tools/lang/Vim.vim)
-	* WebAssembly
+	* [WebAssembly](https://github.com/WebAssembly/wabt/blob/master/src/lexer-keywords.txt), up to wabt 1.0.19
 	* XML Document, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#xml)
 		* XML Schema
 		* XML Stylesheet
@@ -154,6 +143,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* Many Others
 * Toggle fold for specific level, shortcuts: <kbd>Alt</kbd>+<kbd>Number</kbd>
 * Toggle fold for current block without scrolling back to the block start line, shortcut: <kbd>Alt</kbd>+<kbd>C</kbd>, or context menu "Toggle Fold"
+* Improved support for Chinese, Japanese and Korean: inline mode IME, word wrapping, word selection, case conversions, etc.
 * Insert new GUID and current timestamps
 * Number conversion between decimal, hexadecimal, octal and binary
 * Display caret location and length of selected text in count of characters
@@ -165,7 +155,6 @@ Latest development builds (artifacts in Release configuration for each compiler 
 * Support color font (Windows 8.1 and above) in Direct2D mode, useful to display color [Emoji](http://unicode.org/emoji/charts/full-emoji-list.html) 😊 and others
 * Experimental support for RTL layout (GDI) and bidirectional (Direct2D), useful for Arabic and Hebrew
 * Support using fractional font size
-* Support inline mode IME
 * Support full screen mode
 * Extra support for drag and drop file from Visual Studio, Android Studio, IntelliJ IDEA, etc.
 * Other various major or minor changes and tweaks
@@ -195,9 +184,9 @@ Latest development builds (artifacts in Release configuration for each compiler 
 * [Scintilla's website](https://www.scintilla.org/)
 * [Build Notepad2 and metapath](https://github.com/zufuliu/notepad2/wiki/Build-Notepad2)
 * [Localization](https://github.com/zufuliu/notepad2/wiki/Localization)
-	* [简体中文](https://github.com/zufuliu/notepad2/tree/master/locale/zh-Hans)
-	* [繁體中文](https://github.com/zufuliu/notepad2/tree/master/locale/zh-Hant)
 	* [日本語](https://github.com/maboroshin/notepad2)
+	* [中文 (繁體)](https://github.com/zufuliu/notepad2/tree/master/locale/zh-Hant)
+	* [中文 (简体)](https://github.com/zufuliu/notepad2/tree/master/locale/zh-Hans)
 	* [한국어](https://teus.me/category/IT/Notepad2)
 * [Notepad2 Wiki](https://github.com/zufuliu/notepad2/wiki)
 * Other projects based on (original) Notepad2 or Notepad2-mod:

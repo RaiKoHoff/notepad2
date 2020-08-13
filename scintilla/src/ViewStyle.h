@@ -44,7 +44,7 @@ enum TabDrawMode {tdLongArrow=0, tdStrikeOut=1};
 
 typedef std::map<FontSpecification, std::unique_ptr<FontRealised>> FontMap;
 
-enum WrapMode { eWrapNone, eWrapWord, eWrapChar, eWrapWhitespace, eWrapAuto };
+enum class WrapMode { none, word, character, whitespace, automatic };
 
 constexpr int GetFontSizeZoomed(int size, int zoomLevel) noexcept {
 	size = (size * zoomLevel + 50) / 100;
@@ -102,6 +102,7 @@ public:
 	int selAlpha;
 	int selAdditionalAlpha;
 	bool selEOLFilled;
+	int eolSelectedWidth;
 	ForeBackColours whitespaceColours;
 	int controlCharSymbol;
 	XYPOSITION controlCharWidth;
@@ -145,6 +146,8 @@ public:
 	int marginStyleOffset;
 	int annotationVisible;
 	int annotationStyleOffset;
+	int eolAnnotationVisible;
+	int eolAnnotationStyleOffset;
 	bool braceHighlightIndicatorSet;
 	bool braceBadLightIndicatorSet;
 	int braceHighlightIndicator;

@@ -1362,6 +1362,12 @@ HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName) {
 	case LANG_CHINESE:
 		folder = IsChineseTraditionalSubLang(subLang) ? L"zh-Hant" : L"zh-Hans";
 		break;
+	case LANG_GERMAN:
+		folder = L"de";
+		break;
+	case LANG_ITALIAN:
+		folder = L"it";
+		break;
 	case LANG_JAPANESE:
 		folder = L"ja";
 		break;
@@ -2599,13 +2605,6 @@ HWND CreateThemedDialogParam(HINSTANCE hInstance, LPCWSTR lpTemplate, HWND hWndP
 * Mostly taken from SciTE, (c) Neil Hodgson, https://www.scintilla.org
 *
 */
-
-/**
- * Is the character an octal digit?
- */
-static inline BOOL IsOctalDigit(char ch) {
-	return ch >= '0' && ch <= '7';
-}
 
 /**
  * If the character is an hexa digit, get its value.

@@ -602,19 +602,13 @@ int Encoding_MapIniSetting(BOOL bLoad, int iSetting) {
 
 void Encoding_GetLabel(int iEncoding) {
 	if (StrIsEmpty(mEncoding[iEncoding].wchLabel)) {
-		WCHAR *pwsz;
 		WCHAR wch[256] = L"";
 		GetString(mEncoding[iEncoding].idsName, wch, COUNTOF(wch));
-		if ((pwsz = StrChr(wch, L';')) != NULL) {
-#if 0
-			if ((pwsz = StrChr(CharNext(pwsz), L';')) != NULL) {
-				pwsz = CharNext(pwsz);
-			}
-#else
-			pwsz = CharNext(pwsz);
-#endif
+		LPCWSTR pwsz = StrChr(wch, L';');
+		if (pwsz != NULL) {
+			++pwsz;
 		}
-		if (!pwsz) {
+		if (StrIsEmpty(pwsz)) {
 			pwsz = wch;
 		}
 		if (g_AllEncodingLabel == NULL) {
@@ -747,9 +741,9 @@ void Encoding_AddToTreeView(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 
 	// ANSI and OEM
 	for (int id = CPI_DEFAULT; id <= CPI_OEM; id++) {
-		WCHAR *pwsz;
 		GetString(mEncoding[id].idsName, wchBuf, COUNTOF(wchBuf));
-		if ((pwsz = StrChr(wchBuf, L';')) != NULL) {
+		LPWSTR pwsz = StrChr(wchBuf, L';');
+		if (pwsz != NULL) {
 			*pwsz = L'\0';
 		}
 		if (id == CPI_DEFAULT) {
@@ -791,9 +785,9 @@ void Encoding_AddToTreeView(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 				break;
 			}
 			if (!bRecodeOnly || (mEncoding[id].uFlags & NCP_RECODE)) {
-				WCHAR *pwsz;
 				GetString(mEncoding[id].idsName, wchBuf, COUNTOF(wchBuf));
-				if ((pwsz = StrChr(wchBuf, L';')) != NULL) {
+				LPWSTR pwsz = StrChr(wchBuf, L';');
+				if (pwsz != NULL) {
 					*pwsz = L'\0';
 				}
 
@@ -867,12 +861,12 @@ void Encoding_AddToListView(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 	for (int i = 0; i < (int)COUNTOF(mEncoding); i++) {
 		const int id = pEE[i].id;
 		if (!bRecodeOnly || (mEncoding[id].uFlags & NCP_RECODE)) {
-			WCHAR *pwsz;
-
 			lvi.iItem = ListView_GetItemCount(hwnd);
-			if ((pwsz = StrChr(pEE[i].wch, L';')) != NULL) {
+			LPWSTR pwsz = StrChr(pEE[i].wch, L';');
+			if (pwsz != NULL) {
 				lstrcpyn(wchBuf, CharNext(pwsz), COUNTOF(wchBuf));
-				if ((pwsz = StrChr(wchBuf, L';')) != NULL) {
+				pwsz = StrChr(wchBuf, L';');
+				if (pwsz != NULL) {
 					*pwsz = L'\0';
 				}
 			} else {
@@ -946,12 +940,12 @@ void Encoding_AddToComboboxEx(HWND hwnd, int idSel, BOOL bRecodeOnly) {
 	for (int i = 0; i < (int)COUNTOF(mEncoding); i++) {
 		const int id = pEE[i].id;
 		if (!bRecodeOnly || (mEncoding[id].uFlags & NCP_RECODE)) {
-			WCHAR *pwsz;
-
 			cbei.iItem = ComboBox_GetCount(hwnd);
-			if ((pwsz = StrChr(pEE[i].wch, L';')) != NULL) {
+			LPWSTR pwsz = StrChr(pEE[i].wch, L';');
+			if (pwsz != NULL) {
 				lstrcpyn(wchBuf, CharNext(pwsz), COUNTOF(wchBuf));
-				if ((pwsz = StrChr(wchBuf, L';')) != NULL) {
+				pwsz = StrChr(wchBuf, L';');
+				if (pwsz != NULL) {
 					*pwsz = L'\0';
 				}
 			} else {
@@ -1098,19 +1092,480 @@ BOOL IsUTF8(const char *pTest, DWORD nLength) {
 }
 #endif
 
+// https://github.com/zwegner/faster-utf8-validator
+// faster-utf8-validator
+// Copyright (c) 2019 Zach Wegner
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// How this validator works:
+//
+//   [[[ UTF-8 refresher: UTF-8 encodes text in sequences of "code points",
+//   each one from 1-4 bytes. For each code point that is longer than one byte,
+//   the code point begins with a unique prefix that specifies how many bytes
+//   follow. All bytes in the code point after this first have a continuation
+//   marker. All code points in UTF-8 will thus look like one of the following
+//   binary sequences, with x meaning "don't care":
+//      1 byte:  0xxxxxxx
+//      2 bytes: 110xxxxx  10xxxxxx
+//      3 bytes: 1110xxxx  10xxxxxx  10xxxxxx
+//      4 bytes: 11110xxx  10xxxxxx  10xxxxxx  10xxxxxx
+//   ]]]
+//
+// This validator works in two basic steps: checking continuation bytes, and
+// handling special cases. Each step works on one vector's worth of input
+// bytes at a time.
+//
+// The continuation bytes are handled in a fairly straightforward manner in
+// the scalar domain. A mask is created from the input byte vector for each
+// of the highest four bits of every byte. The first mask allows us to quickly
+// skip pure ASCII input vectors, which have no bits set. The first and
+// (inverted) second masks together give us every continuation byte (10xxxxxx).
+// The other masks are used to find prefixes of multi-byte code points (110,
+// 1110, 11110). For these, we keep a "required continuation" mask, by shifting
+// these masks 1, 2, and 3 bits respectively forward in the byte stream. That
+// is, we take a mask of all bytes that start with 11, and shift it left one
+// bit forward to get the mask of all the first continuation bytes, then do the
+// same for the second and third continuation bytes. Here's an example input
+// sequence along with the corresponding masks:
+//
+//   bytes:        61 C3 80 62 E0 A0 80 63 F0 90 80 80 00
+//   code points:  61|C3 80|62|E0 A0 80|63|F0 90 80 80|00
+//   # of bytes:   1 |2  - |1 |3  -  - |1 |4  -  -  - |1
+//   cont. mask 1: -  -  1  -  -  1  -  -  -  1  -  -  -
+//   cont. mask 2: -  -  -  -  -  -  1  -  -  -  1  -  -
+//   cont. mask 3: -  -  -  -  -  -  -  -  -  -  -  1  -
+//   cont. mask *: 0  0  1  0  0  1  1  0  0  1  1  1  0
+//
+// The final required continuation mask is then compared with the mask of
+// actual continuation bytes, and must match exactly in valid UTF-8. The only
+// complication in this step is that the shifted masks can cross vector
+// boundaries, so we need to keep a "carry" mask of the bits that were shifted
+// past the boundary in the last loop iteration.
+//
+// Besides the basic prefix coding of UTF-8, there are several invalid byte
+// sequences that need special handling. These are due to three factors:
+// code points that could be described in fewer bytes, code points that are
+// part of a surrogate pair (which are only valid in UTF-16), and code points
+// that are past the highest valid code point U+10FFFF.
+//
+// All of the invalid sequences can be detected by independently observing
+// the first three nibbles of each code point. Since AVX2 can do a 4-bit/16-byte
+// lookup in parallel for all 32 bytes in a vector, we can create bit masks
+// for all of these error conditions, look up the bit masks for the three
+// nibbles for all input bytes, and AND them together to get a final error mask,
+// that must be all zero for valid UTF-8. This is somewhat complicated by
+// needing to shift the error masks from the first and second nibbles forward in
+// the byte stream to line up with the third nibble.
+//
+// We have these possible values for valid UTF-8 sequences, broken down
+// by the first three nibbles:
+//
+//   1st   2nd   3rd   comment
+//   0..7  0..F        ASCII
+//   8..B  0..F        continuation bytes
+//   C     2..F  8..B  C0 xx and C1 xx can be encoded in 1 byte
+//   D     0..F  8..B  D0..DF are valid with a continuation byte
+//   E     0     A..B  E0 8x and E0 9x can be encoded with 2 bytes
+//         1..C  8..B  E1..EC are valid with continuation bytes
+//         D     8..9  ED Ax and ED Bx correspond to surrogate pairs
+//         E..F  8..B  EE..EF are valid with continuation bytes
+//   F     0     9..B  F0 8x can be encoded with 3 bytes
+//         1..3  8..B  F1..F3 are valid with continuation bytes
+//         4     8     F4 8F BF BF is the maximum valid code point
+//
+// That leaves us with these invalid sequences, which would otherwise fit
+// into UTF-8's prefix encoding. Each of these invalid sequences needs to
+// be detected separately, with their own bits in the error mask.
+//
+//   1st   2nd   3rd   error bit
+//   C     0..1  0..F  0x01
+//   E     0     8..9  0x02
+//         D     A..B  0x04
+//   F     0     0..8  0x08
+//         4     9..F  0x10
+//         5..F  0..F  0x20
+//
+// For every possible value of the first, second, and third nibbles, we keep
+// a lookup table that contains the bitwise OR of all errors that that nibble
+// value can cause. For example, the first nibble has zeroes in every entry
+// except for C, E, and F, and the third nibble lookup has the 0x21 bits in
+// every entry, since those errors don't depend on the third nibble. After
+// doing a parallel lookup of the first/second/third nibble values for all
+// bytes, we AND them together. Only when all three have an error bit in common
+// do we fail validation.
+
+#if NP2_USE_AVX2
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((__always_inline__)) static inline
+#else
+static __forceinline
+#endif
+int z_validate_vec_avx2(__m256i bytes, __m256i shifted_bytes, uint32_t *last_cont) {
+	// Error lookup tables for the first, second, and third nibbles
+	// Simple macro to make a vector lookup table for use with vpshufb. Since
+	// AVX2 is two 16-byte halves, we duplicate the input values.
+#define V_TABLE_16(...)		_mm256_setr_epi8(__VA_ARGS__, __VA_ARGS__)
+	const __m256i error_1 = V_TABLE_16(
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x06, 0x38
+	);
+	const __m256i error_2 = V_TABLE_16(
+		0x0B, 0x01, 0x00, 0x00,
+		0x10, 0x20, 0x20, 0x20,
+		0x20, 0x20, 0x20, 0x20,
+		0x20, 0x24, 0x20, 0x20
+	);
+	const __m256i error_3 = V_TABLE_16(
+		0x29, 0x29, 0x29, 0x29,
+		0x29, 0x29, 0x29, 0x29,
+		0x2B, 0x33, 0x35, 0x35,
+		0x31, 0x31, 0x31, 0x31
+	);
+#undef V_TABLE_16
+
+	// Quick skip for ascii-only input. If there are no bytes with the high bit
+	// set, we don't need to do any more work. We return either valid or
+	// invalid based on whether we expected any continuation bytes here.
+	const uint32_t high = _mm256_movemask_epi8(bytes);
+	if (!high) {
+		return *last_cont == 0;
+	}
+
+	// Which bytes are required to be continuation bytes
+	uint64_t req = *last_cont;
+
+	// Compute the continuation byte mask by finding bytes that start with
+	// 11x, 111x, and 1111. For each of these prefixes, we get a bitmask
+	// and shift it forward by 1, 2, or 3. This loop should be unrolled by
+	// the compiler, and the (n == 1) branch inside eliminated.
+	uint32_t set = high;
+	set &= _mm256_movemask_epi8(_mm256_slli_epi16(bytes, 1));
+	// A bitmask of the actual continuation bytes in the input
+	// Mark continuation bytes: those that have the high bit set but
+	// not the next one
+	const uint32_t cont = high ^ set;
+
+	// We add the shifted mask here instead of ORing it, which would
+	// be the more natural operation, so that this line can be done
+	// with one lea. While adding could give a different result due
+	// to carries, this will only happen for invalid UTF-8 sequences,
+	// and in a way that won't cause it to pass validation. Reasoning:
+	// Any bits for required continuation bytes come after the bits
+	// for their leader bytes, and are all contiguous. For a carry to
+	// happen, two of these bit sequences would have to overlap. If
+	// this is the case, there is a leader byte before the second set
+	// of required continuation bytes (and thus before the bit that
+	// will be cleared by a carry). This leader byte will not be
+	// in the continuation mask, despite being required. QEDish.
+	req += (uint64_t)set << 1;
+	set &= _mm256_movemask_epi8(_mm256_slli_epi16(bytes, 2));
+	req += (uint64_t)set << 2;
+	set &= _mm256_movemask_epi8(_mm256_slli_epi16(bytes, 3));
+	req += (uint64_t)set << 3;
+
+	// Check that continuation bytes match. We must cast req from uint64_t
+	// (which holds the carry mask in the upper half) to uint32_t, which
+	// zeroes out the upper bits
+	if (cont != (uint32_t)req) {
+		return 0;
+	}
+
+	// Look up error masks for three consecutive nibbles.
+	const __m256i nibbles = _mm256_set1_epi8(0x0F);
+	__m256i e_1 = _mm256_shuffle_epi8(error_1, _mm256_and_si256(_mm256_srli_epi16(shifted_bytes, 4), nibbles));
+	__m256i e_2 = _mm256_shuffle_epi8(error_2, _mm256_and_si256(shifted_bytes, nibbles));
+	__m256i e_3 = _mm256_shuffle_epi8(error_3, _mm256_and_si256(_mm256_srli_epi16(bytes, 4), nibbles));
+
+	// Check if any bits are set in all three error masks
+	if (!_mm256_testz_si256(_mm256_and_si256(e_1, e_2), e_3)) {
+		return 0;
+	}
+
+	// Save continuation bits and input bytes for the next round
+	*last_cont = req >> sizeof(__m256i);
+	return 1;
+}
+
+static inline int z_validate_utf8_avx2(const char *data, uint32_t len) {
+	// Keep continuation bits from the previous iteration that carry over to
+	// each input chunk vector
+	uint32_t last_cont = 0;
+
+	uint32_t offset = 0;
+	// Deal with the input up until the last section of bytes
+	if (len >= sizeof(__m256i)) {
+		// We need a vector of the input byte stream shifted forward one byte.
+		// Since we don't want to read the memory before the data pointer
+		// (which might not even be mapped), for the first chunk of input just
+		// use vector instructions.
+		__m256i shifted_bytes = _mm256_loadu_si256((__m256i *)data);
+		__m256i shl_16 = _mm256_permute2x128_si256(shifted_bytes, _mm256_set1_epi8(0), 0x03);
+		shifted_bytes = _mm256_alignr_epi8(shifted_bytes, shl_16, 15);
+
+		// Loop over input in sizeof(__m256i)-byte chunks, as long as we can safely read
+		// that far into memory
+		for (; offset + sizeof(__m256i) < len; offset += sizeof(__m256i)) {
+			__m256i bytes = _mm256_loadu_si256((__m256i *)(data + offset));
+			if (!z_validate_vec_avx2(bytes, shifted_bytes, &last_cont)) {
+				return 0;
+			}
+			shifted_bytes = _mm256_loadu_si256((__m256i *)(data + offset + sizeof(__m256i) - 1));
+		}
+	}
+
+	// Deal with any bytes remaining. Rather than making a separate scalar path,
+	// just fill in a buffer, reading bytes only up to len, and load from that.
+	if (offset < len) {
+		NP2_alignas(32) char buffer[2*sizeof(__m256i)];
+		ZeroMemory_32x2(buffer);
+
+		if (offset > 0) {
+			buffer[0] = data[offset - 1];
+		}
+		for (uint32_t i = 0; i < len - offset; i++) {
+			buffer[i + 1] = data[offset + i];
+		}
+
+		__m256i shifted_bytes = _mm256_load_si256((__m256i *)buffer);
+		__m256i bytes = _mm256_loadu_si256((__m256i *)(buffer + 1));
+		if (!z_validate_vec_avx2(bytes, shifted_bytes, &last_cont)) {
+			return 0;
+		}
+	}
+
+	// The input is valid if we don't have any more expected continuation bytes
+	return last_cont == 0;
+}
+
+// end NP2_USE_AVX2
+#elif NP2_USE_SSE2
+#if defined(__clang__)
+#include <tmmintrin.h>
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((__target__("ssse3"), __always_inline__)) static inline
+#else
+static __forceinline
+#endif
+int z_validate_vec_sse4(__m128i bytes, __m128i shifted_bytes, uint32_t *last_cont) {
+	// Error lookup tables for the first, second, and third nibbles
+	const __m128i error_1 = _mm_setr_epi8(
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x06, 0x38
+	);
+	const __m128i error_2 = _mm_setr_epi8(
+		0x0B, 0x01, 0x00, 0x00,
+		0x10, 0x20, 0x20, 0x20,
+		0x20, 0x20, 0x20, 0x20,
+		0x20, 0x24, 0x20, 0x20
+	);
+	const __m128i error_3 = _mm_setr_epi8(
+		0x29, 0x29, 0x29, 0x29,
+		0x29, 0x29, 0x29, 0x29,
+		0x2B, 0x33, 0x35, 0x35,
+		0x31, 0x31, 0x31, 0x31
+	);
+
+	// Quick skip for ascii-only input. If there are no bytes with the high bit
+	// set, we don't need to do any more work. We return either valid or
+	// invalid based on whether we expected any continuation bytes here.
+	const uint32_t high = _mm_movemask_epi8(bytes);
+	if (!high) {
+		return *last_cont == 0;
+	}
+
+	// Which bytes are required to be continuation bytes
+	uint32_t req = *last_cont;
+
+	// Compute the continuation byte mask by finding bytes that start with
+	// 11x, 111x, and 1111. For each of these prefixes, we get a bitmask
+	// and shift it forward by 1, 2, or 3. This loop should be unrolled by
+	// the compiler, and the (n == 1) branch inside eliminated.
+	uint32_t set = high;
+	set &= _mm_movemask_epi8(_mm_slli_epi16(bytes, 1));
+	// A bitmask of the actual continuation bytes in the input
+	// Mark continuation bytes: those that have the high bit set but
+	// not the next one
+	const uint32_t cont = high ^ set;
+	// We add the shifted mask here instead of ORing it, which would
+	// be the more natural operation, so that this line can be done
+	// with one lea. While adding could give a different result due
+	// to carries, this will only happen for invalid UTF-8 sequences,
+	// and in a way that won't cause it to pass validation. Reasoning:
+	// Any bits for required continuation bytes come after the bits
+	// for their leader bytes, and are all contiguous. For a carry to
+	// happen, two of these bit sequences would have to overlap. If
+	// this is the case, there is a leader byte before the second set
+	// of required continuation bytes (and thus before the bit that
+	// will be cleared by a carry). This leader byte will not be
+	// in the continuation mask, despite being required. QEDish.
+	req += set << 1;
+	set &= _mm_movemask_epi8(_mm_slli_epi16(bytes, 2));
+	req += set << 2;
+	set &= _mm_movemask_epi8(_mm_slli_epi16(bytes, 3));
+	req += set << 3;
+
+	// Check that continuation bytes match. We must cast req from uint32_t
+	// (which holds the carry mask in the upper half) to uint16_t, which
+	// zeroes out the upper bits
+	if (cont != (uint16_t)req) {
+		return 0;
+	}
+
+	// Look up error masks for three consecutive nibbles.
+	const __m128i nibbles = _mm_set1_epi8(0x0F);
+	__m128i e_1 = _mm_shuffle_epi8(error_1, _mm_and_si128(_mm_srli_epi16(shifted_bytes, 4), nibbles));
+	__m128i e_2 = _mm_shuffle_epi8(error_2, _mm_and_si128(shifted_bytes, nibbles));
+	__m128i e_3 = _mm_shuffle_epi8(error_3, _mm_and_si128(_mm_srli_epi16(bytes, 4), nibbles));
+
+	// Check if any bits are set in all three error masks
+#if defined(__SSE4_1__)
+	if (!_mm_testz_si128(_mm_and_si128(e_1, e_2), e_3)) {
+		return 0;
+	}
+#else
+	e_3 = _mm_and_si128(_mm_and_si128(e_1, e_2), e_3);
+#if 0
+	NP2_alignas(16) uint64_t dummy[2];
+	_mm_store_si128((__m128i *)dummy, e_3);
+	dummy[0] |= dummy[1];
+	if (dummy[0]) {
+		return 0;
+	}
+#else
+	const int mask = _mm_movemask_epi8(_mm_cmpeq_epi8(e_3, _mm_setzero_si128()));
+	if (mask != 0xFFFF) {
+		return 0;
+	}
+#endif
+#endif
+
+	// Save continuation bits and input bytes for the next round
+	*last_cont = req >> sizeof(__m128i);
+	return 1;
+}
+
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((__target__("ssse3")))
+#endif
+static inline int z_validate_utf8_sse4(const char *data, uint32_t len) {
+	// Keep continuation bits from the previous iteration that carry over to
+	// each input chunk vector
+	uint32_t last_cont = 0;
+
+	uint32_t offset = 0;
+	// Deal with the input up until the last section of bytes
+	if (len >= sizeof(__m128i)) {
+		// We need a vector of the input byte stream shifted forward one byte.
+		// Since we don't want to read the memory before the data pointer
+		// (which might not even be mapped), for the first chunk of input just
+		// use vector instructions.
+		__m128i shifted_bytes = _mm_loadu_si128((__m128i *)data);
+		shifted_bytes = _mm_alignr_epi8(shifted_bytes, _mm_setzero_si128(), 15);
+
+		// Loop over input in sizeof(__m128i)-byte chunks, as long as we can safely read
+		// that far into memory
+		for (; offset + sizeof(__m128i) < len; offset += sizeof(__m128i)) {
+			__m128i bytes = _mm_loadu_si128((__m128i *)(data + offset));
+			if (!z_validate_vec_sse4(bytes, shifted_bytes, &last_cont)) {
+				return 0;
+			}
+			shifted_bytes = _mm_loadu_si128((__m128i *)(data + offset + sizeof(__m128i) - 1));
+		}
+	}
+
+	// Deal with any bytes remaining. Rather than making a separate scalar path,
+	// just fill in a buffer, reading bytes only up to len, and load from that.
+	if (offset < len) {
+		NP2_alignas(16) char buffer[2*sizeof(__m128i)];
+		ZeroMemory_16x2(buffer);
+
+		if (offset > 0) {
+			buffer[0] = data[offset - 1];
+		}
+		for (uint32_t i = 0; i < len - offset; i++) {
+			buffer[i + 1] = data[offset + i];
+		}
+
+		__m128i shifted_bytes = _mm_load_si128((__m128i *)(buffer));
+		__m128i bytes = _mm_loadu_si128((__m128i *)(buffer + 1));
+		if (!z_validate_vec_sse4(bytes, shifted_bytes, &last_cont)) {
+			return 0;
+		}
+	}
+
+	// The input is valid if we don't have any more expected continuation bytes
+	return last_cont == 0;
+}
+
+static inline int did_cpu_supports_ssse3(void) {
+#if 0//defined(__GNUC__)
+	return __builtin_cpu_supports("ssse3");
+#else
+	int info[4] = {0};
+	__cpuid(info, 0x00000001);
+	return info[2] & 0x0000200;
+#endif
+}
+// end NP2_USE_SSE2
+#endif
+
 // Copyright (c) 2008-2010 Bjoern Hoehrmann <bjoern@hoehrmann.de>
 // See https://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details.
 
 BOOL IsUTF8(const char *pTest, DWORD nLength) {
-	enum {
-		UTF8_ACCEPT = 0,
-		UTF8_REJECT = 12,
-	};
-
 #if 0
 	StopWatch watch;
 	StopWatch_Start(watch);
 #endif
+
+#if NP2_USE_AVX2
+	const BOOL result = z_validate_utf8_avx2(pTest, nLength);
+#if 0
+	StopWatch_Stop(watch);
+	StopWatch_ShowLog(&watch, "UTF8 time");
+#endif
+	return result;
+	// end NP2_USE_AVX2
+#else
+
+#if NP2_USE_SSE2
+	if (did_cpu_supports_ssse3()) {
+		const BOOL result = z_validate_utf8_sse4(pTest, nLength);
+#if 0
+		StopWatch_Stop(watch);
+		StopWatch_ShowLog(&watch, "UTF8 time");
+#endif
+		return result;
+	}
+#endif // NP2_USE_SSE2
+
+	enum {
+		UTF8_ACCEPT = 0,
+		UTF8_REJECT = 12,
+	};
 
 	static const uint8_t utf8_dfa[] = {
 		// The first part of the table maps bytes to character classes that
@@ -1135,128 +1590,135 @@ BOOL IsUTF8(const char *pTest, DWORD nLength) {
 
 	const uint8_t *pt = (const uint8_t *)pTest;
 	const uint8_t * const end = pt + nLength;
-
 	UINT state = UTF8_ACCEPT;
 
-	{
-		const uint8_t * const ptr = (const uint8_t *)align_ptr_ex(pt, NP2_ALIGNED_LOAD_ALIGNMENT);
-		while (pt < ptr) {
-			state = utf8_dfa[256 + state + utf8_dfa[*pt++]];
-		}
-		if (state == UTF8_REJECT) {
+#if 0 // NP2_USE_AVX2
+	while (pt + sizeof(__m256i) <= end) {
+		const __m256i chunk = _mm256_loadu_si256((__m256i *)pt);
+		const uint32_t mask = _mm256_movemask_epi8(chunk);
+		if (mask) {
+			// skip leading and trailing ASCII
+			const DWORD trailing = (state != UTF8_ACCEPT)? 0 : np2_ctz(mask);
+			DWORD leading;
+			_BitScanReverse(&leading, mask);
+
+			const uint8_t *temp = pt + trailing;
+			const uint8_t * const endPtr = pt + leading + 1;
+			do {
+				state = utf8_dfa[256 + state + utf8_dfa[*temp++]];
+			} while (temp < endPtr);
+			if (state == UTF8_REJECT || (leading != 31 && state != UTF8_ACCEPT)) {
+				return FALSE;
+			}
+		} else if (state != UTF8_ACCEPT) {
 			return FALSE;
 		}
+		pt += sizeof(__m256i);
 	}
-
-	{
-#if NP2_USE_AVX2
-		while (pt + sizeof(__m256i) <= end) {
-			const __m256i chunk = _mm256_load_si256((__m256i *)pt);
-			const uint32_t mask = _mm256_movemask_epi8(chunk);
-			if (mask) {
-				// skip leading and trailing ASCII
-				const DWORD trailing = np2_ctz(mask);
-				DWORD leading;
-				_BitScanReverse(&leading, mask);
-
-				const uint8_t *temp = pt + trailing;
-				const uint8_t * const endPtr = pt + leading + 1;
-				do {
-					state = utf8_dfa[256 + state + utf8_dfa[*temp++]];
-				} while (temp < endPtr);
-				if (state == UTF8_REJECT) {
-					return FALSE;
-				}
-			}
-			pt += sizeof(__m256i);
-		}
-		// end NP2_USE_AVX2
+	// end NP2_USE_AVX2
 #elif NP2_USE_SSE2
-		while (pt + sizeof(__m128i) <= end) {
-			const __m128i chunk = _mm_load_si128((__m128i *)pt);
-			const uint32_t mask = _mm_movemask_epi8(chunk);
-			if (mask) {
-				// skip leading and trailing ASCII
-				const DWORD trailing = np2_ctz(mask);
-				DWORD leading;
-				_BitScanReverse(&leading, mask);
+	while (pt + 2*sizeof(__m128i) <= end) {
+		const __m128i chunk1 = _mm_loadu_si128((__m128i *)pt);
+		const __m128i chunk2 = _mm_loadu_si128((__m128i *)(pt + sizeof(__m128i)));
+		const uint32_t mask = _mm_movemask_epi8(chunk1)
+			| (((uint32_t)_mm_movemask_epi8(chunk2)) << sizeof(__m128i));
+		if (mask) {
+			// skip leading and trailing ASCII
+			const DWORD trailing = (state != UTF8_ACCEPT)? 0 : np2_ctz(mask);
+			DWORD leading;
+			_BitScanReverse(&leading, mask);
 
-				const uint8_t *temp = pt + trailing;
-				const uint8_t * const endPtr = pt + leading + 1;
-				do {
-					state = utf8_dfa[256 + state + utf8_dfa[*temp++]];
-				} while (temp < endPtr);
-				if (state == UTF8_REJECT) {
-					return FALSE;
-				}
+			const uint8_t *temp = pt + trailing;
+			const uint8_t * const endPtr = pt + leading + 1;
+			do {
+				state = utf8_dfa[256 + state + utf8_dfa[*temp++]];
+			} while (temp < endPtr);
+			if (state == UTF8_REJECT || (leading != 31 && state != UTF8_ACCEPT)) {
+				return FALSE;
 			}
-			pt += sizeof(__m128i);
+		} else if (state != UTF8_ACCEPT) {
+			return FALSE;
 		}
-		// end NP2_USE_SSE2
-#elif defined(_WIN64)
-		const uint64_t *temp = (const uint64_t *)pt;
-		const uint64_t * const temp_end = (const uint64_t *)end;
-		while (temp < temp_end) {
-			const uint64_t val = *temp;
-			if (val & UINT64_C(0x8080808080808080)) {
-#if 0
-				pt = (const uint8_t *)temp;
-				state = utf8_dfa[256 + state + utf8_dfa[pt[0]]];
-				state = utf8_dfa[256 + state + utf8_dfa[pt[1]]];
-				state = utf8_dfa[256 + state + utf8_dfa[pt[2]]];
-				state = utf8_dfa[256 + state + utf8_dfa[pt[3]]];
-				state = utf8_dfa[256 + state + utf8_dfa[pt[4]]];
-				state = utf8_dfa[256 + state + utf8_dfa[pt[5]]];
-				state = utf8_dfa[256 + state + utf8_dfa[pt[6]]];
-				state = utf8_dfa[256 + state + utf8_dfa[pt[7]]];
-#else
-				// same as above
-				state = utf8_dfa[256 + state + utf8_dfa[val & 255]];
-				state = utf8_dfa[256 + state + utf8_dfa[(val >> 8) & 255]];
-				state = utf8_dfa[256 + state + utf8_dfa[(val >> 16) & 255]];
-				state = utf8_dfa[256 + state + utf8_dfa[(val >> 24) & 255]];
-				state = utf8_dfa[256 + state + utf8_dfa[(val >> 32) & 255]];
-				state = utf8_dfa[256 + state + utf8_dfa[(val >> 40) & 255]];
-				state = utf8_dfa[256 + state + utf8_dfa[(val >> 48) & 255]];
-				state = utf8_dfa[256 + state + utf8_dfa[val >> 56]];
-#endif
-				if (state == UTF8_REJECT) {
-					return FALSE;
-				}
-			}
-			++temp;
-		}
-		pt = (const uint8_t *)temp;
-		// end _WIN64
-#else
-		const uint32_t *temp = (const uint32_t *)pt;
-		const uint32_t * const temp_end = (const uint32_t *)end;
-		while (temp < temp_end) {
-			const uint32_t val = *temp;
-			if (val & 0x80808080U) {
-#if 0
-				pt = (const uint8_t *)temp;
-				state = utf8_dfa[256 + state + utf8_dfa[pt[0]]];
-				state = utf8_dfa[256 + state + utf8_dfa[pt[1]]];
-				state = utf8_dfa[256 + state + utf8_dfa[pt[2]]];
-				state = utf8_dfa[256 + state + utf8_dfa[pt[3]]];
-#else
-				// same as above
-				state = utf8_dfa[256 + state + utf8_dfa[val & 255]];
-				state = utf8_dfa[256 + state + utf8_dfa[(val >> 8) & 255]];
-				state = utf8_dfa[256 + state + utf8_dfa[(val >> 16) & 255]];
-				state = utf8_dfa[256 + state + utf8_dfa[val >> 24]];
-#endif
-				if (state == UTF8_REJECT) {
-					return FALSE;
-				}
-			}
-			++temp;
-		}
-		pt = (const uint8_t *)temp;
-		// end _WIN32
-#endif
+		pt += 2*sizeof(__m128i);
 	}
+	// end NP2_USE_SSE2
+#elif defined(_WIN64)
+	const uint8_t * const ptr = (const uint8_t *)align_ptr_ex(pt, sizeof(uint64_t));
+	while (pt < ptr) {
+		state = utf8_dfa[256 + state + utf8_dfa[*pt++]];
+	}
+
+	const uint64_t *temp = (const uint64_t *)pt;
+	const uint64_t * const temp_end = (const uint64_t *)end;
+	while (temp < temp_end) {
+		const uint64_t val = *temp;
+		if (val & UINT64_C(0x8080808080808080)) {
+#if 0
+			pt = (const uint8_t *)temp;
+			state = utf8_dfa[256 + state + utf8_dfa[pt[0]]];
+			state = utf8_dfa[256 + state + utf8_dfa[pt[1]]];
+			state = utf8_dfa[256 + state + utf8_dfa[pt[2]]];
+			state = utf8_dfa[256 + state + utf8_dfa[pt[3]]];
+			state = utf8_dfa[256 + state + utf8_dfa[pt[4]]];
+			state = utf8_dfa[256 + state + utf8_dfa[pt[5]]];
+			state = utf8_dfa[256 + state + utf8_dfa[pt[6]]];
+			state = utf8_dfa[256 + state + utf8_dfa[pt[7]]];
+#else
+			// same as above
+			state = utf8_dfa[256 + state + utf8_dfa[val & 255]];
+			state = utf8_dfa[256 + state + utf8_dfa[(val >> 8) & 255]];
+			state = utf8_dfa[256 + state + utf8_dfa[(val >> 16) & 255]];
+			state = utf8_dfa[256 + state + utf8_dfa[(val >> 24) & 255]];
+			state = utf8_dfa[256 + state + utf8_dfa[(val >> 32) & 255]];
+			state = utf8_dfa[256 + state + utf8_dfa[(val >> 40) & 255]];
+			state = utf8_dfa[256 + state + utf8_dfa[(val >> 48) & 255]];
+			state = utf8_dfa[256 + state + utf8_dfa[val >> 56]];
+#endif
+			if (state == UTF8_REJECT) {
+				return FALSE;
+			}
+		} else if (state != UTF8_ACCEPT) {
+			return FALSE;
+		}
+		++temp;
+	}
+	pt = (const uint8_t *)temp;
+	// end _WIN64
+#else
+	const uint8_t * const ptr = (const uint8_t *)align_ptr_ex(pt, sizeof(uint32_t));
+	while (pt < ptr) {
+		state = utf8_dfa[256 + state + utf8_dfa[*pt++]];
+	}
+
+	const uint32_t *temp = (const uint32_t *)pt;
+	const uint32_t * const temp_end = (const uint32_t *)end;
+	while (temp < temp_end) {
+		const uint32_t val = *temp;
+		if (val & 0x80808080U) {
+#if 0
+			pt = (const uint8_t *)temp;
+			state = utf8_dfa[256 + state + utf8_dfa[pt[0]]];
+			state = utf8_dfa[256 + state + utf8_dfa[pt[1]]];
+			state = utf8_dfa[256 + state + utf8_dfa[pt[2]]];
+			state = utf8_dfa[256 + state + utf8_dfa[pt[3]]];
+#else
+			// same as above
+			state = utf8_dfa[256 + state + utf8_dfa[val & 255]];
+			state = utf8_dfa[256 + state + utf8_dfa[(val >> 8) & 255]];
+			state = utf8_dfa[256 + state + utf8_dfa[(val >> 16) & 255]];
+			state = utf8_dfa[256 + state + utf8_dfa[val >> 24]];
+#endif
+			if (state == UTF8_REJECT) {
+				return FALSE;
+			}
+		} else if (state != UTF8_ACCEPT) {
+			return FALSE;
+		}
+		++temp;
+	}
+	pt = (const uint8_t *)temp;
+	// end _WIN32
+#endif
 
 	while (pt < end) {
 		state = utf8_dfa[256 + state + utf8_dfa[*pt++]];
@@ -1268,72 +1730,109 @@ BOOL IsUTF8(const char *pTest, DWORD nLength) {
 #endif
 
 	return state == UTF8_ACCEPT;
+#endif // !NP2_USE_AVX2
 }
 
 BOOL IsUTF7(const char *pTest, DWORD nLength) {
 	const uint8_t *pt = (const uint8_t *)pTest;
 	const uint8_t * const end = pt + nLength;
 
-	{
-		const uint8_t * const ptr = (const uint8_t *)align_ptr_ex(pt, NP2_ALIGNED_LOAD_ALIGNMENT);
-		while (pt < ptr && (*pt & 0x80) == 0) {
-			++pt;
-		}
-		if (pt != ptr) {
+#if NP2_USE_AVX2
+	while (pt + 2*sizeof(__m256i) <= end) {
+		const __m256i chunk1 = _mm256_loadu_si256((__m256i *)pt);
+		const __m256i chunk2 = _mm256_loadu_si256((__m256i *)(pt + sizeof(__m256i)));
+		const uint32_t mask = _mm256_movemask_epi8(_mm256_or_si256(chunk1, chunk2));
+		if (mask) {
 			return FALSE;
 		}
+		pt += 2*sizeof(__m256i);
+	}
+	if (pt < end) {
+		NP2_alignas(32) char buffer[2*sizeof(__m256i)];
+		ZeroMemory_32x2(buffer);
+		memcpy(buffer, pt, end - pt + 1);
+
+		const __m256i chunk1 = _mm256_load_si256((__m256i *)buffer);
+		const __m256i chunk2 = _mm256_load_si256((__m256i *)(buffer + sizeof(__m256i)));
+		const uint32_t mask = _mm256_movemask_epi8(_mm256_or_si256(chunk1, chunk2));
+		return mask == 0;
+	}
+	return TRUE;
+	// end NP2_USE_AVX2
+#elif NP2_USE_SSE2
+	while (pt + 4*sizeof(__m128i) <= end) {
+		const __m128i chunk1 = _mm_loadu_si128((__m128i *)pt);
+		const __m128i chunk2 = _mm_loadu_si128((__m128i *)(pt + sizeof(__m128i)));
+		const __m128i chunk3 = _mm_loadu_si128((__m128i *)(pt + 2*sizeof(__m128i)));
+		const __m128i chunk4 = _mm_loadu_si128((__m128i *)(pt + 3*sizeof(__m128i)));
+		const uint32_t mask = _mm_movemask_epi8(_mm_or_si128(_mm_or_si128(_mm_or_si128(chunk1, chunk2), chunk3), chunk4));
+		if (mask) {
+			return FALSE;
+		}
+		pt += 4*sizeof(__m128i);
+	}
+	if (pt < end) {
+		NP2_alignas(16) char buffer[4*sizeof(__m128i)];
+		ZeroMemory_16x4(buffer);
+		memcpy(buffer, pt, end - pt + 1);
+
+		const __m128i chunk1 = _mm_load_si128((__m128i *)buffer);
+		const __m128i chunk2 = _mm_load_si128((__m128i *)(buffer + sizeof(__m128i)));
+		const __m128i chunk3 = _mm_load_si128((__m128i *)(buffer + 2*sizeof(__m128i)));
+		const __m128i chunk4 = _mm_load_si128((__m128i *)(buffer + 3*sizeof(__m128i)));
+		const uint32_t mask = _mm_movemask_epi8(_mm_or_si128(_mm_or_si128(_mm_or_si128(chunk1, chunk2), chunk3), chunk4));
+		return mask == 0;
+	}
+	return TRUE;
+	// end NP2_USE_SSE2
+#else
+
+#if defined(_WIN64)
+	const uint8_t * const ptr = (const uint8_t *)align_ptr_ex(pt, sizeof(uint64_t));
+	while (pt < ptr && (*pt & 0x80) == 0) {
+		++pt;
+	}
+	if (pt != ptr) {
+		return FALSE;
 	}
 
-	{
-#if NP2_USE_AVX2
-		while (pt + sizeof(__m256i) <= end) {
-			const __m256i chunk = _mm256_load_si256((__m256i *)pt);
-			const uint32_t mask = _mm256_movemask_epi8(chunk);
-			if (mask) {
-				return FALSE;
-			}
-			pt += sizeof(__m256i);
+	const uint64_t *temp = (const uint64_t *)pt;
+	const uint64_t * const temp_end = (const uint64_t *)end;
+	while (temp < temp_end) {
+		if (*temp & UINT64_C(0x8080808080808080)) {
+			return FALSE;
 		}
-		// end NP2_USE_AVX2
-#elif NP2_USE_SSE2
-		while (pt + sizeof(__m128i) <= end) {
-			const __m128i chunk = _mm_load_si128((__m128i *)pt);
-			if (_mm_movemask_epi8(chunk)) {
-				return FALSE;
-			}
-			pt += sizeof(__m128i);
-		}
-		// end NP2_USE_SSE2
-#elif defined(_WIN64)
-		const uint64_t *temp = (const uint64_t *)pt;
-		const uint64_t * const temp_end = (const uint64_t *)end;
-		while (temp < temp_end) {
-			if (*temp & UINT64_C(0x8080808080808080)) {
-				return FALSE;
-			}
-			++temp;
-		}
-		pt = (const uint8_t *)temp;
-		// end _WIN64
-#else
-		const uint32_t *temp = (const uint32_t *)pt;
-		const uint32_t * const temp_end = (const uint32_t *)end;
-		while (temp < temp_end) {
-			if (*temp & 0x80808080U) {
-				return FALSE;
-			}
-			++temp;
-		}
-		pt = (const uint8_t *)temp;
-		// end _WIN32
-#endif
+		++temp;
 	}
+	pt = (const uint8_t *)temp;
+	// end _WIN64
+#else
+	const uint8_t * const ptr = (const uint8_t *)align_ptr_ex(pt, sizeof(uint32_t));
+	while (pt < ptr && (*pt & 0x80) == 0) {
+		++pt;
+	}
+	if (pt != ptr) {
+		return FALSE;
+	}
+
+	const uint32_t *temp = (const uint32_t *)pt;
+	const uint32_t * const temp_end = (const uint32_t *)end;
+	while (temp < temp_end) {
+		if (*temp & 0x80808080U) {
+			return FALSE;
+		}
+		++temp;
+	}
+	pt = (const uint8_t *)temp;
+	// end _WIN32
+#endif
 
 	while (pt < end && (*pt & 0x80) == 0) {
 		++pt;
 	}
 
 	return pt == end;
+#endif
 }
 
 #if 0

@@ -795,7 +795,7 @@ void ScintillaWin::EnsureRenderTarget(HDC hdc) noexcept {
 	if ((technology == SC_TECHNOLOGY_DIRECTWRITEDC) && pRenderTarget) {
 		RECT rcWindow;
 		GetClientRect(MainHWND(), &rcWindow);
-		const HRESULT hr = down_cast<ID2D1DCRenderTarget*>(pRenderTarget)->BindDC(hdc, &rcWindow);
+		const HRESULT hr = static_cast<ID2D1DCRenderTarget*>(pRenderTarget)->BindDC(hdc, &rcWindow);
 		if (FAILED(hr)) {
 			//Platform::DebugPrintf("BindDC failed 0x%lx\n", hr);
 			DropRenderTarget();
@@ -817,7 +817,7 @@ void ScintillaWin::DisplayCursor(Window::Cursor c) noexcept {
 	if (cursorMode != SC_CURSORNORMAL) {
 		c = static_cast<Window::Cursor>(cursorMode);
 	}
-	if (c == Window::cursorReverseArrow) {
+	if (c == Window::Cursor::reverseArrow) {
 		::SetCursor(reverseArrowCursor.Load(dpi));
 	} else {
 		wMain.SetCursor(c);
@@ -957,11 +957,11 @@ std::wstring StringDecode(const std::string_view sv, int codePage) {
 }
 
 std::wstring StringMapCase(const std::wstring_view wsv, DWORD mapFlags) {
-	const int charsConverted = ::LCMapStringW(LOCALE_SYSTEM_DEFAULT, mapFlags,
+	const int charsConverted = ::LCMapStringW(LOCALE_USER_DEFAULT, mapFlags,
 		wsv.data(), static_cast<int>(wsv.length()), nullptr, 0);
 	std::wstring wsConverted(charsConverted, 0);
 	if (charsConverted) {
-		::LCMapStringW(LOCALE_SYSTEM_DEFAULT, mapFlags,
+		::LCMapStringW(LOCALE_USER_DEFAULT, mapFlags,
 			wsv.data(), static_cast<int>(wsv.length()), wsConverted.data(), charsConverted);
 	}
 	return wsConverted;
@@ -1549,7 +1549,7 @@ sptr_t ScintillaWin::GetText(uptr_t wParam, sptr_t lParam) const {
 
 Window::Cursor ScintillaWin::ContextCursor() {
 	if (inDragDrop == ddDragging) {
-		return Window::cursorUp;
+		return Window::Cursor::up;
 	} else {
 		// Display regular (drag) cursor over selection
 		POINT pt;
@@ -1558,13 +1558,13 @@ Window::Cursor ScintillaWin::ContextCursor() {
 			if (PointInSelMargin(PointFromPOINT(pt))) {
 				return GetMarginCursor(PointFromPOINT(pt));
 			} else if (PointInSelection(PointFromPOINT(pt)) && !SelectionEmpty()) {
-				return Window::cursorArrow;
+				return Window::Cursor::arrow;
 			} else if (PointIsHotspot(PointFromPOINT(pt))) {
-				return Window::cursorHand;
+				return Window::Cursor::hand;
 			}
 		}
 	}
-	return Window::cursorText;
+	return Window::Cursor::text;
 }
 
 #if SCI_EnablePopupMenu
@@ -1748,7 +1748,7 @@ sptr_t ScintillaWin::KeyMessage(unsigned int iMessage, uptr_t wParam, sptr_t lPa
 		return ::DefWindowProc(MainHWND(), iMessage, wParam, lParam);
 
 	case WM_CHAR:
-		if (((wParam >= 128) || !iscntrl(static_cast<int>(wParam))) || !lastKeyDownConsumed) {
+		if (!lastKeyDownConsumed) {
 			wchar_t wcs[3] = { static_cast<wchar_t>(wParam), 0 };
 			unsigned int wclen = 1;
 			if (IS_HIGH_SURROGATE(wcs[0])) {

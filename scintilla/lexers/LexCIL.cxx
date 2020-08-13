@@ -4,7 +4,6 @@
 
 #include <cassert>
 #include <cstring>
-#include <cctype>
 
 #include "ILexer.h"
 #include "Scintilla.h"
@@ -174,12 +173,12 @@ static void FoldCILDoc(Sci_PositionU startPos, Sci_Position length, int initStyl
 		levelCurrent = styler.LevelAt(lineCurrent - 1) >> 16;
 	int levelNext = levelCurrent;
 
-	int chNext = styler[startPos];
+	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
 	int style = initStyle;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
-		const int ch = chNext;
+		const char ch = chNext;
 		chNext = styler.SafeGetCharAt(i + 1);
 		const int stylePrev = style;
 		style = styleNext;

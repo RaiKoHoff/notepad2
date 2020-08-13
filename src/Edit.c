@@ -164,8 +164,8 @@ void EditSetNewText(LPCSTR lpstrText, DWORD cbText, Sci_Line lineCount) {
 		StopWatch watch;
 		StopWatch_Start(watch);
 #endif
-		SciCall_SetInitLineCount(lineCount);
-		SciCall_AddText(cbText, lpstrText);
+		SciCall_AllocateLines(lineCount);
+		SciCall_AppendText(cbText, lpstrText);
 #if 0
 		StopWatch_Stop(watch);
 		StopWatch_ShowLog(&watch, "AddText time");
@@ -176,8 +176,6 @@ void EditSetNewText(LPCSTR lpstrText, DWORD cbText, Sci_Line lineCount) {
 	SciCall_SetUndoCollection(TRUE);
 	SciCall_EmptyUndoBuffer();
 	SciCall_SetSavePoint();
-	SciCall_GotoPos(0);
-	SciCall_ChooseCaretX();
 
 	bFreezeAppTitle = FALSE;
 }
@@ -219,7 +217,9 @@ BOOL EditConvertText(UINT cpSource, UINT cpDest, BOOL bSetSavePoint) {
 	SciCall_SetCodePage(cpDest);
 
 	if (cbText > 0) {
-		SciCall_AddText(cbText, pchText);
+		SciCall_SetModEventMask(SC_MOD_NONE);
+		SciCall_AppendText(cbText, pchText);
+		SciCall_SetModEventMask(SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT);
 	}
 	if (pchText != NULL) {
 		NP2HeapFree(pchText);
@@ -227,8 +227,6 @@ BOOL EditConvertText(UINT cpSource, UINT cpDest, BOOL bSetSavePoint) {
 
 	SciCall_EmptyUndoBuffer();
 	SciCall_SetUndoCollection(TRUE);
-	SciCall_GotoPos(0);
-	SciCall_ChooseCaretX();
 	if (length == 0 && bSetSavePoint) {
 		SciCall_SetSavePoint();
 	}
@@ -262,7 +260,7 @@ void EditConvertToLargeMode(void) {
 	EditReplaceDocument(pdoc);
 	if (length > 0) {
 		SciCall_SetModEventMask(SC_MOD_NONE);
-		SciCall_AddText(length, pchText);
+		SciCall_AppendText(length, pchText);
 		SciCall_SetModEventMask(SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT);
 	}
 	if (pchText != NULL) {
@@ -271,8 +269,6 @@ void EditConvertToLargeMode(void) {
 
 	SciCall_SetUndoCollection(TRUE);
 	SciCall_EmptyUndoBuffer();
-	SciCall_GotoPos(0);
-	SciCall_ChooseCaretX();
 	SciCall_SetSavePoint();
 
 	Style_SetLexer(pLexCurrent, TRUE);
@@ -461,34 +457,32 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	/* '\r' and '\n' is not reused (e.g. as trailing byte in DBCS) by any known encoding,
 	it's safe to check whole data byte by byte.*/
 
-	Sci_Line lineCountCRLF = 0;
-	Sci_Line lineCountCR = 0;
-	Sci_Line lineCountLF = 0;
+	size_t lineCountCRLF = 0;
+	size_t lineCountCR = 0;
+	size_t lineCountLF = 0;
 #if 0
 	StopWatch watch;
 	StopWatch_Start(watch);
 #endif
-
-	// tools/GenerateTable.py
-	static const uint8_t eolTable[16] = {
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 0, // 00 - 0F
-	};
 
 	const uint8_t *ptr = (const uint8_t *)lpData;
 	// No NULL-terminated requirement for *ptr == '\n'
 	const uint8_t * const end = ptr + cbData - 1;
 
 #if NP2_USE_AVX2
-	const uint32_t LAST_CR_MASK = (1U << (sizeof(__m256i) - 1));
+	const uint64_t LAST_CR_MASK = (UINT64_C(1) << (2*sizeof(__m256i) - 1));
 	const __m256i vectCR = _mm256_set1_epi8('\r');
 	const __m256i vectLF = _mm256_set1_epi8('\n');
-	while (ptr + sizeof(__m256i) <= end) {
+	while (ptr + 2*sizeof(__m256i) <= end) {
 		// unaligned loading: line starts at random position.
-		const __m256i chunk = _mm256_loadu_si256((__m256i *)ptr);
-		uint32_t maskCR = _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, vectCR));
-		uint32_t maskLF = _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, vectLF));
+		const __m256i chunk1 = _mm256_loadu_si256((__m256i *)ptr);
+		const __m256i chunk2 = _mm256_loadu_si256((__m256i *)(ptr + sizeof(__m256i)));
+		uint64_t maskCR = (uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk1, vectCR));
+		uint64_t maskLF = (uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk1, vectLF));
+		maskCR |= ((uint64_t)(uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m256i);
+		maskLF |= ((uint64_t)(uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m256i);
 
-		ptr += sizeof(__m256i);
+		ptr += 2*sizeof(__m256i);
 		if (maskCR) {
 			if (maskCR & LAST_CR_MASK) {
 				maskCR &= LAST_CR_MASK - 1;
@@ -506,34 +500,170 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 			// maskCR and maskLF never have some bit set. after shifting maskCR by 1 bit,
 			// the bits both set in maskCR and maskLF represents CR+LF;
 			// the bits only set in maskCR or maskLF represents individual CR or LF.
-			const uint32_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
-			const uint32_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
+			const uint64_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
+			const uint64_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
 			maskLF = maskCR_LF & maskLF; // LF alone
 			maskCR = maskCR_LF ^ maskLF; // CR alone (with one position offset)
 			if (maskCRLF) {
-				lineCountCRLF += np2_popcount(maskCRLF);
+				lineCountCRLF += np2_popcount64(maskCRLF);
 			}
 			if (maskCR) {
-				lineCountCR += np2_popcount(maskCR);
+				lineCountCR += np2_popcount64(maskCR);
 			}
 		}
 		if (maskLF) {
-			lineCountLF += np2_popcount(maskLF);
+			lineCountLF += np2_popcount64(maskLF);
+		}
+	}
+
+	if (ptr < end) {
+		NP2_alignas(32) char buffer[2*sizeof(__m256i)];
+		ZeroMemory_32x2(buffer);
+		memcpy(buffer, ptr, end - ptr + 2);
+		ptr = end + 1;
+
+		const __m256i chunk1 = _mm256_load_si256((__m256i *)buffer);
+		const __m256i chunk2 = _mm256_load_si256((__m256i *)(buffer + sizeof(__m256i)));
+		uint64_t maskCR = (uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk1, vectCR));
+		uint64_t maskLF = (uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk1, vectLF));
+		maskCR |= ((uint64_t)(uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m256i);
+		maskLF |= ((uint64_t)(uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m256i);
+
+		if (maskCR) {
+			if (maskCR & LAST_CR_MASK) {
+				maskCR &= LAST_CR_MASK - 1;
+				++lineCountCR;
+			}
+
+			// maskCR and maskLF never have some bit set. after shifting maskCR by 1 bit,
+			// the bits both set in maskCR and maskLF represents CR+LF;
+			// the bits only set in maskCR or maskLF represents individual CR or LF.
+			const uint64_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
+			const uint64_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
+			maskLF = maskCR_LF & maskLF; // LF alone
+			maskCR = maskCR_LF ^ maskLF; // CR alone (with one position offset)
+			if (maskCRLF) {
+				lineCountCRLF += np2_popcount64(maskCRLF);
+			}
+			if (maskCR) {
+				lineCountCR += np2_popcount64(maskCR);
+			}
+		}
+		if (maskLF) {
+			lineCountLF += np2_popcount64(maskLF);
 		}
 	}
 	// end NP2_USE_AVX2
 #elif NP2_USE_SSE2
+#if defined(_WIN64)
+	const uint64_t LAST_CR_MASK = (UINT64_C(1) << (4*sizeof(__m128i) - 1));
+	const __m128i vectCR = _mm_set1_epi8('\r');
+	const __m128i vectLF = _mm_set1_epi8('\n');
+	while (ptr + 4*sizeof(__m128i) <= end) {
+		// unaligned loading: line starts at random position.
+		const __m128i chunk1 = _mm_loadu_si128((__m128i *)ptr);
+		const __m128i chunk2 = _mm_loadu_si128((__m128i *)(ptr + sizeof(__m128i)));
+		const __m128i chunk3 = _mm_loadu_si128((__m128i *)(ptr + 2*sizeof(__m128i)));
+		const __m128i chunk4 = _mm_loadu_si128((__m128i *)(ptr + 3*sizeof(__m128i)));
+		uint64_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
+		uint64_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
+		maskCR |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
+		maskLF |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m128i);
+		maskCR |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectCR))) << 2*sizeof(__m128i);
+		maskLF |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectLF))) << 2*sizeof(__m128i);
+		maskCR |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectCR))) << 3*sizeof(__m128i);
+		maskLF |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectLF))) << 3*sizeof(__m128i);
+
+		ptr += 4*sizeof(__m128i);
+		if (maskCR) {
+			if (maskCR & LAST_CR_MASK) {
+				maskCR &= LAST_CR_MASK - 1;
+				if (*ptr == '\n') {
+					// CR+LF across boundary
+					++ptr;
+					++lineCountCRLF;
+				} else {
+					// clear highest bit (last CR) to avoid using following code:
+					// maskCR = (maskCR_LF ^ maskLF) | (maskCR & LAST_CR_MASK);
+					++lineCountCR;
+				}
+			}
+
+			// maskCR and maskLF never have some bit set. after shifting maskCR by 1 bit,
+			// the bits both set in maskCR and maskLF represents CR+LF;
+			// the bits only set in maskCR or maskLF represents individual CR or LF.
+			const uint64_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
+			const uint64_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
+			maskLF = maskCR_LF & maskLF; // LF alone
+			maskCR = maskCR_LF ^ maskLF; // CR alone (with one position offset)
+			if (maskCRLF) {
+				lineCountCRLF += np2_popcount64(maskCRLF);
+			}
+			if (maskCR) {
+				lineCountCR += np2_popcount64(maskCR);
+			}
+		}
+		if (maskLF) {
+			lineCountLF += np2_popcount64(maskLF);
+		}
+	}
+
+	if (ptr < end) {
+		NP2_alignas(16) char buffer[4*sizeof(__m128i)];
+		ZeroMemory_16x4(buffer);
+		memcpy(buffer, ptr, end - ptr + 2);
+		ptr = end + 1;
+
+		const __m128i chunk1 = _mm_load_si128((__m128i *)buffer);
+		const __m128i chunk2 = _mm_load_si128((__m128i *)(buffer + sizeof(__m128i)));
+		const __m128i chunk3 = _mm_load_si128((__m128i *)(buffer + 2*sizeof(__m128i)));
+		const __m128i chunk4 = _mm_load_si128((__m128i *)(buffer + 3*sizeof(__m128i)));
+		uint64_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
+		uint64_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
+		maskCR |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
+		maskLF |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m128i);
+		maskCR |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectCR))) << 2*sizeof(__m128i);
+		maskLF |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectLF))) << 2*sizeof(__m128i);
+		maskCR |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectCR))) << 3*sizeof(__m128i);
+		maskLF |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectLF))) << 3*sizeof(__m128i);
+
+		if (maskCR) {
+			if (maskCR & LAST_CR_MASK) {
+				maskCR &= LAST_CR_MASK - 1;
+				++lineCountCR;
+			}
+
+			// maskCR and maskLF never have some bit set. after shifting maskCR by 1 bit,
+			// the bits both set in maskCR and maskLF represents CR+LF;
+			// the bits only set in maskCR or maskLF represents individual CR or LF.
+			const uint64_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
+			const uint64_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
+			maskLF = maskCR_LF & maskLF; // LF alone
+			maskCR = maskCR_LF ^ maskLF; // CR alone (with one position offset)
+			if (maskCRLF) {
+				lineCountCRLF += np2_popcount64(maskCRLF);
+			}
+			if (maskCR) {
+				lineCountCR += np2_popcount64(maskCR);
+			}
+		}
+		if (maskLF) {
+			lineCountLF += np2_popcount64(maskLF);
+		}
+	}
+	// end _WIN64 NP2_USE_SSE2
+#else
 	const uint32_t LAST_CR_MASK = (1U << (2*sizeof(__m128i) - 1));
 	const __m128i vectCR = _mm_set1_epi8('\r');
 	const __m128i vectLF = _mm_set1_epi8('\n');
 	while (ptr + 2*sizeof(__m128i) <= end) {
 		// unaligned loading: line starts at random position.
-		__m128i chunk = _mm_loadu_si128((__m128i *)ptr);
-		uint32_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectCR));
-		uint32_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectLF));
-		chunk = _mm_loadu_si128((__m128i *)(ptr + sizeof(__m128i)));
-		maskCR |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectCR))) << sizeof(__m128i);
-		maskLF |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectLF))) << sizeof(__m128i);
+		const __m128i chunk1 = _mm_loadu_si128((__m128i *)ptr);
+		const __m128i chunk2 = _mm_loadu_si128((__m128i *)(ptr + sizeof(__m128i)));
+		uint32_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
+		uint32_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
+		maskCR |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
+		maskLF |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m128i);
 
 		ptr += 2*sizeof(__m128i);
 		if (maskCR) {
@@ -568,21 +698,60 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 			lineCountLF += np2_popcount(maskLF);
 		}
 	}
-	// end NP2_USE_SSE2
-#endif
 
+	if (ptr < end) {
+		NP2_alignas(16) char buffer[2*sizeof(__m128i)];
+		ZeroMemory_16x2(buffer);
+		memcpy(buffer, ptr, end - ptr + 2);
+		ptr = end + 1;
+
+		const __m128i chunk1 = _mm_load_si128((__m128i *)buffer);
+		const __m128i chunk2 = _mm_load_si128((__m128i *)(buffer + sizeof(__m128i)));
+		uint32_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
+		uint32_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
+		maskCR |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
+		maskLF |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m128i);
+
+		if (maskCR) {
+			if (maskCR & LAST_CR_MASK) {
+				maskCR &= LAST_CR_MASK - 1;
+				++lineCountCR;
+			}
+
+			// maskCR and maskLF never have some bit set. after shifting maskCR by 1 bit,
+			// the bits both set in maskCR and maskLF represents CR+LF;
+			// the bits only set in maskCR or maskLF represents individual CR or LF.
+			const uint32_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
+			const uint32_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
+			maskLF = maskCR_LF & maskLF; // LF alone
+			maskCR = maskCR_LF ^ maskLF; // CR alone (with one position offset)
+			if (maskCRLF) {
+				lineCountCRLF += np2_popcount(maskCRLF);
+			}
+			if (maskCR) {
+				lineCountCR += np2_popcount(maskCR);
+			}
+		}
+		if (maskLF) {
+			lineCountLF += np2_popcount(maskLF);
+		}
+	}
+#endif
+	// end NP2_USE_SSE2
+#else
+
+	const uint32_t mask = (1 << '\r') | (1 << '\n');
 	do {
 		// skip to line end
-		uint8_t ch;
-		uint8_t type = 0;
-		while (ptr < end && ((ch = *ptr++) > '\r' || (type = eolTable[ch]) == 0)) {
+		uint8_t ch = 0;
+		while (ptr < end && ((ch = *ptr++) > '\r' || ((mask >> ch) & 1) == 0)) {
 			// nop
 		}
-		switch (type) {
-		case 1: //'\n'
+		switch (ch) {
+		case '\n':
 			++lineCountLF;
 			break;
-		case 2: //'\r'
+		case '\r':
 			if (*ptr == '\n') {
 				++ptr;
 				++lineCountCRLF;
@@ -592,6 +761,7 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 			break;
 		}
 	} while (ptr < end);
+#endif
 
 	if (ptr == end) {
 		switch (*ptr) {
@@ -604,9 +774,9 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 		}
 	}
 
-	const Sci_Line linesMax = max_pos(max_pos(lineCountCRLF, lineCountCR), lineCountLF);
+	const size_t linesMax = max_z(max_z(lineCountCRLF, lineCountCR), lineCountLF);
 	// values must kept in same order as SC_EOL_CRLF, SC_EOL_CR, SC_EOL_LF
-	const Sci_Line linesCount[3] = { lineCountCRLF, lineCountCR, lineCountLF };
+	const size_t linesCount[3] = { lineCountCRLF, lineCountCR, lineCountLF };
 	int iEOLMode = status->iEOLMode;
 	if (linesMax != linesCount[iEOLMode]) {
 		if (linesMax == lineCountCRLF) {
@@ -621,11 +791,7 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 #if 0
 	StopWatch_Stop(watch);
 	StopWatch_ShowLog(&watch, "EOL time");
-#if defined(_WIN64)
-	printf("%s CR+LF:%" PRId64 ", LF: %" PRId64 ", CR: %" PRId64 "\n", __func__, lineCountCRLF, lineCountLF, lineCountCR);
-#else
-	printf("%s CR+LF:%d, LF: %d, CR: %d\n", __func__, lineCountCRLF, lineCountLF, lineCountCR);
-#endif
+	printf("%s CR+LF:%u, LF: %u, CR: %u\n", __func__, (UINT)lineCountCRLF, (UINT)lineCountLF, (UINT)lineCountCR);
 #endif
 
 	status->iEOLMode = iEOLMode;
@@ -820,7 +986,7 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 	MEMORYSTATUSEX statex;
 	statex.dwLength = sizeof(statex);
 	if (GlobalMemoryStatusEx(&statex)) {
-		ULONGLONG maxMem = statex.ullTotalPhys/3U;
+		const ULONGLONG maxMem = statex.ullTotalPhys/2U;
 		if (maxMem < (ULONGLONG)maxFileSize) {
 			maxFileSize = (LONGLONG)maxMem;
 		}
@@ -862,7 +1028,7 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 		return FALSE;
 	}
 
-	status->iEOLMode = iLineEndings[iDefaultEOLMode];
+	status->iEOLMode = GetScintillaEOLMode(iDefaultEOLMode);
 	status->bInconsistent = FALSE;
 	status->totalLineCount = 1;
 
@@ -1300,45 +1466,43 @@ static BOOL EditTitleCase(LPWSTR pszTextW, int cchTextW) {
 	BOOL bNewWord = TRUE;
 	BOOL bPrevWasSpace = TRUE;
 	for (int i = 0; i < cchTextW; i++) {
-		if (!IsCharAlphaNumeric(pszTextW[i]) && (!StrChr(L"\x0027\x0060\x0384\x2019", pszTextW[i]) || bPrevWasSpace)) {
+		const WCHAR ch = pszTextW[i];
+		if (!IsCharAlphaNumeric(ch) && (!(ch == L'\'' || ch == L'`' || ch == 0xB4 || ch == 0x0384 || ch == 0x2019) || bPrevWasSpace)) {
 			bNewWord = TRUE;
 		} else {
 			if (bNewWord) {
-				if (IsCharLower(pszTextW[i])) {
-					pszTextW[i] = LOWORD(CharUpper((LPWSTR)(LONG_PTR)MAKELONG(pszTextW[i], 0)));
+				if (IsCharLower(ch)) {
+					pszTextW[i] = LOWORD(CharUpper((LPWSTR)(LONG_PTR)MAKELONG(ch, 0)));
 					bChanged = TRUE;
 				}
 			} else {
-				if (IsCharUpper(pszTextW[i])) {
-					pszTextW[i] = LOWORD(CharLower((LPWSTR)(LONG_PTR)MAKELONG(pszTextW[i], 0)));
+				if (IsCharUpper(ch)) {
+					pszTextW[i] = LOWORD(CharLower((LPWSTR)(LONG_PTR)MAKELONG(ch, 0)));
 					bChanged = TRUE;
 				}
 			}
 			bNewWord = FALSE;
 		}
 
-		if (StrChr(L" \r\n\t[](){}", pszTextW[i])) {
-			bPrevWasSpace = TRUE;
-		} else {
-			bPrevWasSpace = FALSE;
-		}
+		bPrevWasSpace = IsASpace(ch) || ch == L'[' || ch == L']' || ch == L'(' || ch == L')' || ch == L'{' || ch == L'}';
 	}
 #else
 	BOOL bNewWord = TRUE;
 	BOOL bWordEnd = TRUE;
 	for (int i = 0; i < cchTextW; i++) {
-		const BOOL bAlphaNumeric = IsCharAlphaNumeric(pszTextW[i]);
-		if (!bAlphaNumeric && (!StrChr(L"\x0027\x2019\x0060\x00B4", pszTextW[i]) || bWordEnd)) {
+		const WCHAR ch = pszTextW[i];
+		const BOOL bAlphaNumeric = IsCharAlphaNumeric(ch);
+		if (!bAlphaNumeric && (!(ch == L'\'' || ch == L'`' || ch == 0xB4 || ch == 0x0384 || ch == 0x2019) || bWordEnd)) {
 			bNewWord = TRUE;
 		} else {
 			if (bNewWord) {
-				if (IsCharLower(pszTextW[i])) {
-					pszTextW[i] = LOWORD(CharUpper((LPWSTR)(LONG_PTR)MAKELONG(pszTextW[i], 0)));
+				if (IsCharLower(ch)) {
+					pszTextW[i] = LOWORD(CharUpper((LPWSTR)(LONG_PTR)MAKELONG(ch, 0)));
 					bChanged = TRUE;
 				}
 			} else {
-				if (IsCharUpper(pszTextW[i])) {
-					pszTextW[i] = LOWORD(CharLower((LPWSTR)(LONG_PTR)MAKELONG(pszTextW[i], 0)));
+				if (IsCharUpper(ch)) {
+					pszTextW[i] = LOWORD(CharLower((LPWSTR)(LONG_PTR)MAKELONG(ch, 0)));
 					bChanged = TRUE;
 				}
 			}
@@ -1356,7 +1520,7 @@ static BOOL EditTitleCase(LPWSTR pszTextW, int cchTextW) {
 //
 // EditMapTextCase()
 //
-void EditMapTextCase(UINT menu) {
+void EditMapTextCase(int menu) {
 	const Sci_Position iSelCount = SciCall_GetSelTextLength() - 1;
 	if (iSelCount == 0) {
 		return;
@@ -1426,10 +1590,10 @@ void EditMapTextCase(UINT menu) {
 			charsConverted = TransliterateText(pGuid, pszTextW, cchTextW, &pszMappedW);
 		}
 		if (pszMappedW == NULL && flags != 0) {
-			charsConverted = LCMapString(LOCALE_SYSTEM_DEFAULT, flags, pszTextW, cchTextW, NULL, 0);
+			charsConverted = LCMapString(LOCALE_USER_DEFAULT, flags, pszTextW, cchTextW, NULL, 0);
 			if (charsConverted) {
 				pszMappedW = (LPWSTR)NP2HeapAlloc((charsConverted + 1)*sizeof(WCHAR));
-				charsConverted = LCMapString(LOCALE_SYSTEM_DEFAULT, flags, pszTextW, cchTextW, pszMappedW, charsConverted);
+				charsConverted = LCMapString(LOCALE_USER_DEFAULT, flags, pszTextW, cchTextW, pszMappedW, charsConverted);
 			}
 		}
 
@@ -1486,19 +1650,20 @@ void EditSentenceCase(void) {
 	BOOL bNewSentence = TRUE;
 	BOOL bChanged = FALSE;
 	for (int i = 0; i < cchTextW; i++) {
-		if (StrChr(L".;!?\r\n", pszTextW[i])) {
+		const WCHAR ch = pszTextW[i];
+		if (ch == L'.' || ch == L';' || ch == L'!' || ch == L'?' || ch == L'\r' || ch == L'\n') {
 			bNewSentence = TRUE;
 		} else {
-			if (IsCharAlphaNumeric(pszTextW[i])) {
+			if (IsCharAlphaNumeric(ch)) {
 				if (bNewSentence) {
-					if (IsCharLower(pszTextW[i])) {
-						pszTextW[i] = LOWORD(CharUpper((LPWSTR)(LONG_PTR)MAKELONG(pszTextW[i], 0)));
+					if (IsCharLower(ch)) {
+						pszTextW[i] = LOWORD(CharUpper((LPWSTR)(LONG_PTR)MAKELONG(ch, 0)));
 						bChanged = TRUE;
 					}
 					bNewSentence = FALSE;
 				} else {
-					if (IsCharUpper(pszTextW[i])) {
-						pszTextW[i] = LOWORD(CharLower((LPWSTR)(LONG_PTR)MAKELONG(pszTextW[i], 0)));
+					if (IsCharUpper(ch)) {
+						pszTextW[i] = LOWORD(CharLower((LPWSTR)(LONG_PTR)MAKELONG(ch, 0)));
 						bChanged = TRUE;
 					}
 				}
@@ -3859,8 +4024,8 @@ void EditWrapToColumn(int nColumn/*, int nTabWidth*/) {
 	}
 
 #define ISDELIMITER(wc) StrChr(L",;.:-+%&\xA6|/*?!\"\'~\xB4#=", wc)
-#define ISWHITE(wc) StrChr(L" \t", wc)
-#define ISWORDEND(wc) (/*ISDELIMITER(wc) ||*/ StrChr(L" \t\r\n", wc))
+#define ISWHITE(wc)		IsASpaceOrTab(wc)
+#define ISWORDEND(wc)	(/*ISDELIMITER(wc) ||*/ IsASpace(wc))
 
 	int cchConvW = 0;
 	int iLineLength = 0;
@@ -3903,7 +4068,7 @@ void EditWrapToColumn(int nColumn/*, int nTabWidth*/) {
 		//}
 
 		if (ISWHITE(w)) {
-			while (pszTextW[iTextW + 1] == L' ' || pszTextW[iTextW + 1] == L'\t') {
+			while (IsASpaceOrTab(pszTextW[iTextW + 1])) {
 				iTextW++;
 				bModified = TRUE;
 			} // Modified: left out some whitespaces
@@ -3996,15 +4161,15 @@ void EditJoinLinesEx(void) {
 	Sci_Position cchJoin = 0;
 	BOOL bModified = FALSE;
 	for (Sci_Position i = 0; i < iSelCount; i++) {
-		if (pszText[i] == '\r' || pszText[i] == '\n') {
+		if (IsEOLChar(pszText[i])) {
 			if (pszText[i] == '\r' && pszText[i + 1] == '\n') {
 				i++;
 			}
-			if (!strchr("\r\n", pszText[i + 1]) && pszText[i + 1] != 0) {
+			if (!IsEOLChar(pszText[i + 1]) && pszText[i + 1] != '\0') {
 				pszJoin[cchJoin++] = ' ';
 				bModified = TRUE;
 			} else {
-				while (strchr("\r\n", pszText[i + 1])) {
+				while (IsEOLChar(pszText[i + 1])) {
 					i++;
 					bModified = TRUE;
 				}
@@ -4334,33 +4499,17 @@ void EditJumpTo(Sci_Line iNewLine, Sci_Position iNewCol) {
 	const Sci_Line iMaxLine = SciCall_GetLineCount();
 
 	// Jumpt to end with line set to -1
-	if (iNewLine < 0) {
+	if (iNewLine < 0 || iNewLine >= iMaxLine) {
 		SciCall_DocumentEnd();
 		return;
 	}
 
-	// Line maximum is iMaxLine
-	iNewLine = min_pos(iNewLine, iMaxLine);
-
-	// Column minimum is 1
-	iNewCol = max_pos(iNewCol, 1);
-
-	if (iNewLine > 0 && iNewLine <= iMaxLine && iNewCol > 0) {
-		Sci_Position iNewPos = SciCall_PositionFromLine(iNewLine - 1);
-		const Sci_Position iLineEndPos = SciCall_GetLineEndPosition(iNewLine - 1);
-
-		while (iNewCol - 1 > SciCall_GetColumn(iNewPos)) {
-			if (iNewPos >= iLineEndPos) {
-				break;
-			}
-
-			iNewPos = SciCall_PositionAfter(iNewPos);
-		}
-
-		iNewPos = min_pos(iNewPos, iLineEndPos);
-		EditSelectEx(-1, iNewPos); // SciCall_GotoPos(pos) is equivalent to SciCall_SetSel(-1, pos)
-		SciCall_ChooseCaretX();
-	}
+	const Sci_Position iLineEndPos = SciCall_GetLineEndPosition(iNewLine - 1);
+	iNewCol = min_pos(iNewCol, iLineEndPos);
+	const Sci_Position iNewPos = SciCall_FindColumn(iNewLine - 1, iNewCol - 1);
+	// SciCall_GotoPos(pos) is equivalent to SciCall_SetSel(-1, pos)
+	EditSelectEx(-1, iNewPos);
+	SciCall_ChooseCaretX();
 }
 
 //=============================================================================
@@ -4371,10 +4520,13 @@ void EditSelectEx(Sci_Position iAnchorPos, Sci_Position iCurrentPos) {
 	const Sci_Line iNewLine = SciCall_LineFromPosition(iCurrentPos);
 	const Sci_Line iAnchorLine = SciCall_LineFromPosition(iAnchorPos);
 
-	// Ensure that the first and last lines of a selection are always unfolded
-	// This needs to be done *before* the SciCall_SetSel() message
-	SciCall_EnsureVisible(iAnchorLine);
-	if (iAnchorLine != iNewLine) {
+	if (iAnchorLine == iNewLine) {
+		// TODO: center current line on screen when it's not visible
+		SciCall_EnsureVisible(iAnchorLine);
+	} else {
+		// Ensure that the first and last lines of a selection are always unfolded
+		// This needs to be done *before* the SciCall_SetSel() message
+		SciCall_EnsureVisible(iAnchorLine);
 		SciCall_EnsureVisible(iNewLine);
 	}
 
@@ -4629,12 +4781,61 @@ void AddBackslashComboBoxSetup(HWND hwndDlg, int nCtlId) {
 
 extern BOOL bFindReplaceTransparentMode;
 extern int iFindReplaceOpacityLevel;
+
+static BOOL CopySelectionAsFindText(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bFirstTime) {
+	const Sci_Position cchSelection = SciCall_GetSelTextLength() - 1;
+	char *lpszSelection = NULL;
+
+	if (cchSelection != 0 && cchSelection <= NP2_FIND_REPLACE_LIMIT) {
+		lpszSelection = (char *)NP2HeapAlloc(cchSelection + 1);
+		SciCall_GetSelText(lpszSelection);
+	}
+
+	// only for manually selected text
+	const BOOL hasFindText = StrNotEmptyA(lpszSelection);
+
+	// First time you bring up find/replace dialog,
+	// copy content from clipboard to find box when nothing is selected in the editor.
+	if (!hasFindText && bFirstTime) {
+		char *pClip = EditGetClipboardText(hwnd);
+		if (pClip != NULL) {
+			const size_t len = strlen(pClip);
+			if (len > 0 && len <= NP2_FIND_REPLACE_LIMIT) {
+				NP2HeapFree(lpszSelection);
+				lpszSelection = (char *)NP2HeapAlloc(len + 2);
+				strcpy(lpszSelection, pClip);
+			}
+			LocalFree(pClip);
+		}
+	}
+
+	if (StrNotEmptyA(lpszSelection)) {
+		const UINT cpEdit = SciCall_GetCodePage();
+		// Check lpszSelection and truncate bad chars
+		//char *lpsz = strpbrk(lpszSelection, "\r\n\t");
+		//if (lpsz) {
+		//	*lpsz = '\0';
+		//}
+
+		char *lpszEscSel = (char *)NP2HeapAlloc((2 * NP2_FIND_REPLACE_LIMIT));
+		lpefr->bTransformBS = AddBackslashA(lpszEscSel, lpszSelection);
+
+		SetDlgItemTextA2W(cpEdit, hwnd, IDC_FINDTEXT, lpszEscSel);
+		NP2HeapFree(lpszEscSel);
+	}
+
+	if (lpszSelection != NULL) {
+		NP2HeapFree(lpszSelection);
+	}
+	return hasFindText;
+}
+
 //=============================================================================
 //
 // EditFindReplaceDlgProc()
 //
 static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) {
-	static BOOL bSwitchedFindReplace = FALSE;
+	static int bSwitchedFindReplace = 0;
 	static int xFindReplaceDlgSave;
 	static int yFindReplaceDlgSave;
 	static EDITFINDREPLACE efrSave;
@@ -4643,17 +4844,11 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 
 	switch (umsg) {
 	case WM_INITDIALOG: {
-		static BOOL bFirstTime = TRUE;
-
 		SetWindowLongPtr(hwnd, DWLP_USER, lParam);
 		ResizeDlg_InitX(hwnd, cxFindReplaceDlg, IDC_RESIZEGRIP2);
 
 		HWND hwndFind = GetDlgItem(hwnd, IDC_FINDTEXT);
 		AddBackslashComboBoxSetup(hwnd, IDC_FINDTEXT);
-
-		LPEDITFINDREPLACE lpefr = (LPEDITFINDREPLACE)lParam;
-		// Get the current code page for Unicode conversion
-		const UINT cpEdit = SciCall_GetCodePage();
 
 		// Load MRUs
 		for (int i = 0; i < MRU_GetCount(mruFind); i++) {
@@ -4661,47 +4856,18 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 			ComboBox_AddString(hwndFind, tch);
 		}
 
-		if (!bSwitchedFindReplace) {
-			Sci_Position cchSelection = SciCall_GetSelTextLength();
-			if (cchSelection <= NP2_FIND_REPLACE_LIMIT) {
-				char *lpszSelection = (char *)NP2HeapAlloc(cchSelection);
-				SciCall_GetSelText(lpszSelection);
-
-				// First time you bring up find/replace dialog, copy content from clipboard to find box (but only if nothing is selected in the editor)
-				if (StrIsEmptyA(lpszSelection) && bFirstTime) {
-					char *pClip = EditGetClipboardText(lpefr->hwnd);
-					if (pClip != NULL) {
-						const size_t len = strlen(pClip);
-						if (len > 0 && len <= NP2_FIND_REPLACE_LIMIT) {
-							NP2HeapFree(lpszSelection);
-							lpszSelection = (char *)NP2HeapAlloc(len + 2);
-							strcpy(lpszSelection, pClip);
-						}
-						LocalFree(pClip);
-					}
-				}
-				bFirstTime = FALSE;
-
-				// Check lpszSelection and truncate bad chars
-				//char *lpsz = strpbrk(lpszSelection, "\r\n\t");
-				//if (lpsz) {
-				//	*lpsz = '\0';
-				//}
-				char *lpszEscSel = (char *)NP2HeapAlloc((2 * NP2_FIND_REPLACE_LIMIT));
-				lpefr->bTransformBS = AddBackslashA(lpszEscSel, lpszSelection);
-
-				SetDlgItemTextA2W(cpEdit, hwnd, IDC_FINDTEXT, lpszEscSel);
-				NP2HeapFree(lpszSelection);
-				NP2HeapFree(lpszEscSel);
-			}
+		LPEDITFINDREPLACE lpefr = (LPEDITFINDREPLACE)lParam;
+		// don't copy selection after toggle find & replace on this window.
+		BOOL hasFindText = FALSE;
+		if (bSwitchedFindReplace != 3) {
+			hasFindText = CopySelectionAsFindText(hwnd, lpefr, TRUE);
+		}
+		if (!GetWindowTextLength(hwndFind)) {
+			SetDlgItemTextA2W(CP_UTF8, hwnd, IDC_FINDTEXT, lpefr->szFindUTF8);
 		}
 
 		ComboBox_LimitText(hwndFind, NP2_FIND_REPLACE_LIMIT);
 		ComboBox_SetExtendedUI(hwndFind, TRUE);
-
-		if (!GetWindowTextLength(hwndFind)) {
-			SetDlgItemTextA2W(CP_UTF8, hwnd, IDC_FINDTEXT, lpefr->szFindUTF8);
-		}
 
 		HWND hwndRepl = GetDlgItem(hwnd, IDC_REPLACETEXT);
 		if (hwndRepl) {
@@ -4715,6 +4881,9 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 			ComboBox_SetExtendedUI(hwndRepl, TRUE);
 			SetDlgItemTextA2W(CP_UTF8, hwnd, IDC_REPLACETEXT, lpefr->szReplaceUTF8);
 		}
+
+		// focus on replace box when selected text is not empty.
+		PostMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)((hasFindText && hwndRepl)? hwndRepl : hwndFind), 1);
 
 		if (lpefr->fuFlags & SCFIND_MATCHCASE) {
 			CheckDlgButton(hwnd, IDC_FINDCASE, BST_CHECKED);
@@ -4745,7 +4914,7 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 			CheckDlgButton(hwnd, IDC_NOWRAP, BST_CHECKED);
 		}
 
-		if (GetDlgItem(hwnd, IDC_REPLACE)) {
+		if (hwndRepl) {
 			if (bSwitchedFindReplace) {
 				if (lpefr->bFindClose) {
 					CheckDlgButton(hwnd, IDC_FINDCLOSE, BST_CHECKED);
@@ -4775,7 +4944,7 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 			}
 		} else {
 			SetDlgPos(hwnd, xFindReplaceDlgSave, yFindReplaceDlgSave);
-			bSwitchedFindReplace = FALSE;
+			bSwitchedFindReplace = 0;
 			CopyMemory(lpefr, &efrSave, sizeof(EDITFINDREPLACE));
 		}
 
@@ -4784,6 +4953,23 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 		}
 	}
 	return TRUE;
+
+	case WM_COPYDATA: {
+		HWND hwndFind = GetDlgItem(hwnd, IDC_FINDTEXT);
+		HWND hwndRepl = GetDlgItem(hwnd, IDC_REPLACETEXT);
+		LPEDITFINDREPLACE lpefr = (LPEDITFINDREPLACE)GetWindowLongPtr(hwnd, DWLP_USER);
+
+		const BOOL hasFindText = CopySelectionAsFindText(hwnd, lpefr, FALSE);
+		if (!GetWindowTextLength(hwndFind)) {
+			SetDlgItemTextA2W(CP_UTF8, hwnd, IDC_FINDTEXT, lpefr->szFindUTF8);
+		}
+		if (lpefr->bTransformBS) {
+			CheckDlgButton(hwnd, IDC_FINDTRANSFORMBS, BST_CHECKED);
+		}
+		// focus on replace box when selected text is not empty.
+		PostMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)((hasFindText && hwndRepl)? hwndRepl : hwndFind), 1);
+	}
+	break;
 
 	case WM_DESTROY:
 		ResizeDlg_Destroy(hwnd, &cxFindReplaceDlg, NULL);
@@ -4869,27 +5055,16 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 		case IDC_REPLACEALL:
 		case IDC_REPLACEINSEL:
 		case IDACC_SELTONEXT:
-		case IDACC_SELTOPREV:
-		case IDMSG_SWITCHTOFIND:
-		case IDMSG_SWITCHTOREPLACE: {
+		case IDACC_SELTOPREV: {
 			LPEDITFINDREPLACE lpefr = (LPEDITFINDREPLACE)GetWindowLongPtr(hwnd, DWLP_USER);
 			HWND hwndFind = GetDlgItem(hwnd, IDC_FINDTEXT);
 			HWND hwndRepl = GetDlgItem(hwnd, IDC_REPLACETEXT);
 			const BOOL bIsFindDlg = (hwndRepl == NULL);
-
-			if ((bIsFindDlg && LOWORD(wParam) == IDMSG_SWITCHTOREPLACE) ||
-					(!bIsFindDlg && LOWORD(wParam) == IDMSG_SWITCHTOFIND)) {
-				GetDlgPos(hwnd, &xFindReplaceDlgSave, &yFindReplaceDlgSave);
-				bSwitchedFindReplace = TRUE;
-				CopyMemory(&efrSave, lpefr, sizeof(EDITFINDREPLACE));
-			}
-
 			// Get current code page for Unicode conversion
 			const UINT cpEdit = SciCall_GetCodePage();
 			cpLastFind = cpEdit;
 
-			if (!bSwitchedFindReplace &&
-					!GetDlgItemTextA2W(cpEdit, hwnd, IDC_FINDTEXT, lpefr->szFind, COUNTOF(lpefr->szFind))) {
+			if (!GetDlgItemTextA2W(cpEdit, hwnd, IDC_FINDTEXT, lpefr->szFind, COUNTOF(lpefr->szFind))) {
 				EnableWindow(GetDlgItem(hwnd, IDOK), FALSE);
 				EnableWindow(GetDlgItem(hwnd, IDC_FINDPREV), FALSE);
 				EnableWindow(GetDlgItem(hwnd, IDC_REPLACE), FALSE);
@@ -4930,27 +5105,20 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 				lpefr->bReplaceClose = IsButtonChecked(hwnd, IDC_FINDCLOSE);
 			}
 
-			if (!bSwitchedFindReplace) {
-				// Save MRUs
-				if (StrNotEmptyA(lpefr->szFind)) {
-					if (GetDlgItemTextA2W(CP_UTF8, hwnd, IDC_FINDTEXT, lpefr->szFindUTF8, COUNTOF(lpefr->szFindUTF8))) {
-						ComboBox_GetText(hwndFind, tch, COUNTOF(tch));
-						MRU_AddMultiline(mruFind, tch);
-					}
+			// Save MRUs
+			if (StrNotEmptyA(lpefr->szFind)) {
+				if (GetDlgItemTextA2W(CP_UTF8, hwnd, IDC_FINDTEXT, lpefr->szFindUTF8, COUNTOF(lpefr->szFindUTF8))) {
+					ComboBox_GetText(hwndFind, tch, COUNTOF(tch));
+					MRU_AddMultiline(mruFind, tch);
 				}
-				if (StrNotEmptyA(lpefr->szReplace)) {
-					if (GetDlgItemTextA2W(CP_UTF8, hwnd, IDC_REPLACETEXT, lpefr->szReplaceUTF8, COUNTOF(lpefr->szReplaceUTF8))) {
-						ComboBox_GetText(hwndRepl, tch, COUNTOF(tch));
-						MRU_AddMultiline(mruReplace, tch);
-					}
-				} else {
-					strcpy(lpefr->szReplaceUTF8, "");
+			}
+			if (StrNotEmptyA(lpefr->szReplace)) {
+				if (GetDlgItemTextA2W(CP_UTF8, hwnd, IDC_REPLACETEXT, lpefr->szReplaceUTF8, COUNTOF(lpefr->szReplaceUTF8))) {
+					ComboBox_GetText(hwndRepl, tch, COUNTOF(tch));
+					MRU_AddMultiline(mruReplace, tch);
 				}
 			} else {
-				GetDlgItemTextA2W(CP_UTF8, hwnd, IDC_FINDTEXT, lpefr->szFindUTF8, COUNTOF(lpefr->szFindUTF8));
-				if (!GetDlgItemTextA2W(CP_UTF8, hwnd, IDC_REPLACETEXT, lpefr->szReplaceUTF8, COUNTOF(lpefr->szReplaceUTF8))) {
-					strcpy(lpefr->szReplaceUTF8, "");
-				}
+				strcpy(lpefr->szReplaceUTF8, "");
 			}
 
 			BOOL bCloseDlg;
@@ -4981,12 +5149,9 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 			SetDlgItemTextA2W(CP_UTF8, hwnd, IDC_FINDTEXT, lpefr->szFindUTF8);
 			SetDlgItemTextA2W(CP_UTF8, hwnd, IDC_REPLACETEXT, lpefr->szReplaceUTF8);
 
-			if (!bSwitchedFindReplace) {
-				SendMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)(GetFocus()), 1);
-			}
+			SendMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)(GetFocus()), 1);
 
 			if (bCloseDlg) {
-				//EndDialog(hwnd, LOWORD(wParam));
 				DestroyWindow(hwnd);
 				hDlgFindReplace = NULL;
 			}
@@ -5032,7 +5197,6 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 		break;
 
 		case IDCANCEL:
-			//EndDialog(hwnd, IDCANCEL);
 			DestroyWindow(hwnd);
 			break;
 
@@ -5076,6 +5240,18 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 			PostMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)(GetDlgItem(hwnd, IDC_FINDTEXT)), 1);
 		}
 		break;
+
+		case IDC_TOGGLEFINDREPLACE: {
+			bSwitchedFindReplace |= 2;
+			LPEDITFINDREPLACE lpefr = (LPEDITFINDREPLACE)GetWindowLongPtr(hwnd, DWLP_USER);
+			GetDlgPos(hwnd, &xFindReplaceDlgSave, &yFindReplaceDlgSave);
+			CopyMemory(&efrSave, lpefr, sizeof(EDITFINDREPLACE));
+			GetDlgItemTextA2W(CP_UTF8, hwnd, IDC_FINDTEXT, lpefr->szFindUTF8, COUNTOF(lpefr->szFindUTF8));
+			if (!GetDlgItemTextA2W(CP_UTF8, hwnd, IDC_REPLACETEXT, lpefr->szReplaceUTF8, COUNTOF(lpefr->szReplaceUTF8))) {
+				strcpy(lpefr->szReplaceUTF8, "");
+			}
+		}
+		break;
 		}
 		return TRUE;
 
@@ -5086,6 +5262,7 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 		case NM_RETURN:
 			switch (pnmhdr->idFrom) {
 			case IDC_TOGGLEFINDREPLACE:
+				bSwitchedFindReplace = 1;
 				if (GetDlgItem(hwnd, IDC_REPLACE)) {
 					PostWMCommand(hwndMain, IDM_EDIT_FIND);
 				} else {
@@ -5875,18 +6052,7 @@ static INT_PTR CALLBACK EditLineNumDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, 
 				} else {
 					PostMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)(GetDlgItem(hwnd, IDC_COLNUM)), 1);
 				}
-			} else if (iNewLine > 0 && iNewLine <= iMaxLine && iNewCol > 0) {
-				//Sci_Position iNewPos = SciCall_PositionFromLine(iNewLine - 1);
-				//const Sci_Position iLineEndPos = SciCall_GetLineEndPosition(iNewLine - 1);
-				//while (iNewCol-1 > SciCall_GetColumn(iNewPos)) {
-				//	if (iNewPos >= iLineEndPos) {
-				//		break;
-				//	}
-				//	iNewPos = SciCall_PositionAfter(iNewPos);
-				//}
-				//iNewPos = min_pos(iNewPos, iLineEndPos);
-				//SciCall_GotoPos(iNewPos);
-				//SciCall_ChooseCaretX();
+			} else if (iNewLine > 0 && iNewLine <= iMaxLine) {
 				EditJumpTo(iNewLine, iNewCol);
 				EndDialog(hwnd, IDOK);
 			} else {
@@ -6305,21 +6471,14 @@ static INT_PTR CALLBACK EditInsertTagDlgProc(HWND hwnd, UINT umsg, WPARAM wParam
 				DStringW_GetDlgItemText(&wszOpen, hwnd, IDC_MODIFY_LINE_PREFIX);
 				const int len = lstrlen(wszOpen.buffer);
 				if (len >= 3) {
-					LPCWSTR pwsz1 = StrChr(wszOpen.buffer, L'<');
-					if (pwsz1 != NULL) {
+					LPCWSTR pwCur = StrChr(wszOpen.buffer, L'<');
+					if (pwCur != NULL) {
 						LPWSTR wchIns = (LPWSTR)NP2HeapAlloc((len + 5) * sizeof(WCHAR));
 						lstrcpy(wchIns, L"</");
 						int	cchIns = 2;
-						const WCHAR *pwCur = pwsz1 + 1;
 
-						while (*pwCur &&
-								*pwCur != L'<' &&
-								*pwCur != L'>' &&
-								*pwCur != L' ' &&
-								*pwCur != L'\t' &&
-								*pwCur != L'\r' &&
-								*pwCur != L'\n' &&
-								(StrChr(L":_-.", *pwCur) || isalnum(*pwCur))) {
+						++pwCur;
+						while (IsHtmlTagChar(*pwCur)) {
 							wchIns[cchIns++] = *pwCur++;
 						}
 
@@ -6430,10 +6589,10 @@ void EditUpdateTimestampMatchTemplate(HWND hwnd) {
 	IniGetString(INI_SECTION_NAME_FLAGS, L"TimeStamp", L"\\$Date:[^\\$]+\\$ | $Date: %Y/%m/%d %H:%M:%S $", wchFind, COUNTOF(wchFind));
 
 	WCHAR wchTemplate[256] = {0};
-	WCHAR *pwchSep;
-	if ((pwchSep = StrChr(wchFind, L'|')) != NULL) {
+	LPWSTR pwchSep = StrChr(wchFind, L'|');
+	if (pwchSep != NULL) {
 		lstrcpy(wchTemplate, pwchSep + 1);
-		*pwchSep = 0;
+		*pwchSep = L'\0';
 	}
 
 	StrTrim(wchFind, L" ");
@@ -6798,13 +6957,21 @@ char* EditGetStringAroundCaret(LPCSTR delimiters) {
 	// forward
 	if (iCurrentPos < iLineEnd) {
 		ft.chrg.cpMax = (Sci_PositionCR)iLineEnd;
-		const Sci_Position iPos = SciCall_FindText(findFlag, &ft);
+		Sci_Position iPos = SciCall_FindText(findFlag, &ft);
 		if (iPos >= 0) {
-			iLineEnd = SciCall_PositionBefore(ft.chrgText.cpMax);
+			iPos = ft.chrgText.cpMax;
+			// keep column in filename(line,column): warning
+			const int chPrev = SciCall_GetCharAt(iPos - 1);
+			const int ch = SciCall_GetCharAt(iPos);
+			if (chPrev == ',' && (ch >= '0' && ch <= '9')) {
+				iLineEnd = SciCall_WordEndPosition(iPos, TRUE);
+			} else {
+				iLineEnd = SciCall_PositionBefore(iPos);
+			}
 		}
 	}
 
-	// backword
+	// backward
 	if (iCurrentPos > iLineStart) {
 		ft.chrg.cpMax = (Sci_PositionCR)iLineStart;
 		const Sci_Position iPos = SciCall_FindText(findFlag, &ft);
@@ -6813,6 +6980,28 @@ char* EditGetStringAroundCaret(LPCSTR delimiters) {
 		}
 	}
 
+	// Markdown URL: [alt](url)
+	Sci_Position iStartPos = iLineStart;
+	Sci_Position iEndPos = iLineEnd;
+	ft.chrg.cpMax = (Sci_PositionCR)iLineEnd;
+	ft.lpstrText = "\\(\\w*:?\\.*/";
+	while (iStartPos < iEndPos) {
+		ft.chrg.cpMin = (Sci_PositionCR)iStartPos;
+		Sci_Position iPos = SciCall_FindText(findFlag, &ft);
+		if (iPos == -1) {
+			break;
+		}
+
+		iStartPos = iPos + 1;
+		iPos = SciCall_BraceMatchNext(iPos, ft.chrgText.cpMax);
+		iEndPos = (iPos == -1) ? iLineEnd : iPos;
+		if (iCurrentPos >= iStartPos && iCurrentPos <= iEndPos) {
+			iLineStart = iStartPos;
+			iLineEnd = iEndPos;
+			break;
+		}
+		iStartPos = ft.chrgText.cpMax;
+	}
 	if (iLineStart >= iLineEnd) {
 		return NULL;
 	}
@@ -6825,6 +7014,26 @@ char* EditGetStringAroundCaret(LPCSTR delimiters) {
 }
 
 extern BOOL bOpenFolderWithMetapath;
+
+static DWORD EditOpenSelectionCheckFile(LPCWSTR link, LPWSTR path, int cchFilePath, LPWSTR wchDirectory) {
+	DWORD dwAttributes = GetFileAttributes(link);
+	if (dwAttributes == INVALID_FILE_ATTRIBUTES) {
+		if (StrNotEmpty(szCurFile)) {
+			lstrcpy(wchDirectory, szCurFile);
+			PathRemoveFileSpec(wchDirectory);
+			PathCombine(path, wchDirectory, link);
+			dwAttributes = GetFileAttributes(path);
+		}
+		if (dwAttributes == INVALID_FILE_ATTRIBUTES && GetFullPathName(link, cchFilePath, path, NULL)) {
+			dwAttributes = GetFileAttributes(path);
+		}
+	} else {
+		if (!GetFullPathName(link, cchFilePath, path, NULL)) {
+			lstrcpy(path, link);
+		}
+	}
+	return dwAttributes;
+}
 
 void EditOpenSelection(int type) {
 	Sci_Position cchSelection = SciCall_GetSelTextLength();
@@ -6844,34 +7053,80 @@ void EditOpenSelection(int type) {
 	if (mszSelection == NULL) {
 		return;
 	}
-	/* remove quotes, spaces and some invalid filename characters (except '/', '\' and '?') */
-	StrTrimA(mszSelection, " \t\r\n'`\"<>|:*,;");
 	cchSelection = strlen(mszSelection);
-	if (cchSelection != 0) {
-		LPWSTR wszSelection = (LPWSTR)NP2HeapAlloc((max_pos(MAX_PATH, cchSelection) + 32) * sizeof(WCHAR));
-		LPWSTR link = wszSelection + 16;
+	if (cchSelection == 0) {
+		NP2HeapFree(mszSelection);
+		return;
+	}
 
-		const UINT cpEdit = SciCall_GetCodePage();
-		MultiByteToWideChar(cpEdit, 0, mszSelection, -1, link, (int)cchSelection);
+	LPWSTR wszSelection = (LPWSTR)NP2HeapAlloc((max_pos(MAX_PATH, cchSelection) + 32) * sizeof(WCHAR));
+	LPWSTR link = wszSelection + 16;
+	const UINT cpEdit = SciCall_GetCodePage();
+	MultiByteToWideChar(cpEdit, 0, mszSelection, -1, link, (int)cchSelection);
+	NP2HeapFree(mszSelection);
 
-		WCHAR path[MAX_PATH];
-		WCHAR wchDirectory[MAX_PATH] = L"";
-		DWORD dwAttributes = GetFileAttributes(link);
+	/* remove quotes, spaces and some invalid filename characters (except '/', '\' and '?') */
+	StrTrim(link, L" \t\r\n'`\"<>|:*,;");
+	const int cchTextW = lstrlen(link);
+
+	if (cchTextW != 0) {
+		// scan line and column after file name.
+		LPCWSTR line = NULL;
+		LPCWSTR column = L"";
+		LPWSTR back = link + cchTextW - 1;
+
+		LPWSTR p = back;
+		if (*p == L')') {
+			--p;
+			--back;
+		}
+		while (*p >= L'0' && *p <= L'9') {
+			--p;
+		}
+		if (p != back && (*p == L':' || *p == L',' || *p == L'(')) {
+			line = p + 1;
+			back = p;
+			if (*p == L',') {
+				*p = L'\0';
+			}
+			if (*p != L'(') {
+				--p;
+				while (*p >= L'0' && *p <= L'9') {
+					--p;
+				}
+				if (p != back - 1) {
+					column = line;
+					line = p + 1;
+					if (*p == L':' && *back == L':') {
+						// filename:line:column: warning
+						*back = L'\0';
+						*p = L'\0';
+					}
+					back = p;
+				}
+			}
+		}
+
+		WCHAR path[MAX_PATH * 2];
+		WCHAR wchDirectory[MAX_PATH];
+		DWORD dwAttributes = EditOpenSelectionCheckFile(link, path, COUNTOF(path), wchDirectory);
 		if (dwAttributes == INVALID_FILE_ATTRIBUTES) {
-			if (StrNotEmpty(szCurFile)) {
-				lstrcpy(wchDirectory, szCurFile);
-				PathRemoveFileSpec(wchDirectory);
-				PathCombine(path, wchDirectory, link);
-				dwAttributes = GetFileAttributes(path);
+			if (line != NULL) {
+				const WCHAR ch = *back;
+				*back = L'\0';
+				dwAttributes = EditOpenSelectionCheckFile(link, path, COUNTOF(path), wchDirectory);
+				if (dwAttributes == INVALID_FILE_ATTRIBUTES) {
+					// line is port number or the file not exists
+					*back = ch;
+				} else {
+					link = path;
+				}
 			}
-			if (dwAttributes == INVALID_FILE_ATTRIBUTES && GetFullPathName(link, COUNTOF(path), path, NULL)) {
-				dwAttributes = GetFileAttributes(path);
+		} else {
+			link = path;
+			if (*back != L'\0') {
+				line = NULL;
 			}
-			if (dwAttributes != INVALID_FILE_ATTRIBUTES) {
-				lstrcpy(link, path);
-			}
-		} else if (GetFullPathName(link, COUNTOF(path), path, NULL)) {
-			lstrcpy(link, path);
 		}
 
 		if (type == 4) { // containing folder
@@ -6882,7 +7137,7 @@ void EditOpenSelection(int type) {
 			if (dwAttributes & FILE_ATTRIBUTE_DIRECTORY) {
 				type = 3;
 			} else {
-				const BOOL can = Style_CanOpenFile(link);
+				const BOOL can = line != NULL || Style_CanOpenFile(link);
 				// open supported file in a new window
 				type = can ? 2 : 1;
 			}
@@ -6909,6 +7164,13 @@ void EditOpenSelection(int type) {
 			PathRemoveFileSpec(wchDirectory);
 			PathQuoteSpaces(link);
 
+			LPWSTR lpParameters = link;
+			if (line != NULL) {
+				// TODO: improve the code when column is actually character index
+				lpParameters = (LPWSTR)NP2HeapAlloc(sizeof(path));
+				wsprintf(lpParameters, L"-g %s,%s %s", line, column, link);
+			}
+
 			SHELLEXECUTEINFO sei;
 			ZeroMemory(&sei, sizeof(SHELLEXECUTEINFO));
 			sei.cbSize = sizeof(SHELLEXECUTEINFO);
@@ -6916,11 +7178,14 @@ void EditOpenSelection(int type) {
 			sei.hwnd = hwndMain;
 			sei.lpVerb = NULL;
 			sei.lpFile = szModuleName;
-			sei.lpParameters = link;
+			sei.lpParameters = lpParameters;
 			sei.lpDirectory = wchDirectory;
 			sei.nShow = SW_SHOWNORMAL;
 
 			ShellExecuteEx(&sei);
+			if (line != NULL) {
+				NP2HeapFree(lpParameters);
+			}
 		}
 		break;
 
@@ -6936,11 +7201,9 @@ void EditOpenSelection(int type) {
 			OpenContainingFolder(hwndMain, link, TRUE);
 			break;
 		}
-
-		NP2HeapFree(wszSelection);
 	}
 
-	NP2HeapFree(mszSelection);
+	NP2HeapFree(wszSelection);
 }
 
 //=============================================================================
@@ -7151,7 +7414,7 @@ BOOL FileVars_ParseInt(LPCSTR pszData, LPCSTR pszName, int *piValue) {
 
 	while ((pvStart = strstr(pvStart, pszName)) != NULL) {
 		const unsigned char chPrev = (pvStart > pszData) ? *(pvStart - 1) : 0;
-		if (!isalpha(chPrev) && chPrev != '-' && chPrev != '_') {
+		if (!(IsAlpha(chPrev) || chPrev == '-' || chPrev == '_')) {
 			pvStart += strlen(pszName);
 			while (*pvStart == ' ') {
 				pvStart++;
@@ -7165,7 +7428,7 @@ BOOL FileVars_ParseInt(LPCSTR pszData, LPCSTR pszName, int *piValue) {
 	}
 
 	if (pvStart) {
-		while (*pvStart && strchr(":=\"' \t", *pvStart)) {
+		while (*pvStart == ':' || *pvStart == '=' || *pvStart == '\"' || *pvStart == '\'' || *pvStart == ' ' || *pvStart == '\t') {
 			pvStart++;
 		}
 
@@ -7199,7 +7462,7 @@ BOOL FileVars_ParseStr(LPCSTR pszData, LPCSTR pszName, char *pszValue, int cchVa
 
 	while ((pvStart = strstr(pvStart, pszName)) != NULL) {
 		const unsigned char chPrev = (pvStart > pszData) ? *(pvStart - 1) : 0;
-		if (!isalpha(chPrev) && chPrev != '-' && chPrev != '_') {
+		if (!(IsAlpha(chPrev) || chPrev == '-' || chPrev == '_')) {
 			pvStart += strlen(pszName);
 			while (*pvStart == ' ') {
 				pvStart++;
@@ -7215,7 +7478,7 @@ BOOL FileVars_ParseStr(LPCSTR pszData, LPCSTR pszName, char *pszValue, int cchVa
 	if (pvStart) {
 		BOOL bQuoted = FALSE;
 
-		while (*pvStart && strchr(":=\"' \t", *pvStart)) {
+		while (*pvStart == ':' || *pvStart == '=' || *pvStart == '\"' || *pvStart == '\'' || *pvStart == ' ' || *pvStart == '\t') {
 			if (*pvStart == '\'' || *pvStart == '"') {
 				bQuoted = TRUE;
 			}
@@ -7226,11 +7489,11 @@ BOOL FileVars_ParseStr(LPCSTR pszData, LPCSTR pszName, char *pszValue, int cchVa
 		strncpy(tch, pvStart, COUNTOF(tch) - 1);
 
 		char *pvEnd = tch;
-		while (*pvEnd && (isalnum((unsigned char)(*pvEnd)) || strchr("+-/_", *pvEnd) || (bQuoted && *pvEnd == ' '))) {
+		while (IsAlphaNumeric(*pvEnd) || *pvEnd == '+' || *pvEnd == '-' || *pvEnd == '/' || *pvEnd == '_' || (bQuoted && *pvEnd == ' ')) {
 			pvEnd++;
 		}
 		*pvEnd = '\0';
-		StrTrimA(tch, " \t:=\"'");
+		StrTrimA(tch, ":=\"\' \t");
 
 		*pszValue = '\0';
 		strncpy(pszValue, tch, cchValue);
@@ -7521,7 +7784,6 @@ void FoldToggleCurrentBlock(FOLD_ACTION action) {
 }
 
 void FoldToggleCurrentLevel(FOLD_ACTION action) {
-	SciCall_ColouriseAll();
 	Sci_Line line = SciCall_LineFromPosition(SciCall_GetCurrentPos());
 	int level = SciCall_GetFoldLevel(line);
 
@@ -7566,7 +7828,7 @@ void FoldToggleDefault(FOLD_ACTION action) {
 				level &= SC_FOLDLEVELNUMBERMASK;
 				FoldLevelStack_Push(&levelStack, level);
 				level = levelStack.levelCount;
-				if (state & (1U << level)) {
+				if ((state >> level) & 1) {
 					FoldToggleNode(line, &action, &fToggled);
 					if (level == maxLevel) {
 						line = SciCall_GetLastChild(line);
@@ -7581,7 +7843,7 @@ void FoldToggleDefault(FOLD_ACTION action) {
 			if (level & SC_FOLDLEVELHEADERFLAG) {
 				level &= SC_FOLDLEVELNUMBERMASK;
 				level -= SC_FOLDLEVELBASE;
-				if (state & (1U << level)) {
+				if ((state >> level) & 1) {
 					FoldToggleNode(line, &action, &fToggled);
 					if (level == maxLevel) {
 						line = SciCall_GetLastChild(line);
@@ -7701,5 +7963,107 @@ void FoldAltArrow(int key, int mode) {
 				FoldPerformAction(ln, mode, FOLD_ACTION_EXPAND);
 			}
 		}
+	}
+}
+
+void EditGotoBlock(int menu) {
+	const Sci_Position iCurPos = SciCall_GetCurrentPos();
+	const Sci_Line iCurLine = SciCall_LineFromPosition(iCurPos);
+
+	Sci_Line iLine = iCurLine;
+	int level = SciCall_GetFoldLevel(iLine);
+	if (!(level & SC_FOLDLEVELHEADERFLAG)) {
+		iLine = SciCall_GetFoldParent(iLine);
+	}
+
+	switch (menu) {
+	case IDM_EDIT_GOTO_BLOCK_START:
+		break;
+
+	case IDM_EDIT_GOTO_BLOCK_END:
+		if (iLine >= 0) {
+			iLine = SciCall_GetLastChild(iLine);
+		}
+		break;
+
+	case IDM_EDIT_GOTO_PREVIOUS_BLOCK:
+	case IDM_EDIT_GOTO_PREV_SIBLING_BLOCK: {
+		BOOL sibling = menu == IDM_EDIT_GOTO_PREV_SIBLING_BLOCK;
+		Sci_Line line = iCurLine - 1;
+		Sci_Line first = -1;
+		level &= SC_FOLDLEVELNUMBERMASK;
+
+		while (line >= 0) {
+			const int lev = SciCall_GetFoldLevel(line);
+			 if ((lev & SC_FOLDLEVELHEADERFLAG) && line != iLine) {
+				if (sibling) {
+					if (first < 0) {
+						first = line;
+					}
+					if (level >= (lev & SC_FOLDLEVELNUMBERMASK)) {
+						iLine = line;
+						sibling = FALSE;
+						break;
+					}
+					line = SciCall_GetFoldParent(line);
+					continue;
+				}
+
+				iLine = line;
+				break;
+			}
+			--line;
+		}
+		if (sibling && first >= 0) {
+			iLine = first;
+		}
+	}
+	break;
+
+	case IDM_EDIT_GOTO_NEXT_BLOCK:
+	case IDM_EDIT_GOTO_NEXT_SIBLING_BLOCK: {
+		const Sci_Line lineCount = SciCall_GetLineCount();
+		if (iLine >= 0) {
+			iLine = SciCall_GetLastChild(iLine);
+		}
+
+		BOOL sibling = menu == IDM_EDIT_GOTO_NEXT_SIBLING_BLOCK;
+		Sci_Line line = iCurLine + 1;
+		Sci_Line first = -1;
+		if (sibling && iLine > 0 && (level & SC_FOLDLEVELHEADERFLAG)) {
+			line = iLine + 1;
+		}
+		level &= SC_FOLDLEVELNUMBERMASK;
+
+		while (line < lineCount) {
+			const int lev = SciCall_GetFoldLevel(line);
+			if (lev & SC_FOLDLEVELHEADERFLAG) {
+				if (sibling) {
+					if (first < 0) {
+						first = line;
+					}
+					if (level >= (lev & SC_FOLDLEVELNUMBERMASK)) {
+						iLine = line;
+						sibling = FALSE;
+						break;
+					}
+					line = SciCall_GetLastChild(line);
+				} else {
+					iLine = line;
+					break;
+				}
+			}
+			++line;
+		}
+		if (sibling && first >= 0) {
+			iLine = first;
+		}
+	}
+	break;
+	}
+
+	if (iLine >= 0 && iLine != iCurLine) {
+		const Sci_Position column = SciCall_GetColumn(iCurPos);
+		EditJumpTo(iLine + 1, column + 1);
 	}
 }

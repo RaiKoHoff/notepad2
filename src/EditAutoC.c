@@ -12,7 +12,7 @@
 #include "Edit.h"
 #include "Styles.h"
 #include "resource.h"
-#include "EditAutoC_Data0.c"
+#include "EditAutoC_Data0.c" // NOLINT(bugprone-suspicious-include)
 
 #define NP2_AUTOC_USE_STRING_ORDER	1
 // scintilla/src/AutoComplete.h AutoComplete::maxItemLen
@@ -445,14 +445,6 @@ void WordList_AddSubWord(struct WordList *pWList, LPSTR pWord, int wordLength, i
 }
 
 
-static inline BOOL IsASpaceOrTab(int ch) {
-	return ch == ' ' || ch == '\t';
-}
-
-static inline BOOL IsAAlpha(int ch) {
-	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z');
-}
-
 static inline BOOL IsEscapeChar(int ch) {
 	return ch == 't' || ch == 'n' || ch == 'r' || ch == 'a' || ch == 'b' || ch == 'v' || ch == 'f'
 		|| ch == '0'
@@ -480,6 +472,12 @@ static inline BOOL IsCppStringStyle(int style) {
 		|| style == SCE_C_DSTRINGT;
 }
 
+static inline BOOL IsSpecialStart(int ch) {
+	return ch == ':' || ch == '.' || ch == '#' || ch == '@'
+		|| ch == '<' || ch == '\\' || ch == '/' || ch == '-'
+		|| ch == '>' || ch == '$' || ch == '%';
+}
+
 static inline BOOL IsSpecialStartChar(int ch, int chPrev) {
 	return (ch == '.')	// member
 		|| (ch == '#')	// preprocessor
@@ -501,11 +499,11 @@ extern struct EditAutoCompletionConfig autoCompletionConfig;
 
 // CharClassify::SetDefaultCharClasses()
 static inline BOOL IsDefaultWordChar(int ch) {
-	return ch >= 0x80 || isalnum(ch) || ch == '_';
+	return ch >= 0x80 || IsAlphaNumeric(ch) || ch == '_';
 }
 
 BOOL IsDocWordChar(int ch) {
-	if (isalnum(ch) || ch == '_' || ch == '.') {
+	if (IsAlphaNumeric(ch) || ch == '_' || ch == '.') {
 		return TRUE;
 	}
 
@@ -581,111 +579,18 @@ BOOL IsAutoCompletionWordCharacter(int ch) {
 	return (ch < 0x80) ? IsDocWordChar(ch) : SciCall_IsAutoCompletionWordCharacter(ch);
 }
 
-static inline BOOL IsOperatorStyle(int style) {
-	switch (pLexCurrent->iLexer) {
-	case SCLEX_ASM:
-		return style == SCE_ASM_OPERATOR;
-	case SCLEX_AU3:
-		return style == SCE_AU3_OPERATOR;
-
-	case SCLEX_BASH:
-		return style == SCE_SH_OPERATOR;
-	case SCLEX_BATCH:
-		return style == SCE_BAT_OPERATOR;
-
-	case SCLEX_CMAKE:
-		return style == SCE_CMAKE_OPERATOR;
-	case SCLEX_CONF:
-		return style == SCE_CONF_OPERATOR;
-	case SCLEX_CPP:
-	case SCLEX_GRAPHVIZ:
-	case SCLEX_LISP:
-	case SCLEX_NSIS:
-		return style == SCE_C_OPERATOR;
-	case SCLEX_CSS:
-		return style == SCE_CSS_OPERATOR;
-
-	case SCLEX_FORTRAN:
-		return style == SCE_F_OPERATOR;
-	case SCLEX_FSHARP:
-		return style == SCE_FSHARP_OPERATOR;
-
-	case SCLEX_GN:
-		return style == SCE_GN_OPERATOR;
-
-	case SCLEX_HTML:
-		return style == SCE_HPHP_OPERATOR || style == SCE_HJ_SYMBOLS || style == SCE_HJA_SYMBOLS;
-
-	case SCLEX_JSON:
-		return style == SCE_JSON_OPERATOR;
-	case SCLEX_JULIA:
-		return style == SCE_JULIA_OPERATOR || style == SCE_JULIA_OPERATOR2;
-
-	case SCLEX_KOTLIN:
-		return style == SCE_KOTLIN_OPERATOR || style == SCE_KOTLIN_OPERATOR2;
-
-	case SCLEX_LATEX:
-	case SCLEX_TEXINFO:
-		return style == SCE_L_OPERATOR;
-	case SCLEX_LLVM:
-		return style == SCE_LLVM_OPERATOR;
-	case SCLEX_LUA:
-		return style == SCE_LUA_OPERATOR;
-
-	case SCLEX_MAKEFILE:
-		return style == SCE_MAKE_OPERATOR;
-	case SCLEX_MATLAB:
-		return style == SCE_MAT_OPERATOR;
-
-	case SCLEX_PASCAL:
-		return style == SCE_PAS_OPERATOR;
-	case SCLEX_PERL:
-		return style == SCE_PL_OPERATOR;
-	case SCLEX_POWERSHELL:
-		return style == SCE_POWERSHELL_OPERATOR;
-	case SCLEX_PYTHON:
-		return style == SCE_PY_OPERATOR;
-
-	case SCLEX_RUBY:
-		return style == SCE_RB_OPERATOR;
-	case SCLEX_RUST:
-		return style == SCE_RUST_OPERATOR;
-
-	case SCLEX_SMALI:
-		return style == SCE_SMALI_OPERATOR;
-	case SCLEX_SQL:
-		return style == SCE_SQL_OPERATOR;
-
-	case SCLEX_TCL:
-		return style == SCE_TCL_OPERATOR;
-	case SCLEX_TOML:
-		return style == SCE_TOML_OPERATOR;
-
-	case SCLEX_VB:
-	case SCLEX_VBSCRIPT:
-		return style == SCE_B_OPERATOR;
-	case SCLEX_VERILOG:
-		return style == SCE_V_OPERATOR;
-	case SCLEX_VHDL:
-		return style == SCE_VHDL_OPERATOR;
-	case SCLEX_VIM:
-		return style == SCE_VIM_OPERATOR;
-
-	case SCLEX_WASM:
-		return style == SCE_WASM_OPERATOR;
-
-	case SCLEX_YAML:
-		return style == SCE_YAML_OPERATOR;
-	}
-	return FALSE;
-}
-
 static inline BOOL IsWordStyleToIgnore(int style) {
 	switch (pLexCurrent->iLexer) {
 	case SCLEX_CPP:
 		return style == SCE_C_WORD
 			|| style == SCE_C_WORD2
 			|| style == SCE_C_PREPROCESSOR;
+
+	case SCLEX_GO:
+		return style == SCE_GO_WORD
+			|| style == SCE_GO_WORD2
+			|| style == SCE_GO_BUILTIN_FUNC
+			|| style == SCE_GO_FORMAT_SPECIFIER;
 
 	case SCLEX_JSON:
 		return style == SCE_JSON_KEYWORD;
@@ -714,7 +619,7 @@ static inline BOOL IsWordStyleToIgnore(int style) {
 
 // https://en.wikipedia.org/wiki/Printf_format_string
 static inline BOOL IsStringFormatChar(int ch, int style) {
-	if (!IsAAlpha(ch)) {
+	if (!IsAlpha(ch)) {
 		return FALSE;
 	}
 	switch (pLexCurrent->iLexer) {
@@ -913,7 +818,7 @@ void AutoC_AddDocWord(struct WordList *pWList, BOOL bIgnoreCase, char prefix) {
 					if (IsAutoCompletionWordCharacter(chNext)) {
 						wordEnd += 2;
 					}
-				} else if (ch == '.' || (ch == '-' && !IsOperatorStyle(SciCall_GetStyleAt(wordEnd)))) {
+				} else if (ch == '.' || (ch == '-' && style == SciCall_GetStyleAt(wordEnd))) {
 					if (IsAutoCompletionWordCharacter(chNext)) {
 						++wordEnd;
 					}
@@ -1183,7 +1088,7 @@ void EditCompleteUpdateConfig(void) {
 		if (c == L'\0') {
 			break;
 		}
-		if (c < 0x80 && ispunct((unsigned char)c)) {
+		if (IsPunctuation(c)) {
 			autoCompletionConfig.wszAutoCompleteFillUp[k++] = c;
 			if (punctuation) {
 				autoCompletionConfig.szAutoCompleteFillUp[i++] = (char)c;
@@ -1374,7 +1279,7 @@ static BOOL EditCompleteWordCore(int iCondition, BOOL autoInsert) {
 		if (pWList->nWordCount == 0 && iRootLen != 0) {
 			const char *pSubRoot = strpbrk(pWList->pWordStart, ":.#@<\\/->$%");
 			if (pSubRoot) {
-				while (*pSubRoot && strchr(":.#@<\\/->$%", *pSubRoot)) {
+				while (IsSpecialStart(*pSubRoot)) {
 					pSubRoot++;
 				}
 				if (*pSubRoot) {
@@ -1466,12 +1371,12 @@ static BOOL CanAutoCloseSingleQuote(int chPrev, int iCurrentStyle) {
 	}
 
 	// someone's, don't
-	if (isalnum(chPrev)) {
+	if (IsAlphaNumeric(chPrev)) {
 		// character prefix
 		if (pLexCurrent->rid == NP2LEX_CPP || pLexCurrent->rid == NP2LEX_RC || iLexer == SCLEX_PYTHON || iLexer == SCLEX_SQL || iLexer == SCLEX_RUST) {
 			const int lower = chPrev | 0x20;
 			const int chPrev2 = SciCall_GetCharAt(SciCall_GetCurrentPos() - 3);
-			const BOOL bSubWord = chPrev2 >= 0x80 || isalnum(chPrev2);
+			const BOOL bSubWord = chPrev2 >= 0x80 || IsAlphaNumeric(chPrev2);
 
 			switch (iLexer) {
 			case SCLEX_CPP:
@@ -1499,19 +1404,46 @@ static BOOL CanAutoCloseSingleQuote(int chPrev, int iCurrentStyle) {
 	return TRUE;
 }
 
+BOOL EditIsOpenBraceMatched(Sci_Position pos, Sci_Position startPos) {
+	// SciCall_GetEndStyled() is SciCall_GetCurrentPos() - 1
+#if 0
+	// style current line, ensure brace matching on current line matched with style
+	const Sci_Line iLine = SciCall_LineFromPosition(pos);
+	SciCall_EnsureStyledTo(SciCall_PositionFromLine(iLine + 1));
+#else
+	// only find close brace with same style in next 1KiB text
+	const Sci_Position iDocLen = SciCall_GetLength();
+	SciCall_EnsureStyledTo(min_pos(iDocLen, pos + 1024));
+#endif
+	// find next close brace
+	const Sci_Position iPos = SciCall_BraceMatchNext(pos, startPos);
+	if (iPos != -1) {
+		// style may not matched when iPos > SciCall_GetEndStyled() (e.g. iPos on next line), see Document::BraceMatch()
+#if 0
+		SciCall_EnsureStyledTo(iPos + 1);
+#endif
+		// TODO: retry when style not matched
+		if (SciCall_GetStyleAt(pos) == SciCall_GetStyleAt(iPos)) {
+			// check whether next close brace already matched
+			return pos == 0 || SciCall_BraceMatchNext(iPos, SciCall_PositionBefore(pos)) == -1;
+		}
+	}
+	return FALSE;
+}
+
 void EditAutoCloseBraceQuote(int ch) {
 	const Sci_Position iCurPos = SciCall_GetCurrentPos();
 	const int chPrev = SciCall_GetCharAt(iCurPos - 2);
 	const int chNext = SciCall_GetCharAt(iCurPos);
-	const int iCurrentStyle = SciCall_GetStyleAt(iCurPos - 2);
+	const int iPrevStyle = SciCall_GetStyleAt(iCurPos - 2);
 	const int iNextStyle = SciCall_GetStyleAt(iCurPos);
 
 	if (pLexCurrent->iLexer == SCLEX_CPP) {
 		// within char
-		if (iCurrentStyle == SCE_C_CHARACTER && iNextStyle == SCE_C_CHARACTER && pLexCurrent->rid != NP2LEX_PHP) {
+		if (iPrevStyle == SCE_C_CHARACTER && iNextStyle == SCE_C_CHARACTER && pLexCurrent->rid != NP2LEX_PHP) {
 			return;
 		}
-		if (ch == '`' && !IsCppStringStyle(iCurrentStyle)) {
+		if (ch == '`' && !IsCppStringStyle(iPrevStyle)) {
 			return;
 		}
 	}
@@ -1522,39 +1454,43 @@ void EditAutoCloseBraceQuote(int ch) {
 	}
 
 	const int mask = autoCompletionConfig.fAutoInsertMask;
-	char tchIns[2] = "";
+	char fillChar = '\0';
+	BOOL closeBrace = FALSE;
 	switch (ch) {
 	case '(':
 		if (mask & AutoInsertParenthesis) {
-			tchIns[0] = ')';
+			fillChar = ')';
+			closeBrace = TRUE;
 		}
 		break;
 	case '[':
-		if ((mask & AutoInsertSquareBracket) && !(pLexCurrent->rid == NP2LEX_SMALI)) { // Smali array type
-			tchIns[0] = ']';
+		if ((mask & AutoInsertSquareBracket) && !(pLexCurrent->rid == NP2LEX_SMALI)) { // JVM array type
+			fillChar = ']';
+			closeBrace = TRUE;
 		}
 		break;
 	case '{':
 		if (mask & AutoInsertBrace) {
-			tchIns[0] = '}';
+			fillChar = '}';
+			closeBrace = TRUE;
 		}
 		break;
 	case '<':
 		if ((mask & AutoInsertAngleBracket) && (pLexCurrent->rid == NP2LEX_CPP || pLexCurrent->rid == NP2LEX_CSHARP || pLexCurrent->rid == NP2LEX_JAVA)) {
 			// geriatric type, template
-			if (iCurrentStyle == SCE_C_CLASS || iCurrentStyle == SCE_C_INTERFACE || iCurrentStyle == SCE_C_STRUCT) {
-				tchIns[0] = '>';
+			if (iPrevStyle == SCE_C_CLASS || iPrevStyle == SCE_C_INTERFACE || iPrevStyle == SCE_C_STRUCT) {
+				fillChar = '>';
 			}
 		}
 		break;
 	case '\"':
 		if ((mask & AutoInsertDoubleQuote)) {
-			tchIns[0] = '\"';
+			fillChar = '\"';
 		}
 		break;
 	case '\'':
-		if ((mask & AutoInsertSingleQuote) && CanAutoCloseSingleQuote(chPrev, iCurrentStyle)) {
-			tchIns[0] = '\'';
+		if ((mask & AutoInsertSingleQuote) && CanAutoCloseSingleQuote(chPrev, iPrevStyle)) {
+			fillChar = '\'';
 		}
 		break;
 	case '`':
@@ -1563,28 +1499,41 @@ void EditAutoCloseBraceQuote(int ch) {
 		//|| pLexCurrent->iLexer == SCLEX_MAKEFILE
 		//|| pLexCurrent->iLexer == SCLEX_SQL
 		//) {
-		//	tchIns[0] = '`';
+		//	fillChar = '`';
 		//} else if (0) {
-		//	tchIns[0] = '\'';
+		//	fillChar = '\'';
 		//}
 		if (mask & AutoInsertBacktick) {
-			tchIns[0] = '`';
+			fillChar = '`';
 		}
 		break;
 	case ',':
 		if ((mask & AutoInsertSpaceAfterComma) && !(chNext == ' ' || chNext == '\t' || (chPrev == '\'' && chNext == '\'') || (chPrev == '\"' && chNext == '\"'))) {
-			tchIns[0] = ' ';
+			fillChar = ' ';
 		}
 		break;
 	default:
 		break;
 	}
-	if (tchIns[0]) {
+
+	if (fillChar) {
+		if (closeBrace && EditIsOpenBraceMatched(iCurPos - 1, iCurPos)) {
+			return;
+		}
+		// TODO: auto escape quotes inside string
+		//else if (ch == fillChar) {
+		//}
+
+		const char tchIns[4] = { fillChar };
 		SciCall_BeginUndoAction();
 		SciCall_ReplaceSel(tchIns);
 		const Sci_Position iCurrentPos = (ch == ',') ? iCurPos + 1 : iCurPos;
 		SciCall_SetSel(iCurrentPos, iCurrentPos);
 		SciCall_EndUndoAction();
+		if (closeBrace) {
+			// fix brace matching
+			SciCall_EnsureStyledTo(iCurPos + 1);
+		}
 	}
 }
 
@@ -1641,7 +1590,7 @@ void EditAutoCloseXMLTag(void) {
 
 			if (*pCur == '<') {
 				pCur++;
-				while (strchr(":_-.", *pCur) || isalnum((unsigned char)(*pCur))) {
+				while (IsHtmlTagChar(*pCur)) {
 					tchIns[cchIns++] = *pCur;
 					pCur++;
 				}
@@ -1722,7 +1671,7 @@ const char *EditKeywordIndent(const char *head, int *indent) {
 	const char *endPart = NULL;
 	*indent = 0;
 
-	while (*head && length < 63 && IsAAlpha(*head)) {
+	while (*head && length < 63 && IsAlpha(*head)) {
 		word[length] = *head;
 		word_low[length] = (char)((*head) | 0x20);
 		++length;
@@ -1821,6 +1770,7 @@ const char *EditKeywordIndent(const char *head, int *indent) {
 	case SCLEX_MATLAB:
 		if (!strcmp(word, "function")) {
 			*indent = 1;
+			// 'end' is optional
 		} else if (!strcmp(word, "if") || !strcmp(word, "for") || !strcmp(word, "while") || !strcmp(word, "switch") || !strcmp(word, "try")) {
 			*indent = 2;
 			if (pLexCurrent->rid == NP2LEX_OCTAVE || np2LexLangIndex == IDM_LEXER_OCTAVE) {
@@ -1950,8 +1900,8 @@ void EditAutoIndent(void) {
 
 		iIndentLen = 0;
 		ch = SciCall_GetCharAt(SciCall_PositionFromLine(iCurLine));
-		const BOOL closeBraces = (ch == '}' || ch == ']' || ch == ')');
-		if (indent == 2 && !closeBraces) {
+		const BOOL closeBrace = (ch == '}' || ch == ']' || ch == ')');
+		if (indent == 2 && !closeBrace) {
 			indent = 1;
 		}
 
@@ -1959,7 +1909,7 @@ void EditAutoIndent(void) {
 		const char *endPart = NULL;
 		for (pPos = pLineBuf; *pPos; pPos++) {
 			if (*pPos != ' ' && *pPos != '\t') {
-				if (!indent && IsAAlpha(*pPos)) { // indent on keywords
+				if (!indent && IsAlpha(*pPos)) { // indent on keywords
 					const int style = SciCall_GetStyleAt(SciCall_PositionFromLine(iCurLine - 1) + iIndentLen);
 					if (IsIndentKeywordStyle(style)) {
 						endPart = EditKeywordIndent(pPos, &indent);
@@ -1972,6 +1922,20 @@ void EditAutoIndent(void) {
 				break;
 			}
 			iIndentLen += 1;
+		}
+
+		if (indent == 2 && endPart) {
+			const int level = SciCall_GetFoldLevel(iCurLine);
+			if (!(level & SC_FOLDLEVELHEADERFLAG)) {
+				const Sci_Line parent = SciCall_GetFoldParent(iCurLine);
+				if (parent >= 0 && parent + 1 == iCurLine) {
+					const Sci_Line child = SciCall_GetLastChild(parent);
+					// TODO: check endPart is on this line
+					if (SciCall_GetLineLength(child)) {
+						indent = 1;
+					}
+				}
+			}
 		}
 
 		Sci_Position iIndentPos = iCurPos;
@@ -2093,6 +2057,7 @@ void EditToggleCommentLine(void) {
 	case SCLEX_CIL:
 	case SCLEX_CSS:
 	case SCLEX_FSHARP:
+	case SCLEX_GO:
 	case SCLEX_GRAPHVIZ:
 	case SCLEX_JSON:
 	case SCLEX_KOTLIN:
@@ -2226,6 +2191,7 @@ void EditToggleCommentBlock(void) {
 	case SCLEX_ASM:
 	case SCLEX_CIL:
 	case SCLEX_CSS:
+	case SCLEX_GO:
 	case SCLEX_GRAPHVIZ:
 	case SCLEX_JSON:
 	case SCLEX_KOTLIN:
@@ -2362,10 +2328,6 @@ void EditInsertScriptShebangLine(void) {
 		switch (pLexCurrent->rid) {
 		case NP2LEX_AWK:
 			name = "awk";
-			break;
-
-		case NP2LEX_GO:
-			name = "go";
 			break;
 
 		case NP2LEX_GROOVY:

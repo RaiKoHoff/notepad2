@@ -362,12 +362,12 @@ enum GlobalStyleIndex {
 	GlobalStyleIndex_IndentationGuide,	// inherited style. `fore`, `back`
 	GlobalStyleIndex_Selection,			// standalone style. main selection (`back`, `alpha`), additional selection (`fore`, `outline`), `eolfilled`
 	GlobalStyleIndex_Whitespace,		// standalone style. `fore`, `back`, `size`: dot size
-	GlobalStyleIndex_CurrentBlock,		// standalone style. `fore`
 	GlobalStyleIndex_CurrentLine,		// standalone style. frame (`fore`, `size`, `outline`), background (`back`, `alpha`)
 	GlobalStyleIndex_Caret,				// standalone style. `fore`: main caret color, `back`: additional caret color
 	GlobalStyleIndex_IMEIndicator,		// indicator style. `fore`: IME indicator color
 	GlobalStyleIndex_LongLineMarker,	// standalone style. `fore`: edge line color, `back`: background color for text exceeds long line limit
 	GlobalStyleIndex_ExtraLineSpacing,	// standalone style. descent = `size`/2, ascent = `size` - descent
+	GlobalStyleIndex_CodeFolding,		// standalone style. `fore`, `back`
 	GlobalStyleIndex_FoldingMarker,		// standalone style. `fore`: folding line color, `back`: plus/minus box fill color
 	GlobalStyleIndex_FoldDispalyText,	// inherited style.
 	GlobalStyleIndex_MarkOccurrences,	// indicator style. `fore`, `alpha`, `outline`
@@ -460,6 +460,7 @@ static inline UINT GetLexerStyleControlMask(int rid, int index) {
 		case GlobalStyleIndex_CurrentLine:
 		case GlobalStyleIndex_Caret:
 		case GlobalStyleIndex_LongLineMarker:
+		case GlobalStyleIndex_CodeFolding:
 		case GlobalStyleIndex_FoldingMarker:
 		case GlobalStyleIndex_Bookmark:
 			return StyleControl_Fore | StyleControl_Back;
@@ -467,7 +468,6 @@ static inline UINT GetLexerStyleControlMask(int rid, int index) {
 			return StyleControl_Fore | StyleControl_Back | StyleControl_EOLFilled;
 		case GlobalStyleIndex_MatchBrace:
 		case GlobalStyleIndex_MatchBraceError:
-		case GlobalStyleIndex_CurrentBlock:
 		case GlobalStyleIndex_IMEIndicator:
 		case GlobalStyleIndex_MarkOccurrences:
 			return StyleControl_Fore;
@@ -1071,7 +1071,7 @@ void Style_OnDPIChanged(PEDITLEXER pLex) {
 	// whitespace dot size
 	LPCWSTR szValue = pLexGlobal->Styles[GlobalStyleIndex_Whitespace].szValue;
 	int iValue = 0;
-	Style_StrGetRawSize(szValue, &iValue);
+	Style_StrGetSize(szValue, &iValue);
 	iValue = ScaleStylePixel(iValue, scale, 1);
 	SciCall_SetWhitespaceSize(iValue);
 
@@ -1083,7 +1083,7 @@ void Style_OnDPIChanged(PEDITLEXER pLex) {
 	// Extra Line Spacing
 	szValue = (pLex->rid != NP2LEX_ANSI)? pLexGlobal->Styles[GlobalStyleIndex_ExtraLineSpacing].szValue
 		: pLex->Styles[ANSIArtStyleIndex_ExtraLineSpacing].szValue;
-	if (Style_StrGetRawSize(szValue, &iValue) && iValue != 0) {
+	if (Style_StrGetSize(szValue, &iValue) && iValue != 0) {
 		int iAscent;
 		int iDescent;
 		if (iValue > 0) {
@@ -1188,12 +1188,6 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 	case NP2LEX_JAVA:
 		attr[10] = KeywordAttr_NoLexer;		// Package
 		break;
-	case NP2LEX_JS:
-		//attr[1] = KeywordAttr_NoAutoComp;	// Reserved Word
-		attr[9] = KeywordAttr_NoLexer;		// Function
-		attr[10] = KeywordAttr_NoLexer;		// Property
-		attr[11] = KeywordAttr_NoLexer;		// Method
-		break;
 	case NP2LEX_NSIS:
 		attr[0] = KeywordAttr_MakeLower;
 		break;
@@ -1241,6 +1235,15 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 	case NP2LEX_GN:
 		attr[3] = KeywordAttr_NoLexer;		// target variables
 		attr[4] = KeywordAttr_NoLexer;		// placeholders
+		break;
+	case NP2LEX_GO:
+		attr[7] = KeywordAttr_NoLexer;		// variables
+		attr[8] = KeywordAttr_NoLexer;		// function
+		attr[9] = KeywordAttr_NoLexer;		// package
+		break;
+	case NP2LEX_JS:
+		attr[9] = KeywordAttr_NoLexer;		// function
+		attr[10] = KeywordAttr_NoLexer;		// properties
 		break;
 	case NP2LEX_JULIA:
 		attr[1] = KeywordAttr_NoAutoComp;	// code fold
@@ -1372,6 +1375,11 @@ void Style_InitDefaultColor(void) {
 	SciCall_StyleSetBack(STYLE_DEFAULT, rgb);
 	//SciCall_StyleClearAll();
 
+	const COLORREF backColor = rgb;
+	szValue = pLexGlobal->Styles[GlobalStyleIndex_CodeFolding].szValue;
+	if (!Style_StrGetBackColor(szValue, &rgb)) {
+		rgb = backColor;
+	}
 	SciCall_SetFoldMarginColour(TRUE, rgb);
 	SciCall_SetFoldMarginHiColour(TRUE, rgb);
 
@@ -1586,6 +1594,10 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	}
 
 	SciCall_SetSelEOLFilled(Style_StrGetEOLFilled(szValue));
+	if (!Style_StrGetSize(szValue, &iValue)) {
+		iValue = 100;
+	}
+	SciCall_SetEOLSelectedWidth(iValue);
 	//! end Selection
 
 	//! begin Whitespace
@@ -1662,13 +1674,15 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 			fillColor = (bUse2ndGlobalStyle || np2StyleTheme == StyleTheme_Dark) ? FoldingMarkerFillColorDark : FoldingMarkerFillColorDefault;
 		}
 
-		szValue = pLexGlobal->Styles[GlobalStyleIndex_CurrentBlock].szValue;
+		szValue = pLexGlobal->Styles[GlobalStyleIndex_CodeFolding].szValue;
 		if (!Style_StrGetForeColor(szValue, &highlightColor)) {
 			highlightColor = RGB(0xFF, 0x00, 0x00); // Scintilla default red color
 		}
-
-		SciCall_SetFoldMarginColour(TRUE, backColor);
-		SciCall_SetFoldMarginHiColour(TRUE, backColor);
+		if (!Style_StrGetBackColor(szValue, &rgb)) {
+			rgb = backColor;
+		}
+		SciCall_SetFoldMarginColour(TRUE, rgb);
+		SciCall_SetFoldMarginHiColour(TRUE, rgb);
 #if 0	// use gray fold color
 		COLORREF foreColor = SciCall_StyleGetFore(STYLE_DEFAULT);
 		// Marker fore/back colors
@@ -1797,10 +1811,6 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	UpdateFoldMarginWidth();
 }
 
-static inline BOOL IsASpace(int ch) {
-	return (ch == ' ') || ((ch >= 0x09) && (ch <= 0x0d));
-}
-
 //=============================================================================
 // find lexer from script interpreter, which must be first line of the file.
 // Style_SniffShebang()
@@ -1919,9 +1929,6 @@ PEDITLEXER Style_SniffShebang(char *pchText) {
 			if (!strncmp(name, "py", 2)) {
 				return &lexPython;
 			}
-			if (!strncmp(name, "go", 2)) {
-				return &lexGo;
-			}
 		}
 	}
 	return NULL;
@@ -2027,7 +2034,7 @@ int Style_GetDocTypeLanguage(void) {
 	}
 	if (*p == '<') {
 		p++;
-		if (!isalpha((unsigned char)(*p))) {
+		if (!IsAlpha(*p)) {
 			return 0;
 		}
 	} else {
@@ -2124,7 +2131,7 @@ BOOL MatchCPPKeyword(const char *p, int index) {
 	while (len < 30 && (*p == '_' || (*p >= 'a' && *p <= 'z'))) {
 		word[len++] = *p++;
 	}
-	if (len == 30 || isalnum((unsigned char)(*p))) {
+	if (len == 30 || IsAlphaNumeric(*p)) {
 		return FALSE;
 	}
 	word[len++] = ' ';
@@ -2747,10 +2754,10 @@ BOOL Style_MaybeBinaryFile(LPCWSTR lpszFile) {
 	UINT count = 0;
 	while (ptr < end) {
 		uint8_t ch = *ptr++;
-		if (ch < 32 && (C0Mask & (1U << ch))) {
+		if (ch < 32 && ((C0Mask >> ch) & 1)) {
 			++count;
 			ch = *ptr++;
-			if ((count >= 8) || (ch < 32 && (C0Mask & (1U << ch)))) {
+			if ((count >= 8) || (ch < 32 && ((C0Mask >> ch) & 1))) {
 				return TRUE;
 			}
 		}
@@ -3020,7 +3027,7 @@ void Style_HighlightCurrentLine(void) {
 		if (Style_StrGetColor(outline, szValue, &rgb)) {
 			int size = 0;
 			if (outline) {
-				Style_StrGetRawSize(szValue, &size);
+				Style_StrGetSize(szValue, &size);
 				size = ScaleStylePixel(size, g_uCurrentDPI*iZoomLevel, 1);
 			}
 
@@ -3207,6 +3214,7 @@ LPWSTR Style_GetOpenDlgFilterStr(BOOL open, LPCWSTR lpszFile, int lexers[]) {
 	}
 
 	if (!open) {
+		lexers[0] = pLexArray[iDefaultLexerIndex]->rid;
 		// All Files comes last for save file dialog.
 		GetString(IDS_FILTER_ALL, szFilter + length, MAX_EDITLEXER_EXT_SIZE);
 	}
@@ -3228,7 +3236,8 @@ BOOL Style_StrGetFontEx(LPCWSTR lpszStyle, LPWSTR lpszFont, int cchFont, BOOL bD
 			++p;
 		}
 		lstrcpyn(lpszFont, p, cchFont);
-		if ((p = StrChr(lpszFont, L';')) != NULL) {
+		p = StrChr(lpszFont, L';');
+		if (p != NULL) {
 			*p = L'\0';
 		}
 		TrimString(lpszFont);
@@ -3291,7 +3300,7 @@ BOOL Style_StrGetFontSize(LPCWSTR lpszStyle, int *size) {
 	return FALSE;
 }
 
-BOOL Style_StrGetRawSize(LPCWSTR lpszStyle, int *size) {
+BOOL Style_StrGetSize(LPCWSTR lpszStyle, int *size) {
 	LPCWSTR p = StrStr(lpszStyle, L"size:");
 
 	if (p != NULL) {
@@ -3333,7 +3342,8 @@ static BOOL Style_StrGetValueEx(LPCWSTR lpszStyle, LPCWSTR key, int keyLen, LPWS
 			++p;
 		}
 		lstrcpyn(lpszValue, p, cchValue);
-		if ((p = StrChr(lpszValue, L';')) != NULL) {
+		p = StrChr(lpszValue, L';');
+		if (p != NULL) {
 			*p = L'\0';
 		}
 		TrimString(lpszValue);
@@ -4293,8 +4303,9 @@ static INT_PTR CALLBACK Style_ConfigDlgProc(HWND hwnd, UINT umsg, WPARAM wParam,
 						WCHAR wch[MAX_EDITLEXER_EXT_SIZE];
 
 						GetDlgItemText(hwnd, IDC_STYLELABELS, wch, COUNTOF(wch));
-						if (StrChr(wch, L'|')) {
-							*StrChr(wch, L'|') = 0;
+						LPWSTR p = StrChr(wch, L'|');
+						if (p != NULL) {
+							*p = L'\0';
 						}
 
 						SetDlgItemText(hwnd, IDC_STYLELABEL, wch);
@@ -4311,8 +4322,9 @@ static INT_PTR CALLBACK Style_ConfigDlgProc(HWND hwnd, UINT umsg, WPARAM wParam,
 						WCHAR wch[MAX_EDITSTYLE_VALUE_SIZE];
 
 						GetDlgItemText(hwnd, IDC_STYLELABELS, wch, COUNTOF(wch));
-						if (StrChr(wch, L'|')) {
-							*StrChr(wch, L'|') = 0;
+						LPWSTR p = StrChr(wch, L'|');
+						if (p != NULL) {
+							*p = L'\0';
 						}
 
 						SetDlgItemText(hwnd, IDC_STYLELABEL, StrEnd(wch) + 1);

@@ -42,9 +42,6 @@ typedef struct EDITFINDREPLACE {
 
 typedef const EDITFINDREPLACE * LPCEDITFINDREPLACE;
 
-#define IDMSG_SWITCHTOFIND		300
-#define IDMSG_SWITCHTOREPLACE	301
-
 #define ALIGN_LEFT			0
 #define ALIGN_RIGHT			1
 #define ALIGN_CENTER		2
@@ -110,14 +107,19 @@ void	EditReplaceDocument(HANDLE pdoc);
 char*	EditGetClipboardText(HWND hwnd); // LocalFree()
 BOOL	EditCopyAppend(HWND hwnd);
 
-extern const int iLineEndings[3];
+static inline int GetScintillaEOLMode(int mode) {
+#define EOLModeMask (SC_EOL_CRLF | (SC_EOL_LF << 4) | (SC_EOL_CR << 8))
+	return (EOLModeMask >> (mode << 2)) & 0x0f;
+#undef EOLModeMask
+}
+
 struct EditFileIOStatus;
 void 	EditDetectEOLMode(LPCSTR lpData, DWORD cbData, struct EditFileIOStatus *status);
 BOOL	EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, struct EditFileIOStatus *status);
 BOOL	EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, struct EditFileIOStatus *status);
 
 void	EditInvertCase(void);
-void	EditMapTextCase(UINT menu);
+void	EditMapTextCase(int menu);
 void	EditSentenceCase(void);
 
 void	EditURLEncode(void);
@@ -279,6 +281,7 @@ void	EditCompleteUpdateConfig(void);
 BOOL	IsDocWordChar(int ch);
 BOOL	IsAutoCompletionWordCharacter(int ch);
 void	EditCompleteWord(int iCondition, BOOL autoInsert);
+BOOL	EditIsOpenBraceMatched(Sci_Position pos, Sci_Position startPos);
 void	EditAutoCloseBraceQuote(int ch);
 void	EditAutoCloseXMLTag(void);
 void	EditAutoIndent(void);
@@ -420,3 +423,4 @@ void FoldToggleCurrentLevel(FOLD_ACTION action);
 void FoldToggleDefault(FOLD_ACTION action);
 void FoldClickAt(Sci_Position pos, int mode);
 void FoldAltArrow(int key, int mode);
+void EditGotoBlock(int menu);

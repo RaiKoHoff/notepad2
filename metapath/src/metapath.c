@@ -220,11 +220,21 @@ static void CleanUpResources(BOOL initialized) {
 	OleUninitialize();
 }
 
+BOOL WINAPI ConsoleHandlerRoutine(DWORD dwCtrlType) {
+	if (dwCtrlType == CTRL_C_EVENT) {
+		ShowNotifyIcon(hwndMain, FALSE);
+		SendMessage(hwndMain, WM_CLOSE, 0, 0);
+		return TRUE;
+	}
+	return FALSE;
+}
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nShowCmd) {
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
 #if 0 // used for Clang UBSan or printing debug message on console.
 	if (AttachConsole(ATTACH_PARENT_PROCESS)) {
+		SetConsoleCtrlHandler(ConsoleHandlerRoutine, TRUE);
 		freopen("CONOUT$", "w", stdout);
 		freopen("CONOUT$", "w", stderr);
 		fprintf(stdout, "\n%s:%d %s\n", __FILE__, __LINE__, __FUNCTION__);
@@ -2240,7 +2250,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			} else {
 				WCHAR tch[256];
 				GetString((UINT)pnmh->idFrom, tch, COUNTOF(tch));
-				lstrcpyn(pTTT->szText, tch, 80);
+				lstrcpyn(pTTT->szText, tch, COUNTOF(pTTT->szText));
 			}
 		}
 		break;
@@ -2362,6 +2372,12 @@ void ValidateUILangauge(void) {
 	case LANG_CHINESE:
 		languageResID = IsChineseTraditionalSubLang(subLang)? IDS_LANG_CHINESE_TRADITIONAL : IDS_LANG_CHINESE_SIMPLIFIED;
 		break;
+	case LANG_GERMAN:
+		languageResID = IDS_LANG_GERMAN;
+		break;
+	case LANG_ITALIAN:
+		languageResID = IDS_LANG_ITALIAN;
+		break;
 	case LANG_JAPANESE:
 		languageResID = IDS_LANG_JAPANESE;
 		break;
@@ -2373,7 +2389,7 @@ void ValidateUILangauge(void) {
 	}
 }
 
-void SetUILanguage(UINT resID) {
+void SetUILanguage(int resID) {
 	LANGID lang = uiLanguage;
 	switch (resID) {
 	case IDS_LANG_USER_DEFAULT:
@@ -2387,6 +2403,12 @@ void SetUILanguage(UINT resID) {
 		break;
 	case IDS_LANG_CHINESE_TRADITIONAL:
 		lang = MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL);
+		break;
+	case IDS_LANG_GERMAN:
+		lang = MAKELANGID(LANG_GERMAN, SUBLANG_GERMAN);
+		break;
+	case IDS_LANG_ITALIAN:
+		lang = MAKELANGID(LANG_ITALIAN, SUBLANG_ITALIAN);
 		break;
 	case IDS_LANG_JAPANESE:
 		lang = MAKELANGID(LANG_JAPANESE, SUBLANG_DEFAULT);

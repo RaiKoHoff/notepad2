@@ -16,7 +16,7 @@ class LineLevels;
 class LineState;
 class LineAnnotation;
 
-enum EncodingFamily {
+enum class EncodingFamily {
 	efEightBit, efUnicode, efDBCS
 };
 
@@ -244,7 +244,7 @@ private:
 
 	// ldSize is not real data - it is for dimensions and loops
 	enum lineData {
-		ldMarkers, ldLevels, ldState, ldMargin, ldAnnotation, ldSize
+		ldMarkers, ldLevels, ldState, ldMargin, ldAnnotation, ldEOLAnnotation, ldSize
 	};
 	std::unique_ptr<PerLine> perLineData[ldSize];
 	LineMarkers *Markers() const noexcept;
@@ -252,6 +252,7 @@ private:
 	LineState *States() const noexcept;
 	LineAnnotation *Margins() const noexcept;
 	LineAnnotation *Annotations() const noexcept;
+	LineAnnotation *EOLAnnotations() const noexcept;
 
 	bool matchesValid;
 	std::unique_ptr<RegexSearchBase> regex;
@@ -261,9 +262,9 @@ private:
 public:
 
 	struct CharacterExtracted {
-		unsigned int character;
-		unsigned int widthBytes;
-		CharacterExtracted(unsigned int character_, unsigned int widthBytes_) noexcept :
+		int character;
+		int widthBytes;
+		CharacterExtracted(int character_, int widthBytes_) noexcept :
 			character(character_), widthBytes(widthBytes_) {}
 		// For DBCS characters turn 2 bytes into an int
 		static CharacterExtracted DBCS(unsigned char lead, unsigned char trail) noexcept {
@@ -499,7 +500,7 @@ public:
 	void AllocateLineCharacterIndex(int lineCharacterIndex);
 	void ReleaseLineCharacterIndex(int lineCharacterIndex);
 	Sci::Line LinesTotal() const noexcept;
-	void SetInitLineCount(Sci::Line lineCount);
+	void AllocateLines(Sci::Line lines);
 
 	void SetDefaultCharClasses(bool includeWordClass) noexcept;
 	void SetCharClasses(const unsigned char *chars, CharClassify::cc newCharClass) noexcept;
@@ -545,6 +546,11 @@ public:
 	int AnnotationLines(Sci::Line line) const noexcept;
 	void AnnotationClearAll();
 
+	StyledText EOLAnnotationStyledText(Sci::Line line) const noexcept;
+	void EOLAnnotationSetStyle(Sci::Line line, int style);
+	void EOLAnnotationSetText(Sci::Line line, const char *text);
+	void EOLAnnotationClearAll();
+
 	bool AddWatcher(DocWatcher *watcher, void *userData);
 	bool RemoveWatcher(DocWatcher *watcher, void *userData);
 
@@ -559,7 +565,7 @@ public:
 	int IndentSize() const noexcept {
 		return actualIndentInChars;
 	}
-	Sci::Position BraceMatch(Sci::Position position, Sci::Position maxReStyle) const noexcept;
+	Sci::Position BraceMatch(Sci::Position position, Sci::Position maxReStyle, Sci::Position startPos, bool useStartPos) const noexcept;
 
 	bool IsAutoCompletionWordCharacter(unsigned int ch) const noexcept {
 		return WordCharacterClass(ch) == CharClassify::ccWord;

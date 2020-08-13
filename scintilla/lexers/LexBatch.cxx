@@ -4,7 +4,6 @@
 
 #include <cassert>
 #include <cstring>
-#include <cctype>
 
 #include <vector>
 
@@ -31,11 +30,11 @@ constexpr bool IsBatOp(int ch, bool inEcho) noexcept {
 	return ch == '&' || ch == '|' || ch == '<' || ch == '>' || ch == '(' || ch == ')'
 		|| (!inEcho && (ch == '=' || ch == '@' || ch == ';' || ch == '*' || ch == ','));
 }
-inline bool IsWordStart(int ch) noexcept {
-	return (ch >= 0x80) || (isgraph(ch) && !(IsBatOp(ch, false) || IsBatSpec(ch) || ch == '.'));
+constexpr bool IsWordStart(int ch) noexcept {
+	return IsGraphic(ch) && !(IsBatOp(ch, false) || IsBatSpec(ch) || ch == '.');
 }
-inline bool IsWordChar(int ch) noexcept {
-	return (ch >= 0x80) || (isgraph(ch) && !(IsBatOp(ch, false) || IsBatSpec(ch)));
+constexpr bool IsWordChar(int ch) noexcept {
+	return IsGraphic(ch) && !(IsBatOp(ch, false) || IsBatSpec(ch));
 }
 constexpr bool IsBatVariable(int ch) noexcept {
 	return iswordchar(ch) || ch == '-' || ch == ':' || ch == '=' || ch == '$';
@@ -47,16 +46,16 @@ constexpr bool IsMarkVariableNext(int chNext) noexcept {
 	return chNext == '=' || iswordstart(chNext);
 }
 // someone's, don't
-inline bool IsSingleQuotedString(int ch, int chPrev, int chNext) noexcept {
-	return ch == '\'' && !((chPrev >= 0x80 || isalnum(chPrev)) && (chNext == 's' || chNext == 't' || chNext == 'S' || chNext == 'T'));
+constexpr bool IsSingleQuotedString(int ch, int chPrev, int chNext) noexcept {
+	return ch == '\'' && !((chPrev >= 0x80 || IsAlphaNumeric(chPrev)) && (chNext == 's' || chNext == 't' || chNext == 'S' || chNext == 'T'));
 }
 // Escape Characters https://www.robvanderwoude.com/escapechars.php
-bool GetBatEscapeLen(int state, int& length, int ch, int chNext, int chNext2) noexcept {
+constexpr bool GetBatEscapeLen(int state, int& length, int ch, int chNext, int chNext2) noexcept {
 	length = 0;
 	if (ch == '^') {
 		if (chNext == '^') {
 			length = (chNext2 == '!') ? 2 : 1;
-		} else if (chNext < 0x80 && ispunct(chNext)) {
+		} else if (IsPunctuation(chNext)) {
 			length = 1;
 		}
 	} else if (ch == '%') {

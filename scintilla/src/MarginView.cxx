@@ -367,9 +367,11 @@ void MarginView::PaintMargin(Surface *surface, Sci::Line topLine, PRectangle rc,
 
 				marks &= vs.ms[margin].mask;
 
-				PRectangle rcMarker = rcSelMargin;
-				rcMarker.top = static_cast<XYPOSITION>(yposScreen);
-				rcMarker.bottom = static_cast<XYPOSITION>(yposScreen + vs.lineHeight);
+				PRectangle rcMarker(
+					rcSelMargin.left,
+					static_cast<XYPOSITION>(yposScreen),
+					rcSelMargin.right,
+					static_cast<XYPOSITION>(yposScreen + vs.lineHeight));
 				if (vs.ms[margin].style == SC_MARGIN_NUMBER) {
 					if (firstSubLine) {
 						std::string sNumber;
@@ -413,13 +415,14 @@ void MarginView::PaintMargin(Surface *surface, Sci::Line topLine, PRectangle rc,
 					const StyledText stMargin = model.pdoc->MarginStyledText(lineDoc);
 					if (stMargin.text && ValidStyledText(vs, vs.marginStyleOffset, stMargin)) {
 						if (firstSubLine) {
+							PRectangle rcText = rcMarker;
 							surface->FillRectangle(rcMarker,
 								vs.styles[stMargin.StyleAt(0) + vs.marginStyleOffset].back);
 							if (vs.ms[margin].style == SC_MARGIN_RTEXT) {
 								const int width = WidestLineWidth(surface, vs, vs.marginStyleOffset, stMargin);
-								rcMarker.left = rcMarker.right - width - 3;
+								rcText.left = rcText.right - width - 3;
 							}
-							DrawStyledText(surface, vs, vs.marginStyleOffset, rcMarker,
+							DrawStyledText(surface, vs, vs.marginStyleOffset, rcText,
 								stMargin, 0, stMargin.length, drawAll);
 						} else {
 							// if we're displaying annotation lines, colour the margin to match the associated document line
@@ -434,25 +437,25 @@ void MarginView::PaintMargin(Surface *surface, Sci::Line topLine, PRectangle rc,
 				if (marks) {
 					for (int markBit = 0; (markBit < MarkerBitCount) && marks; markBit++) {
 						if (marks & 1) {
-							LineMarker::typeOfFold tFold = LineMarker::undefined;
+							LineMarker::FoldPart part = LineMarker::FoldPart::undefined;
 							if ((vs.ms[margin].mask & SC_MASK_FOLDERS) && highlightDelimiter.IsFoldBlockHighlighted(lineDoc)) {
 								if (highlightDelimiter.IsBodyOfFoldBlock(lineDoc)) {
-									tFold = LineMarker::body;
+									part = LineMarker::FoldPart::body;
 								} else if (highlightDelimiter.IsHeadOfFoldBlock(lineDoc)) {
 									if (firstSubLine) {
-										tFold = headWithTail ? LineMarker::headWithTail : LineMarker::head;
+										part = headWithTail ? LineMarker::FoldPart::headWithTail : LineMarker::FoldPart::head;
 									} else {
 										if (model.pcs->GetExpanded(lineDoc) || headWithTail) {
-											tFold = LineMarker::body;
+											part = LineMarker::FoldPart::body;
 										} else {
-											tFold = LineMarker::undefined;
+											part = LineMarker::FoldPart::undefined;
 										}
 									}
 								} else if (highlightDelimiter.IsTailOfFoldBlock(lineDoc)) {
-									tFold = LineMarker::tail;
+									part = LineMarker::FoldPart::tail;
 								}
 							}
-							vs.markers[markBit].Draw(surface, rcMarker, fontLineNumber, tFold, vs.ms[margin].style);
+							vs.markers[markBit].Draw(surface, rcMarker, fontLineNumber, part, vs.ms[margin].style);
 						}
 						marks >>= 1;
 					}

@@ -38,6 +38,14 @@ NP2_inline UINT max_u(UINT x, UINT y) {
 	return (x > y) ? x : y;
 }
 
+NP2_inline size_t min_z(size_t x, size_t y) {
+	return (x < y) ? x : y;
+}
+
+NP2_inline size_t max_z(size_t x, size_t y) {
+	return (x > y) ? x : y;
+}
+
 NP2_inline long min_l(long x, long y) {
 	return (x < y) ? x : y;
 }
@@ -91,6 +99,46 @@ NP2_inline BOOL StrNotEmpty(LPCWSTR s) {
 	return s != NULL && *s != L'\0';
 }
 
+// see scintilla/lexlib/CharacterSet.h
+
+NP2_inline BOOL IsEOLChar(int ch) {
+	return ch == '\r' || ch == '\n';
+}
+
+NP2_inline BOOL IsASpace(int ch) {
+	return ch == ' ' || (ch >= 0x09 && ch <= 0x0d);
+}
+
+NP2_inline BOOL IsASpaceOrTab(int ch) {
+	return ch == ' ' || ch == '\t';
+}
+
+NP2_inline BOOL IsOctalDigit(int ch) {
+	return ch >= '0' && ch <= '7';
+}
+
+NP2_inline BOOL IsAlpha(int ch) {
+	return (ch >= 'a' && ch <= 'z')
+		|| (ch >= 'A' && ch <= 'Z');
+}
+
+NP2_inline BOOL IsAlphaNumeric(int ch) {
+	return (ch >= '0' && ch <= '9')
+		|| (ch >= 'a' && ch <= 'z')
+		|| (ch >= 'A' && ch <= 'Z');
+}
+
+NP2_inline BOOL IsPunctuation(int ch) {
+	return (ch > 32 && ch < '0')
+		|| (ch > '9' && ch < 'A')
+		|| (ch > 'Z' && ch < 'a')
+		|| (ch > 'z' && ch < 127);
+}
+
+NP2_inline BOOL IsHtmlTagChar(int ch) {
+	return IsAlphaNumeric(ch) || ch == ':' || ch == '_' || ch == '-' || ch == '.';
+}
+
 NP2_inline int ToUpperA(int ch) {
 	return (ch >= 'a' && ch <= 'z') ? (ch - 'a' + 'A') : ch;
 }
@@ -107,10 +155,27 @@ NP2_inline BOOL StrCaseEqual(LPCWSTR s1, LPCWSTR s2) {
 	return _wcsicmp(s1, s2) == 0;
 }
 
+#if _WIN32_WINNT >= _WIN32_WINNT_WIN7
+#define StrHasPrefix(s, prefix)				(FindStringOrdinal(FIND_STARTSWITH, (s), -1, (prefix), CSTRLEN(prefix), FALSE) == 0)
+#define StrHasPrefixEx(s, prefix, len)		(FindStringOrdinal(FIND_STARTSWITH, (s), -1, (prefix), (len), FALSE) == 0)
+#define StrHasPrefixCase(s, prefix)			(FindStringOrdinal(FIND_STARTSWITH, (s), -1, (prefix), CSTRLEN(prefix), TRUE) == 0)
+#define StrHasPrefixCaseEx(s, prefix, len)	(FindStringOrdinal(FIND_STARTSWITH, (s), -1, (prefix), (len), TRUE) == 0)
+
+NP2_inline LPWSTR StrStrEx(LPCWSTR pszFirst, LPCWSTR pszSrch, BOOL bIgnoreCase) {
+	const int index = FindStringOrdinal(FIND_FROMSTART, pszFirst, -1, pszSrch, -1, bIgnoreCase);
+	return (index == -1) ? NULL : (LPWSTR)(pszFirst + index);
+}
+
+#undef StrStr
+#undef StrStrI
+#define StrStr(pszFirst, pszSrch)			StrStrEx((pszFirst), (pszSrch), FALSE)
+#define StrStrI(pszFirst, pszSrch)			StrStrEx((pszFirst), (pszSrch), TRUE)
+#else
 #define StrHasPrefix(s, prefix)				(wcsncmp((s), (prefix), CSTRLEN(prefix)) == 0)
 #define StrHasPrefixEx(s, prefix, len)		(wcsncmp((s), (prefix), (len)) == 0)
 #define StrHasPrefixCase(s, prefix)			(_wcsnicmp((s), (prefix), CSTRLEN(prefix)) == 0)
 #define StrHasPrefixCaseEx(s, prefix, len)	(_wcsnicmp((s), (prefix), (len)) == 0)
+#endif
 
 NP2_inline BOOL StrToFloat(LPCWSTR str, float *value) {
 	LPWSTR end;
@@ -177,12 +242,12 @@ NP2_inline double StopWatch_Get(const StopWatch *watch) {
 void StopWatch_Show(const StopWatch *watch, LPCWSTR msg);
 void StopWatch_ShowLog(const StopWatch *watch, LPCSTR msg);
 
-#define DebugPrint(msg)	OutputDebugStringA(msg)
-void DebugPrintf(const char *fmt, ...)
+#define DebugPrint(msg)		OutputDebugStringA(msg)
 #if defined(__GNUC__) || defined(__clang__)
-__attribute__((format(printf, 1, 2)))
+void DebugPrintf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+#else
+void DebugPrintf(const char *fmt, ...);
 #endif
-;
 
 extern HINSTANCE g_hInstance;
 extern HANDLE g_hDefaultHeap;

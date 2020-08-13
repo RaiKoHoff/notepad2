@@ -9,9 +9,9 @@
 namespace Scintilla {
 
 class CharacterSet {
-	int size;
 	bool valueAfter;
-	bool *bset;
+	// ASCII character only, not useful for UTF-8 or DBCS multi byte character
+	bool bset[128]{};
 public:
 	enum setBase {
 		setNone = 0,
@@ -21,19 +21,14 @@ public:
 		setAlpha = setLower | setUpper,
 		setAlphaNum = setAlpha | setDigits
 	};
-	CharacterSet(setBase base = setNone, const char *initialSet = "", int size_ = 0x80, bool valueAfter_ = false);
+	CharacterSet(setBase base = setNone, const char *initialSet = "", bool valueAfter_ = false) noexcept;
 	CharacterSet(const CharacterSet &other) = delete;
 	CharacterSet(CharacterSet &&other) = delete;
 	CharacterSet &operator=(const CharacterSet &other) = delete;
 	CharacterSet &operator=(CharacterSet &&other) = delete;
-	~CharacterSet() {
-		delete[]bset;
-		bset = nullptr;
-		size = 0;
-	}
 	void Add(int val) noexcept {
 		assert(val >= 0);
-		assert(val < size);
+		assert(val < 128);
 		bset[val] = true;
 	}
 	void AddString(const char *setToAdd) noexcept;
@@ -42,7 +37,7 @@ public:
 		if (val < 0) {
 			return false;
 		}
-		return (val < size) ? bset[val] : valueAfter;
+		return (val < 128) ? bset[val] : valueAfter;
 	}
 	bool Contains(char ch) const noexcept {
 		// Overload char as char may be signed
@@ -51,22 +46,34 @@ public:
 	}
 };
 
+template <typename T, typename... Args>
+constexpr bool AnyOf(T t, Args... args) noexcept {
+	return ((t == args) || ...);
+}
+
+#if defined(_INC_STRING)
+template <typename... Args>
+inline bool AnyOf(const char *s, Args... args) noexcept {
+	return ((::strcmp(s, args) == 0) || ...);
+}
+#endif
+
 // Functions for classifying characters
 
 constexpr bool IsEOLChar(int ch) noexcept {
-	return (ch == '\r') || (ch == '\n');
+	return ch == '\r' || ch == '\n';
 }
 
 constexpr bool IsASpace(int ch) noexcept {
-	return (ch == ' ') || ((ch >= 0x09) && (ch <= 0x0d));
+	return ch == ' ' || (ch >= 0x09 && ch <= 0x0d);
 }
 
 constexpr bool IsASpaceOrTab(int ch) noexcept {
-	return (ch == ' ') || (ch == '\t');
+	return ch == ' ' || ch == '\t';
 }
 
 constexpr bool IsADigit(int ch) noexcept {
-	return (ch >= '0') && (ch <= '9');
+	return ch >= '0' && ch <= '9';
 }
 
 constexpr bool IsHexDigit(int ch) noexcept {
@@ -75,13 +82,17 @@ constexpr bool IsHexDigit(int ch) noexcept {
 		|| (ch >= 'a' && ch <= 'f');
 }
 
+constexpr bool IsOctalDigit(int ch) noexcept {
+	return ch >= '0' && ch <= '7';
+}
+
 constexpr bool IsADigit(int ch, int base) noexcept {
 	if (base <= 10) {
-		return (ch >= '0') && (ch < '0' + base);
+		return (ch >= '0' && ch < '0' + base);
 	}
-	return ((ch >= '0') && (ch <= '9'))
-		|| ((ch >= 'A') && (ch < 'A' + base - 10))
-		|| ((ch >= 'a') && (ch < 'a' + base - 10));
+	return (ch >= '0' && ch <= '9')
+		|| (ch >= 'A' && ch < 'A' + base - 10)
+		|| (ch >= 'a' && ch < 'a' + base - 10);
 }
 
 constexpr bool IsNumberStart(int ch, int chNext) noexcept {
@@ -110,30 +121,31 @@ constexpr bool IsFloatExponent(int base, int ch, int chNext) noexcept {
 }
 
 constexpr bool IsASCII(int ch) noexcept {
-	return (ch >= 0) && (ch < 0x80);
+	return ch >= 0 && ch < 0x80;
 }
 
 constexpr bool IsLowerCase(int ch) noexcept {
-	return (ch >= 'a') && (ch <= 'z');
+	return ch >= 'a' && ch <= 'z';
 }
 
 constexpr bool IsUpperCase(int ch) noexcept {
-	return (ch >= 'A') && (ch <= 'Z');
+	return ch >= 'A' && ch <= 'Z';
 }
 
 constexpr bool IsUpperOrLowerCase(int ch) noexcept {
-	return IsUpperCase(ch) || IsLowerCase(ch);
+	return (ch >= 'A' && ch <= 'Z')
+		|| (ch >= 'a' && ch <= 'z');
 }
 
 constexpr bool IsAlpha(int ch) noexcept {
-	return ((ch >= 'a') && (ch <= 'z'))
-		|| ((ch >= 'A') && (ch <= 'Z'));
+	return (ch >= 'a' && ch <= 'z')
+		|| (ch >= 'A' && ch <= 'Z');
 }
 
 constexpr bool IsAlphaNumeric(int ch) noexcept {
-	return ((ch >= '0') && (ch <= '9'))
-		|| ((ch >= 'a') && (ch <= 'z'))
-		|| ((ch >= 'A') && (ch <= 'Z'));
+	return (ch >= '0' && ch <= '9')
+		|| (ch >= 'a' && ch <= 'z')
+		|| (ch >= 'A' && ch <= 'Z');
 }
 
 /**
@@ -141,7 +153,7 @@ constexpr bool IsAlphaNumeric(int ch) noexcept {
  * This is ASCII specific but is safe with chars >= 0x80.
  */
 constexpr bool isspacechar(int ch) noexcept {
-	return (ch == ' ') || ((ch >= 0x09) && (ch <= 0x0d));
+	return ch == ' ' || (ch >= 0x09 && ch <= 0x0d);
 }
 
 constexpr bool iswordchar(int ch) noexcept {
@@ -181,13 +193,24 @@ constexpr bool IsWordCharEx(int ch) noexcept {
 }
 
 constexpr bool isoperator(int ch) noexcept {
-	return
-		(ch == '%' || ch == '^' || ch == '&' || ch == '*' ||
-		ch == '(' || ch == ')' || ch == '-' || ch == '+' ||
-		ch == '=' || ch == '|' || ch == '{' || ch == '}' ||
-		ch == '[' || ch == ']' || ch == ':' || ch == ';' ||
-		ch == '<' || ch == '>' || ch == ',' || ch == '/' ||
-		ch == '?' || ch == '!' || ch == '.' || ch == '~');
+	return ch == '%' || ch == '^' || ch == '&' || ch == '*'
+		|| ch == '(' || ch == ')' || ch == '-' || ch == '+'
+		|| ch == '=' || ch == '|' || ch == '{' || ch == '}'
+		|| ch == '[' || ch == ']' || ch == ':' || ch == ';'
+		|| ch == '<' || ch == '>' || ch == ',' || ch == '/'
+		|| ch == '?' || ch == '!' || ch == '.' || ch == '~';
+}
+
+constexpr bool IsGraphic(int ch) noexcept {
+	// excludes C0 control characters and whitespace
+	return ch > 32 && ch != 127;
+}
+
+constexpr bool IsPunctuation(int ch) noexcept {
+	return (ch > 32 && ch < '0')
+		|| (ch > '9' && ch < 'A')
+		|| (ch > 'Z' && ch < 'a')
+		|| (ch > 'z' && ch < 127);
 }
 
 // Simple case functions for ASCII supersets.

@@ -19,7 +19,7 @@
 #define NP2STYLE_IMEIndicator			63217
 #define NP2STYLE_Bookmark				63218
 #define NP2STYLE_CallTip				63219
-#define NP2STYLE_CurrentBlock			63220
+#define NP2STYLE_CodeFolding			63220
 
 #define NP2STYLE_Default				63226
 #define NP2STYLE_Comment				63227
@@ -118,7 +118,7 @@
 #define NP2STYLE_Important				63410
 
 #define NP2STYLE_Class					63420
-#define NP2STYLE_Struct					63421
+#define NP2STYLE_Structure				63421
 #define NP2STYLE_Union					63422
 #define NP2STYLE_Interface				63423
 #define NP2STYLE_Trait					63424
@@ -149,6 +149,8 @@
 #define NP2STYLE_ReservedWord			63451
 #define NP2STYLE_EscapeSequence			63452
 #define NP2STYLE_Placeholder			63453
+#define NP2STYLE_FormatSpecifier		63454
+#define NP2STYLE_TaskMarker				63455
 
 #define NP2STYLE_BracketArgument		63461
 

@@ -5,7 +5,6 @@
 
 #include <cassert>
 #include <cstring>
-#include <cctype>
 
 #include <string>
 #include <vector>
@@ -39,7 +38,6 @@ using namespace Scintilla;
 #define		LEX_HX		12	// haXe
 #define		LEX_GROOVY	13	// Groovy Script
 #define		LEX_SCALA	14	// Scala Script
-#define		LEX_GO		15	// Go
 //#define		LEX_AIDL	27	// Android Interface Definition Language
 #define		LEX_PHP		29
 #define		LEX_AWK		51	// Awk
@@ -178,9 +176,9 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 	if (initStyle == SCE_C_COMMENTLINE || initStyle == SCE_C_COMMENTLINEDOC || initStyle == SCE_C_PREPROCESSOR) {
 		// Set continuationLine if last character of previous line is '\'
 		if (lineCurrent > 0) {
-			const int chBack = styler.SafeGetCharAt(startPos - 1);
-			const int chBack2 = styler.SafeGetCharAt(startPos - 2);
-			int lineEndChar = '!';
+			const char chBack = styler.SafeGetCharAt(startPos - 1);
+			const char chBack2 = styler.SafeGetCharAt(startPos - 2);
+			char lineEndChar = '!';
 			if (chBack2 == '\r' && chBack == '\n') {
 				lineEndChar = styler.SafeGetCharAt(startPos - 3);
 			} else if (chBack == '\n' || chBack == '\r') {
@@ -647,7 +645,7 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 			}
 			break;
 		case SCE_C_DSTRINGB: // D
-			if (sc.ch == '`' && (lexType == LEX_JS || lexType == LEX_D || lexType == LEX_GO)) {
+			if (sc.ch == '`' && (lexType == LEX_JS || lexType == LEX_D)) {
 				if (lexType == LEX_D && IsDStrFix(sc.chNext))
 					sc.Forward();
 				sc.ForwardSetState(SCE_C_DEFAULT);
@@ -754,11 +752,11 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 		case SCE_C_TRIPLEVERBATIM:
 			if (sc.ch == '\\' && IsEscapeChar(sc.chNext)) {
 				sc.Forward();
-			} else if (isTripleSingle && sc.Match(R"(''')")) {
+			} else if (isTripleSingle && sc.Match('\'', '\'', '\'')) {
 				isTripleSingle = false;
 				sc.Forward(2);
 				sc.ForwardSetState(SCE_C_DEFAULT);
-			} else if (sc.Match(R"(""")")) {
+			} else if (sc.Match('"', '"', '"')) {
 				sc.Forward(2);
 				sc.ForwardSetState(SCE_C_DEFAULT);
 			}
@@ -856,10 +854,10 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 						|| ((lexType == LEX_D) && sc.Match('r', '\"'))) {
 						sc.SetState(SCE_C_VERBATIM);
 						sc.Forward();
-					} else if (HasTripleVerbatim(lexType) && sc.Match(R"(""")")) {
+					} else if (HasTripleVerbatim(lexType) && sc.Match('"', '"', '"')) {
 						sc.SetState(SCE_C_TRIPLEVERBATIM);
 						sc.Forward(2);
-					} else if (lexType == LEX_GROOVY && sc.Match(R"(''')")) {
+					} else if (lexType == LEX_GROOVY && sc.Match('\'', '\'', '\'')) {
 						sc.SetState(SCE_C_TRIPLEVERBATIM);
 						sc.Forward(2);
 						isTripleSingle = true;
@@ -873,18 +871,20 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 						++numDTSBrace;
 						sc.SetState(SCE_C_DSTRINGT);
 						sc.Forward();
-					} else if (sc.ch == '`' && (lexType == LEX_JS || lexType == LEX_D || lexType == LEX_GO)) {
+					} else if (sc.ch == '`' && (lexType == LEX_JS || lexType == LEX_D)) {
 						sc.SetState(SCE_C_DSTRINGB);
 					} else if (!SharpComment(lexType) && sc.Match('/', '*')) {
-						if (visibleChars == 0 && (sc.Match("/**") || sc.Match("/*!"))) {
+						if (visibleChars == 0 && styler.MatchAny(sc.currentPos + 2, '*', '!')) {
 							sc.SetState(SCE_C_COMMENTDOC);
 						} else {
 							sc.SetState(SCE_C_COMMENT);
 						}
 						sc.Forward();
-					} else if ((!(SharpComment(lexType)) && sc.Match('/', '/'))
-						|| ((SharpComment(lexType) || lexType == LEX_PHP) && sc.ch == '#')) {
-						if (visibleChars == 0 && ((sc.Match("///") && !sc.Match("////")) || sc.Match("//!")))
+					} else if ((SharpComment(lexType) || lexType == LEX_PHP) && sc.ch == '#') {
+						sc.SetState(SCE_C_COMMENTLINE);
+					} else if (!SharpComment(lexType) && sc.Match('/', '/')) {
+						const char chNext = (visibleChars == 0) ? styler.SafeGetCharAt(sc.currentPos + 2) : '\0';
+						if (chNext == '!' || (chNext == '/' && styler.SafeGetCharAt(sc.currentPos + 3) != '/'))
 							sc.SetState(SCE_C_COMMENTLINEDOC);
 						else
 							sc.SetState(SCE_C_COMMENTLINE);
@@ -902,8 +902,8 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 						// RegExp only appears in assignment or function argument
 						//if (HasRegex(lexType) && (isAssignStmt || numRBrace > 0) && (strchr("([{=,:;!%^&*|?~+-", chPrevNonWhite) || followsReturn)
 						const bool isJsRegex = (isAssignStmt && (chPrevNonWhite == '=' || chPrevNonWhite == ':')) 	// assignment
-							|| (numRBrace > 0 && strchr("(,!&|", chPrevNonWhite))	// argument
-							|| (strchr("};", chPrevNonWhite))
+							|| (numRBrace > 0 && AnyOf(chPrevNonWhite, '(', ',', '!', '&', '|'))	// argument
+							|| (chPrevNonWhite == '}' || chPrevNonWhite == ';')
 							|| followsReturn;
 						if (HasRegex(lexType) && isJsRegex
 							&& !(chPrevNonWhite == '+' || chPrevNonWhite == '-' || followsPostfixOperator)) {
@@ -1232,13 +1232,13 @@ static void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyl
 	//int levelMinCurrent = levelCurrent;
 	int levelNext = levelCurrent;
 
-	int chNext = styler[startPos];
+	char chNext = styler[startPos];
 	int style = initStyle;
 	int styleNext = styler.StyleAt(startPos);
 	bool isObjCProtocol = false;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
-		const int ch = chNext;
+		const char ch = chNext;
 		chNext = styler.SafeGetCharAt(i + 1);
 		const int stylePrev = style;
 		style = styleNext;
@@ -1373,8 +1373,7 @@ static void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyl
 			}
 		}
 
-		// Go
-		if ((lexType == LEX_JS || lexType == LEX_GO) && style == SCE_C_DSTRINGB) {
+		if (lexType == LEX_JS && style == SCE_C_DSTRINGB) {
 			if (ch == '`') {
 				if (styleNext == SCE_C_DSTRINGB)
 					levelNext++;

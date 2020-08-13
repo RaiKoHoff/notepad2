@@ -9,7 +9,6 @@
 
 #include <cassert>
 #include <cstring>
-#include <cctype>
 
 #include <string>
 #include <vector>
@@ -109,8 +108,8 @@ static void ClassifyPascalWord(LexerWordList keywordLists, StyleContext &sc, int
 static void ColourisePascalDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	const bool bSmartHighlighting = styler.GetPropertyInt("lexer.pascal.smart.highlighting", 1) != 0;
 
-	const CharacterSet setWordStart(CharacterSet::setAlpha, "_", 0x80, true);
-	const CharacterSet setWord(CharacterSet::setAlphaNum, "_", 0x80, true);
+	const CharacterSet setWordStart(CharacterSet::setAlpha, "_", true);
+	const CharacterSet setWord(CharacterSet::setAlphaNum, "_", true);
 	const CharacterSet setNumber(CharacterSet::setDigits, ".-+eE");
 	const CharacterSet setHexNumber(CharacterSet::setDigits, "abcdefABCDEF");
 	const CharacterSet setOperator(CharacterSet::setNone, "#$&'()*+,-./:;<=>@[]^{}");
@@ -201,7 +200,7 @@ static void ColourisePascalDoc(Sci_PositionU startPos, Sci_Position length, int 
 			//			if (IsADigit(sc.ch) && !(curLineState & stateInAsm)) {
 			if (IsADigit(sc.ch)) {
 				sc.SetState(SCE_PAS_NUMBER);
-				if (sc.MatchIgnoreCase("0x")) {
+				if (sc.ch == '0' && (sc.chNext =='x' || sc.chNext == 'X')) {
 					sc.SetState(SCE_PAS_HEXNUMBER);
 					sc.Forward(2);
 					while (IsHexDigit(sc.ch))
@@ -213,14 +212,14 @@ static void ColourisePascalDoc(Sci_PositionU startPos, Sci_Position length, int 
 			} else if (sc.ch == '$') {
 				sc.SetState(SCE_PAS_HEXNUMBER);
 				if (curLineState & stateInAsm) {
-					if (sc.MatchIgnoreCase("$0x"))
+					if (sc.chNext == '0' && styler.MatchAny(sc.currentPos + 2, 'x', 'X'))
 						sc.Forward(2);
 				}
 			} else if (sc.Match('{', '$')) {
 				sc.SetState(SCE_PAS_PREPROCESSOR);
 			} else if (sc.ch == '{') {
 				sc.SetState(SCE_PAS_COMMENT);
-			} else if (sc.Match("(*$")) {
+			} else if (sc.Match('(', '*', '$')) {
 				sc.SetState(SCE_PAS_PREPROCESSOR2);
 			} else if (sc.Match('(', '*')) {
 				sc.SetState(SCE_PAS_COMMENT2);
@@ -232,7 +231,7 @@ static void ColourisePascalDoc(Sci_PositionU startPos, Sci_Position length, int 
 			} else if (sc.ch == '#') {
 				if (curLineState & stateInAsm) {
 					sc.SetState(SCE_PAS_HEXNUMBER);
-					if (sc.MatchIgnoreCase("#0x"))
+					if (sc.chNext == '0' && styler.MatchAny(sc.currentPos + 2, 'x', 'X'))
 						sc.Forward(2);
 				} else
 					sc.SetState(SCE_PAS_CHARACTER);
@@ -265,7 +264,7 @@ static void SetFoldInPreprocessorLevelFlag(int &lineFoldStateCurrent, unsigned i
 }
 
 static void ClassifyPascalPreprocessorFoldPoint(int &levelCurrent, int &lineFoldStateCurrent,
-	Sci_PositionU startPos, Accessor &styler) {
+	Sci_PositionU startPos, Accessor &styler) noexcept {
 	const CharacterSet setWord(CharacterSet::setAlpha);
 
 	char s[16];	// Size of the longest possible keyword + one additional character + null
@@ -299,7 +298,7 @@ static void ClassifyPascalPreprocessorFoldPoint(int &levelCurrent, int &lineFold
 
 static void ClassifyPascalWordFoldPoint(int &levelCurrent, int &lineFoldStateCurrent,
 	Sci_Position startPos, Sci_PositionU endPos,
-	Sci_PositionU lastStart, Sci_PositionU currentPos, Accessor &styler) {
+	Sci_PositionU lastStart, Sci_PositionU currentPos, Accessor &styler) noexcept {
 	char s[128];
 	const CharacterSet setWordStart(CharacterSet::setAlpha, "_");
 	const CharacterSet setWord(CharacterSet::setAlphaNum, "_");
@@ -413,7 +412,7 @@ static void FoldPascalDoc(Sci_PositionU startPos, Sci_Position length, int initS
 	int style = initStyle;
 
 	Sci_PositionU lastStart = 0;
-	const CharacterSet setWord(CharacterSet::setAlphaNum, "_", 0x80, true);
+	const CharacterSet setWord(CharacterSet::setAlphaNum, "_", true);
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
 		const char ch = chNext;

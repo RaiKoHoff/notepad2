@@ -9,7 +9,6 @@
 
 #include <cassert>
 #include <cstring>
-#include <cctype>
 
 #include "ILexer.h"
 #include "Scintilla.h"
@@ -60,8 +59,8 @@ static void ColouriseLuaDoc(Sci_PositionU startPos, Sci_Position length, int ini
 	const WordList &keywords8 = *keywordLists[7];
 
 	// Accepts accented characters
-	const CharacterSet setWordStart(CharacterSet::setAlpha, "_", 0x80, true);
-	const CharacterSet setWord(CharacterSet::setAlphaNum, "_", 0x80, true);
+	const CharacterSet setWordStart(CharacterSet::setAlpha, "_", true);
+	const CharacterSet setWord(CharacterSet::setAlphaNum, "_", true);
 	// Not exactly following number definition (several dots are seen as OK, etc.)
 	// but probably enough in most cases. [pP] is for hex floats.
 	const CharacterSet setNumber(CharacterSet::setDigits, ".-+abcdefpABCDEFP");
@@ -309,7 +308,7 @@ static void ColouriseLuaDoc(Sci_PositionU startPos, Sci_Position length, int ini
 				}
 			} else if (sc.Match('-', '-')) {
 				sc.SetState(SCE_LUA_COMMENTLINE);
-				if (sc.Match("--[")) {
+				if (sc.GetRelative(2) == '[') {
 					sc.Forward(2);
 					sepCount = LongDelimCheck(sc);
 					if (sepCount > 0) {
@@ -320,7 +319,7 @@ static void ColouriseLuaDoc(Sci_PositionU startPos, Sci_Position length, int ini
 				} else {
 					sc.Forward();
 				}
-			} else if (sc.atLineStart && sc.Match('$')) {
+			} else if (sc.atLineStart && sc.ch == '$') {
 				sc.SetState(SCE_LUA_PREPROCESSOR);	// Obsolete since Lua 4.0, but still in old code
 			} else if (setLuaOperator.Contains(sc.ch)) {
 				sc.SetState(SCE_LUA_OPERATOR);

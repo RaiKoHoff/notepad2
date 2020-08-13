@@ -4,7 +4,6 @@
 
 #include <cassert>
 #include <cstring>
-#include <cctype>
 
 #include "ILexer.h"
 #include "Scintilla.h"
@@ -60,7 +59,7 @@ constexpr bool IsTOMLUnquotedKey(int ch) noexcept {
 
 bool IsTOMLKey(StyleContext& sc, int braceCount, const WordList *kwList) {
 	if (braceCount) {
-		const int chNext = LexGetNextChar(sc.currentPos, sc.styler.Length(), sc.styler);
+		const char chNext = LexGetNextChar(sc.currentPos, sc.styler.Length(), sc.styler);
 		if (chNext == '=' || chNext == '.' || chNext == '-') {
 			sc.ChangeState(SCE_TOML_KEY);
 			return true;
@@ -106,8 +105,6 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 		*/
 		braceCount = (lineState >> 8) & 0xff;
 	}
-
-	Sci_Position lineStartNext = styler.LineStart(sc.currentLine + 1);
 
 	while (sc.More()) {
 		switch (sc.state) {
@@ -182,7 +179,7 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 						if (sc.ch == ']') {
 							sc.Forward();
 						}
-						const int chNext = LexGetNextChar(sc.currentPos, lineStartNext, styler);
+						const int chNext = sc.GetLineNextChar();
 						if (chNext == '#') {
 							sc.SetState(SCE_TOML_DEFAULT);
 						}
@@ -219,7 +216,7 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			break;
 
 		case SCE_TOML_TRIPLE_STRING1:
-			if (sc.Match(R"(''')")) {
+			if (sc.Match('\'', '\'', '\'')) {
 				sc.Forward(2);
 				sc.ForwardSetState(SCE_TOML_DEFAULT);
 			}
@@ -229,7 +226,7 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				escSeq.resetEscapeState(sc.state, sc.chNext);
 				sc.SetState(SCE_TOML_ESCAPECHAR);
 				sc.Forward();
-			} else if (sc.Match(R"(""")")) {
+			} else if (sc.Match('"', '"', '"')) {
 				sc.Forward(2);
 				sc.ForwardSetState(SCE_TOML_DEFAULT);
 			}
@@ -285,10 +282,10 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					if (visibleChars == 0) {
 						lineType = TOMLLineType_CommentLine;
 					}
-				} else if (sc.Match(R"(''')")) {
+				} else if (sc.Match('\'', '\'', '\'')) {
 					sc.SetState(SCE_TOML_TRIPLE_STRING1);
 					sc.Forward(2);
-				} else if (sc.Match(R"(""")")) {
+				} else if (sc.Match('"', '"', '"')) {
 					sc.SetState(SCE_TOML_TRIPLE_STRING2);
 					sc.Forward(2);
 				} else if (sc.ch == '\'') {
@@ -320,7 +317,6 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 		if (sc.atLineEnd) {
 			const int lineState = tableLevel | (braceCount << 8) | (lineType << 16);
 			styler.SetLineState(sc.currentLine, lineState);
-			lineStartNext = styler.LineStart(sc.currentLine + 2);
 			lineType = TOMLLineType_None;
 			visibleChars = 0;
 			tableLevel = 0;

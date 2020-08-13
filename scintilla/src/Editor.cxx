@@ -134,7 +134,7 @@ Editor::Editor() : durationWrapOneLine(0.00001, 0.000001, 0.0001) {
 	dropWentOutside = false;
 	posDrop = SelectionPosition(Sci::invalidPosition);
 	hotSpotClickPos = INVALID_POSITION;
-	selectionType = selChar;
+	selectionUnit = TextUnit::character;
 
 	lastXChosen = 0;
 	lineAnchorPos = 0;
@@ -218,6 +218,7 @@ void Editor::SetRepresentations() {
 		const char c[2] = { static_cast<char>(j), 0 };
 		reprs.SetRepresentation(c, reps[j]);
 	}
+	reprs.SetRepresentation("\x7f", "DEL");
 
 	// C1 control set
 	// As well as Unicode mode, ISO-8859-1 should use these
@@ -271,7 +272,7 @@ void Editor::InvalidateStyleData() {
 	vs.technology = technology;
 	DropGraphics(false);
 	AllocateGraphics();
-	view.llc.Invalidate(LineLayout::llInvalid);
+	view.llc.Invalidate(LineLayout::ValidLevel::invalid);
 	view.posCache.Clear();
 }
 
@@ -787,7 +788,7 @@ void Editor::MultipleSelectAdd(AddNumber addNumber) {
 					ContainerNeedsUpdate(SC_UPDATE_SELECTION);
 					ScrollRange(sel.RangeMain());
 					Redraw();
-					if (addNumber == addOne)
+					if (addNumber == AddNumber::one)
 						return;
 					searchStart = pos + lengthFound;
 				} else {
@@ -1173,7 +1174,7 @@ Editor::XYScrollPosition Editor::XYScrollToMakeVisible(SelectionRange range, con
 	if ((options & xysVertical) && (pt.y < rcClient.top || ptBottomCaret.y >= rcClient.bottom || (policies.y.policy & CARET_STRICT) != 0)) {
 		const Sci::Line lineCaret = DisplayFromPosition(range.caret.Position());
 		const Sci::Line linesOnScreen = LinesOnScreen();
-		const Sci::Line halfScreen = std::max(linesOnScreen - 1, static_cast<Sci::Line>(2)) / 2;
+		const Sci::Line halfScreen = std::max<Sci::Line>(linesOnScreen - 1, 2) / 2;
 		const bool bSlop = (policies.y.policy & CARET_SLOP) != 0;
 		const bool bStrict = (policies.y.policy & CARET_STRICT) != 0;
 		const bool bJump = (policies.y.policy & CARET_JUMPS) != 0;
@@ -1482,13 +1483,13 @@ void Editor::UpdateSystemCaret() {
 }
 
 bool Editor::Wrapping() const noexcept {
-	return vs.wrapState != eWrapNone;
+	return vs.wrapState != WrapMode::none;
 }
 
 void Editor::NeedWrapping(Sci::Line docLineStart, Sci::Line docLineEnd) noexcept {
 	//Platform::DebugPrintf("\nNeedWrapping: %0d..%0d\n", docLineStart, docLineEnd);
 	if (wrapPending.AddRange(docLineStart, docLineEnd)) {
-		view.llc.Invalidate(LineLayout::llPositions);
+		view.llc.Invalidate(LineLayout::ValidLevel::positions);
 	}
 	// Wrap lines during idle.
 	if (Wrapping() && wrapPending.NeedsWrap()) {
@@ -2144,6 +2145,7 @@ void Editor::ClearAll() {
 		if (!pdoc->IsReadOnly()) {
 			pcs->Clear();
 			pdoc->AnnotationClearAll();
+			pdoc->EOLAnnotationClearAll();
 			pdoc->MarginClearAll();
 		}
 	}
@@ -2559,9 +2561,9 @@ void Editor::NotifySavePoint(Document *, void *, bool atSavePoint) noexcept {
 
 void Editor::CheckModificationForWrap(DocModification mh) {
 	if (mh.modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT)) {
-		view.llc.Invalidate(LineLayout::llCheckTextAndStyle);
+		view.llc.Invalidate(LineLayout::ValidLevel::checkTextAndStyle);
 		const Sci::Line lineDoc = pdoc->SciLineFromPosition(mh.position);
-		const Sci::Line lines = std::max(static_cast<Sci::Line>(0), mh.linesAdded);
+		const Sci::Line lines = std::max<Sci::Line>(0, mh.linesAdded);
 		if (Wrapping()) {
 			NeedWrapping(lineDoc, lineDoc + lines + 1);
 		}
@@ -2640,7 +2642,7 @@ void Editor::NotifyModified(Document *, DocModification mh, void *) {
 			}
 		}
 		if (mh.modificationType & SC_MOD_CHANGESTYLE) {
-			view.llc.Invalidate(LineLayout::llCheckTextAndStyle);
+			view.llc.Invalidate(LineLayout::ValidLevel::checkTextAndStyle);
 		}
 	} else {
 		// Move selection and brace highlights
@@ -2693,6 +2695,11 @@ void Editor::NotifyModified(Document *, DocModification mh, void *) {
 				if (pcs->SetHeight(lineDoc, pcs->GetHeight(lineDoc) + static_cast<int>(mh.annotationLinesAdded))) {
 					SetScrollBars();
 				}
+				Redraw();
+			}
+		}
+		if (mh.modificationType & SC_MOD_CHANGEEOLANNOTATION) {
+			if (vs.eolAnnotationVisible) {
 				Redraw();
 			}
 		}
@@ -4311,7 +4318,7 @@ bool Editor::DragThreshold(Point ptStart, Point ptNow) noexcept {
 void Editor::StartDrag() {
 	// Always handled by subclasses
 	//SetMouseCapture(true);
-	//DisplayCursor(Window::cursorArrow);
+	//DisplayCursor(Window::Cursor::::arrow);
 }
 
 void Editor::DropAt(SelectionPosition position, const char *value, size_t lengthValue, bool moving, bool rectangular) {
@@ -4439,7 +4446,7 @@ Window::Cursor Editor::GetMarginCursor(Point pt) const noexcept {
 			return static_cast<Window::Cursor>(m.cursor);
 		x += m.width;
 	}
-	return Window::cursorReverseArrow;
+	return Window::Cursor::reverseArrow;
 }
 
 void Editor::TrimAndSetSelection(Sci::Position currentPos_, Sci::Position anchor_) {
@@ -4564,34 +4571,34 @@ void Editor::ButtonDownWithModifiers(Point pt, unsigned int curTime, int modifie
 		//Platform::DebugPrintf("Double click %d %d = %d\n", curTime, lastClickTime, curTime - lastClickTime);
 		SetMouseCapture(true);
 		FineTickerStart(tickScroll, 100, 10);
-		if (!ctrl || !multipleSelection || (selectionType != selChar && selectionType != selWord))
+		if (!ctrl || !multipleSelection || (selectionUnit != TextUnit::character && selectionUnit != TextUnit::word))
 			SetEmptySelection(newPos.Position());
 		bool doubleClick = false;
 		if (inSelMargin) {
-			// Inside margin selection type should be either selSubLine or selWholeLine.
-			if (selectionType == selSubLine) {
-				// If it is selSubLine, we're inside a *double* click and word wrap is enabled,
-				// so we switch to selWholeLine in order to select whole line.
-				selectionType = selWholeLine;
-			} else if (selectionType != selSubLine && selectionType != selWholeLine) {
+			// Inside margin selection type should be either subLine or wholeLine.
+			if (selectionUnit == TextUnit::subLine) {
+				// If it is subLine, we're inside a *double* click and word wrap is enabled,
+				// so we switch to wholeLine in order to select whole line.
+				selectionUnit = TextUnit::wholeLine;
+			} else if (selectionUnit != TextUnit::subLine && selectionUnit != TextUnit::wholeLine) {
 				// If it is neither, reset selection type to line selection.
-				selectionType = (Wrapping() && (marginOptions & SC_MARGINOPTION_SUBLINESELECT)) ? selSubLine : selWholeLine;
+				selectionUnit = (Wrapping() && (marginOptions & SC_MARGINOPTION_SUBLINESELECT)) ? TextUnit::subLine : TextUnit::wholeLine;
 			}
 		} else {
-			if (selectionType == selChar) {
-				selectionType = selWord;
+			if (selectionUnit == TextUnit::character) {
+				selectionUnit = TextUnit::word;
 				doubleClick = true;
-			} else if (selectionType == selWord) {
+			} else if (selectionUnit == TextUnit::word) {
 				// Since we ended up here, we're inside a *triple* click, which should always select
 				// whole line regardless of word wrap being enabled or not.
-				selectionType = selWholeLine;
+				selectionUnit = TextUnit::wholeLine;
 			} else {
-				selectionType = selChar;
+				selectionUnit = TextUnit::character;
 				originalAnchorPos = sel.MainCaret();
 			}
 		}
 
-		if (selectionType == selWord) {
+		if (selectionUnit == TextUnit::word) {
 			Sci::Position charPos = originalAnchorPos;
 			if (sel.MainCaret() == originalAnchorPos) {
 				charPos = PositionFromLocation(pt, false, true);
@@ -4620,9 +4627,9 @@ void Editor::ButtonDownWithModifiers(Point pt, unsigned int curTime, int modifie
 			wordSelectAnchorEndPos = endWord;
 			wordSelectInitialCaretPos = sel.MainCaret();
 			WordSelection(wordSelectInitialCaretPos);
-		} else if (selectionType == selSubLine || selectionType == selWholeLine) {
+		} else if (selectionUnit == TextUnit::subLine || selectionUnit == TextUnit::wholeLine) {
 			lineAnchorPos = newPos.Position();
-			LineSelection(lineAnchorPos, lineAnchorPos, selectionType == selWholeLine);
+			LineSelection(lineAnchorPos, lineAnchorPos, selectionUnit == TextUnit::wholeLine);
 			//Platform::DebugPrintf("Triple click: %d - %d\n", anchor, currentPos);
 		} else {
 			SetEmptySelection(sel.MainCaret());
@@ -4641,10 +4648,10 @@ void Editor::ButtonDownWithModifiers(Point pt, unsigned int curTime, int modifie
 			}
 			sel.selType = Selection::selStream;
 			if (!shift) {
-				// Single click in margin: select whole line or only subline if word wrap is enabled
+				// Single click in margin: select wholeLine or only subLine if word wrap is enabled
 				lineAnchorPos = newPos.Position();
-				selectionType = (Wrapping() && (marginOptions & SC_MARGINOPTION_SUBLINESELECT)) ? selSubLine : selWholeLine;
-				LineSelection(lineAnchorPos, lineAnchorPos, selectionType == selWholeLine);
+				selectionUnit = (Wrapping() && (marginOptions & SC_MARGINOPTION_SUBLINESELECT)) ? TextUnit::subLine : TextUnit::wholeLine;
+				LineSelection(lineAnchorPos, lineAnchorPos, selectionUnit == TextUnit::wholeLine);
 			} else {
 				// Single shift+click in margin: select from line anchor to clicked line
 				if (sel.MainAnchor() > sel.MainCaret())
@@ -4653,11 +4660,11 @@ void Editor::ButtonDownWithModifiers(Point pt, unsigned int curTime, int modifie
 					lineAnchorPos = sel.MainAnchor();
 				// Reset selection type if there is an empty selection.
 				// This ensures that we don't end up stuck in previous selection mode, which is no longer valid.
-				// Otherwise, if there's a non empty selection, reset selection type only if it differs from selSubLine and selWholeLine.
+				// Otherwise, if there's a non empty selection, reset selection type only if it differs from subLine and wholeLine.
 				// This ensures that we continue selecting in the same selection mode.
-				if (sel.Empty() || (selectionType != selSubLine && selectionType != selWholeLine))
-					selectionType = (Wrapping() && (marginOptions & SC_MARGINOPTION_SUBLINESELECT)) ? selSubLine : selWholeLine;
-				LineSelection(newPos.Position(), lineAnchorPos, selectionType == selWholeLine);
+				if (sel.Empty() || (selectionUnit != TextUnit::subLine && selectionUnit != TextUnit::wholeLine))
+					selectionUnit = (Wrapping() && (marginOptions & SC_MARGINOPTION_SUBLINESELECT)) ? TextUnit::subLine : TextUnit::wholeLine;
+				LineSelection(newPos.Position(), lineAnchorPos, selectionUnit == TextUnit::wholeLine);
 			}
 
 			SetDragPosition(SelectionPosition(Sci::invalidPosition));
@@ -4698,7 +4705,7 @@ void Editor::ButtonDownWithModifiers(Point pt, unsigned int curTime, int modifie
 					anchorCurrent = sel.IsRectangular() ?
 					sel.Rectangular().anchor : sel.RangeMain().anchor;
 				sel.selType = alt ? Selection::selRectangle : Selection::selStream;
-				selectionType = selChar;
+				selectionUnit = TextUnit::character;
 				originalAnchorPos = sel.MainCaret();
 				sel.Rectangular() = SelectionRange(newPos, anchorCurrent);
 				SetRectangularRange();
@@ -4825,7 +4832,7 @@ void Editor::ButtonMoveWithModifiers(Point pt, unsigned int, int modifiers) {
 		if (posDrag.IsValid()) {
 			SetDragPosition(movePos);
 		} else {
-			if (selectionType == selChar) {
+			if (selectionUnit == TextUnit::character) {
 				if (sel.selType == Selection::selStream && (modifiers & SCI_ALT) && mouseSelectionRectangularSwitch) {
 					sel.selType = Selection::selRectangle;
 				}
@@ -4840,7 +4847,7 @@ void Editor::ButtonMoveWithModifiers(Point pt, unsigned int, int modifiers) {
 				} else {
 					SetSelection(movePos, sel.RangeMain().anchor);
 				}
-			} else if (selectionType == selWord) {
+			} else if (selectionUnit == TextUnit::word) {
 				// Continue selecting by word
 				if (movePos.Position() == wordSelectInitialCaretPos) {  // Didn't move
 					// No need to do anything. Previously this case was lumped
@@ -4858,7 +4865,7 @@ void Editor::ButtonMoveWithModifiers(Point pt, unsigned int, int modifiers) {
 				}
 			} else {
 				// Continue selecting by line
-				LineSelection(movePos.Position(), lineAnchorPos, selectionType == selWholeLine);
+				LineSelection(movePos.Position(), lineAnchorPos, selectionUnit == TextUnit::wholeLine);
 			}
 		}
 
@@ -4878,7 +4885,7 @@ void Editor::ButtonMoveWithModifiers(Point pt, unsigned int, int modifiers) {
 
 		if (hotSpotClickPos != INVALID_POSITION && PositionFromLocation(pt, true, true) != hotSpotClickPos) {
 			if (inDragDrop == ddNone) {
-				DisplayCursor(Window::cursorText);
+				DisplayCursor(Window::Cursor::text);
 			}
 			hotSpotClickPos = INVALID_POSITION;
 		}
@@ -4893,17 +4900,17 @@ void Editor::ButtonMoveWithModifiers(Point pt, unsigned int, int modifiers) {
 		}
 		// Display regular (drag) cursor over selection
 		if (PointInSelection(pt) && !SelectionEmpty()) {
-			DisplayCursor(Window::cursorArrow);
+			DisplayCursor(Window::Cursor::arrow);
 		} else {
 			SetHoverIndicatorPoint(pt);
 			if (PointIsHotspot(pt)) {
-				DisplayCursor(Window::cursorHand);
+				DisplayCursor(Window::Cursor::hand);
 				SetHotSpotRange(&pt);
 			} else {
 				if (hoverIndicatorPos != Sci::invalidPosition)
-					DisplayCursor(Window::cursorHand);
+					DisplayCursor(Window::Cursor::hand);
 				else
-					DisplayCursor(Window::cursorText);
+					DisplayCursor(Window::Cursor::text);
 				SetHotSpotRange(nullptr);
 			}
 		}
@@ -4920,7 +4927,7 @@ void Editor::ButtonUpWithModifiers(Point pt, unsigned int curTime, int modifiers
 	if (inDragDrop == ddInitial) {
 		inDragDrop = ddNone;
 		SetEmptySelection(newPos);
-		selectionType = selChar;
+		selectionUnit = TextUnit::character;
 		originalAnchorPos = sel.MainCaret();
 	}
 	if (hotSpotClickPos != INVALID_POSITION && PointIsHotspot(pt)) {
@@ -4933,7 +4940,7 @@ void Editor::ButtonUpWithModifiers(Point pt, unsigned int curTime, int modifiers
 		if (PointInSelMargin(pt)) {
 			DisplayCursor(GetMarginCursor(pt));
 		} else {
-			DisplayCursor(Window::cursorText);
+			DisplayCursor(Window::Cursor::text);
 			SetHotSpotRange(nullptr);
 		}
 		ptMouseLast = pt;
@@ -4972,10 +4979,10 @@ void Editor::ButtonUpWithModifiers(Point pt, unsigned int curTime, int modifiers
 					}
 					drag.Clear();
 				}
-				selectionType = selChar;
+				selectionUnit = TextUnit::character;
 			}
 		} else {
-			if (selectionType == selChar) {
+			if (selectionUnit == TextUnit::character) {
 				if (sel.Count() > 1) {
 					sel.RangeMain() =
 						SelectionRange(newPos, sel.Range(sel.Count() - 1).anchor);
@@ -5320,6 +5327,13 @@ void Editor::SetAnnotationVisible(int visible) {
 			}
 			SetScrollBars();
 		}
+		Redraw();
+	}
+}
+
+void Editor::SetEOLAnnotationVisible(int visible) {
+	if (vs.eolAnnotationVisible != visible) {
+		vs.eolAnnotationVisible = visible;
 		Redraw();
 	}
 }
@@ -5765,9 +5779,6 @@ sptr_t Editor::StyleGetMessage(unsigned int iMessage, uptr_t wParam, sptr_t lPar
 		return StringResult(lParam, vs.styles[wParam].fontName);
 	case SCI_STYLEGETUNDERLINE:
 		return vs.styles[wParam].underline ? 1 : 0;
-		// Added strike style, 2011-12-20
-	case SCI_STYLEGETSTRIKE:
-		return vs.styles[wParam].strike ? 1 : 0;
 	case SCI_STYLEGETCASE:
 		return static_cast<int>(vs.styles[wParam].caseForce);
 	case SCI_STYLEGETCHARACTERSET:
@@ -5962,8 +5973,8 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 		else
 			return pdoc->LinesTotal();
 
-	case SCI_SETINITLINECOUNT:
-		pdoc->SetInitLineCount(wParam);
+	case SCI_ALLOCATELINES:
+		pdoc->AllocateLines(wParam);
 		break;
 
 	case SCI_GETMODIFY:
@@ -6412,11 +6423,11 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 		return view.printParameters.colourMode;
 
 	case SCI_SETPRINTWRAPMODE:
-		view.printParameters.wrapState = (wParam == SC_WRAP_WORD) ? eWrapWord : eWrapNone;
+		view.printParameters.wrapState = (wParam == SC_WRAP_WORD) ? WrapMode::word : WrapMode::none;
 		break;
 
 	case SCI_GETPRINTWRAPMODE:
-		return view.printParameters.wrapState;
+		return static_cast<sptr_t>(view.printParameters.wrapState);
 
 	case SCI_GETSTYLEAT:
 		if (static_cast<Sci::Position>(wParam) >= pdoc->Length())
@@ -6461,10 +6472,10 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 		break;
 
 	case SCI_MARKERHANDLEFROMLINE:
-		return pdoc->MarkerHandleFromLine(static_cast<Sci::Line>(wParam), static_cast<int>(lParam));
+		return pdoc->MarkerHandleFromLine(wParam, static_cast<int>(lParam));
 
 	case SCI_MARKERNUMBERFROMLINE:
-		return pdoc->MarkerNumberFromLine(static_cast<Sci::Line>(wParam), static_cast<int>(lParam));
+		return pdoc->MarkerNumberFromLine(wParam, static_cast<int>(lParam));
 
 	case SCI_GETVIEWWS:
 		return vs.viewWhitespace;
@@ -6721,7 +6732,7 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 		break;
 
 	case SCI_GETWRAPMODE:
-		return vs.wrapState;
+		return static_cast<sptr_t>(vs.wrapState);
 
 	case SCI_SETWRAPVISUALFLAGS:
 		if (vs.SetWrapVisualFlags(static_cast<int>(wParam))) {
@@ -7164,7 +7175,6 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 	case SCI_STYLEGETSIZEFRACTIONAL:
 	case SCI_STYLEGETFONT:
 	case SCI_STYLEGETUNDERLINE:
-	case SCI_STYLEGETSTRIKE:
 	case SCI_STYLEGETCASE:
 	case SCI_STYLEGETCHARACTERSET:
 	case SCI_STYLEGETVISIBLE:
@@ -7408,6 +7418,11 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 
 	case SCI_SETSELEOLFILLED:
 		vs.selEOLFilled = wParam != 0;
+		InvalidateStyleRedraw();
+		break;
+
+	case SCI_SETEOLSELECTEDWIDTH:
+		vs.eolSelectedWidth = std::clamp(static_cast<int>(wParam), 0, 100);
 		InvalidateStyleRedraw();
 		break;
 
@@ -7714,7 +7729,10 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 	case SCI_BRACEMATCH:
 		// wParam is position of char to find brace for,
 		// lParam is maximum amount of text to restyle to find it
-		return pdoc->BraceMatch(wParam, lParam);
+		return pdoc->BraceMatch(wParam, lParam, 0, false);
+
+	case SCI_BRACEMATCHNEXT:
+		return pdoc->BraceMatch(wParam, 0, lParam, true);
 
 	case SCI_GETVIEWEOL:
 		return vs.viewEOL;
@@ -7939,7 +7957,7 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 
 	case SCI_SETCURSOR:
 		cursorMode = static_cast<int>(wParam);
-		DisplayCursor(Window::cursorText);
+		DisplayCursor(Window::Cursor::text);
 		break;
 
 	case SCI_GETCURSOR:
@@ -8150,6 +8168,43 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 
 	case SCI_ANNOTATIONGETSTYLEOFFSET:
 		return vs.annotationStyleOffset;
+
+	case SCI_EOLANNOTATIONSETTEXT:
+		pdoc->EOLAnnotationSetText(wParam, CharPtrFromSPtr(lParam));
+		break;
+
+	case SCI_EOLANNOTATIONGETTEXT: {
+		const StyledText st = pdoc->EOLAnnotationStyledText(wParam);
+		return BytesResult(lParam, reinterpret_cast<const unsigned char *>(st.text), st.length);
+	}
+
+	case SCI_EOLANNOTATIONGETSTYLE: {
+		const StyledText st = pdoc->EOLAnnotationStyledText(wParam);
+		return st.style;
+	}
+
+	case SCI_EOLANNOTATIONSETSTYLE:
+		pdoc->EOLAnnotationSetStyle(wParam, static_cast<int>(lParam));
+		break;
+
+	case SCI_EOLANNOTATIONCLEARALL:
+		pdoc->EOLAnnotationClearAll();
+		break;
+
+	case SCI_EOLANNOTATIONSETVISIBLE:
+		SetEOLAnnotationVisible(static_cast<int>(wParam));
+		break;
+
+	case SCI_EOLANNOTATIONGETVISIBLE:
+		return vs.eolAnnotationVisible;
+
+	case SCI_EOLANNOTATIONSETSTYLEOFFSET:
+		vs.eolAnnotationStyleOffset = static_cast<int>(wParam);
+		InvalidateStyleRedraw();
+		break;
+
+	case SCI_EOLANNOTATIONGETSTYLEOFFSET:
+		return vs.eolAnnotationStyleOffset;
 
 	case SCI_RELEASEALLEXTENDEDSTYLES:
 		vs.ReleaseAllExtendedStyles();
@@ -8371,11 +8426,11 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 		break;
 
 	case SCI_MULTIPLESELECTADDNEXT:
-		MultipleSelectAdd(addOne);
+		MultipleSelectAdd(AddNumber::one);
 		break;
 
 	case SCI_MULTIPLESELECTADDEACH:
-		MultipleSelectAdd(addEach);
+		MultipleSelectAdd(AddNumber::each);
 		break;
 
 	case SCI_CHANGELEXERSTATE:
