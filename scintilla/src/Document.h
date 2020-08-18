@@ -402,6 +402,9 @@ public:
 	const char *RangePointer(Sci::Position position, Sci::Position rangeLength) noexcept {
 		return cb.RangePointer(position, rangeLength);
 	}
+	const char *StyleRangePointer(Sci::Position position, Sci::Position rangeLength) noexcept {
+		return cb.StyleRangePointer(position, rangeLength);
+	}
 	Sci::Position GapPosition() const noexcept {
 		return cb.GapPosition();
 	}
@@ -411,6 +414,7 @@ public:
 	Sci::Position GetLineIndentPosition(Sci::Line line) const noexcept;
 	Sci::Position GetColumn(Sci::Position pos) noexcept;
 	Sci::Position CountCharacters(Sci::Position startPos, Sci::Position endPos) const noexcept;
+	void CountCharactersAndColumns(Sci_TextToFind *ft) const noexcept;
 	Sci::Position CountUTF16(Sci::Position startPos, Sci::Position endPos) const noexcept;
 	Sci::Position FindColumn(Sci::Line line, Sci::Position column) noexcept;
 	void Indent(bool forwards, Sci::Line lineBottom, Sci::Line lineTop);

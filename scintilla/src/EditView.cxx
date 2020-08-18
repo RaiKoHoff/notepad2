@@ -329,9 +329,10 @@ LineLayout *EditView::RetrieveLineLayout(Sci::Line lineNumber, const EditModel &
 	const Sci::Position posLineEnd = model.pdoc->LineStart(lineNumber + 1);
 	PLATFORM_ASSERT(posLineEnd >= posLineStart);
 	const Sci::Line lineCaret = model.pdoc->SciLineFromPosition(model.sel.MainCaret());
+	const Sci::Line topLine = model.pcs->DocFromDisplay(model.TopLineOfMain());
 	return llc.Retrieve(lineNumber, lineCaret,
 		static_cast<int>(posLineEnd - posLineStart), model.pdoc->GetStyleClock(),
-		model.LinesOnScreen() + 1, model.pdoc->LinesTotal());
+		model.LinesOnScreen() + 1, model.pdoc->LinesTotal(), topLine);
 }
 
 namespace {
@@ -428,48 +429,54 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 		posLineEnd = posLineStart + ll->maxLineLength;
 	}
 	if (ll->validity == LineLayout::ValidLevel::checkTextAndStyle) {
-		Sci::Position lineLength = posLineEnd - posLineStart;
-		if (!vstyle.viewEOL) {
-			lineLength = model.pdoc->LineEnd(line) - posLineStart;
-		}
+		const Sci::Position lineLength = (vstyle.viewEOL ? posLineEnd : model.pdoc->LineEnd(line)) - posLineStart;
 		if (lineLength == ll->numCharsInLine) {
+			//ElapsedPeriod period;
 			// See if chars, styles, indicators, are all the same
-			bool allSame = true;
+			int allSame = vstyle.viewEOL ? 0 : (ll->styles[lineLength] ^ model.pdoc->StyleIndexAt(posLineStart + lineLength)); // For eolFilled
 			// Check base line layout
-			int styleByte = 0;
-			int numCharsInLine = 0;
+#if 0
 			if (vstyle.someStylesForceCase) {
 				char chPrevious = '\0';
-				Sci::Position charInDoc = posLineStart;
-				while (numCharsInLine < lineLength) {
-					styleByte = model.pdoc->StyleIndexAt(charInDoc);
+				for (Sci::Position numCharsInLine = 0, charInDoc = posLineStart; numCharsInLine < lineLength; ++numCharsInLine, ++charInDoc) {
+					const int styleByte = model.pdoc->StyleIndexAt(charInDoc);
 					const char chDoc = model.pdoc->CharAt(charInDoc);
-					if ((ll->styles[numCharsInLine] != styleByte) || (ll->chars[numCharsInLine] != CaseForce(vstyle.styles[styleByte].caseForce, chDoc, chPrevious))) {
-						allSame = false;
-						break;
-					}
-					++numCharsInLine;
-					++charInDoc;
+					allSame |= (ll->styles[numCharsInLine] ^ styleByte)
+						| (ll->chars[numCharsInLine] ^ CaseForce(vstyle.styles[styleByte].caseForce, chDoc, chPrevious));
 					chPrevious = chDoc;
 				}
 			} else {
-				Sci::Position charInDoc = posLineStart;
-				while (numCharsInLine < lineLength) {
-					styleByte = model.pdoc->StyleIndexAt(charInDoc);
-					if ((ll->styles[numCharsInLine] != styleByte) || (ll->chars[numCharsInLine] != model.pdoc->CharAt(charInDoc))) {
-						allSame = false;
-						break;
-					}
-					++numCharsInLine;
-					++charInDoc;
+				for (Sci::Position numCharsInLine = 0, charInDoc = posLineStart; numCharsInLine < lineLength; ++numCharsInLine, ++charInDoc) {
+					allSame |= (ll->styles[numCharsInLine] ^ model.pdoc->StyleIndexAt(charInDoc))
+						| (ll->chars[numCharsInLine] ^ model.pdoc->CharAt(charInDoc));
 				}
 			}
-			allSame = allSame && (ll->styles[numCharsInLine] == styleByte);	// For eolFilled
-			if (allSame) {
-				ll->validity = LineLayout::ValidLevel::positions;
-			} else {
-				ll->validity = LineLayout::ValidLevel::invalid;
+#else
+			if (lineLength != 0) {
+				const char *docChars = model.pdoc->RangePointer(posLineStart, lineLength);
+				const uint8_t *docStyles = reinterpret_cast<const uint8_t *>(model.pdoc->StyleRangePointer(posLineStart, lineLength));
+				if (docStyles) { // HasStyles
+					allSame |= ::memcmp(docStyles, ll->styles.get(), lineLength); // NOLINT(bugprone-suspicious-string-compare)
+				}
+				if (vstyle.someStylesForceCase) {
+					char chPrevious = '\0';
+					const char *chars = ll->chars.get();
+					const char *end = chars + lineLength;
+					docStyles = ll->styles.get(); // if styles differ, allSame is already non-zero
+					do {
+						const uint8_t styleByte = *docStyles++;
+						const char chDoc = *docChars++;
+						allSame |= CaseForce(vstyle.styles[styleByte].caseForce, chDoc, chPrevious) ^ *chars++;
+						chPrevious = chDoc;
+					} while (chars < end);
+				} else {
+					allSame |= ::memcmp(docChars, ll->chars.get(), lineLength); // NOLINT(bugprone-suspicious-string-compare)
+				}
 			}
+#endif
+			//const double duration = period.Duration()*1e3;
+			//printf("line=%zd (%zd) allSame=%d, duration=%f\n", line + 1, lineLength, allSame, duration);
+			ll->validity = allSame ? LineLayout::ValidLevel::invalid : LineLayout::ValidLevel::positions;
 		} else {
 			ll->validity = LineLayout::ValidLevel::invalid;
 		}
@@ -492,8 +499,8 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 		model.pdoc->GetCharRange(ll->chars.get(), posLineStart, lineLength);
 		model.pdoc->GetStyleRange(ll->styles.get(), posLineStart, lineLength);
 		const int numCharsBeforeEOL = static_cast<int>(model.pdoc->LineEnd(line) - posLineStart);
-		const int numCharsInLine = (vstyle.viewEOL) ? lineLength : numCharsBeforeEOL;
-		const unsigned char styleByteLast = (lineLength > 0) ? ll->styles[lineLength - 1] : 0;
+		const int numCharsInLine = vstyle.viewEOL ? lineLength : numCharsBeforeEOL;
+		const unsigned char styleByteLast = (lineLength != 0) ? (vstyle.viewEOL ? ll->styles[lineLength - 1] : ll->styles[numCharsBeforeEOL]) : 0;
 		if (vstyle.someStylesForceCase) {
 			char chPrevious = '\0';
 			for (int charInLine = 0; charInLine < lineLength; charInLine++) {
@@ -1475,7 +1482,7 @@ void EditView::DrawEOLAnnotationText(Surface *surface, const EditModel &model, c
 	rcSegment.right = rcSegment.left + widthEOLAnnotationText;
 
 	const ColourOptional background = vsDraw.Background(model.pdoc->GetMark(line), model.caret.active, ll->containsCaret);
-	ColourDesired textFore = vsDraw.styles[style].fore;
+	const ColourDesired textFore = vsDraw.styles[style].fore;
 	const ColourDesired textBack = TextBackground(model, vsDraw, ll, background, false,
 											false, static_cast<int>(style), -1);
 
@@ -2432,20 +2439,31 @@ void EditView::PaintText(Surface *surfaceWindow, const EditModel &model, PRectan
 
 		Sci::Line lineDocPrevious = -1;	// Used to avoid laying out one document line multiple times
 		AutoLineLayout ll(llc, nullptr);
-		std::vector<DrawPhase> phases;
+		int phaseCount;
+		DrawPhase phases[MaxDrawPhaseCount];
 		if ((phasesDraw == phasesMultiple) && !bufferedDraw) {
-			for (int phase = drawBack; phase < drawFoldLines; phase = phase * 2) {
-				phases.push_back(static_cast<DrawPhase>(phase));
-			}
+			phases[0] = drawBack;
+			phases[1] = drawIndicatorsBack;
+			phases[2] = drawText;
+			phases[3] = drawIndentationGuides;
+			phases[4] = drawIndicatorsFore;
+			phases[5] = drawSelectionTranslucent;
+			phases[6] = drawLineTranslucent;
+			phases[7] = drawFoldLines;
+			phases[8] = drawCarets;
 			if (needDrawFoldLines) {
-				phases.push_back(drawFoldLines);
+				phaseCount = 9;
+			} else {
+				phaseCount = 8;
+				phases[7] = drawCarets;
 			}
-			phases.push_back(drawCarets);
 		} else {
-			phases.push_back(needDrawFoldLines ? drawAll : static_cast<DrawPhase>(drawAll & ~drawFoldLines));
+			phases[0] = needDrawFoldLines ? drawAll : static_cast<DrawPhase>(drawAll & ~drawFoldLines);
+			phaseCount = 1;
 		}
 
-		for (const DrawPhase &phase : phases) {
+		for (int phaseIndex = 0; phaseIndex < phaseCount; phaseIndex++) {
+			const DrawPhase phase = phases[phaseIndex];
 			int ypos = 0;
 			if (!bufferedDraw)
 				ypos += screenLinePaintFirst * vsDraw.lineHeight;

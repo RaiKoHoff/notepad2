@@ -18,7 +18,7 @@
 #include <vector>
 #include <algorithm>
 #include <memory>
-//#include <chrono>
+#include <chrono>
 
 #include "Platform.h"
 #include "VectorISA.h"
@@ -29,7 +29,7 @@
 #include "Partitioning.h"
 #include "CellBuffer.h"
 #include "UniConversion.h"
-//#include "ElapsedPeriod.h"
+#include "ElapsedPeriod.h"
 
 namespace Scintilla {
 
@@ -650,6 +650,10 @@ const char *CellBuffer::BufferPointer() {
 
 const char *CellBuffer::RangePointer(Sci::Position position, Sci::Position rangeLength) noexcept {
 	return substance.RangePointer(position, rangeLength);
+}
+
+const char *CellBuffer::StyleRangePointer(Sci::Position position, Sci::Position rangeLength) noexcept {
+	return hasStyles ? style.RangePointer(position, rangeLength) : nullptr;
 }
 
 Sci::Position CellBuffer::GapPosition() const noexcept {
