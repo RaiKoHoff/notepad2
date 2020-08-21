@@ -146,7 +146,8 @@ struct ScreenLine : public IScreenLine {
 /**
  */
 class LineLayoutCache {
-	std::vector<std::unique_ptr<LineLayout>>cache;
+	std::vector<std::unique_ptr<LineLayout>> cache;
+	size_t lastCaretSlot;
 	int level;
 	bool allInvalidated;
 	int styleClock;
