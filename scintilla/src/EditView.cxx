@@ -111,8 +111,7 @@ int WidestLineWidth(Surface *surface, const ViewStyle &vs, int styleOffset, cons
 			const std::string_view text(st.text + start, lenLine);
 			widthSubLine = static_cast<int>(std::lround(surface->WidthText(fontText, text)));
 		}
-		if (widthSubLine > widthMax)
-			widthMax = widthSubLine;
+		widthMax = std::max(widthMax, widthSubLine);
 		start += lenLine + 1;
 	}
 	return widthMax;
@@ -423,13 +422,15 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 	PLATFORM_ASSERT(line < model.pdoc->LinesTotal());
 	PLATFORM_ASSERT(ll->chars != nullptr);
 	const Sci::Position posLineStart = model.pdoc->LineStart(line);
-	Sci::Position posLineEnd = model.pdoc->LineStart(line + 1);
 	// If the line is very long, limit the treatment to a length that should fit in the viewport
-	if (posLineEnd > (posLineStart + ll->maxLineLength)) {
-		posLineEnd = posLineStart + ll->maxLineLength;
-	}
-	if (ll->validity == LineLayout::ValidLevel::checkTextAndStyle) {
+	const Sci::Position posLineEnd = std::min(model.pdoc->LineStart(line + 1), posLineStart + ll->maxLineLength);
+	// Hard to cope when too narrow, so just assume there is space
+	width = std::max(width, 20);
+
+	auto validity = ll->validity;
+	if (validity == LineLayout::ValidLevel::checkTextAndStyle) {
 		const Sci::Position lineLength = (vstyle.viewEOL ? posLineEnd : model.pdoc->LineEnd(line)) - posLineStart;
+		validity = LineLayout::ValidLevel::invalid;
 		if (lineLength == ll->numCharsInLine) {
 			//ElapsedPeriod period;
 			// See if chars, styles, indicators, are all the same
@@ -461,8 +462,10 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 			if (lineLength != 0) {
 				const char *docStyles = model.pdoc->StyleRangePointer(posLineStart, lineLength);
 				if (docStyles) { // HasStyles
-					allSame |= ::memcmp(docStyles, styles, lineLength); // NOLINT(bugprone-suspicious-string-compare)
+					// NOLINTNEXTLINE(bugprone-suspicious-string-compare)
+					allSame |= memcmp(docStyles, styles, lineLength);
 				}
+
 				const char *docChars = model.pdoc->RangePointer(posLineStart, lineLength);
 				const char *chars = ll->chars.get();
 				if (vstyle.someStylesForceCase) {
@@ -475,7 +478,8 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 						chPrevious = chDoc;
 					} while (styles < end);
 				} else {
-					allSame |= ::memcmp(docChars, chars, lineLength); // NOLINT(bugprone-suspicious-string-compare)
+					// NOLINTNEXTLINE(bugprone-suspicious-string-compare)
+					allSame |= memcmp(docChars, chars, lineLength);
 				}
 			}
 
@@ -483,13 +487,14 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 			allSame |= *end ^ styleByteLast; // For eolFilled
 #endif
 			//const double duration = period.Duration()*1e3;
-			//printf("line=%zd (%zd) allSame=%d, duration=%f\n", line + 1, lineLength, allSame, duration);
-			ll->validity = allSame ? LineLayout::ValidLevel::invalid : LineLayout::ValidLevel::positions;
-		} else {
-			ll->validity = LineLayout::ValidLevel::invalid;
+			//printf("check line=%zd (%zd) allSame=%d, duration=%f\n", line + 1, lineLength, allSame, duration);
+			if (allSame == 0) {
+				validity = (ll->widthLine != width)? LineLayout::ValidLevel::positions : LineLayout::ValidLevel::lines;
+			}
 		}
 	}
-	if (ll->validity == LineLayout::ValidLevel::invalid) {
+	if (validity == LineLayout::ValidLevel::invalid) {
+		//ElapsedPeriod period;
 		ll->widthLine = LineLayout::wrapWidthInfinite;
 		ll->lines = 1;
 		if (vstyle.edgeState == EDGE_BACKGROUND) {
@@ -575,13 +580,11 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 		}
 		ll->numCharsInLine = numCharsInLine;
 		ll->numCharsBeforeEOL = numCharsBeforeEOL;
-		ll->validity = LineLayout::ValidLevel::positions;
+		validity = LineLayout::ValidLevel::positions;
+		//const double duration = period.Duration()*1e3;
+		//printf("invalid line=%zd (%d) duration=%f\n", line + 1, lineLength, duration);
 	}
-	// Hard to cope when too narrow, so just assume there is space
-	if (width < 20) {
-		width = 20;
-	}
-	if ((ll->validity == LineLayout::ValidLevel::positions) || (ll->widthLine != width)) {
+	if ((validity == LineLayout::ValidLevel::positions) || (ll->widthLine != width)) {
 		ll->widthLine = width;
 		if (width == LineLayout::wrapWidthInfinite) {
 			ll->lines = 1;
@@ -589,6 +592,7 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 			// Simple common case where line does not need wrapping.
 			ll->lines = 1;
 		} else {
+			//ElapsedPeriod period;
 			if (vstyle.wrapVisualFlags & SC_WRAPVISUALFLAG_END) {
 				width -= static_cast<int>(vstyle.aveCharWidth); // take into account the space for end wrap mark
 			}
@@ -759,9 +763,12 @@ void EditView::LayoutLine(const EditModel &model, Sci::Line line, Surface *surfa
 				p++;
 			}
 			ll->lines++;
+			//const double duration = period.Duration()*1e3;
+			//printf("wrap line=%zd duration=%f\n", line + 1, duration);
 		}
-		ll->validity = LineLayout::ValidLevel::lines;
+		validity = LineLayout::ValidLevel::lines;
 	}
+	ll->validity = validity;
 }
 
 // Fill the LineLayout bidirectional data fields according to each char style
@@ -1027,7 +1034,7 @@ static ColourDesired TextBackground(const EditModel &model, const ViewStyle &vsD
 }
 
 void EditView::DrawIndentGuide(Surface *surface, Sci::Line lineVisible, int lineHeight, XYPOSITION start, PRectangle rcSegment, bool highlight) const {
-	const Point from = Point::FromInts(0, ((lineVisible & 1) && (lineHeight & 1)) ? 1 : 0);
+	const Point from = Point::FromInts(0, ((lineVisible & 1) & (lineHeight & 1)));
 	const PRectangle rcCopyArea(start + 1, rcSegment.top,
 		start + 2, rcSegment.bottom);
 	surface->Copy(rcCopyArea, from,
@@ -1048,7 +1055,7 @@ static void DrawTextBlob(Surface *surface, const ViewStyle &vsDraw, PRectangle r
 		surface->FillRectangle(rcSegment, textBack);
 	}
 	FontAlias ctrlCharsFont = vsDraw.styles[STYLE_CONTROLCHAR].font;
-	const int normalCharHeight = static_cast<int>(std::ceil(vsDraw.styles[STYLE_CONTROLCHAR].capitalHeight));
+	const XYPOSITION normalCharHeight = std::ceil(vsDraw.styles[STYLE_CONTROLCHAR].capitalHeight);
 	PRectangle rcCChar = rcSegment;
 	rcCChar.left = rcCChar.left + 1;
 	rcCChar.top = rcSegment.top + vsDraw.maxAscent - normalCharHeight;
@@ -1213,9 +1220,7 @@ void EditView::DrawEOL(Surface *surface, const EditModel &model, const ViewStyle
 		}
 	}
 
-	rcSegment.left = rcSegment.right;
-	if (rcSegment.left < rcLine.left)
-		rcSegment.left = rcLine.left;
+	rcSegment.left = std::max(rcSegment.right, rcLine.left);
 	rcSegment.right = rcLine.right;
 
 	const bool drawEOLAnnotationStyledText = (vsDraw.eolAnnotationVisible != EOLANNOTATION_HIDDEN) && model.pdoc->EOLAnnotationStyledText(line).text;
@@ -1416,8 +1421,7 @@ void EditView::DrawFoldDisplayText(Surface *surface, const EditModel &model, con
 	if (phase & drawBack) {
 		// Fill Remainder of the line
 		PRectangle rcRemainder = rcSegment;
-		if (rcRemainder.left < rcLine.left)
-			rcRemainder.left = rcLine.left;
+		rcRemainder.left = std::max(rcRemainder.left, rcLine.left);
 		rcRemainder.right = rcLine.right;
 		FillLineRemainder(surface, model, vsDraw, ll, line, rcRemainder, subLine);
 
@@ -1506,9 +1510,7 @@ void EditView::DrawEOLAnnotationText(Surface *surface, const EditModel &model, c
 
 		// Fill Remainder of the line
 		PRectangle rcRemainder = rcSegment;
-		rcRemainder.left = rcRemainder.right;
-		if (rcRemainder.left < rcLine.left)
-			rcRemainder.left = rcLine.left;
+		rcRemainder.left = std::max(rcRemainder.right, rcLine.left);
 		rcRemainder.right = rcLine.right;
 		FillLineRemainder(surface, model, vsDraw, ll, line, rcRemainder, subLine);
 	}
@@ -1567,8 +1569,7 @@ void EditView::DrawAnnotation(Surface *surface, const EditModel &model, const Vi
 				rcSegment.left = static_cast<XYPOSITION>(xStart + indent);
 				rcSegment.right = rcSegment.left + widthAnnotation;
 			}
-			if (widthAnnotation > lineWidthMaxSeen)
-				lineWidthMaxSeen = widthAnnotation;
+			lineWidthMaxSeen = std::max(lineWidthMaxSeen, widthAnnotation);
 		}
 		const int annotationLines = model.pdoc->AnnotationLines(line);
 		size_t start = 0;
@@ -1633,8 +1634,7 @@ static void DrawBlockCaret(Surface *surface, const EditModel &model, const ViewS
 
 	// See if the next character shares horizontal space, if so we'll
 	// need to draw that too.
-	if (offsetFirstChar < 0)
-		offsetFirstChar = 0;
+	offsetFirstChar = std::max<Sci::Position>(offsetFirstChar, 0);
 	numCharsToDraw = offsetLastChar - offsetFirstChar;
 	while ((offsetLastChar < ll->LineStart(subLine + 1)) && (offsetLastChar <= ll->numCharsInLine)) {
 		// Update posAfter to point to the 2nd next char, this is where
@@ -1742,9 +1742,8 @@ void EditView::DrawCarets(Surface *surface, const EditModel &model, const ViewSt
 						canDrawBlockCaret = !invalidByte;
 						widthOverstrikeCaret = ll->positions[offset + widthChar] - ll->positions[offset];
 					}
-					if (widthOverstrikeCaret < 3) {	// Make sure its visible
-						widthOverstrikeCaret = 3;
-					}
+					// Make sure its visible
+					widthOverstrikeCaret = std::max(widthOverstrikeCaret, 3.0f);
 				}
 
 				if (xposCaret > 0) {
@@ -1846,10 +1845,8 @@ void EditView::DrawBackground(Surface *surface, const EditModel &model, const Vi
 		// draw strings that are completely past the right side of the window.
 		if (!rcSegment.Empty() && rcSegment.Intersects(rcLine)) {
 			// Clip to line rectangle, since may have a huge position which will not work with some platforms
-			if (rcSegment.left < rcLine.left)
-				rcSegment.left = rcLine.left;
-			if (rcSegment.right > rcLine.right)
-				rcSegment.right = rcLine.right;
+			rcSegment.left = std::max(rcSegment.left, rcLine.left);
+			rcSegment.right = std::min(rcSegment.right, rcLine.right);
 
 			const int inSelection = hideSelection ? 0 : model.sel.CharacterInSelection(iDoc);
 			const bool inHotspot = (ll->hotspot.Valid()) && ll->hotspot.ContainsCharacter(iDoc);
@@ -1985,8 +1982,8 @@ static void DrawTranslucentSelection(Surface *surface, const EditModel &model, c
 							if ((portion.start.Position() - posLineStart) == lineRange.start && model.sel.Range(r).ContainsCharacter(portion.start.Position() - 1))
 								rcSegment.left -= static_cast<int>(ll->wrapIndent); // indentation added to xStart was truncated to int, so we do the same here
 						}
-						rcSegment.left = (rcSegment.left > rcLine.left) ? rcSegment.left : rcLine.left;
-						rcSegment.right = (rcSegment.right < rcLine.right) ? rcSegment.right : rcLine.right;
+						rcSegment.left = std::max(rcSegment.left, rcLine.left);
+						rcSegment.right = std::min(rcSegment.right, rcLine.right);
 						if (rcSegment.right > rcLine.left)
 							SimpleAlphaRectangle(surface, rcSegment, SelectionBackground(vsDraw, r == model.sel.Main(), model.primarySelection), alpha);
 					}
@@ -2075,9 +2072,12 @@ void EditView::DrawForeground(Surface *surface, const EditModel &model, const Vi
 					const int indicatorValue = deco->ValueAt(ts.start + posLineStart);
 					if (indicatorValue) {
 						const Indicator &indicator = vsDraw.indicators[deco->Indicator()];
-						const bool hover = indicator.IsDynamic() &&
-							((model.hoverIndicatorPos >= ts.start + posLineStart) &&
-							(model.hoverIndicatorPos <= ts.end() + posLineStart));
+						bool hover = false;
+						if (indicator.IsDynamic()) {
+							const Sci::Position startPos = ts.start + posLineStart;
+							const Range rangeRun(deco->StartRun(startPos), deco->EndRun(startPos));
+							hover =	rangeRun.ContainsCharacter(model.hoverIndicatorPos);
+						}
 						if (hover) {
 							if (indicator.sacHover.style == INDIC_TEXTFORE) {
 								textFore = indicator.sacHover.fore;
@@ -2719,12 +2719,9 @@ Sci::Position EditView::FormatRange(bool draw, const Sci_RangeToFormat *pfr, Sur
 	}
 
 	const Sci::Line linePrintStart = model.pdoc->SciLineFromPosition(pfr->chrg.cpMin);
-	Sci::Line linePrintLast = linePrintStart + (pfr->rc.bottom - pfr->rc.top) / vsPrint.lineHeight - 1;
-	if (linePrintLast < linePrintStart)
-		linePrintLast = linePrintStart;
 	const Sci::Line linePrintMax = model.pdoc->SciLineFromPosition(pfr->chrg.cpMax);
-	if (linePrintLast > linePrintMax)
-		linePrintLast = linePrintMax;
+	Sci::Line linePrintLast = linePrintStart + (pfr->rc.bottom - pfr->rc.top) / vsPrint.lineHeight - 1;
+	linePrintLast = std::clamp(linePrintLast, linePrintStart, linePrintMax);
 	//Platform::DebugPrintf("Formatting lines=[%0d,%0d,%0d] top=%0d bottom=%0d line=%0d %.0f\n",
 	//      linePrintStart, linePrintLast, linePrintMax, pfr->rc.top, pfr->rc.bottom, vsPrint.lineHeight,
 	//      surfaceMeasure->Height(vsPrint.styles[STYLE_LINENUMBER].font));
@@ -2742,9 +2739,7 @@ Sci::Position EditView::FormatRange(bool draw, const Sci_RangeToFormat *pfr, Sur
 
 	Sci::Position nPrintPos = pfr->chrg.cpMin;
 	int visibleLine = 0;
-	int widthPrint = pfr->rc.right - pfr->rc.left - vsPrint.fixedColumnWidth;
-	if (printParameters.wrapState == WrapMode::none)
-		widthPrint = LineLayout::wrapWidthInfinite;
+	const int widthPrint = (printParameters.wrapState == WrapMode::none) ? LineLayout::wrapWidthInfinite : pfr->rc.right - pfr->rc.left - vsPrint.fixedColumnWidth;
 
 	while (lineDoc <= linePrintLast && ypos < pfr->rc.bottom) {
 

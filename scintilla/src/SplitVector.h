@@ -54,10 +54,12 @@ protected:
 	/// reallocating if more space needed.
 	void RoomFor(ptrdiff_t insertionLength) {
 		if (gapLength <= insertionLength) {
-			while (growSize < static_cast<ptrdiff_t>(body.size() / 6)) {
+			const ptrdiff_t size = static_cast<ptrdiff_t>(body.size());
+			const ptrdiff_t upper = size / 6;
+			while (growSize < upper) {
 				growSize *= 2;
 			}
-			ReAllocate(body.size() + insertionLength + growSize);
+			ReAllocate(size + insertionLength + growSize);
 		}
 	}
 
@@ -98,7 +100,8 @@ public:
 		if (newSize < 0)
 			throw std::runtime_error("SplitVector::ReAllocate: negative size.");
 
-		if (newSize > static_cast<ptrdiff_t>(body.size())) {
+		const ptrdiff_t size = static_cast<ptrdiff_t>(body.size());
+		if (newSize > size) {
 #if ENABLE_SHOW_DEBUG_INFO
 			printf("before %s(%td, %zu) part1Length=%td, gapLength=%td, lengthBody=%td, growSize=%td\n",
 				__func__, newSize, body.size(), part1Length, gapLength, lengthBody, growSize);
@@ -107,7 +110,7 @@ public:
 #endif
 			// Move the gap to the end
 			GapTo(lengthBody);
-			gapLength += newSize - static_cast<ptrdiff_t>(body.size());
+			gapLength += newSize - size;
 			// RoomFor implements a growth strategy but so does vector::resize so
 			// ensure vector::resize allocates exactly the amount wanted by
 			// calling reserve first.
@@ -215,7 +218,7 @@ public:
 			}
 			RoomFor(insertLength);
 			GapTo(position);
-			std::fill(body.data() + part1Length, body.data() + part1Length + insertLength, v);
+			std::fill_n(body.data() + part1Length, insertLength, v);
 			lengthBody += insertLength;
 			part1Length += insertLength;
 			gapLength -= insertLength;
@@ -262,7 +265,7 @@ public:
 			}
 			RoomFor(insertLength);
 			GapTo(positionToInsert);
-			std::copy(s + positionFrom, s + positionFrom + insertLength, body.data() + part1Length);
+			std::copy_n(s + positionFrom, insertLength, body.data() + part1Length);
 			lengthBody += insertLength;
 			part1Length += insertLength;
 			gapLength -= insertLength;
@@ -303,22 +306,19 @@ public:
 		// Split into up to 2 ranges, before and after the split then use memcpy on each.
 		ptrdiff_t range1Length = 0;
 		if (position < part1Length) {
-			const ptrdiff_t part1AfterPosition = part1Length - position;
-			range1Length = retrieveLength;
-			if (range1Length > part1AfterPosition)
-				range1Length = part1AfterPosition;
+			range1Length = std::min(retrieveLength, part1Length - position);
 		}
-		std::copy(body.data() + position, body.data() + position + range1Length, buffer);
-		buffer += range1Length;
-		position = position + range1Length + gapLength;
+		const T* data = body.data() + position;
+		std::copy_n(data, range1Length, buffer);
+		data += range1Length + gapLength;
 		const ptrdiff_t range2Length = retrieveLength - range1Length;
-		std::copy(body.data() + position, body.data() + position + range2Length, buffer);
+		std::copy_n(data, range2Length, buffer + range1Length);
 	}
 
 	/// Compact the buffer and return a pointer to the first element.
 	/// Also ensures there is an empty element beyond logical end in case its
 	/// passed to a function expecting a NUL terminated string.
-	T *BufferPointer() {
+	const T *BufferPointer() {
 		RoomFor(1);
 		GapTo(lengthBody);
 		T emptyOne = {};
@@ -328,18 +328,18 @@ public:
 
 	/// Return a pointer to a range of elements, first rearranging the buffer if
 	/// needed to make that range contiguous.
-	T *RangePointer(ptrdiff_t position, ptrdiff_t rangeLength) noexcept {
+	const T *RangePointer(ptrdiff_t position, ptrdiff_t rangeLength) noexcept {
+		const T *data = body.data() + position;
 		if (position < part1Length) {
 			if ((position + rangeLength) > part1Length) {
 				// Range overlaps gap, so move gap to start of range.
 				GapTo(position);
-				return body.data() + position + gapLength;
-			} else {
-				return body.data() + position;
+				data += gapLength;
 			}
 		} else {
-			return body.data() + position + gapLength;
+			data += gapLength;
 		}
+		return data;
 	}
 
 	/// Return the position of the gap within the buffer.

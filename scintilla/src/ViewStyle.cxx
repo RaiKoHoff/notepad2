@@ -335,11 +335,7 @@ void ViewStyle::Refresh(Surface &surface, int tabInChars) {
 	maxAscent += extraAscent;
 	maxDescent += extraDescent;
 	lineHeight = maxAscent + maxDescent;
-	lineOverlap = lineHeight / 10;
-	if (lineOverlap < 2)
-		lineOverlap = 2;
-	if (lineOverlap > lineHeight)
-		lineOverlap = lineHeight;
+	lineOverlap = std::clamp(lineHeight / 10, 2, lineHeight);
 
 	someStylesProtected = std::any_of(styles.cbegin(), styles.cend(),
 		[](const Style &style) noexcept { return style.IsProtected(); });
@@ -521,6 +517,17 @@ ColourDesired ViewStyle::WrapColour() const noexcept {
 		return styles[STYLE_DEFAULT].fore;
 }
 
+// Insert new edge in sorted order.
+void ViewStyle::AddMultiEdge(uptr_t wParam, sptr_t lParam) {
+	const int column = static_cast<int>(wParam);
+	theMultiEdge.insert(
+		std::upper_bound(theMultiEdge.begin(), theMultiEdge.end(), column,
+		[](const EdgeProperties &a, const EdgeProperties &b) noexcept {
+			return a.column < b.column;
+		}),
+		EdgeProperties(column, lParam));
+}
+
 bool ViewStyle::SetWrapState(int wrapState_) noexcept {
 	WrapMode wrapStateWanted;
 	switch (wrapState_) {
@@ -679,10 +686,12 @@ FontRealised *ViewStyle::Find(const FontSpecification &fs) const {
 }
 
 void ViewStyle::FindMaxAscentDescent() {
+	auto ascent = maxAscent;
+	auto descent = maxDescent;
 	for (const auto &it : fonts) {
-		if (maxAscent < it.second->ascent)
-			maxAscent = it.second->ascent;
-		if (maxDescent < it.second->descent)
-			maxDescent = it.second->descent;
+		ascent = std::max(ascent, it.second->ascent);
+		descent = std::max(descent, it.second->descent);
 	}
+	maxAscent = ascent;
+	maxDescent = descent;
 }

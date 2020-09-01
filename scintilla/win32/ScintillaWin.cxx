@@ -1689,12 +1689,10 @@ sptr_t ScintillaWin::MouseMessage(unsigned int iMessage, uptr_t wParam, sptr_t l
 		wheelDelta -= GET_WHEEL_DELTA_WPARAM(wParam);
 		if (std::abs(wheelDelta) >= WHEEL_DELTA && linesPerScroll > 0) {
 			Sci::Line linesToScroll = linesPerScroll;
-			if (linesPerScroll == WHEEL_PAGESCROLL) {
+			if (linesToScroll == WHEEL_PAGESCROLL) {
 				linesToScroll = LinesOnScreen() - 1;
 			}
-			if (linesToScroll == 0) {
-				linesToScroll = 1;
-			}
+			linesToScroll = std::max<Sci::Line>(linesToScroll, 1);
 			linesToScroll *= (wheelDelta / WHEEL_DELTA);
 			if (wheelDelta >= 0) {
 				wheelDelta = wheelDelta % WHEEL_DELTA;
@@ -2080,7 +2078,7 @@ sptr_t ScintillaWin::SciMessage(unsigned int iMessage, uptr_t wParam, sptr_t lPa
 			(wParam == SC_TECHNOLOGY_DIRECTWRITE)) {
 			const int technologyNew = static_cast<int>(wParam);
 			if (technology != technologyNew) {
-				if (technologyNew > SC_TECHNOLOGY_DEFAULT) {
+				if (technologyNew != SC_TECHNOLOGY_DEFAULT) {
 #if defined(USE_D2D)
 					if (!LoadD2D())
 						// Failed to load Direct2D or DirectWrite so no effect
@@ -2093,6 +2091,7 @@ sptr_t ScintillaWin::SciMessage(unsigned int iMessage, uptr_t wParam, sptr_t lPa
 				}
 #if defined(USE_D2D)
 				DropRenderTarget();
+				view.bufferedDraw = technologyNew == SC_TECHNOLOGY_DEFAULT;
 #endif
 				technology = technologyNew;
 				// Invalidate all cached information including layout.

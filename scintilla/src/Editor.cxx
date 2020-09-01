@@ -109,7 +109,7 @@ static constexpr bool IsAllSpacesOrTabs(std::string_view sv) noexcept {
 	return true;
 }
 
-Editor::Editor() : durationWrapOneLine(0.00001, 0.000001, 0.0001) {
+Editor::Editor() {
 	ctrlID = 0;
 
 	stylesValid = false;
@@ -370,7 +370,7 @@ Sci::Line Editor::MaxScrollPos() const noexcept {
 		retVal -= linesOnScreen - linesOnScreen/4;
 		break;
 	}
-	return (retVal < 0) ? 0 : retVal;
+	return std::max<Sci::Line>(retVal, 0);
 }
 
 SelectionPosition Editor::ClampPositionIntoDocument(SelectionPosition sp) const noexcept {
@@ -523,12 +523,8 @@ void Editor::RedrawSelMargin(Sci::Line line, bool allAfter) noexcept {
 		// Inflate line rectangle if there are image markers with height larger than line height
 		if (vs.largestMarkerHeight > vs.lineHeight) {
 			const int delta = (vs.largestMarkerHeight - vs.lineHeight + 1) / 2;
-			rcLine.top -= delta;
-			rcLine.bottom += delta;
-			if (rcLine.top < rcMarkers.top)
-				rcLine.top = rcMarkers.top;
-			if (rcLine.bottom > rcMarkers.bottom)
-				rcLine.bottom = rcMarkers.bottom;
+			rcLine.top = std::max(rcLine.top - delta, rcMarkers.top);
+			rcLine.bottom = std::min(rcLine.bottom + delta, rcMarkers.bottom);
 		}
 
 		rcMarkers.top = rcLine.top;
@@ -556,8 +552,7 @@ PRectangle Editor::RectangleFromRange(Range r, int overlap) const noexcept {
 	const int leftTextOverlap = ((xOffset == 0) && (vs.leftMarginWidth > 0)) ? 1 : 0;
 	rc.left = static_cast<XYPOSITION>(vs.textStart - leftTextOverlap);
 	rc.top = static_cast<XYPOSITION>((minLine - TopLineOfMain()) * vs.lineHeight - overlap);
-	if (rc.top < rcClientDrawing.top)
-		rc.top = rcClientDrawing.top;
+	rc.top = std::max(rc.top, rcClientDrawing.top);
 	// Extend to right of prepared area if any to prevent artifacts from caret line highlight
 	rc.right = rcClientDrawing.right;
 	rc.bottom = static_cast<XYPOSITION>((maxLine - TopLineOfMain() + 1) * vs.lineHeight + overlap);
@@ -1558,9 +1553,7 @@ bool Editor::WrapLines(WrapScope ws) {
 		} else if (ws == WrapScope::wsIdle) {
 			// Try to keep time taken by wrapping reasonable so interaction remains smooth.
 			constexpr double secondsAllowed = 0.01;
-			const Sci::Line linesInAllowedTime = std::clamp<Sci::Line>(
-				static_cast<Sci::Line>(secondsAllowed / durationWrapOneLine.Duration()),
-				LinesOnScreen() + 50, 0x10000);
+			const Sci::Line linesInAllowedTime = durationWrapOneLine.LinesInAllowedTime(secondsAllowed);
 			lineToWrapEnd = lineToWrap + linesInAllowedTime;
 		}
 		const Sci::Line lineEndNeedWrap = std::min(wrapPending.end, pdoc->LinesTotal());
@@ -1703,10 +1696,8 @@ void Editor::PaintSelMargin(Surface *surfaceWindow, PRectangle rc) {
 	}
 
 	// Clip vertically to paint area to avoid drawing line numbers
-	if (rcMargin.bottom > rc.bottom)
-		rcMargin.bottom = rc.bottom;
-	if (rcMargin.top < rc.top)
-		rcMargin.top = rc.top;
+	rcMargin.bottom = std::min(rcMargin.bottom, rc.bottom);
+	rcMargin.top = std::max(rcMargin.top, rc.top);
 
 	marginView.PaintMargin(surface, topLine, rc, rcMargin, *this, vs);
 
@@ -2975,9 +2966,9 @@ void Editor::ChangeCaseOfSelection(int caseMapping) {
 		currentNoVS.ClearVirtualSpace();
 		const size_t rangeBytes = currentNoVS.Length();
 		if (rangeBytes > 0) {
-			std::string sText = RangeText(currentNoVS.Start().Position(), currentNoVS.End().Position());
+			const std::string sText = RangeText(currentNoVS.Start().Position(), currentNoVS.End().Position());
 
-			std::string sMapped = CaseMapString(sText, caseMapping);
+			const std::string sMapped = CaseMapString(sText, caseMapping);
 
 			if (sMapped != sText) {
 				size_t firstDifference = 0;
@@ -4030,8 +4021,7 @@ void Editor::Indent(bool forwards) {
 				} else {
 					Sci::Position newColumn = ((pdoc->GetColumn(caretPosition) - 1) / pdoc->tabInChars) *
 						pdoc->tabInChars;
-					if (newColumn < 0)
-						newColumn = 0;
+					newColumn = std::max<Sci::Position>(newColumn, 0);
 					Sci::Position newPos = caretPosition;
 					while (pdoc->GetColumn(newPos) > newColumn)
 						newPos--;
@@ -4205,10 +4195,7 @@ Sci::Position Editor::SearchInTarget(const char *text, Sci::Position length) {
 }
 
 void Editor::GoToLine(Sci::Line lineNo) {
-	if (lineNo > pdoc->LinesTotal())
-		lineNo = pdoc->LinesTotal();
-	if (lineNo < 0)
-		lineNo = 0;
+	lineNo = std::clamp<Sci::Line>(lineNo, 0, pdoc->LinesTotal());
 	SetEmptySelection(pdoc->LineStart(lineNo));
 	ShowCaretAtCurrentPosition();
 	EnsureCaretVisible();
@@ -5105,8 +5092,7 @@ Sci::Position Editor::PositionAfterArea(PRectangle rcArea) const noexcept {
 // affects later lines so style all the viewed text.
 void Editor::StyleToPositionInView(Sci::Position pos) {
 	Sci::Position endWindow = PositionAfterArea(GetClientDrawingRectangle());
-	if (pos > endWindow)
-		pos = endWindow;
+	pos = std::min(pos, endWindow);
 	const int styleAtEnd = pdoc->StyleIndexAt(pos - 1);
 	pdoc->EnsureStyledTo(pos);
 	if ((endWindow > pos) && (styleAtEnd != pdoc->StyleIndexAt(pos - 1))) {
@@ -5128,10 +5114,8 @@ Sci::Position Editor::PositionAfterMaxStyling(Sci::Position posMax, bool scrolli
 	// Try to keep time taken by styling reasonable so interaction remains smooth.
 	// When scrolling, allow less time to ensure responsive
 	const double secondsAllowed = scrolling ? 0.005 : 0.02;
+	const Sci::Line linesToStyle = pdoc->durationStyleOneLine.LinesInAllowedTime(secondsAllowed);
 
-	const Sci::Line linesToStyle = std::clamp(
-		static_cast<int>(secondsAllowed / pdoc->durationStyleOneLine.Duration()),
-		10, 0x10000);
 	const Sci::Line stylingMaxLine = std::min(
 		pdoc->SciLineFromPosition(pdoc->GetEndStyled()) + linesToStyle,
 		pdoc->LinesTotal());
@@ -5220,12 +5204,8 @@ void Editor::CheckForChangeOutsidePaint(Range r) noexcept {
 
 		PRectangle rcRange = RectangleFromRange(r, 0);
 		const PRectangle rcText = GetTextRectangle();
-		if (rcRange.top < rcText.top) {
-			rcRange.top = rcText.top;
-		}
-		if (rcRange.bottom > rcText.bottom) {
-			rcRange.bottom = rcText.bottom;
-		}
+		rcRange.top = std::max(rcRange.top, rcText.top);
+		rcRange.bottom = std::min(rcRange.bottom, rcText.bottom);
 
 		if (!PaintContains(rcRange)) {
 			AbandonPaint();
@@ -5450,7 +5430,6 @@ Sci::Line Editor::ContractedFoldNext(Sci::Line lineStart) const noexcept {
  * and unfold them all.
  */
 void Editor::EnsureLineVisible(Sci::Line lineDoc, bool enforcePolicy) {
-
 	// In case in need of wrapping to ensure DisplayFromDoc works.
 	if (lineDoc >= wrapPending.start) {
 		if (WrapLines(WrapScope::wsAll)) {
@@ -7787,7 +7766,7 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 		break;
 
 	case SCI_MULTIEDGEADDLINE:
-		vs.theMultiEdge.emplace_back(wParam, lParam);
+		vs.AddMultiEdge(wParam, lParam);
 		InvalidateStyleRedraw();
 		break;
 
@@ -7795,6 +7774,15 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 		std::vector<EdgeProperties>().swap(vs.theMultiEdge); // Free vector and memory, C++03 compatible
 		InvalidateStyleRedraw();
 		break;
+
+	case SCI_GETMULTIEDGECOLUMN: {
+		const size_t which = wParam;
+		// size_t is unsigned so this also handles negative inputs.
+		if (which >= vs.theMultiEdge.size()) {
+			return -1;
+		}
+		return vs.theMultiEdge[which].column;
+	}
 
 	case SCI_GETACCESSIBILITY:
 		return SC_ACCESSIBILITY_DISABLED;

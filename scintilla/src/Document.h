@@ -45,11 +45,11 @@ public:
 	}
 
 	Sci::Position First() const noexcept {
-		return (start <= end) ? start : end;
+		return std::min(start, end);
 	}
 
 	Sci::Position Last() const noexcept {
-		return (start > end) ? start : end;
+		return std::max(start, end);
 	}
 
 	// Is the position within the range?
@@ -198,13 +198,14 @@ struct RegexError : public std::runtime_error {
  */
 
 class ActionDuration {
-	double duration;
-	const double minDuration;
-	const double maxDuration;
+	double duration = 1e-5;
+	static constexpr double minDuration = 1e-6;
+	static constexpr double maxDuration = 1e-4;
 public:
-	ActionDuration(double duration_, double minDuration_, double maxDuration_) noexcept;
+	//ActionDuration(double duration_, double minDuration_, double maxDuration_) noexcept;
 	void AddSample(size_t numberActions, double durationOfActions) noexcept;
 	double Duration() const noexcept;
+	Sci::Line LinesInAllowedTime(double secondsAllowed) const noexcept;
 };
 
 /**
@@ -449,7 +450,7 @@ public:
 	int StyleIndexAt(Sci_Position position) const noexcept {
 		return static_cast<unsigned char>(cb.StyleAt(position));
 	}
-	void GetStyleRange(unsigned char *buffer, Sci::Position position, Sci::Position lengthRetrieve) const {
+	void GetStyleRange(unsigned char *buffer, Sci::Position position, Sci::Position lengthRetrieve) const noexcept {
 		cb.GetStyleRange(buffer, position, lengthRetrieve);
 	}
 	MarkerMask GetMark(Sci::Line line) const noexcept;
