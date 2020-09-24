@@ -260,8 +260,8 @@ NP2_inline Sci_Line SciCall_GetLineCount(void) {
 	return SciCall(SCI_GETLINECOUNT, 0, 0);
 }
 
-NP2_inline void SciCall_SetInitLineCount(Sci_Line lineCount) {
-	SciCall(SCI_SETINITLINECOUNT, lineCount, 0);
+NP2_inline void SciCall_AllocateLines(Sci_Line lineCount) {
+	SciCall(SCI_ALLOCATELINES, lineCount, 0);
 }
 
 NP2_inline void SciCall_SetSel(Sci_Position anchor, Sci_Position caret) {
@@ -406,6 +406,10 @@ NP2_inline Sci_Line EditGetSelectedLineCount(void) {
 
 NP2_inline Sci_Position SciCall_CountCharacters(Sci_Position start, Sci_Position end) {
 	return SciCall(SCI_COUNTCHARACTERS, start, end);
+}
+
+NP2_inline void SciCall_CountCharactersAndColumns(struct Sci_TextToFind *ft) {
+	SciCall(SCI_COUNTCHARACTERSANDCOLUMNS, 0, (LPARAM)ft);
 }
 
 // Multiple Selection and Virtual Space
@@ -777,10 +781,6 @@ NP2_inline void SciCall_SetCodePage(UINT codePage) {
 
 NP2_inline UINT SciCall_GetCodePage(void) {
 	return (UINT)SciCall(SCI_GETCODEPAGE, 0, 0);
-}
-
-NP2_inline void SciCall_SetBufferedDraw(BOOL buffered) {
-	SciCall(SCI_SETBUFFEREDDRAW, buffered, 0);
 }
 
 NP2_inline void SciCall_SetTechnology(int technology) {

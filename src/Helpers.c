@@ -144,10 +144,9 @@ BOOL IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection) {
 			node->key = p;
 			node->value = v;
 			++count;
-			p = StrEnd(v) + 1;
-		} else {
-			p = StrEnd(p) + 1;
+			p = v;
 		}
+		p = StrEnd(p) + 1;
 	} while (*p && count < capacity);
 
 	if (count == 0) {
@@ -2605,13 +2604,6 @@ HWND CreateThemedDialogParam(HINSTANCE hInstance, LPCWSTR lpTemplate, HWND hWndP
 * Mostly taken from SciTE, (c) Neil Hodgson, https://www.scintilla.org
 *
 */
-
-/**
- * Is the character an octal digit?
- */
-static inline BOOL IsOctalDigit(char ch) {
-	return ch >= '0' && ch <= '7';
-}
 
 /**
  * If the character is an hexa digit, get its value.

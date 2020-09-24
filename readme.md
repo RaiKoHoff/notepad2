@@ -37,12 +37,9 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* NASM
 	* Asymptote Vector Graphics Language
 	* AutoIt Script
-	* AWK
-		* GNU AWK
+	* AWK, GNU AWK
 	* Batch Script, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#batch)
-	* C#, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#c)
-		* C# Doc
-		* Vala
+	* C#, Vala, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#c)
 	* C/C++, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#cc)
 		* Objective-C/C++, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#objective-cc)
 		* [C Standard Library](../master/tools/lang/C.c), up to C2x.
@@ -51,7 +48,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* Sassy CSS
 		* Less CSS
 		* HSS
-	* [CMake](../master/tools/lang/CMake.cmake), [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#cmake), up to 3.16
+	* [CMake](../master/tools/lang/CMake.cmake), up to CMake 3.18. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#cmake)
 	* Common Intermediate Language
 	* Configuration / Properties File
 		* Apache Configuration File
@@ -59,10 +56,10 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* Diff/Patch File
 	* Doxygen
 	* F#
-	* Fortran
-		* GNU Fortran
+	* Fortran, GNU Fortran
 	* [GN Build](../master/tools/lang/GN.gn), up to GN 2019-03-13.
 	* [Go](../master/tools/lang/Go.go), up to Go 1.14.
+		* Go+ (GoPlus) and the Q language
 	* Gradle, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#gradle)
 	* GraphViz Dot, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#graphviz)
 		* blockdiag, seqdiag, actdiag and nwdiag
@@ -77,11 +74,9 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* Inno Setup
 	* Boost Jam
 	* Java, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#java)
-		* JavaDoc
-	* [JavaScript](../master/tools/lang/JavaScript.js), up to ECMAScript 2018, 9ed.
+	* [JavaScript](../master/tools/lang/JavaScript.js), up to ECMAScript 2020 (11th edition) with [Web APIs](https://developer.mozilla.org/en-US/docs/Web/API).
 	* JSON and JSON5 Document
-	* Julia Script, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#julia)
-		* [Julia Base and Standard Library](../master/tools/lang/Julia.jl), up to 1.2.
+	* [Julia Script](../master/tools/lang/Julia.jl), up to Julia 1.2. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#julia)
 	* [Kotlin](../master/tools/lang/Kotlin.kt), up to Kotlin 1.3
 	* LaTeX
 	* Lisp Script (Common Lisp, Clojure, Scheme, etc.)
@@ -98,8 +93,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* Scilab
 		* Gnuplot
 	* NSIS
-	* Pascal
-		* Delphi
+	* Pascal, Delphi
 	* Perl, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#perl)
 	* PowerShell
 	* Python, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#python)
@@ -108,30 +102,30 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* Jython
 		* Boo
 	* PHP Script, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#php)
-		* PHPDoc
 	* Windows Rescouce Script
 	* [Ruby](../master/tools/lang/Ruby.rb), [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#ruby)
-	* Rust, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#rust)
-		* [Rust Standard Library](../master/tools/lang/Rust.rs), up to 1.38.
+	* [Rust](../master/tools/lang/Rust.rs), up to Rust 1.38. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#rust)
 	* Scala Script
 	* Shell Script
 		* Bash likes (sh, bash, dash, ash, zsh, ksh), [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#shell-script)
 		* C Shell (csh, tcsh)
 		* M4 Macro, limited support
 	* SQL Query
+		* [SQL Standard](../master/tools/lang/SQL.sql), up to SQL:2016.
 		* [MySQL](../master/tools/lang/MySQL.sql), up to MySQL 8.0, MariaDB 10.3.
-		* [SQLite3](../master/tools/lang/SQLite3.sql)
+		* [SQLite3](../master/tools/lang/SQLite3.sql), up to 3.33.
+		* [PostgreSQL](../master/tools/lang/PostgreSQL.sql), up to 12.
+		* [Transact-SQL](../master/tools/lang/Transact-SQL.sql), up to SQL Server 2019.
+		* [Oracle](../master/tools/lang/Oracle.sql), up Oracle 20, incomplete.
 	* TCL, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#tcl)
 	* Texinfo
 	* TOML File
-	* Visual Basic
-		* VB6
-		* VB.NET
+	* Visual Basic, VB6, VB.NET
 	* VBScript
 	* VHDL
 	* Verilog HDL
 	* [Vim Script](../master/tools/lang/Vim.vim)
-	* WebAssembly
+	* [WebAssembly](https://github.com/WebAssembly/wabt/blob/master/src/lexer-keywords.txt), up to wabt 1.0.19
 	* XML Document, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#xml)
 		* XML Schema
 		* XML Stylesheet

@@ -18,7 +18,7 @@
 #include <vector>
 #include <algorithm>
 #include <memory>
-//#include <chrono>
+#include <chrono>
 
 #include "Platform.h"
 #include "VectorISA.h"
@@ -29,7 +29,7 @@
 #include "Partitioning.h"
 #include "CellBuffer.h"
 #include "UniConversion.h"
-//#include "ElapsedPeriod.h"
+#include "ElapsedPeriod.h"
 
 namespace Scintilla {
 
@@ -72,7 +72,7 @@ public:
 	virtual void SetLineStart(Sci::Line line, Sci::Position position) noexcept = 0;
 	virtual void RemoveLine(Sci::Line line) = 0;
 	virtual Sci::Line Lines() const noexcept = 0;
-	virtual void SetInitLineCount(Sci::Line lineCount) = 0;
+	virtual void AllocateLines(Sci::Line lines) = 0;
 	virtual Sci::Line LineFromPosition(Sci::Position pos) const noexcept = 0;
 	virtual Sci::Position LineStart(Sci::Line line) const noexcept = 0;
 	virtual void InsertCharacters(Sci::Line line, CountWidths delta) noexcept = 0;
@@ -106,7 +106,7 @@ public:
 	virtual ~LineStartIndex() = default;
 	bool Allocate(Sci::Line lines) {
 		refCount++;
-		Sci::Position length = starts.PositionFromPartition(starts.Partitions());
+		Sci::Position length = starts.Length();
 		for (Sci::Line line = starts.Partitions(); line < lines; line++) {
 			// Produce an ascending sequence that will be filled in with correct widths later
 			length++;
@@ -132,8 +132,10 @@ public:
 		const Sci::Position widthCurrent = LineWidth(line);
 		starts.InsertText(static_cast<POS>(line), static_cast<POS>(width - widthCurrent));
 	}
-	void SetInitLineCount(Sci::Line lineCount) {
-		starts.ReAllocate(lineCount);
+	void AllocateLines(Sci::Line lines) {
+		if (lines > starts.Partitions()) {
+			starts.ReAllocate(lines);
+		}
 	}
 	void InsertLines(Sci::Line line, Sci::Line lines) {
 		// Insert multiple lines with each temporarily 1 character wide.
@@ -240,13 +242,15 @@ public:
 	Sci::Line Lines() const noexcept override {
 		return static_cast<Sci::Line>(starts.Partitions());
 	}
-	void SetInitLineCount(Sci::Line lineCount) override {
-		starts.ReAllocate(lineCount);
-		if (activeIndices & SC_LINECHARACTERINDEX_UTF32) {
-			startsUTF32.SetInitLineCount(lineCount);
-		}
-		if (activeIndices & SC_LINECHARACTERINDEX_UTF16) {
-			startsUTF16.SetInitLineCount(lineCount);
+	void AllocateLines(Sci::Line lines) override {
+		if (lines > Lines()) {
+			starts.ReAllocate(lines);
+			if (activeIndices & SC_LINECHARACTERINDEX_UTF32) {
+				startsUTF32.AllocateLines(lines);
+			}
+			if (activeIndices & SC_LINECHARACTERINDEX_UTF16) {
+				startsUTF16.AllocateLines(lines);
+			}
 		}
 	}
 	Sci::Line LineFromPosition(Sci::Position pos) const noexcept override {
@@ -621,13 +625,13 @@ char CellBuffer::StyleAt(Sci::Position position) const noexcept {
 	return hasStyles ? style.ValueAt(position) : '\0';
 }
 
-void CellBuffer::GetStyleRange(unsigned char *buffer, Sci::Position position, Sci::Position lengthRetrieve) const {
+void CellBuffer::GetStyleRange(unsigned char *buffer, Sci::Position position, Sci::Position lengthRetrieve) const noexcept {
 	if (lengthRetrieve < 0)
 		return;
 	if (position < 0)
 		return;
 	if (!hasStyles) {
-		std::fill(buffer, buffer + lengthRetrieve, static_cast<unsigned char>(0));
+		std::fill_n(buffer, lengthRetrieve, static_cast<unsigned char>(0));
 		return;
 	}
 	if ((position + lengthRetrieve) > style.Length()) {
@@ -646,6 +650,10 @@ const char *CellBuffer::BufferPointer() {
 
 const char *CellBuffer::RangePointer(Sci::Position position, Sci::Position rangeLength) noexcept {
 	return substance.RangePointer(position, rangeLength);
+}
+
+const char *CellBuffer::StyleRangePointer(Sci::Position position, Sci::Position rangeLength) noexcept {
+	return hasStyles ? style.RangePointer(position, rangeLength) : nullptr;
 }
 
 Sci::Position CellBuffer::GapPosition() const noexcept {
@@ -728,6 +736,19 @@ void CellBuffer::Allocate(Sci::Position newSize) {
 	}
 }
 
+bool CellBuffer::EnsureStyleBuffer(bool hasStyles_) {
+	if (hasStyles != hasStyles_) {
+		hasStyles = hasStyles_;
+		if (hasStyles_) {
+			style.InsertValue(0, substance.Length(), 0);
+		} else {
+			style.DeleteAll();
+		}
+		return true;
+	}
+	return false;
+}
+
 void CellBuffer::SetUTF8Substance(bool utf8Substance_) noexcept {
 	utf8Substance = utf8Substance_;
 }
@@ -785,8 +806,8 @@ Sci::Line CellBuffer::Lines() const noexcept {
 	return plv->Lines();
 }
 
-void CellBuffer::SetInitLineCount(Sci::Line lineCount) {
-	plv->SetInitLineCount(lineCount);
+void CellBuffer::AllocateLines(Sci::Line lines) {
+	plv->AllocateLines(lines);
 }
 
 Sci::Position CellBuffer::LineStart(Sci::Line line) const noexcept {
@@ -903,9 +924,9 @@ bool CellBuffer::UTF8IsCharacterBoundary(Sci::Position position) const {
 
 void CellBuffer::ResetLineEnds() {
 	// Reinitialize line data -- too much work to preserve
-	const Sci::Line lineCount = plv->Lines();
+	const Sci::Line lines = plv->Lines();
 	plv->Init();
-	plv->SetInitLineCount(lineCount);
+	plv->AllocateLines(lines);
 
 	constexpr Sci::Position position = 0;
 	const Sci::Position length = Length();
@@ -1093,12 +1114,6 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 			chPrev = ch;
 		}
 	} else {
-		// same as above, see EditDetectEOLMode() in Edit.c
-		// tools/GenerateTable.py
-		static const uint8_t eolTable[16] = {
-			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 0, // 00 - 0F
-		};
-
 #if NP2_USE_AVX2
 		constexpr uint32_t LAST_CR_MASK = (1U << (sizeof(__m256i) - 1));
 		const __m256i vectCR = _mm256_set1_epi8('\r');
@@ -1165,12 +1180,12 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 		const __m128i vectLF = _mm_set1_epi8('\n');
 		while (ptr + 2*sizeof(__m128i) <= end) {
 			// unaligned loading: line starts at random position.
-			__m128i chunk = _mm_loadu_si128((__m128i *)ptr);
-			uint32_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectCR));
-			uint32_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectLF));
-			chunk = _mm_loadu_si128((__m128i *)(ptr + sizeof(__m128i)));
-			maskCR |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectCR))) << sizeof(__m128i);
-			maskLF |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk, vectLF))) << sizeof(__m128i);
+			const __m128i chunk1 = _mm_loadu_si128((__m128i *)ptr);
+			const __m128i chunk2 = _mm_loadu_si128((__m128i *)(ptr + sizeof(__m128i)));
+			uint32_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
+			uint32_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
+			maskCR |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
+			maskLF |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m128i);
 
 			const char *next = ptr + 2*sizeof(__m128i);
 			bool lastCR = false;
@@ -1225,19 +1240,20 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 		// end NP2_USE_SSE2
 #endif
 
+		constexpr uint32_t mask = (1 << '\r') | (1 << '\n');
 		while (ptr < end) {
 			// skip to line end
-			uint8_t type = 0;
-			while (ptr < end && ((ch = *ptr++) > '\r' || (type = eolTable[ch]) == 0)) {
+			ch = 0;
+			while (ptr < end && ((ch = *ptr++) > '\r' || ((mask >> ch) & 1) == 0)) {
 				// nop
 			}
-			switch (type) {
-			case 2: // '\r'
+			switch (ch) {
+			case '\r':
 				if (*ptr == '\n') {
 					++ptr;
 				}
 				[[fallthrough]];
-			case 1: // '\n'
+			case '\n':
 				if (nPositions == PositionBlockSize) {
 					plv->InsertLines(lineInsert, positions, nPositions, atLineStart);
 					lineInsert += nPositions;

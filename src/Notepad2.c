@@ -281,12 +281,6 @@ static EDITFINDREPLACE efrData;
 UINT	cpLastFind = 0;
 BOOL	bReplaceInitialized = FALSE;
 
-const int iLineEndings[3] = {
-	SC_EOL_CRLF,
-	SC_EOL_LF,
-	SC_EOL_CR
-};
-
 static int iSortOptions = 0;
 static int iAlignMode	= 0;
 Sci_Position iMatchesCount = 0;
@@ -299,15 +293,22 @@ extern int iCaretBlinkPeriod;
 BOOL fIsElevated = FALSE;
 static WCHAR wchWndClass[16] = WC_NOTEPAD2;
 
-#define STATUS_BAR_UPDATE_MASK_LEXER	1
-#define STATUS_BAR_UPDATE_MASK_CODEPAGE	2
-#define STATUS_BAR_UPDATE_MASK_EOLMODE	4
-#define STATUS_BAR_UPDATE_MASK_OVRMODE	8
-#define STATUS_BAR_UPDATE_MASK_DOCZOOM	16
+enum StatusBarUpdateMask {
+	StatusBarUpdateMask_Lexer = 1,
+	StatusBarUpdateMask_CodePage = 2,
+	StatusBarUpdateMask_EOLMode = 4,
+	StatusBarUpdateMask_OVRMode = 8,
+	StatusBarUpdateMask_DocZoom = 16,
+	StatusBarUpdateMask_LineColumn = 32,
+};
 // rarely changed statusbar items
 struct CachedStatusItem {
 	UINT updateMask;
 	BOOL overType;
+
+	Sci_Line iLine;
+	Sci_Position iLineChar;
+	Sci_Position iLineColumn;
 
 	LPCWSTR pszLexerName;
 	LPCWSTR pszEOLMode;
@@ -317,6 +318,8 @@ struct CachedStatusItem {
 	WCHAR tchLexerName[MAX_EDITLEXER_NAME_SIZE];
 	WCHAR tchDocPosFmt[96];
 } cachedStatusItem;
+
+#define UpdateStatusBarCacheLineColumn()	cachedStatusItem.updateMask |= StatusBarUpdateMask_LineColumn
 
 HINSTANCE	g_hInstance;
 HANDLE		g_hDefaultHeap;
@@ -399,7 +402,7 @@ static inline void UpdateStatusBarCache_OVRMode(BOOL force) {
 	if (force || overType != cachedStatusItem.overType) {
 		cachedStatusItem.overType = overType;
 		cachedStatusItem.pszOvrMode = overType ? L"OVR" : L"INS";
-		cachedStatusItem.updateMask |= STATUS_BAR_UPDATE_MASK_OVRMODE;
+		cachedStatusItem.updateMask |= StatusBarUpdateMask_OVRMode;
 	}
 }
 
@@ -432,6 +435,9 @@ static void CleanUpResources(BOOL initialized) {
 	if (tchToolbarBitmapDisabled != NULL) {
 		LocalFree(tchToolbarBitmapDisabled);
 	}
+	if (lpSchemeArg) {
+		LocalFree(lpSchemeArg);
+	}
 
 	Encoding_ReleaseResources();
 	Style_ReleaseResources();
@@ -449,11 +455,20 @@ static void CleanUpResources(BOOL initialized) {
 	OleUninitialize();
 }
 
+BOOL WINAPI ConsoleHandlerRoutine(DWORD dwCtrlType) {
+	if (dwCtrlType == CTRL_C_EVENT) {
+		SendWMCommand(hwndMain, IDM_FILE_EXIT);
+		return TRUE;
+	}
+	return FALSE;
+}
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nShowCmd) {
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
 #if 0 // used for Clang UBSan or printing debug message on console.
 	if (AttachConsole(ATTACH_PARENT_PROCESS)) {
+		SetConsoleCtrlHandler(ConsoleHandlerRoutine, TRUE);
 		freopen("CONOUT$", "w", stdout);
 		freopen("CONOUT$", "w", stderr);
 		fprintf(stdout, "\n%s:%d %s\n", __FILE__, __LINE__, __FUNCTION__);
@@ -645,6 +660,10 @@ BOOL InitApplication(HINSTANCE hInstance) {
 //
 //
 HWND InitInstance(HINSTANCE hInstance, int nCmdShow) {
+#if 0
+	StopWatch watch;
+	StopWatch_Start(watch);
+#endif
 	const BOOL defaultPos = (wi.x == CW_USEDEFAULT || wi.y == CW_USEDEFAULT || wi.cx == CW_USEDEFAULT || wi.cy == CW_USEDEFAULT);
 	RECT rc = { wi.x, wi.y, (defaultPos ? CW_USEDEFAULT : (wi.x + wi.cx)), (defaultPos ? CW_USEDEFAULT : (wi.y + wi.cy)) };
 
@@ -822,6 +841,7 @@ HWND InitInstance(HINSTANCE hInstance, int nCmdShow) {
 	if (!bOpened) {
 		UpdateStatusBarCache(STATUS_CODEPAGE);
 		UpdateStatusBarCache(STATUS_EOLMODE);
+		UpdateStatusBarCacheLineColumn();
 	}
 
 	// reset
@@ -910,6 +930,7 @@ HWND InitInstance(HINSTANCE hInstance, int nCmdShow) {
 		if (lpSchemeArg) {
 			Style_SetLexerFromName(szCurFile, lpSchemeArg);
 			LocalFree(lpSchemeArg);
+			lpSchemeArg = NULL;
 		} else {
 			Style_SetLexerFromID(iInitialLexer);
 		}
@@ -929,6 +950,11 @@ HWND InitInstance(HINSTANCE hInstance, int nCmdShow) {
 		UpdateToolbar();
 		UpdateStatusbar();
 	}
+
+#if 0
+	StopWatch_Stop(watch);
+	StopWatch_ShowLog(&watch, "InitInstance() time");
+#endif
 	return hwndMain;
 }
 
@@ -1589,7 +1615,6 @@ HWND EditCreate(HWND hwndParent) {
 
 	InitScintillaHandle(hwnd);
 	Style_InitDefaultColor();
-	SciCall_SetBufferedDraw(iRenderingTechnology == SC_TECHNOLOGY_DEFAULT);
 	SciCall_SetTechnology(iRenderingTechnology);
 	SciCall_SetBidirectional(iBidirectional);
 	SciCall_SetIMEInteraction(bUseInlineIME);
@@ -1610,8 +1635,6 @@ HWND EditCreate(HWND hwndParent) {
 	SciCall_SetAdditionalCaretsVisible(TRUE);
 	// style both before and after the visible text in the background
 	SciCall_SetIdleStyling(SC_IDLESTYLING_ALL);
-	// cache layout for visible lines
-	SciCall_SetLayoutCache(SC_CACHE_PAGE);
 
 	SciCall_AssignCmdKey((SCK_NEXT + (SCMOD_CTRL << 16)), SCI_PARADOWN);
 	SciCall_AssignCmdKey((SCK_PRIOR + (SCMOD_CTRL << 16)), SCI_PARAUP);
@@ -2100,24 +2123,24 @@ void UpdateStatusBarCache(int item) {
 	switch (item) {
 	case STATUS_LEXER:
 		cachedStatusItem.pszLexerName = Style_GetCurrentLexerName(cachedStatusItem.tchLexerName, MAX_EDITLEXER_NAME_SIZE);
-		cachedStatusItem.updateMask |= STATUS_BAR_UPDATE_MASK_LEXER;
+		cachedStatusItem.updateMask |= StatusBarUpdateMask_Lexer;
 		UpdateStatusBarWidth();
 		break;
 
 	case STATUS_CODEPAGE:
 		Encoding_GetLabel(iEncoding);
-		cachedStatusItem.updateMask |= STATUS_BAR_UPDATE_MASK_CODEPAGE;
+		cachedStatusItem.updateMask |= StatusBarUpdateMask_CodePage;
 		UpdateStatusBarWidth();
 		break;
 
 	case STATUS_EOLMODE:
 		cachedStatusItem.pszEOLMode = (iEOLMode == SC_EOL_LF) ? L"LF" : ((iEOLMode == SC_EOL_CR) ? L"CR" : L"CR+LF");
-		cachedStatusItem.updateMask |= STATUS_BAR_UPDATE_MASK_EOLMODE;
+		cachedStatusItem.updateMask |= StatusBarUpdateMask_EOLMode;
 		break;
 
 	case STATUS_DOCZOOM:
 		wsprintf(cachedStatusItem.tchZoom, L"%i%%", iZoomLevel);
-		cachedStatusItem.updateMask |= STATUS_BAR_UPDATE_MASK_DOCZOOM;
+		cachedStatusItem.updateMask |= StatusBarUpdateMask_DocZoom;
 		break;
 	}
 }
@@ -2650,7 +2673,7 @@ static inline BOOL IsBraceMatchChar(int ch) {
 #else
 	// tools/GenerateTable.py
 	static const uint32_t table[8] = { 0, 0x50000300, 0x28000000, 0x28000000 };
-	return table[ch >> 5] & (1 << (ch & 31));
+	return (table[ch >> 5] >> (ch & 31)) & 1;
 #endif
 }
 
@@ -3023,7 +3046,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_LINEENDINGS_CRLF:
 	case IDM_LINEENDINGS_LF:
 	case IDM_LINEENDINGS_CR: {
-		const int iNewEOLMode = iLineEndings[LOWORD(wParam) - IDM_LINEENDINGS_CRLF];
+		const int iNewEOLMode = GetScintillaEOLMode(LOWORD(wParam) - IDM_LINEENDINGS_CRLF);
 		ConvertLineEndings(iNewEOLMode);
 	}
 	break;
@@ -4249,7 +4272,6 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_SET_RENDER_TECH_D2DDC: {
 		const int back = iRenderingTechnology;
 		iRenderingTechnology = LOWORD(wParam) - IDM_SET_RENDER_TECH_GDI;
-		SciCall_SetBufferedDraw(iRenderingTechnology == SC_TECHNOLOGY_DEFAULT);
 		SciCall_SetTechnology(iRenderingTechnology);
 		iRenderingTechnology = SciCall_GetTechnology();
 		iBidirectional = SciCall_GetBidirectional();
@@ -4990,7 +5012,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 					return 0;
 				}
 				// Auto close braces/quotes
-				if (strchr("([{<\"\'`,", ch)) {
+				if (ch == '(' || ch == '[' || ch == '{' || ch == '<' || ch == '\"' || ch == '\'' || ch == '`' || ch == ',') {
 					if (autoCompletionConfig.fAutoInsertMask) {
 						EditAutoCloseBraceQuote(ch);
 					}
@@ -5087,6 +5109,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			break;
 
 		case SCN_MODIFIED:
+			UpdateStatusBarCacheLineColumn();
 			if (scn->linesAdded) {
 				UpdateLineNumberWidth();
 			}
@@ -5244,7 +5267,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			} else {
 				WCHAR tch[256];
 				GetString((UINT)pnmh->idFrom, tch, COUNTOF(tch));
-				lstrcpyn(pTTT->szText, /*StrChr(tch, L'\n')+1*/tch, 80);
+				lstrcpyn(pTTT->szText, tch, COUNTOF(pTTT->szText));
 			}
 		}
 		break;
@@ -6910,64 +6933,83 @@ void UpdateStatusbar(void) {
 		return;
 	}
 
-	WCHAR tchLn[32];
-	WCHAR tchLines[32];
-	WCHAR tchCol[32];
-	WCHAR tchCols[32];
-	WCHAR tchCh[32];
-	WCHAR tchChs[32];
-	WCHAR tchSel[32];
-	WCHAR tchSelCh[32];
-	WCHAR tchDocPos[256];
-	WCHAR tchDocSize[32];
-	WCHAR tchLinesSelected[32];
-	WCHAR tchMatchesCount[32];
-
 	const Sci_Position iPos = SciCall_GetCurrentPos();
-
-	const Sci_Line iLn = SciCall_LineFromPosition(iPos) + 1;
-	PosToStrW(iLn, tchLn);
-	FormatNumberStr(tchLn);
-
+	const Sci_Line iLine = SciCall_LineFromPosition(iPos);
 	const Sci_Line iLines = SciCall_GetLineCount();
-	PosToStrW(iLines, tchLines);
-	FormatNumberStr(tchLines);
 
-	Sci_Position iCol = SciCall_GetColumn(iPos) + 1;
-	PosToStrW(iCol, tchCol);
-	FormatNumberStr(tchCol);
+#if 0
+	StopWatch watch;
+	StopWatch_Start(watch);
+#endif
+	struct Sci_TextToFind ft = { { SciCall_PositionFromLine(iLine), iPos }, NULL, { 0, 0 }};
+	SciCall_CountCharactersAndColumns(&ft);
+	const Sci_Position iChar = ft.chrgText.cpMin;
+	const Sci_Position iCol = ft.chrgText.cpMax;
+	Sci_Position iLineChar;
+	Sci_Position iLineColumn;
 
-	const Sci_Position iLineStart = SciCall_PositionFromLine(iLn - 1);
-	const Sci_Position iLineEnd = SciCall_GetLineEndPosition(iLn - 1);
-	iCol = SciCall_CountCharacters(iLineStart, iPos) + 1;
-	const Sci_Position iLineChar = SciCall_CountCharacters(iLineStart, iLineEnd);
-	PosToStrW(iCol, tchCh);
-	PosToStrW(iLineChar, tchChs);
-	FormatNumberStr(tchCh);
-	FormatNumberStr(tchChs);
+	const UINT updateMask = cachedStatusItem.updateMask;
+	if ((updateMask & StatusBarUpdateMask_LineColumn) || (iLine != cachedStatusItem.iLine)) {
+		ft.chrg.cpMin = ft.chrg.cpMax;
+		ft.chrg.cpMax = SciCall_GetLineEndPosition(iLine);
+		SciCall_CountCharactersAndColumns(&ft);
+		iLineChar = ft.chrgText.cpMin;
+		iLineColumn = ft.chrgText.cpMax;
+		cachedStatusItem.iLine = iLine;
+		cachedStatusItem.iLineChar = iLineChar;
+		cachedStatusItem.iLineColumn = iLineColumn;
+	} else {
+		iLineChar = cachedStatusItem.iLineChar;
+		iLineColumn = cachedStatusItem.iLineColumn;
+	}
+#if 0
+	StopWatch_Stop(watch);
+	StopWatch_ShowLog(&watch, "CountCharacters time");
+#endif
 
-	iCol = SciCall_GetColumn(iLineEnd);
-	PosToStrW(iCol, tchCols);
-	FormatNumberStr(tchCols);
+	WCHAR tchCurLine[32];
+	WCHAR tchDocLine[32];
+	PosToStrW(iLine + 1, tchCurLine);
+	PosToStrW(iLines, tchDocLine);
+	FormatNumberStr(tchCurLine);
+	FormatNumberStr(tchDocLine);
 
+	WCHAR tchCurColumn[32];
+	WCHAR tchLineColumn[32];
+	PosToStrW(iCol + 1, tchCurColumn);
+	PosToStrW(iLineColumn, tchLineColumn);
+	FormatNumberStr(tchCurColumn);
+	FormatNumberStr(tchLineColumn);
+
+	WCHAR tchCurChar[32];
+	WCHAR tchLineChar[32];
+	PosToStrW(iChar + 1, tchCurChar);
+	PosToStrW(iLineChar, tchLineChar);
+	FormatNumberStr(tchCurChar);
+	FormatNumberStr(tchLineChar);
+
+	WCHAR tchSelByte[32];
+	WCHAR tchSelChar[32];
 	const Sci_Position iSelStart = SciCall_GetSelectionStart();
 	const Sci_Position iSelEnd = SciCall_GetSelectionEnd();
 	if (iSelStart == iSelEnd) {
-		lstrcpy(tchSel, L"0");
-		lstrcpy(tchSelCh, L"0");
+		lstrcpy(tchSelByte, L"0");
+		lstrcpy(tchSelChar, L"0");
 	} else if (!SciCall_IsRectangleSelection()) {
 		Sci_Position iSel = SciCall_GetSelTextLength() - 1;
-		PosToStrW(iSel, tchSel);
-		FormatNumberStr(tchSel);
+		PosToStrW(iSel, tchSelByte);
+		FormatNumberStr(tchSelByte);
 		iSel = SciCall_CountCharacters(iSelStart, iSelEnd);
-		PosToStrW(iSel, tchSelCh);
-		FormatNumberStr(tchSelCh);
+		PosToStrW(iSel, tchSelChar);
+		FormatNumberStr(tchSelChar);
 	} else {
-		lstrcpy(tchSel, L"--");
-		lstrcpy(tchSelCh, L"--");
+		lstrcpy(tchSelByte, L"--");
+		lstrcpy(tchSelChar, L"--");
 	}
 
-	// Print number of lines selected lines in statusbar
+	// Print number of selected lines in statusbar
+	WCHAR tchLinesSelected[32];
+	WCHAR tchMatchesCount[32];
 	if (iSelStart == iSelEnd) {
 		lstrcpy(tchLinesSelected, L"0");
 		lstrcpy(tchMatchesCount, L"0");
@@ -6985,33 +7027,33 @@ void UpdateStatusbar(void) {
 		FormatNumberStr(tchMatchesCount);
 	}
 
-	wsprintf(tchDocPos, cachedStatusItem.tchDocPosFmt, tchLn, tchLines,
-				 tchCol, tchCols, tchCh, tchChs, tchSelCh, tchSel, tchLinesSelected, tchMatchesCount);
+	WCHAR tchDocPos[256];
+	wsprintf(tchDocPos, cachedStatusItem.tchDocPosFmt, tchCurLine, tchDocLine,
+				 tchCurColumn, tchLineColumn, tchCurChar, tchLineChar,
+				 tchSelChar, tchSelByte, tchLinesSelected, tchMatchesCount);
 
+	WCHAR tchDocSize[32];
 	const Sci_Position iBytes = SciCall_GetLength();
 	StrFormatByteSize(iBytes, tchDocSize, COUNTOF(tchDocSize));
 
 	StatusSetText(hwndStatus, STATUS_DOCPOS, tchDocPos);
-	const UINT updateMask = cachedStatusItem.updateMask;
-	if (updateMask & STATUS_BAR_UPDATE_MASK_LEXER) {
+	StatusSetText(hwndStatus, STATUS_DOCSIZE, tchDocSize);
+	if (updateMask & StatusBarUpdateMask_Lexer) {
 		StatusSetText(hwndStatus, STATUS_LEXER, cachedStatusItem.pszLexerName);
 	}
-	if (updateMask & STATUS_BAR_UPDATE_MASK_CODEPAGE) {
+	if (updateMask & StatusBarUpdateMask_CodePage) {
 		StatusSetText(hwndStatus, STATUS_CODEPAGE, mEncoding[iEncoding].wchLabel);
 	}
-	if (updateMask & STATUS_BAR_UPDATE_MASK_EOLMODE) {
+	if (updateMask & StatusBarUpdateMask_EOLMode) {
 		StatusSetText(hwndStatus, STATUS_EOLMODE, cachedStatusItem.pszEOLMode);
 	}
-	if (updateMask & STATUS_BAR_UPDATE_MASK_OVRMODE) {
+	if (updateMask & StatusBarUpdateMask_OVRMode) {
 		StatusSetText(hwndStatus, STATUS_OVRMODE, cachedStatusItem.pszOvrMode);
 	}
-	if (updateMask & STATUS_BAR_UPDATE_MASK_DOCZOOM) {
+	if (updateMask & StatusBarUpdateMask_DocZoom) {
 		StatusSetText(hwndStatus, STATUS_DOCZOOM, cachedStatusItem.tchZoom);
 	}
-	StatusSetText(hwndStatus, STATUS_DOCSIZE, tchDocSize);
-	if (updateMask != 0) {
-		cachedStatusItem.updateMask = 0;
-	}
+	cachedStatusItem.updateMask = 0;
 }
 
 //=============================================================================
@@ -7189,14 +7231,15 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 		EditSetEmptyText();
 		bModified = FALSE;
 		bReadOnly = FALSE;
-		iEOLMode = iLineEndings[iDefaultEOLMode];
-		SciCall_SetEOLMode(iLineEndings[iDefaultEOLMode]);
+		iEOLMode = GetScintillaEOLMode(iDefaultEOLMode);
+		SciCall_SetEOLMode(iEOLMode);
 		iEncoding = iDefaultEncoding;
 		iOriginalEncoding = iDefaultEncoding;
 		SciCall_SetCodePage((iDefaultEncoding == CPI_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
 		Style_SetLexer(NULL, TRUE);
 		UpdateStatusBarCache(STATUS_CODEPAGE);
 		UpdateStatusBarCache(STATUS_EOLMODE);
+		UpdateStatusBarCacheLineColumn();
 		UpdateDocumentModificationStatus();
 
 		// Terminate file watching
@@ -7254,8 +7297,8 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 				CloseHandle(hFile);
 				FileVars_Init(NULL, 0, &fvCurFile);
 				EditSetEmptyText();
-				iEOLMode = iLineEndings[iDefaultEOLMode];
-				SciCall_SetEOLMode(iLineEndings[iDefaultEOLMode]);
+				iEOLMode = GetScintillaEOLMode(iDefaultEOLMode);
+				SciCall_SetEOLMode(iEOLMode);
 				if (iSrcEncoding != -1) {
 					iEncoding = iSrcEncoding;
 					iOriginalEncoding = iSrcEncoding;
@@ -7293,12 +7336,17 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 		SciCall_SetEOLMode(iEOLMode);
 		UpdateStatusBarCache(STATUS_CODEPAGE);
 		UpdateStatusBarCache(STATUS_EOLMODE);
+		UpdateStatusBarCacheLineColumn();
 
 		BOOL bUnknownFile = FALSE;
 		if (!lexerSpecified) {
 			if (flagLexerSpecified) {
 				if (pLexCurrent->rid == iInitialLexer) {
 					UpdateLineNumberWidth();
+				} else if (lpSchemeArg) {
+					Style_SetLexerFromName(szCurFile, lpSchemeArg);
+					LocalFree(lpSchemeArg);
+					lpSchemeArg = NULL;
 				} else {
 					Style_SetLexerFromID(iInitialLexer);
 				}
@@ -7381,7 +7429,7 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 			// diff/patch file may contains content from files with different line endings.
 			status.bLineEndingsDefaultNo = bUnknownFile || pLexCurrent->iLexer == SCLEX_DIFF;
 			if (WarnLineEndingDlg(hwndMain, &status)) {
-				const int iNewEOLMode = iLineEndings[status.iEOLMode];
+				const int iNewEOLMode = GetScintillaEOLMode(status.iEOLMode);
 				ConvertLineEndings(iNewEOLMode);
 			}
 		}
@@ -7491,6 +7539,10 @@ BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy) {
 					if (flagLexerSpecified) {
 						if (pLexCurrent->rid == iInitialLexer) {
 							UpdateLineNumberWidth();
+						} else if (lpSchemeArg) {
+							Style_SetLexerFromName(szCurFile, lpSchemeArg);
+							LocalFree(lpSchemeArg);
+							lpSchemeArg = NULL;
 						} else {
 							Style_SetLexerFromID(iInitialLexer);
 						}

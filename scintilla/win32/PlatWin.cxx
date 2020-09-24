@@ -15,6 +15,7 @@
 #include <climits>
 
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <vector>
 #include <map>
@@ -1036,7 +1037,7 @@ void SurfaceGDI::Copy(PRectangle rc, Point from, Surface &surfaceSource) noexcep
 	::BitBlt(hdc,
 		static_cast<int>(rc.left), static_cast<int>(rc.top),
 		static_cast<int>(rc.Width()), static_cast<int>(rc.Height()),
-		static_cast<SurfaceGDI &>(surfaceSource).hdc,
+		down_cast<SurfaceGDI &>(surfaceSource).hdc,
 		static_cast<int>(from.x), static_cast<int>(from.y), SRCCOPY);
 }
 
@@ -1090,7 +1091,7 @@ void SurfaceGDI::DrawTextTransparent(PRectangle rc, const Font &font_, XYPOSITIO
 
 XYPOSITION SurfaceGDI::WidthText(const Font &font_, std::string_view text) {
 	SetFont(font_);
-	SIZE sz = { 0, 0 };
+	SIZE sz {};
 	if (!unicodeMode) {
 		::GetTextExtentPoint32A(hdc, text.data(), std::min(static_cast<int>(text.length()), maxLenText), &sz);
 	} else {
@@ -1104,7 +1105,7 @@ void SurfaceGDI::MeasureWidths(const Font &font_, std::string_view text, XYPOSIT
 	// Zero positions to avoid random behaviour on failure.
 	std::fill(positions, positions + text.length(), 0.0f);
 	SetFont(font_);
-	SIZE sz = { 0, 0 };
+	SIZE sz {};
 	int fit = 0;
 	int i = 0;
 	const int len = static_cast<int>(text.length());
@@ -1236,6 +1237,7 @@ class SurfaceD2D : public Surface {
 
 	void Clear() noexcept;
 	void SetFont(const Font &font_) noexcept;
+	HRESULT GetBitmap(ID2D1Bitmap **ppBitmap);
 
 public:
 	SurfaceD2D() noexcept = default;
@@ -1365,6 +1367,11 @@ void SurfaceD2D::InitPixMap(int width, int height, Surface *surface_, WindowID w
 	SetDBCSMode(psurfOther->codePage);
 }
 
+HRESULT SurfaceD2D::GetBitmap(ID2D1Bitmap **ppBitmap) {
+	PLATFORM_ASSERT(pBitmapRenderTarget);
+	return pBitmapRenderTarget->GetBitmap(ppBitmap);
+}
+
 void SurfaceD2D::PenColour(ColourDesired fore) {
 	D2DPenColour(fore);
 }
@@ -1467,11 +1474,8 @@ void SurfaceD2D::LineTo(int x_, int y_) noexcept {
 void SurfaceD2D::Polygon(const Point *pts, size_t npts, ColourDesired fore, ColourDesired back) {
 	PLATFORM_ASSERT(pRenderTarget && (npts > 2));
 	if (pRenderTarget) {
-		ID2D1Factory *pFactory = nullptr;
-		pRenderTarget->GetFactory(&pFactory);
-		PLATFORM_ASSERT(pFactory);
 		ID2D1PathGeometry *geometry = nullptr;
-		HRESULT hr = pFactory->CreatePathGeometry(&geometry);
+		HRESULT hr = pD2DFactory->CreatePathGeometry(&geometry);
 		PLATFORM_ASSERT(geometry);
 		if (SUCCEEDED(hr) && geometry) {
 			ID2D1GeometrySink *sink = nullptr;
@@ -1490,7 +1494,6 @@ void SurfaceD2D::Polygon(const Point *pts, size_t npts, ColourDesired fore, Colo
 				D2DPenColour(fore);
 				pRenderTarget->DrawGeometry(geometry, pBrush);
 			}
-
 			ReleaseUnknown(geometry);
 		}
 	}
@@ -1516,10 +1519,10 @@ void SurfaceD2D::FillRectangle(PRectangle rc, ColourDesired back) {
 
 void SurfaceD2D::FillRectangle(PRectangle rc, Surface &surfacePattern) {
 	SurfaceD2D *psurfOther = down_cast<SurfaceD2D *>(&surfacePattern);
-	PLATFORM_ASSERT(psurfOther && psurfOther->pBitmapRenderTarget);
+	PLATFORM_ASSERT(psurfOther);
 	psurfOther->FlushDrawing();
 	ID2D1Bitmap *pBitmap = nullptr;
-	HRESULT hr = psurfOther->pBitmapRenderTarget->GetBitmap(&pBitmap);
+	HRESULT hr = psurfOther->GetBitmap(&pBitmap);
 	if (SUCCEEDED(hr) && pBitmap) {
 		ID2D1BitmapBrush *pBitmapBrush = nullptr;
 		const D2D1_BITMAP_BRUSH_PROPERTIES brushProperties =
@@ -1584,12 +1587,13 @@ void SurfaceD2D::AlphaRectangle(PRectangle rc, int cornerSize, ColourDesired fil
 
 namespace {
 
-inline D2D_COLOR_F ColorFromColourAlpha(ColourAlpha colour) noexcept {
-	D2D_COLOR_F col;
-	col.r = colour.GetRedComponent();
-	col.g = colour.GetGreenComponent();
-	col.b = colour.GetBlueComponent();
-	col.a = colour.GetAlphaComponent();
+constexpr D2D_COLOR_F ColorFromColourAlpha(ColourAlpha colour) noexcept {
+	D2D_COLOR_F col = {
+		colour.GetRedComponent(),
+		colour.GetGreenComponent(),
+		colour.GetBlueComponent(),
+		colour.GetAlphaComponent()
+	};
 	return col;
 }
 
@@ -1628,7 +1632,7 @@ void SurfaceD2D::GradientRectangle(PRectangle rc, const std::vector<ColourStop> 
 			pRenderTarget->FillRectangle(&rectangle, pBrushLinear);
 			ReleaseUnknown(pBrushLinear);
 		}
-		ReleaseUnknown(pBrushLinear);
+		ReleaseUnknown(pGradientStops);
 	}
 }
 
@@ -1673,14 +1677,11 @@ void SurfaceD2D::Ellipse(PRectangle rc, ColourDesired fore, ColourDesired back) 
 }
 
 void SurfaceD2D::Copy(PRectangle rc, Point from, Surface &surfaceSource) {
-	SurfaceD2D &surfOther = static_cast<SurfaceD2D &>(surfaceSource);
+	SurfaceD2D &surfOther = down_cast<SurfaceD2D &>(surfaceSource);
 	surfOther.FlushDrawing();
-	ID2D1BitmapRenderTarget *pCompatibleRenderTarget = reinterpret_cast<ID2D1BitmapRenderTarget *>(
-		surfOther.pRenderTarget);
-	PLATFORM_ASSERT(pCompatibleRenderTarget);
 	ID2D1Bitmap *pBitmap = nullptr;
-	HRESULT hr = pCompatibleRenderTarget->GetBitmap(&pBitmap);
-	if (SUCCEEDED(hr)) {
+	HRESULT hr = surfOther.GetBitmap(&pBitmap);
+	if (SUCCEEDED(hr) && pBitmap) {
 		const D2D1_RECT_F rcDestination = RectangleFromPRectangle(rc);
 		D2D1_RECT_F rcSource = { from.x, from.y, from.x + rc.Width(), from.y + rc.Height() };
 		pRenderTarget->DrawBitmap(pBitmap, rcDestination, 1.0f,
@@ -2354,7 +2355,7 @@ RECT RectFromMonitor(HMONITOR hMonitor) noexcept {
 	if (GetMonitorInfo(hMonitor, &mi)) {
 		return mi.rcWork;
 	}
-	RECT rc = { 0, 0, 0, 0 };
+	RECT rc {};
 	if (::SystemParametersInfo(SPI_GETWORKAREA, 0, &rc, 0) == 0) {
 		rc.left = 0;
 		rc.top = 0;
@@ -2369,7 +2370,7 @@ RECT RectFromMonitor(HMONITOR hMonitor) noexcept {
 void Window::SetPositionRelative(PRectangle rc, const Window *relativeTo) noexcept {
 	const DWORD style = GetWindowStyle(HwndFromWindowID(wid));
 	if (style & WS_POPUP) {
-		POINT ptOther = { 0, 0 };
+		POINT ptOther {};
 		::ClientToScreen(HwndFromWindow(*relativeTo), &ptOther);
 		rc.Move(static_cast<XYPOSITION>(ptOther.x), static_cast<XYPOSITION>(ptOther.y));
 
@@ -2398,7 +2399,7 @@ void Window::SetPositionRelative(PRectangle rc, const Window *relativeTo) noexce
 }
 
 PRectangle Window::GetClientPosition() const noexcept {
-	RECT rc = { 0, 0, 0, 0 };
+	RECT rc {};
 	if (wid)
 		::GetClientRect(HwndFromWindowID(wid), &rc);
 	return PRectangle::FromInts(rc.left, rc.top, rc.right, rc.bottom);
@@ -2479,27 +2480,27 @@ HCURSOR LoadReverseArrowCursor(UINT dpi) noexcept {
 
 void Window::SetCursor(Cursor curs) noexcept {
 	switch (curs) {
-	case cursorText:
+	case Cursor::text:
 		::SetCursor(::LoadCursor({}, IDC_IBEAM));
 		break;
-	case cursorUp:
+	case Cursor::up:
 		::SetCursor(::LoadCursor({}, IDC_UPARROW));
 		break;
-	case cursorWait:
+	case Cursor::wait:
 		::SetCursor(::LoadCursor({}, IDC_WAIT));
 		break;
-	case cursorHoriz:
+	case Cursor::horizontal:
 		::SetCursor(::LoadCursor({}, IDC_SIZEWE));
 		break;
-	case cursorVert:
+	case Cursor::vertical:
 		::SetCursor(::LoadCursor({}, IDC_SIZENS));
 		break;
-	case cursorHand:
+	case Cursor::hand:
 		::SetCursor(::LoadCursor({}, IDC_HAND));
 		break;
-	case cursorReverseArrow:
-	case cursorArrow:
-	case cursorInvalid:	// Should not occur, but just in case.
+	case Cursor::reverseArrow:
+	case Cursor::arrow:
+	case Cursor::invalid:	// Should not occur, but just in case.
 		::SetCursor(::LoadCursor({}, IDC_ARROW));
 		break;
 	}
@@ -2753,7 +2754,7 @@ PRectangle ListBoxX::GetDesiredRect() {
 	int width = MinClientWidth();
 	HDC hdc = ::GetDC(lb);
 	HFONT oldFont = SelectFont(hdc, fontCopy);
-	SIZE textSize = { 0, 0 };
+	SIZE textSize {};
 	int len = 0;
 	if (widestItem) {
 		len = static_cast<int>(strlen(widestItem));
@@ -3466,13 +3467,7 @@ LRESULT ListBoxX::WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam
 		wheelDelta -= GET_WHEEL_DELTA_WPARAM(wParam);
 		if (std::abs(wheelDelta) >= WHEEL_DELTA) {
 			const int nRows = GetVisibleRows();
-			int linesToScroll = 1;
-			if (nRows > 1) {
-				linesToScroll = nRows - 1;
-			}
-			if (linesToScroll > 3) {
-				linesToScroll = 3;
-			}
+			int linesToScroll = std::clamp(nRows - 1, 1, 3);
 			linesToScroll *= (wheelDelta / WHEEL_DELTA);
 			int top = ListBox_GetTopIndex(lb) + linesToScroll;
 			if (top < 0) {

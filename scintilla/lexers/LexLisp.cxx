@@ -4,7 +4,6 @@
 
 #include <cassert>
 #include <cstring>
-#include <cctype>
 
 #include "ILexer.h"
 #include "Scintilla.h"
@@ -110,7 +109,7 @@ static void ColouriseLispDoc(Sci_PositionU startPos, Sci_Position length, int in
 		}
 
 		if (state == SCE_C_DEFAULT) {
-			if (((ch == '?' || ch == '#') && chNext == '\\') || (ch == '?' && isgraph(chNext))) {
+			if (((ch == '?' || ch == '#') && chNext == '\\') || (ch == '?' && IsGraphic(chNext))) {
 				styler.ColourTo(i - 1, state);
 				state = SCE_C_CHARACTER;
 				if (chNext == '\\') {
@@ -151,11 +150,9 @@ static void ColouriseLispDoc(Sci_PositionU startPos, Sci_Position length, int in
 #define IsStreamStyle(style)		((style) == SCE_C_STRING)
 #define IsStreamCommantStyle(style)	((style) == SCE_C_COMMENT)
 static void FoldListDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
-	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
-	const bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;
+	const bool foldComment = styler.GetPropertyInt("fold.comment", 1) != 0;
 
 	const Sci_PositionU endPos = startPos + length;
-	int visibleChars = 0;
 	Sci_Position lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
 	if (lineCurrent > 0)
@@ -175,10 +172,7 @@ static void FoldListDoc(Sci_PositionU startPos, Sci_Position length, int initSty
 		const bool atEOL = (ch == '\r' && chNext != '\n') || (ch == '\n');
 
 		if (foldComment && atEOL && IsCommentLine(lineCurrent)) {
-			if (!IsCommentLine(lineCurrent - 1) && IsCommentLine(lineCurrent + 1))
-				levelNext++;
-			else if (IsCommentLine(lineCurrent - 1) && !IsCommentLine(lineCurrent + 1))
-				levelNext--;
+			levelNext += IsCommentLine(lineCurrent + 1) - IsCommentLine(lineCurrent - 1);
 		}
 		if (foldComment && IsStreamCommantStyle(style)) {
 			if (!IsStreamCommantStyle(stylePrev)) {
@@ -202,14 +196,9 @@ static void FoldListDoc(Sci_PositionU startPos, Sci_Position length, int initSty
 				levelNext--;
 		}
 
-		if (!isspacechar(ch))
-			visibleChars++;
-
 		if (atEOL || (i == endPos - 1)) {
 			const int levelUse = levelCurrent;
 			int lev = levelUse | levelNext << 16;
-			if (visibleChars == 0 && foldCompact)
-				lev |= SC_FOLDLEVELWHITEFLAG;
 			if (levelUse < levelNext)
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			if (lev != styler.LevelAt(lineCurrent)) {
@@ -217,7 +206,6 @@ static void FoldListDoc(Sci_PositionU startPos, Sci_Position length, int initSty
 			}
 			lineCurrent++;
 			levelCurrent = levelNext;
-			visibleChars = 0;
 		}
 	}
 }

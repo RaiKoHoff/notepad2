@@ -4,7 +4,6 @@
 
 #include <cassert>
 #include <cstring>
-#include <cctype>
 
 #include "ILexer.h"
 #include "Scintilla.h"
@@ -23,14 +22,8 @@ static constexpr bool IsLSpecial(int ch) noexcept {
 	return ch == '#' || ch == '$' || ch == '%' || ch == '&'
 		|| ch == '^' || ch == '_' || ch == '{' || ch == '}' || ch == '~';
 }
-static inline bool IsLWordChar(int ch) noexcept {
-	return (ch < 0x80) && isalnum(ch);
-}
-static inline bool IsLWordStart(int ch) noexcept {
-	return (ch < 0x80) && isalpha(ch);
-}
 
-#define IsCmdEnd(pos)	(!IsLWordChar(sc.GetRelative(pos)))
+#define IsCmdEnd(pos)	(!IsAlphaNumeric(sc.GetRelative(pos)))
 
 static void ColouriseLatexDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
 	if (initStyle == SCE_L_COMMENT)
@@ -53,7 +46,7 @@ static void ColouriseLatexDoc(Sci_PositionU startPos, Sci_Position length, int i
 		} else if (sc.state == SCE_L_COMMAND) {
 			if (sc.GetRelative(4) == '`' && (sc.Match("code") || sc.Match("char")))
 				isCatcode = true;
-			if (!IsLWordChar(sc.ch)) {
+			if (!IsAlphaNumeric(sc.ch)) {
 				if (sc.ch == '*' && sc.chNext == '{')
 					sc.Forward();
 				while (IsASpaceOrTab(sc.ch))
@@ -78,7 +71,7 @@ static void ColouriseLatexDoc(Sci_PositionU startPos, Sci_Position length, int i
 						isCatcode = false;
 						sc.SetState(SCE_L_SPECIAL);
 						sc.Forward();
-						if (IsLSpecial(sc.chNext) || (sc.chNext == '\\' && !IsLWordStart(sc.GetRelative(2))))
+						if (IsLSpecial(sc.chNext) || (sc.chNext == '\\' && !IsAlpha(sc.GetRelative(2))))
 							sc.Forward();
 					}
 				}
@@ -101,7 +94,7 @@ static void ColouriseLatexDoc(Sci_PositionU startPos, Sci_Position length, int i
 					isSquareBrace = true;
 				} else if (sc.Match("verb")) {
 					sc.Forward(4);
-					if (!IsLWordStart(sc.ch)) {
+					if (!IsAlpha(sc.ch)) {
 						if (sc.ch == '*')
 							sc.Forward();
 						sc.SetState(SCE_L_DEFAULT);
@@ -199,7 +192,7 @@ static void ColouriseLatexDoc(Sci_PositionU startPos, Sci_Position length, int i
 				if (IsLSpecial(sc.chNext) || sc.chNext == '`' || sc.chNext == '\'' || sc.chNext == '\"') {
 					sc.SetState(SCE_L_SPECIAL);
 					sc.Forward();
-				} else if (IsLWordStart(sc.chNext)) {
+				} else if (IsAlpha(sc.chNext)) {
 					sc.SetState(SCE_L_COMMAND);
 				} else if (sc.chNext == '\\') {
 					sc.SetState(SCE_L_OPERATOR);
@@ -264,11 +257,9 @@ static bool IsLEnd(Sci_Position line, Accessor &styler) noexcept {
 #define IsEndDoc(line)			IsLEnd(line, styler)
 
 static void FoldLatexDoc(Sci_PositionU startPos, Sci_Position length, int /*initStyle*/, LexerWordList, Accessor &styler) {
-	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
-	const bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;
+	const bool foldComment = styler.GetPropertyInt("fold.comment", 1) != 0;
 
 	const Sci_PositionU endPos = startPos + length;
-	int visibleChars = 0;
 	Sci_Position lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
 	if (lineCurrent > 0)
@@ -290,10 +281,7 @@ static void FoldLatexDoc(Sci_PositionU startPos, Sci_Position length, int /*init
 		const bool atEOL = (ch == '\r' && chNext != '\n') || (ch == '\n');
 
 		if (foldComment && atEOL && IsCommentLine(lineCurrent)) {
-			if (!IsCommentLine(lineCurrent - 1) && IsCommentLine(lineCurrent + 1))
-				levelNext++;
-			else if (IsCommentLine(lineCurrent - 1) && !IsCommentLine(lineCurrent + 1))
-				levelNext--;
+			levelNext += IsCommentLine(lineCurrent + 1) - IsCommentLine(lineCurrent - 1);
 		}
 
 		if (atEOL && IsChapter(lineCurrent)) {
@@ -360,14 +348,9 @@ static void FoldLatexDoc(Sci_PositionU startPos, Sci_Position length, int /*init
 				levelNext--;
 		}
 
-		if (!isspacechar(ch))
-			visibleChars++;
-
 		if (atEOL || (i == endPos - 1)) {
 			const int levelUse = levelCurrent;
 			int lev = levelUse | levelNext << 16;
-			if (visibleChars == 0 && foldCompact)
-				lev |= SC_FOLDLEVELWHITEFLAG;
 			if (levelUse < levelNext)
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			if (lev != styler.LevelAt(lineCurrent)) {
@@ -375,7 +358,6 @@ static void FoldLatexDoc(Sci_PositionU startPos, Sci_Position length, int /*init
 			}
 			lineCurrent++;
 			levelCurrent = levelNext;
-			visibleChars = 0;
 		}
 	}
 }

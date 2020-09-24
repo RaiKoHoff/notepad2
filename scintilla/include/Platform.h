@@ -108,6 +108,15 @@ inline DerivedPointer down_cast(Base *ptr) noexcept {
 #endif
 }
 
+template<typename DerivedReference, class Base>
+inline DerivedReference down_cast(Base &ref) noexcept {
+#if USE_RTTI
+	return dynamic_cast<DerivedReference>(ref);
+#else
+	return static_cast<DerivedReference>(ref);
+#endif
+}
+
 typedef float XYPOSITION;
 typedef double XYACCUMULATOR;
 
@@ -474,12 +483,12 @@ protected:
 	WindowID wid;
 
 public:
-	Window() noexcept : wid(nullptr), cursorLast(cursorInvalid) {}
+	Window() noexcept : wid(nullptr), cursorLast(Cursor::invalid) {}
 	Window(const Window &source) = delete;
 	Window(Window &&) = delete;
 	Window &operator=(WindowID wid_) noexcept {
 		wid = wid_;
-		cursorLast = cursorInvalid;
+		cursorLast = Cursor::invalid;
 		return *this;
 	}
 	Window &operator=(const Window &) = delete;
@@ -500,8 +509,8 @@ public:
 	void InvalidateAll() noexcept;
 	void SCICALL InvalidateRectangle(PRectangle rc) noexcept;
 	virtual void SetFont(const Font &font) noexcept;
-	enum Cursor {
-		cursorInvalid, cursorText, cursorArrow, cursorUp, cursorWait, cursorHoriz, cursorVert, cursorReverseArrow, cursorHand
+	enum class Cursor {
+		invalid, text, arrow, up, wait, horizontal, vertical, reverseArrow, hand
 	};
 	void SetCursor(Cursor curs) noexcept;
 	PRectangle SCICALL GetMonitorRect(Point pt) const noexcept;
@@ -602,7 +611,7 @@ namespace Platform {
 	void Assert(const char *c, const char *file, int line) noexcept CLANG_ANALYZER_NORETURN;
 }
 
-#ifdef  NDEBUG
+#ifdef NDEBUG
 #define PLATFORM_ASSERT(c) ((void)0)
 #else
 #define PLATFORM_ASSERT(c) ((c) ? (void)(0) : Scintilla::Platform::Assert(#c, __FILE__, __LINE__))

@@ -48,7 +48,7 @@ public:
 class LineLayout {
 private:
 	friend class LineLayoutCache;
-	std::unique_ptr<int[]>lineStarts;
+	std::unique_ptr<int[]> lineStarts;
 	int lenLineStarts;
 	/// Drawing is only performed for @a maxLineLength characters on each line.
 	Sci::Line lineNumber;
@@ -146,11 +146,11 @@ struct ScreenLine : public IScreenLine {
 /**
  */
 class LineLayoutCache {
+	std::vector<std::unique_ptr<LineLayout>> cache;
+	size_t lastCaretSlot;
 	int level;
-	std::vector<std::unique_ptr<LineLayout>>cache;
 	bool allInvalidated;
 	int styleClock;
-	int useCount;
 	void Allocate(size_t length_);
 	void AllocateForLevel(Sci::Line linesOnScreen, Sci::Line linesInDoc);
 public:
@@ -173,8 +173,8 @@ public:
 	int GetLevel() const noexcept {
 		return level;
 	}
-	LineLayout *Retrieve(Sci::Line lineNumber, Sci::Line lineCaret, int maxChars, int styleClock_,
-		Sci::Line linesOnScreen, Sci::Line linesInDoc);
+	LineLayout* SCICALL Retrieve(Sci::Line lineNumber, Sci::Line lineCaret, int maxChars, int styleClock_,
+		Sci::Line linesOnScreen, Sci::Line linesInDoc, Sci::Line topLine);
 	void Dispose(LineLayout *ll) noexcept;
 };
 
@@ -187,8 +187,8 @@ public:
 	PositionCacheEntry() noexcept;
 	// Copy constructor not currently used, but needed for being element in std::vector.
 	PositionCacheEntry(const PositionCacheEntry &);
+	PositionCacheEntry(PositionCacheEntry &&) noexcept = default;
 	// Deleted so PositionCacheEntry objects can not be assigned.
-	PositionCacheEntry(PositionCacheEntry &&) = delete;
 	void operator=(const PositionCacheEntry &) = delete;
 	void operator=(PositionCacheEntry &&) = delete;
 	~PositionCacheEntry();

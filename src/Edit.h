@@ -107,7 +107,11 @@ void	EditReplaceDocument(HANDLE pdoc);
 char*	EditGetClipboardText(HWND hwnd); // LocalFree()
 BOOL	EditCopyAppend(HWND hwnd);
 
-extern const int iLineEndings[3];
+static inline int GetScintillaEOLMode(int mode) {
+	const int mask = SC_EOL_CRLF | (SC_EOL_LF << 4) | (SC_EOL_CR << 8);
+	return (mask >> (mode << 2)) & 0x0f;
+}
+
 struct EditFileIOStatus;
 void 	EditDetectEOLMode(LPCSTR lpData, DWORD cbData, struct EditFileIOStatus *status);
 BOOL	EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, struct EditFileIOStatus *status);
@@ -395,8 +399,8 @@ typedef struct FILEVARS {
 
 typedef const FILEVARS * LPCFILEVARS;
 
-BOOL	FileVars_Init(LPCSTR lpData, DWORD cbData, LPFILEVARS lpfv);
-BOOL	FileVars_Apply(LPCFILEVARS lpfv);
+void	FileVars_Init(LPCSTR lpData, DWORD cbData, LPFILEVARS lpfv);
+void	FileVars_Apply(LPCFILEVARS lpfv);
 BOOL	FileVars_ParseInt(LPCSTR pszData, LPCSTR pszName, int *piValue);
 BOOL	FileVars_ParseStr(LPCSTR pszData, LPCSTR pszName, char *pszValue, int cchValue);
 // in EditEncoding.c

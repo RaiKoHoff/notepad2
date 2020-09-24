@@ -111,7 +111,7 @@ public:
 class CellBuffer {
 private:
 	bool hasStyles;
-	bool largeDocument;
+	const bool largeDocument;
 	SplitVector<char> substance;
 	SplitVector<char> style;
 	bool readOnly;
@@ -146,13 +146,15 @@ public:
 	unsigned char UCharAt(Sci::Position position) const noexcept;
 	void GetCharRange(char *buffer, Sci::Position position, Sci::Position lengthRetrieve) const noexcept;
 	char StyleAt(Sci::Position position) const noexcept;
-	void GetStyleRange(unsigned char *buffer, Sci::Position position, Sci::Position lengthRetrieve) const;
+	void GetStyleRange(unsigned char *buffer, Sci::Position position, Sci::Position lengthRetrieve) const noexcept;
 	const char *BufferPointer();
 	const char *RangePointer(Sci::Position position, Sci::Position rangeLength) noexcept;
+	const char *StyleRangePointer(Sci::Position position, Sci::Position rangeLength) noexcept;
 	Sci::Position GapPosition() const noexcept;
 
 	Sci::Position Length() const noexcept;
 	void Allocate(Sci::Position newSize);
+	bool EnsureStyleBuffer(bool hasStyles_);
 	void SetUTF8Substance(bool utf8Substance_) noexcept;
 	int GetLineEndTypes() const noexcept {
 		return utf8LineEnds;
@@ -164,7 +166,7 @@ public:
 	void AllocateLineCharacterIndex(int lineCharacterIndex);
 	void ReleaseLineCharacterIndex(int lineCharacterIndex);
 	Sci::Line Lines() const noexcept;
-	void SetInitLineCount(Sci::Line lineCount);
+	void AllocateLines(Sci::Line lines);
 	Sci::Position LineStart(Sci::Line line) const noexcept;
 	Sci::Position IndexLineStart(Sci::Line line, int lineCharacterIndex) const noexcept;
 	Sci::Line LineFromPosition(Sci::Position pos) const noexcept;

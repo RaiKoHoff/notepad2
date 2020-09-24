@@ -2,6 +2,7 @@ import sys
 sys.path.append('../scintilla/scripts')
 import os.path
 import re
+from collections import Counter
 from enum import IntFlag
 
 from FileGenerator import Regenerate
@@ -120,8 +121,8 @@ def BuildKeywordContent(rid, keywordList, keywordCount=16):
 		AllKeywordAttrList[rid] = nonzero
 	return output
 
-def UpdateKeywordFile(rid, path, keywordList):
-	output = BuildKeywordContent(rid, keywordList)
+def UpdateKeywordFile(rid, path, keywordList, keywordCount=16):
+	output = BuildKeywordContent(rid, keywordList, keywordCount=keywordCount)
 	Regenerate(path, '//', output)
 
 def read_api_file(path, comment):
@@ -139,8 +140,22 @@ def read_api_file(path, comment):
 		sections.append((key, doc))
 	return sections
 
+def to_lower(items):
+	return [item.lower() for item in items]
 
-# CMake
+def has_upper_char(s):
+	return any(ch.isupper() for ch in s)
+
+def to_upper_conditional(items):
+	result = []
+	for item in items:
+		if has_upper_char(item):
+			result.append(item)
+		else:
+			result.append(item.upper())
+	return result
+
+
 def parse_cmake_api_file(path):
 	# languages from https://gitlab.kitware.com/cmake/cmake/blob/master/Auxiliary/vim/extract-upper-case.pl
 	cmakeLang = "ASM C CSharp CUDA CXX Fortran Java RC Swift".split()
@@ -236,6 +251,12 @@ def parse_cmake_api_file(path):
 		'long properties',
 		'long variables',
 	])
+
+	#counter = Counter(item.split('_')[0] for item in keywordMap['long properties'])
+	#print('CMake long properties prefix:', counter)
+	#counter = Counter(item.split('_')[0] for item in keywordMap['long variables'])
+	#print('CMake long variables prefix:', counter)
+
 	keywordList = [
 		('keywords', keywordMap['keywords'], KeywordAttr.Default),
 		('commands', keywordMap['commands'], KeywordAttr.Default),
@@ -250,11 +271,6 @@ def parse_cmake_api_file(path):
 	]
 	return keywordList
 
-def update_cmake_keyword():
-	keywordList = parse_cmake_api_file('lang/CMake.cmake')
-	UpdateKeywordFile('NP2LEX_CMAKE', '../src/EditLexers/stlCMake.c', keywordList)
-
-# GN
 def parse_gn_api_file(path):
 	sections = read_api_file(path, '#')
 	keywordMap = {}
@@ -280,11 +296,6 @@ def parse_gn_api_file(path):
 	]
 	return keywordList
 
-def update_gn_keyword():
-	keywordList = parse_gn_api_file('lang/GN.gn')
-	UpdateKeywordFile('NP2LEX_GN', '../src/EditLexers/stlGN.c', keywordList)
-
-# Go
 def parse_go_api_file(path):
 	sections = read_api_file(path, '//')
 	keywordMap = {}
@@ -365,11 +376,73 @@ def parse_go_api_file(path):
 	]
 	return keywordList
 
-def update_go_keyword():
-	keywordList = parse_go_api_file('lang/Go.go')
-	UpdateKeywordFile('NP2LEX_GO', '../src/EditLexers/stlGO.c', keywordList)
+def parse_javascript_api_file(path):
+	sections = read_api_file(path, '//')
+	keywordMap = {}
+	for key, doc in sections:
+		if key in ('keywords', 'future reserved words'):
+			keywordMap[key] = set(doc.split())
+		elif key == 'module':
+			items = set()
+			for item in doc.split():
+				index = item.find('(')
+				if index > 0:
+					item = item[:index]
+				items.add(item)
+			keywordMap[key] = items
+		elif key == 'api':
+			classes = set(['JSON', 'jQuery'])
+			constant = set()
+			functions = set()
+			properties = set(['URL'])
 
-# Julia
+			items = re.findall(r'^\s*(\w+)(.?)', doc, re.MULTILINE)
+			for item, kind in items:
+				if item[0].isupper():
+					if any(ch.islower() for ch in item):
+						classes.add(item)
+					elif kind == '(':
+						functions.add(item + '(')
+					else:
+						constant.add(item)
+				else:
+					if kind == '(':
+						functions.add(item + '(')
+					else:
+						properties.add(item)
+
+			items = ['function', 'require', 'import']
+			for item in items:
+				functions.add(item + '(')
+
+			keywordMap['class'] = classes
+			keywordMap['constant'] = constant
+			keywordMap['function'] = functions
+			keywordMap['properties'] = properties
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'module',
+		'keywords',
+		'future reserved words',
+		'class',
+		'properties',
+		'constant',
+	])
+	keywordList = [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('future reserved words', keywordMap['future reserved words'], KeywordAttr.Default),
+		('Preprocessor', [], KeywordAttr.Default),
+		('Directive', [], KeywordAttr.Default),
+		('module', keywordMap['module'], KeywordAttr.Default),
+		('class', keywordMap['class'], KeywordAttr.Default),
+		('Interface', [], KeywordAttr.Default),
+		('Enumeration', [], KeywordAttr.Default),
+		('constant', keywordMap['constant'], KeywordAttr.Default),
+		('function', keywordMap['function'], KeywordAttr.NoLexer),
+		('properties', keywordMap['properties'], KeywordAttr.NoLexer),
+	]
+	return keywordList
+
 def parse_julia_api_file(path):
 	sections = read_api_file(path, '#')
 	keywordMap = {}
@@ -422,11 +495,6 @@ def parse_julia_api_file(path):
 	]
 	return keywordList
 
-def update_julia_keyword():
-	keywordList = parse_julia_api_file('lang/Julia.jl')
-	UpdateKeywordFile('NP2LEX_JULIA', '../src/EditLexers/stlJulia.c', keywordList)
-
-# Kotlin
 def parse_kotlin_api_file(path):
 	sections = read_api_file(path, '//')
 	keywordMap = {}
@@ -480,11 +548,6 @@ def parse_kotlin_api_file(path):
 	]
 	return keywordList
 
-def update_kotlin_keyword():
-	keywordList = parse_kotlin_api_file('lang/Kotlin.kt')
-	UpdateKeywordFile('NP2LEX_KOTLIN', '../src/EditLexers/stlKotlin.c', keywordList)
-
-# LLVM IR
 def parse_llvm_api_file(path):
 	sections = read_api_file(path, ';')
 	keywordMap = {}
@@ -512,11 +575,6 @@ def parse_llvm_api_file(path):
 	]
 	return keywordList
 
-def update_llvm_keyword():
-	keywordList = parse_llvm_api_file('lang/LLVM.ll')
-	UpdateKeywordFile('NP2LEX_LLVM', '../src/EditLexers/stlLLVM.c', keywordList)
-
-# Ruby
 def parse_ruby_api_file(path):
 	sections = read_api_file(path, '#')
 	keywordMap = {}
@@ -536,11 +594,6 @@ def parse_ruby_api_file(path):
 	]
 	return keywordList
 
-def update_ruby_keyword():
-	keywordList = parse_ruby_api_file('lang/Ruby.rb')
-	UpdateKeywordFile('NP2LEX_RUBY', '../src/EditLexers/stlRuby.c', keywordList)
-
-# Rust
 def parse_rust_api_file(path):
 	sections = read_api_file(path, '//')
 	keywordMap = {}
@@ -638,11 +691,51 @@ def parse_rust_api_file(path):
 	]
 	return keywordList
 
-def update_rust_keyword():
-	keywordList = parse_rust_api_file('lang/Rust.rs')
-	UpdateKeywordFile('NP2LEX_RUST', '../src/EditLexers/stlRust.c', keywordList)
+def parse_sql_api_files(path_list):
+	keywordMap = {}
+	for path in path_list:
+		sections = read_api_file(path, '--')
+		for key, doc in sections:
+			items = []
+			min_len = 2
+			if key in ('keywords', 'data types'):
+				items = re.findall(r'\w+', doc)
+			elif key == 'functions':
+				items = re.findall(r'\w+\(', doc)
+				min_len = 3
+			else:
+				raise ValueError('unknown key:', key)
+			items = [item for item in items if len(item) >= min_len]
+			items = to_upper_conditional(items)
+			keywordMap.setdefault(key, set()).update(items)
 
-# Vim
+	upper_keywords = keywordMap['keywords']
+	upper_types = keywordMap['data types']
+	upper_functions = keywordMap['functions']
+	upper_types -= set(['CURSOR', 'SET', 'TABLE'])
+	upper_keywords -= upper_types
+	upper_keywords.add('END-EXEC')
+
+	keywords = set(to_lower(upper_keywords))
+	types = set(to_lower(upper_types))
+	functions = set(to_lower(upper_functions))
+	keywords -= types
+
+	ignores = set(item for item in functions if item[:-1] in keywords or item[:-1] in types)
+	functions -= ignores
+	upper_functions |= ignores
+
+	keywordList = [
+		('keywords', keywords, KeywordAttr.Default),
+		('data types', types, KeywordAttr.Default),
+		('functions', functions, KeywordAttr.Default),
+
+		('upper case keywords', upper_keywords, KeywordAttr.NoLexer),
+		('upper case data types', upper_types, KeywordAttr.NoLexer),
+		('upper case functions', upper_functions, KeywordAttr.NoLexer),
+	]
+	return keywordList
+
 def parse_vim_api_file(path):
 	sections = read_api_file(path, '"')
 	keywordMap = {}
@@ -660,12 +753,11 @@ def parse_vim_api_file(path):
 	]
 	return keywordList
 
-def update_vim_keyword():
-	keywordList = parse_vim_api_file('lang/Vim.vim')
-	UpdateKeywordFile('NP2LEX_VIM', '../src/EditLexers/stlVim.c', keywordList)
+def parse_wasm_lexer_keywords(path):
+	if not os.path.isfile(path):
+		AllKeywordAttrList['NP2LEX_WASM'] = [(3, KeywordAttr.NoLexer, 'full instruction')]
+		return []
 
-# WebAssembly
-def parse_web_assembly_lexer_keywords(path):
 	keywordMap = {
 		'keywords': [],
 		'type': [],
@@ -721,18 +813,8 @@ def parse_web_assembly_lexer_keywords(path):
 	]
 	return keywordList
 
-def update_web_assembly_keyword():
-	url = 'https://github.com/WebAssembly/wabt/blob/master/src/lexer-keywords.txt'
-	path = 'wasm-lexer-keywords.txt'
-	if not os.path.isfile(path):
-		print(f'please manually download {url}\nand save it as {path}')
-		AllKeywordAttrList['NP2LEX_WASM'] = [(3, KeywordAttr.NoLexer, 'full instruction')]
-		return
-	keywordList = parse_web_assembly_lexer_keywords(path)
-	UpdateKeywordFile('NP2LEX_WASM', '../src/EditLexers/stlWASM.c', keywordList)
-
 # Style_UpdateLexerKeywordAttr()
-def update_lexer_keyword_attr():
+def update_lexer_keyword_attr(path):
 	output = []
 	for rid, nonzero in sorted(AllKeywordAttrList.items()):
 		output.append(f'\tcase {rid}:')
@@ -749,18 +831,4 @@ def update_lexer_keyword_attr():
 			output.append(f'\t\t{line}{padding}// {comment}')
 		output.append('\t\tbreak;')
 
-	Regenerate('../src/Styles.c', '//', output)
-
-# update all keywords in order
-def update_all_keyword():
-	update_cmake_keyword()
-	update_gn_keyword()
-	update_go_keyword()
-	update_julia_keyword()
-	update_kotlin_keyword()
-	update_llvm_keyword()
-	update_ruby_keyword()
-	update_rust_keyword()
-	update_vim_keyword()
-	update_web_assembly_keyword()
-	update_lexer_keyword_attr()
+	Regenerate(path, '//', output)

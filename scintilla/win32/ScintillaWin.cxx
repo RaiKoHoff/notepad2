@@ -39,7 +39,7 @@
 #include <shellapi.h>
 
 #define DebugDragAndDropDataFormat		0
-
+#define MaxDragAndDropDataFormatCount	6
 /*
 CF_VSSTGPROJECTITEMS, CF_VSREFPROJECTITEMS
 https://docs.microsoft.com/en-us/visualstudio/extensibility/ux-guidelines/application-patterns-for-visual-studio
@@ -381,10 +381,10 @@ class ScintillaWin :
 	SetCoalescableTimerSig SetCoalescableTimerFn;
 #endif
 
-	unsigned int linesPerScroll;	///< Intellimouse support
+	UINT linesPerScroll;	///< Intellimouse support
 	int wheelDelta; ///< Wheel delta from roll
 
-	UINT dpi = USER_DEFAULT_SCREEN_DPI;
+	UINT dpi;
 	ReverseArrowCursor reverseArrowCursor;
 
 	HRGN hRgnUpdate;
@@ -405,7 +405,8 @@ class ScintillaWin :
 #endif
 
 	// supported drag & drop format
-	std::vector<CLIPFORMAT> dropFormat;
+	CLIPFORMAT dropFormat[MaxDragAndDropDataFormatCount];
+	UINT dropFormatCount;
 
 	//HRESULT hrOle;
 	DropSource ds;
@@ -544,7 +545,7 @@ class ScintillaWin :
 	void ChangeScrollPos(int barType, Sci::Position pos);
 	sptr_t GetTextLength() const noexcept;
 	sptr_t GetText(uptr_t wParam, sptr_t lParam) const;
-	Window::Cursor ContextCursor();
+	Window::Cursor SCICALL ContextCursor(Point pt);
 #if SCI_EnablePopupMenu
 	sptr_t ShowContextMenu(unsigned int iMessage, uptr_t wParam, sptr_t lParam);
 #endif
@@ -651,17 +652,19 @@ ScintillaWin::ScintillaWin(HWND hwnd) {
 	cfChromiumCustomMIME = GetClipboardFormat(L"Chromium Web Custom MIME Data Format");
 #endif
 
-	dropFormat.push_back(CF_HDROP);
+	UINT index = 0;
+	dropFormat[index++] = CF_HDROP;
 #if EnableDrop_VisualStudioProjectItem
-	dropFormat.push_back(cfVSStgProjectItem);
-	dropFormat.push_back(cfVSRefProjectItem);
+	dropFormat[index++] = cfVSStgProjectItem;
+	dropFormat[index++] = cfVSRefProjectItem;
 #endif
 #if Enable_ChromiumWebCustomMIMEDataFormat
-	dropFormat.push_back(cfChromiumCustomMIME);
+	dropFormat[index++] = cfChromiumCustomMIME;
 #endif
 	// text format comes last
-	dropFormat.push_back(CF_UNICODETEXT);
-	dropFormat.push_back(CF_TEXT);
+	dropFormat[index++] = CF_UNICODETEXT;
+	dropFormat[index++] = CF_TEXT;
+	dropFormatCount = index;
 
 	//hrOle = E_FAIL;
 	wMain = hwnd;
@@ -795,7 +798,7 @@ void ScintillaWin::EnsureRenderTarget(HDC hdc) noexcept {
 	if ((technology == SC_TECHNOLOGY_DIRECTWRITEDC) && pRenderTarget) {
 		RECT rcWindow;
 		GetClientRect(MainHWND(), &rcWindow);
-		const HRESULT hr = down_cast<ID2D1DCRenderTarget*>(pRenderTarget)->BindDC(hdc, &rcWindow);
+		const HRESULT hr = static_cast<ID2D1DCRenderTarget*>(pRenderTarget)->BindDC(hdc, &rcWindow);
 		if (FAILED(hr)) {
 			//Platform::DebugPrintf("BindDC failed 0x%lx\n", hr);
 			DropRenderTarget();
@@ -817,7 +820,7 @@ void ScintillaWin::DisplayCursor(Window::Cursor c) noexcept {
 	if (cursorMode != SC_CURSORNORMAL) {
 		c = static_cast<Window::Cursor>(cursorMode);
 	}
-	if (c == Window::cursorReverseArrow) {
+	if (c == Window::Cursor::reverseArrow) {
 		::SetCursor(reverseArrowCursor.Load(dpi));
 	} else {
 		wMain.SetCursor(c);
@@ -1547,24 +1550,25 @@ sptr_t ScintillaWin::GetText(uptr_t wParam, sptr_t lParam) const {
 	}
 }
 
-Window::Cursor ScintillaWin::ContextCursor() {
+Window::Cursor ScintillaWin::ContextCursor(Point pt) {
 	if (inDragDrop == ddDragging) {
-		return Window::cursorUp;
+		return Window::Cursor::up;
 	} else {
 		// Display regular (drag) cursor over selection
-		POINT pt;
-		if (0 != ::GetCursorPos(&pt)) {
-			::ScreenToClient(MainHWND(), &pt);
-			if (PointInSelMargin(PointFromPOINT(pt))) {
-				return GetMarginCursor(PointFromPOINT(pt));
-			} else if (PointInSelection(PointFromPOINT(pt)) && !SelectionEmpty()) {
-				return Window::cursorArrow;
-			} else if (PointIsHotspot(PointFromPOINT(pt))) {
-				return Window::cursorHand;
+		if (PointInSelMargin(pt)) {
+			return GetMarginCursor(pt);
+		} else if (!SelectionEmpty() && PointInSelection(pt)) {
+			return Window::Cursor::arrow;
+		} else if (PointIsHotspot(pt)) {
+			return Window::Cursor::hand;
+		} else if (hoverIndicatorPos != Sci::invalidPosition) {
+			const Sci::Position pos = PositionFromLocation(pt, true, true);
+			if (pos != Sci::invalidPosition) {
+				return Window::Cursor::hand;
 			}
 		}
 	}
-	return Window::cursorText;
+	return Window::Cursor::text;
 }
 
 #if SCI_EnablePopupMenu
@@ -1688,9 +1692,7 @@ sptr_t ScintillaWin::MouseMessage(unsigned int iMessage, uptr_t wParam, sptr_t l
 			if (linesPerScroll == WHEEL_PAGESCROLL) {
 				linesToScroll = LinesOnScreen() - 1;
 			}
-			if (linesToScroll == 0) {
-				linesToScroll = 1;
-			}
+			linesToScroll = std::max<Sci::Line>(linesToScroll, 1);
 			linesToScroll *= (wheelDelta / WHEEL_DELTA);
 			if (wheelDelta >= 0) {
 				wheelDelta = wheelDelta % WHEEL_DELTA;
@@ -2076,7 +2078,7 @@ sptr_t ScintillaWin::SciMessage(unsigned int iMessage, uptr_t wParam, sptr_t lPa
 			(wParam == SC_TECHNOLOGY_DIRECTWRITE)) {
 			const int technologyNew = static_cast<int>(wParam);
 			if (technology != technologyNew) {
-				if (technologyNew > SC_TECHNOLOGY_DEFAULT) {
+				if (technologyNew != SC_TECHNOLOGY_DEFAULT) {
 #if defined(USE_D2D)
 					if (!LoadD2D())
 						// Failed to load Direct2D or DirectWrite so no effect
@@ -2089,6 +2091,7 @@ sptr_t ScintillaWin::SciMessage(unsigned int iMessage, uptr_t wParam, sptr_t lPa
 				}
 #if defined(USE_D2D)
 				DropRenderTarget();
+				view.bufferedDraw = technologyNew == SC_TECHNOLOGY_DEFAULT;
 #endif
 				technology = technologyNew;
 				// Invalidate all cached information including layout.
@@ -2187,7 +2190,11 @@ sptr_t ScintillaWin::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam
 
 		case WM_SETCURSOR:
 			if (LOWORD(lParam) == HTCLIENT) {
-				DisplayCursor(ContextCursor());
+				POINT pt;
+				if (::GetCursorPos(&pt)) {
+					::ScreenToClient(MainHWND(), &pt);
+					DisplayCursor(ContextCursor(PointFromPOINT(pt)));
+				}
 				return TRUE;
 			}
 			return ::DefWindowProc(MainHWND(), iMessage, wParam, lParam);
@@ -2487,9 +2494,8 @@ void ScintillaWin::SetHorizontalScrollPos() {
 
 bool ScintillaWin::ModifyScrollBars(Sci::Line nMax, Sci::Line nPage) {
 	bool modified = false;
-	SCROLLINFO sci = {
-		sizeof(sci), 0, 0, 0, 0, 0, 0
-	};
+	SCROLLINFO sci {};
+	sci.cbSize = sizeof(sci);
 	sci.fMask = SIF_PAGE | SIF_RANGE;
 	GetScrollInfo(SB_VERT, &sci);
 	const Sci::Line vertEndPreferred = nMax;
@@ -3086,7 +3092,7 @@ void ScintillaWin::ImeStartComposition() {
 			// Since the style creation code has been made platform independent,
 			// The logfont for the IME is recreated here.
 			const int styleHere = pdoc->StyleIndexAt(sel.MainCaret());
-			LOGFONTW lf = { };
+			LOGFONTW lf {};
 			const int sizeZoomed = GetFontSizeZoomed(vs.styles[styleHere].size, vs.zoomLevel);
 			// The negative is to allow for leading
 			lf.lfHeight = -::MulDiv(sizeZoomed, dpi, 72*SC_FONT_SIZE_MULTIPLIER);
@@ -3553,7 +3559,8 @@ STDMETHODIMP ScintillaWin::DragEnter(LPDATAOBJECT pIDataSource, DWORD grfKeyStat
 	try {
 		//EnumDataSourceFormat("DragEnter", pIDataSource);
 
-		for (const CLIPFORMAT fmt : dropFormat) {
+		for (UINT fmtIndex = 0; fmtIndex < dropFormatCount; fmtIndex++) {
+			const CLIPFORMAT fmt = dropFormat[fmtIndex];
 			FORMATETC fmtu = { fmt, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
 			const HRESULT hrHasUText = pIDataSource->QueryGetData(&fmtu);
 			hasOKText = (hrHasUText == S_OK);
@@ -3615,7 +3622,8 @@ STDMETHODIMP ScintillaWin::Drop(LPDATAOBJECT pIDataSource, DWORD grfKeyState, PO
 		HRESULT hr = DV_E_FORMATETC;
 
 		//EnumDataSourceFormat("Drop", pIDataSource);
-		for (const CLIPFORMAT fmt : dropFormat) {
+		for (UINT fmtIndex = 0; fmtIndex < dropFormatCount; fmtIndex++) {
+			const CLIPFORMAT fmt = dropFormat[fmtIndex];
 			FORMATETC fmtu = { fmt, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
 			STGMEDIUM medium {};
 			hr = pIDataSource->GetData(&fmtu, &medium);

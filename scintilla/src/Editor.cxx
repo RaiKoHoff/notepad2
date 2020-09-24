@@ -109,7 +109,7 @@ static constexpr bool IsAllSpacesOrTabs(std::string_view sv) noexcept {
 	return true;
 }
 
-Editor::Editor() : durationWrapOneLine(0.00001, 0.000001, 0.0001) {
+Editor::Editor() {
 	ctrlID = 0;
 
 	stylesValid = false;
@@ -370,7 +370,7 @@ Sci::Line Editor::MaxScrollPos() const noexcept {
 		retVal -= linesOnScreen - linesOnScreen/4;
 		break;
 	}
-	return (retVal < 0) ? 0 : retVal;
+	return std::max<Sci::Line>(retVal, 0);
 }
 
 SelectionPosition Editor::ClampPositionIntoDocument(SelectionPosition sp) const noexcept {
@@ -523,12 +523,8 @@ void Editor::RedrawSelMargin(Sci::Line line, bool allAfter) noexcept {
 		// Inflate line rectangle if there are image markers with height larger than line height
 		if (vs.largestMarkerHeight > vs.lineHeight) {
 			const int delta = (vs.largestMarkerHeight - vs.lineHeight + 1) / 2;
-			rcLine.top -= delta;
-			rcLine.bottom += delta;
-			if (rcLine.top < rcMarkers.top)
-				rcLine.top = rcMarkers.top;
-			if (rcLine.bottom > rcMarkers.bottom)
-				rcLine.bottom = rcMarkers.bottom;
+			rcLine.top = std::max(rcLine.top - delta, rcMarkers.top);
+			rcLine.bottom = std::min(rcLine.bottom + delta, rcMarkers.bottom);
 		}
 
 		rcMarkers.top = rcLine.top;
@@ -556,8 +552,7 @@ PRectangle Editor::RectangleFromRange(Range r, int overlap) const noexcept {
 	const int leftTextOverlap = ((xOffset == 0) && (vs.leftMarginWidth > 0)) ? 1 : 0;
 	rc.left = static_cast<XYPOSITION>(vs.textStart - leftTextOverlap);
 	rc.top = static_cast<XYPOSITION>((minLine - TopLineOfMain()) * vs.lineHeight - overlap);
-	if (rc.top < rcClientDrawing.top)
-		rc.top = rcClientDrawing.top;
+	rc.top = std::max(rc.top, rcClientDrawing.top);
 	// Extend to right of prepared area if any to prevent artifacts from caret line highlight
 	rc.right = rcClientDrawing.right;
 	rc.bottom = static_cast<XYPOSITION>((maxLine - TopLineOfMain() + 1) * vs.lineHeight + overlap);
@@ -1526,7 +1521,6 @@ bool Editor::WrapLines(WrapScope ws) {
 			wrapOccurred = true;
 		}
 		wrapPending.Reset();
-
 	} else if (wrapPending.NeedsWrap()) {
 		wrapPending.start = std::min(wrapPending.start, pdoc->LinesTotal());
 		if (!SetIdle(true)) {
@@ -1545,7 +1539,13 @@ bool Editor::WrapLines(WrapScope ws) {
 			// as taking only one display line.
 			lineToWrapEnd = lineDocTop;
 			Sci::Line lines = LinesOnScreen() + 1;
-			while ((lineToWrapEnd < pcs->LinesInDoc()) && (lines > 0)) {
+#if ActionDuration_MeasureTimeByBytes
+			const Sci::Line lineLast = pdoc->LineFromPositionAfter(lineToWrap, ActionDuration_InitializedMaxBytes);
+			const Sci::Line maxLine = std::min(lineLast, pcs->LinesInDoc());
+#else
+			const Sci::Line maxLine = pcs->LinesInDoc();
+#endif
+			while ((lineToWrapEnd < maxLine) && (lines > 0)) {
 				if (pcs->GetVisible(lineToWrapEnd))
 					lines--;
 				lineToWrapEnd++;
@@ -1558,10 +1558,12 @@ bool Editor::WrapLines(WrapScope ws) {
 		} else if (ws == WrapScope::wsIdle) {
 			// Try to keep time taken by wrapping reasonable so interaction remains smooth.
 			constexpr double secondsAllowed = 0.01;
-			const Sci::Line linesInAllowedTime = std::clamp<Sci::Line>(
-				static_cast<Sci::Line>(secondsAllowed / durationWrapOneLine.Duration()),
-				LinesOnScreen() + 50, 0x10000);
-			lineToWrapEnd = lineToWrap + linesInAllowedTime;
+			const Sci::Line actions = durationWrapOneLine.ActionsInAllowedTime(secondsAllowed);
+#if ActionDuration_MeasureTimeByBytes
+			lineToWrapEnd = pdoc->LineFromPositionAfter(lineToWrap, actions);
+#else
+			lineToWrapEnd = lineToWrap + actions;
+#endif
 		}
 		const Sci::Line lineEndNeedWrap = std::min(wrapPending.end, pdoc->LinesTotal());
 		lineToWrapEnd = std::min(lineToWrapEnd, lineEndNeedWrap);
@@ -1579,8 +1581,11 @@ bool Editor::WrapLines(WrapScope ws) {
 			AutoSurface surface(this);
 			if (surface) {
 				//Platform::DebugPrintf("Wraplines: scope=%0d need=%0d..%0d perform=%0d..%0d\n", ws, wrapPending.start, wrapPending.end, lineToWrap, lineToWrapEnd);
-
-				const Sci::Line linesBeingWrapped = lineToWrapEnd - lineToWrap;
+#if ActionDuration_MeasureTimeByBytes
+				const Sci::Line actions = pdoc->LineStart(lineToWrapEnd) - pdoc->LineStart(lineToWrap);
+#else
+				const Sci::Line actions = lineToWrapEnd - lineToWrap;
+#endif
 				ElapsedPeriod epWrapping;
 				while (lineToWrap < lineToWrapEnd) {
 					if (WrapOneLine(surface, lineToWrap)) {
@@ -1589,7 +1594,7 @@ bool Editor::WrapLines(WrapScope ws) {
 					wrapPending.Wrapped(lineToWrap);
 					lineToWrap++;
 				}
-				durationWrapOneLine.AddSample(linesBeingWrapped, epWrapping.Duration());
+				durationWrapOneLine.AddSample(actions, epWrapping.Duration());
 
 				goodTopLine = pcs->DisplayFromDoc(lineDocTop) + std::min(
 					subLineTop, static_cast<Sci::Line>(pcs->GetHeight(lineDocTop) - 1));
@@ -1703,10 +1708,8 @@ void Editor::PaintSelMargin(Surface *surfaceWindow, PRectangle rc) {
 	}
 
 	// Clip vertically to paint area to avoid drawing line numbers
-	if (rcMargin.bottom > rc.bottom)
-		rcMargin.bottom = rc.bottom;
-	if (rcMargin.top < rc.top)
-		rcMargin.top = rc.top;
+	rcMargin.bottom = std::min(rcMargin.bottom, rc.bottom);
+	rcMargin.top = std::max(rcMargin.top, rc.top);
 
 	marginView.PaintMargin(surface, topLine, rc, rcMargin, *this, vs);
 
@@ -2975,9 +2978,9 @@ void Editor::ChangeCaseOfSelection(int caseMapping) {
 		currentNoVS.ClearVirtualSpace();
 		const size_t rangeBytes = currentNoVS.Length();
 		if (rangeBytes > 0) {
-			std::string sText = RangeText(currentNoVS.Start().Position(), currentNoVS.End().Position());
+			const std::string sText = RangeText(currentNoVS.Start().Position(), currentNoVS.End().Position());
 
-			std::string sMapped = CaseMapString(sText, caseMapping);
+			const std::string sMapped = CaseMapString(sText, caseMapping);
 
 			if (sMapped != sText) {
 				size_t firstDifference = 0;
@@ -4030,8 +4033,7 @@ void Editor::Indent(bool forwards) {
 				} else {
 					Sci::Position newColumn = ((pdoc->GetColumn(caretPosition) - 1) / pdoc->tabInChars) *
 						pdoc->tabInChars;
-					if (newColumn < 0)
-						newColumn = 0;
+					newColumn = std::max<Sci::Position>(newColumn, 0);
 					Sci::Position newPos = caretPosition;
 					while (pdoc->GetColumn(newPos) > newColumn)
 						newPos--;
@@ -4205,10 +4207,7 @@ Sci::Position Editor::SearchInTarget(const char *text, Sci::Position length) {
 }
 
 void Editor::GoToLine(Sci::Line lineNo) {
-	if (lineNo > pdoc->LinesTotal())
-		lineNo = pdoc->LinesTotal();
-	if (lineNo < 0)
-		lineNo = 0;
+	lineNo = std::clamp<Sci::Line>(lineNo, 0, pdoc->LinesTotal());
 	SetEmptySelection(pdoc->LineStart(lineNo));
 	ShowCaretAtCurrentPosition();
 	EnsureCaretVisible();
@@ -4318,7 +4317,7 @@ bool Editor::DragThreshold(Point ptStart, Point ptNow) noexcept {
 void Editor::StartDrag() {
 	// Always handled by subclasses
 	//SetMouseCapture(true);
-	//DisplayCursor(Window::cursorArrow);
+	//DisplayCursor(Window::Cursor::::arrow);
 }
 
 void Editor::DropAt(SelectionPosition position, const char *value, size_t lengthValue, bool moving, bool rectangular) {
@@ -4446,7 +4445,7 @@ Window::Cursor Editor::GetMarginCursor(Point pt) const noexcept {
 			return static_cast<Window::Cursor>(m.cursor);
 		x += m.width;
 	}
-	return Window::cursorReverseArrow;
+	return Window::Cursor::reverseArrow;
 }
 
 void Editor::TrimAndSetSelection(Sci::Position currentPos_, Sci::Position anchor_) {
@@ -4526,6 +4525,7 @@ void Editor::DwellEnd(bool mouseMoved) {
 
 void Editor::MouseLeave() {
 	SetHotSpotRange(nullptr);
+	SetHoverIndicatorPosition(Sci::invalidPosition);
 	if (!HaveMouseCapture()) {
 		ptMouseLast = Point(-1, -1);
 		DwellEnd(true);
@@ -4885,7 +4885,7 @@ void Editor::ButtonMoveWithModifiers(Point pt, unsigned int, int modifiers) {
 
 		if (hotSpotClickPos != INVALID_POSITION && PositionFromLocation(pt, true, true) != hotSpotClickPos) {
 			if (inDragDrop == ddNone) {
-				DisplayCursor(Window::cursorText);
+				DisplayCursor(Window::Cursor::text);
 			}
 			hotSpotClickPos = INVALID_POSITION;
 		}
@@ -4895,22 +4895,24 @@ void Editor::ButtonMoveWithModifiers(Point pt, unsigned int, int modifiers) {
 			if (PointInSelMargin(pt)) {
 				DisplayCursor(GetMarginCursor(pt));
 				SetHotSpotRange(nullptr);
+				SetHoverIndicatorPosition(Sci::invalidPosition);
 				return; 	// No need to test for selection
 			}
 		}
 		// Display regular (drag) cursor over selection
 		if (PointInSelection(pt) && !SelectionEmpty()) {
-			DisplayCursor(Window::cursorArrow);
+			DisplayCursor(Window::Cursor::arrow);
+			SetHoverIndicatorPosition(Sci::invalidPosition);
 		} else {
 			SetHoverIndicatorPoint(pt);
 			if (PointIsHotspot(pt)) {
-				DisplayCursor(Window::cursorHand);
+				DisplayCursor(Window::Cursor::hand);
 				SetHotSpotRange(&pt);
 			} else {
 				if (hoverIndicatorPos != Sci::invalidPosition)
-					DisplayCursor(Window::cursorHand);
+					DisplayCursor(Window::Cursor::hand);
 				else
-					DisplayCursor(Window::cursorText);
+					DisplayCursor(Window::Cursor::text);
 				SetHotSpotRange(nullptr);
 			}
 		}
@@ -4940,7 +4942,7 @@ void Editor::ButtonUpWithModifiers(Point pt, unsigned int curTime, int modifiers
 		if (PointInSelMargin(pt)) {
 			DisplayCursor(GetMarginCursor(pt));
 		} else {
-			DisplayCursor(Window::cursorText);
+			DisplayCursor(Window::Cursor::text);
 			SetHotSpotRange(nullptr);
 		}
 		ptMouseLast = pt;
@@ -5102,8 +5104,7 @@ Sci::Position Editor::PositionAfterArea(PRectangle rcArea) const noexcept {
 // affects later lines so style all the viewed text.
 void Editor::StyleToPositionInView(Sci::Position pos) {
 	Sci::Position endWindow = PositionAfterArea(GetClientDrawingRectangle());
-	if (pos > endWindow)
-		pos = endWindow;
+	pos = std::min(pos, endWindow);
 	const int styleAtEnd = pdoc->StyleIndexAt(pos - 1);
 	pdoc->EnsureStyledTo(pos);
 	if ((endWindow > pos) && (styleAtEnd != pdoc->StyleIndexAt(pos - 1))) {
@@ -5125,13 +5126,15 @@ Sci::Position Editor::PositionAfterMaxStyling(Sci::Position posMax, bool scrolli
 	// Try to keep time taken by styling reasonable so interaction remains smooth.
 	// When scrolling, allow less time to ensure responsive
 	const double secondsAllowed = scrolling ? 0.005 : 0.02;
+	Sci::Line lineStart = pdoc->SciLineFromPosition(pdoc->GetEndStyled());
+	const Sci::Line actions = pdoc->durationStyleOneLine.ActionsInAllowedTime(secondsAllowed);
+#if ActionDuration_MeasureTimeByBytes
+	lineStart = pdoc->LineFromPositionAfter(lineStart, actions);
+#else
+	lineStart += actions;
+#endif
 
-	const Sci::Line linesToStyle = std::clamp(
-		static_cast<int>(secondsAllowed / pdoc->durationStyleOneLine.Duration()),
-		10, 0x10000);
-	const Sci::Line stylingMaxLine = std::min(
-		pdoc->SciLineFromPosition(pdoc->GetEndStyled()) + linesToStyle,
-		pdoc->LinesTotal());
+	const Sci::Line stylingMaxLine = std::min(lineStart, pdoc->LinesTotal());
 	return std::min(pdoc->LineStart(stylingMaxLine), posMax);
 }
 
@@ -5217,12 +5220,8 @@ void Editor::CheckForChangeOutsidePaint(Range r) noexcept {
 
 		PRectangle rcRange = RectangleFromRange(r, 0);
 		const PRectangle rcText = GetTextRectangle();
-		if (rcRange.top < rcText.top) {
-			rcRange.top = rcText.top;
-		}
-		if (rcRange.bottom > rcText.bottom) {
-			rcRange.bottom = rcText.bottom;
-		}
+		rcRange.top = std::max(rcRange.top, rcText.top);
+		rcRange.bottom = std::min(rcRange.bottom, rcText.bottom);
 
 		if (!PaintContains(rcRange)) {
 			AbandonPaint();
@@ -5331,7 +5330,7 @@ void Editor::SetAnnotationVisible(int visible) {
 	}
 }
 
-void Editor::SetEOLAnnotationVisible(int visible) {
+void Editor::SetEOLAnnotationVisible(int visible) noexcept {
 	if (vs.eolAnnotationVisible != visible) {
 		vs.eolAnnotationVisible = visible;
 		Redraw();
@@ -5447,7 +5446,6 @@ Sci::Line Editor::ContractedFoldNext(Sci::Line lineStart) const noexcept {
  * and unfold them all.
  */
 void Editor::EnsureLineVisible(Sci::Line lineDoc, bool enforcePolicy) {
-
 	// In case in need of wrapping to ensure DisplayFromDoc works.
 	if (lineDoc >= wrapPending.start) {
 		if (WrapLines(WrapScope::wsAll)) {
@@ -5779,9 +5777,6 @@ sptr_t Editor::StyleGetMessage(unsigned int iMessage, uptr_t wParam, sptr_t lPar
 		return StringResult(lParam, vs.styles[wParam].fontName);
 	case SCI_STYLEGETUNDERLINE:
 		return vs.styles[wParam].underline ? 1 : 0;
-		// Added strike style, 2011-12-20
-	case SCI_STYLEGETSTRIKE:
-		return vs.styles[wParam].strike ? 1 : 0;
 	case SCI_STYLEGETCASE:
 		return static_cast<int>(vs.styles[wParam].caseForce);
 	case SCI_STYLEGETCHARACTERSET:
@@ -5797,6 +5792,9 @@ sptr_t Editor::StyleGetMessage(unsigned int iMessage, uptr_t wParam, sptr_t lPar
 }
 
 void Editor::SetSelectionNMessage(unsigned int iMessage, uptr_t wParam, sptr_t lParam) noexcept {
+	if (wParam >= sel.Count()) {
+		return;
+	}
 	InvalidateRange(sel.Range(wParam).Start().Position(), sel.Range(wParam).End().Position());
 
 	switch (iMessage) {
@@ -5976,8 +5974,8 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 		else
 			return pdoc->LinesTotal();
 
-	case SCI_SETINITLINECOUNT:
-		pdoc->SetInitLineCount(wParam);
+	case SCI_ALLOCATELINES:
+		pdoc->AllocateLines(wParam);
 		break;
 
 	case SCI_GETMODIFY:
@@ -7178,7 +7176,6 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 	case SCI_STYLEGETSIZEFRACTIONAL:
 	case SCI_STYLEGETFONT:
 	case SCI_STYLEGETUNDERLINE:
-	case SCI_STYLEGETSTRIKE:
 	case SCI_STYLEGETCASE:
 	case SCI_STYLEGETCHARACTERSET:
 	case SCI_STYLEGETVISIBLE:
@@ -7424,9 +7421,6 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 		vs.selEOLFilled = wParam != 0;
 		InvalidateStyleRedraw();
 		break;
-
-	case SCI_GETEOLSELECTEDWIDTH:
-		return vs.eolSelectedWidth;
 
 	case SCI_SETEOLSELECTEDWIDTH:
 		vs.eolSelectedWidth = std::clamp(static_cast<int>(wParam), 0, 100);
@@ -7788,7 +7782,7 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 		break;
 
 	case SCI_MULTIEDGEADDLINE:
-		vs.theMultiEdge.emplace_back(wParam, lParam);
+		vs.AddMultiEdge(wParam, lParam);
 		InvalidateStyleRedraw();
 		break;
 
@@ -7796,6 +7790,15 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 		std::vector<EdgeProperties>().swap(vs.theMultiEdge); // Free vector and memory, C++03 compatible
 		InvalidateStyleRedraw();
 		break;
+
+	case SCI_GETMULTIEDGECOLUMN: {
+		const size_t which = wParam;
+		// size_t is unsigned so this also handles negative inputs.
+		if (which >= vs.theMultiEdge.size()) {
+			return -1;
+		}
+		return vs.theMultiEdge[which].column;
+	}
 
 	case SCI_GETACCESSIBILITY:
 		return SC_ACCESSIBILITY_DISABLED;
@@ -7964,7 +7967,7 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 
 	case SCI_SETCURSOR:
 		cursorMode = static_cast<int>(wParam);
-		DisplayCursor(Window::cursorText);
+		DisplayCursor(Window::Cursor::text);
 		break;
 
 	case SCI_GETCURSOR:
@@ -8460,6 +8463,10 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 
 	case SCI_COUNTCHARACTERS:
 		return pdoc->CountCharacters(wParam, lParam);
+
+	case SCI_COUNTCHARACTERSANDCOLUMNS:
+		pdoc->CountCharactersAndColumns(static_cast<Sci_TextToFind *>(PtrFromSPtr(lParam)));
+		break;
 
 	case SCI_COUNTCODEUNITS:
 		return pdoc->CountUTF16(wParam, lParam);

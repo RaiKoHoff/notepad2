@@ -11,7 +11,6 @@
 
 #include <cassert>
 #include <cstring>
-#include <cctype>
 
 #include "ILexer.h"
 #include "Scintilla.h"
@@ -27,13 +26,13 @@
 using namespace Scintilla;
 
 
-static inline bool IsAWordChar(int ch) noexcept {
+static constexpr bool IsAWordChar(int ch) noexcept {
 	/* FIXME:
 	 * The CSS spec allows "ISO 10646 characters U+00A1 and higher" to be treated as word chars.
 	 * Unfortunately, we are only getting string bytes here, and not full unicode characters. We cannot guarantee
 	 * that our byte is between U+0080 - U+00A0 (to return false), so we have to allow all characters U+0080 and higher
 	 */
-	return ch >= 0x80 || isalnum(ch) || ch == '-' || ch == '_';
+	return ch >= 0x80 || IsAlphaNumeric(ch) || ch == '-' || ch == '_';
 }
 
 static constexpr bool IsCssOperator(int ch) noexcept {
@@ -504,10 +503,8 @@ static void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position length, int ini
 }
 
 static void FoldCSSDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWordList, Accessor &styler) {
-	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
-	const bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;
+	const bool foldComment = styler.GetPropertyInt("fold.comment", 1) != 0;
 	const Sci_PositionU endPos = startPos + length;
-	int visibleChars = 0;
 	Sci_Position lineCurrent = styler.GetLine(startPos);
 	int levelPrev = styler.LevelAt(lineCurrent) & SC_FOLDLEVELNUMBERMASK;
 	int levelCurrent = levelPrev;
@@ -534,19 +531,14 @@ static void FoldCSSDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWo
 		}
 		if (atEOL) {
 			int lev = levelPrev;
-			if (visibleChars == 0 && foldCompact)
-				lev |= SC_FOLDLEVELWHITEFLAG;
-			if ((levelCurrent > levelPrev) && (visibleChars > 0))
+			if ((levelCurrent > levelPrev))
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			if (lev != styler.LevelAt(lineCurrent)) {
 				styler.SetLevel(lineCurrent, lev);
 			}
 			lineCurrent++;
 			levelPrev = levelCurrent;
-			visibleChars = 0;
 		}
-		if (!isspacechar(ch))
-			visibleChars++;
 	}
 	// Fill in the real level of the next line, keeping the current flags as they will be filled in later
 	const int flagsNext = styler.LevelAt(lineCurrent) & ~SC_FOLDLEVELNUMBERMASK;

@@ -52,7 +52,7 @@ constexpr bool IsYAMLOperator(int ch) noexcept {
 
 constexpr bool IsYAMLAnchorChar(int ch) noexcept {
 	// ns-anchor-char ::= ns-char - c-flow-indicator
-	return ch > 32 && ch != 0x7f && !IsYAMLFlowIndicator(ch);
+	return IsGraphic(ch) && !IsYAMLFlowIndicator(ch);
 }
 
 constexpr bool IsYAMLDateTime(int ch, int chNext) noexcept {
@@ -442,7 +442,7 @@ struct FoldLineState {
 
 // code folding based on LexNull
 void FoldYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*/, LexerWordList, Accessor &styler) {
-	const bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
+	const bool foldComment = styler.GetPropertyInt("fold.comment", 1) != 0;
 
 	const Sci_Position maxPos = startPos + lengthDoc;
 	const Sci_Position docLines = styler.GetLine(styler.Length());

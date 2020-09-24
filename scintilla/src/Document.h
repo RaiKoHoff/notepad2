@@ -45,11 +45,11 @@ public:
 	}
 
 	Sci::Position First() const noexcept {
-		return (start <= end) ? start : end;
+		return std::min(start, end);
 	}
 
 	Sci::Position Last() const noexcept {
-		return (start > end) ? start : end;
+		return std::max(start, end);
 	}
 
 	// Is the position within the range?
@@ -197,14 +197,18 @@ struct RegexError : public std::runtime_error {
  * experience.
  */
 
+//#define ActionDuration_MeasureTimeByBytes	0	// measure time by line
+#define ActionDuration_MeasureTimeByBytes	1024
+#define ActionDuration_InitializedMaxBytes	(1024*1024)
+
 class ActionDuration {
-	double duration;
-	const double minDuration;
-	const double maxDuration;
+	double duration = 1e-5;
+	static constexpr double minDuration = 1e-6;
+	static constexpr double maxDuration = 1e-4;
 public:
-	ActionDuration(double duration_, double minDuration_, double maxDuration_) noexcept;
-	void AddSample(size_t numberActions, double durationOfActions) noexcept;
+	void AddSample(Sci::Line numberActions, double durationOfActions) noexcept;
 	double Duration() const noexcept;
+	Sci::Line ActionsInAllowedTime(double secondsAllowed) const noexcept;
 };
 
 /**
@@ -402,6 +406,9 @@ public:
 	const char *RangePointer(Sci::Position position, Sci::Position rangeLength) noexcept {
 		return cb.RangePointer(position, rangeLength);
 	}
+	const char *StyleRangePointer(Sci::Position position, Sci::Position rangeLength) noexcept {
+		return cb.StyleRangePointer(position, rangeLength);
+	}
 	Sci::Position GapPosition() const noexcept {
 		return cb.GapPosition();
 	}
@@ -411,6 +418,7 @@ public:
 	Sci::Position GetLineIndentPosition(Sci::Line line) const noexcept;
 	Sci::Position GetColumn(Sci::Position pos) noexcept;
 	Sci::Position CountCharacters(Sci::Position startPos, Sci::Position endPos) const noexcept;
+	void CountCharactersAndColumns(Sci_TextToFind *ft) const noexcept;
 	Sci::Position CountUTF16(Sci::Position startPos, Sci::Position endPos) const noexcept;
 	Sci::Position FindColumn(Sci::Line line, Sci::Position column) noexcept;
 	void Indent(bool forwards, Sci::Line lineBottom, Sci::Line lineTop);
@@ -445,7 +453,7 @@ public:
 	int StyleIndexAt(Sci_Position position) const noexcept {
 		return static_cast<unsigned char>(cb.StyleAt(position));
 	}
-	void GetStyleRange(unsigned char *buffer, Sci::Position position, Sci::Position lengthRetrieve) const {
+	void GetStyleRange(unsigned char *buffer, Sci::Position position, Sci::Position lengthRetrieve) const noexcept {
 		cb.GetStyleRange(buffer, position, lengthRetrieve);
 	}
 	MarkerMask GetMark(Sci::Line line) const noexcept;
@@ -467,6 +475,9 @@ public:
 	Sci::Position VCHomePosition(Sci::Position position) const noexcept;
 	Sci::Position IndexLineStart(Sci::Line line, int lineCharacterIndex) const noexcept;
 	Sci::Line LineFromPositionIndex(Sci::Position pos, int lineCharacterIndex) const noexcept;
+#if ActionDuration_MeasureTimeByBytes
+	Sci::Line LineFromPositionAfter(Sci::Line line, Sci::Position length) const noexcept;
+#endif
 
 	int SCI_METHOD SetLevel(Sci_Position line, int level) override;
 	int SCI_METHOD GetLevel(Sci_Position line) const noexcept override;
@@ -500,7 +511,7 @@ public:
 	void AllocateLineCharacterIndex(int lineCharacterIndex);
 	void ReleaseLineCharacterIndex(int lineCharacterIndex);
 	Sci::Line LinesTotal() const noexcept;
-	void SetInitLineCount(Sci::Line lineCount);
+	void AllocateLines(Sci::Line lines);
 
 	void SetDefaultCharClasses(bool includeWordClass) noexcept;
 	void SetCharClasses(const unsigned char *chars, CharClassify::cc newCharClass) noexcept;
@@ -518,7 +529,7 @@ public:
 	}
 	void EnsureStyledTo(Sci::Position pos);
 	void StyleToAdjustingLineDuration(Sci::Position pos);
-	void LexerChanged();
+	void LexerChanged(bool hasStyles_);
 	int GetStyleClock() const noexcept {
 		return styleClock;
 	}

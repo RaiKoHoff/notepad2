@@ -610,13 +610,13 @@ BEGIN
 			MENUITEM SEPARATOR
 			POPUP "言語(&L)"
 			BEGIN
-				MENUITEM "システムの規定(&S)",			IDM_LANG_USER_DEFAULT
-				MENUITEM "&Deutsch",				IDM_LANG_GERMAN
-				MENUITEM "&English",				IDM_LANG_ENGLISH_US
-				MENUITEM "&Italiano",				IDM_LANG_ITALIAN
-				MENUITEM "日本語(&J)",				IDM_LANG_JAPANESE
-				MENUITEM "中文 (繁體)(&T)",			IDM_LANG_CHINESE_TRADITIONAL
-				MENUITEM "中文 (简体)(&C)",			IDM_LANG_CHINESE_SIMPLIFIED
+				MENUITEM "システムの規定(&S)",		IDM_LANG_USER_DEFAULT
+				MENUITEM "Deutsch",					IDM_LANG_GERMAN
+				MENUITEM "English",					IDM_LANG_ENGLISH_US
+				MENUITEM "Italiano",				IDM_LANG_ITALIAN
+				MENUITEM "日本語",					IDM_LANG_JAPANESE
+				MENUITEM "中文(繁體)",				IDM_LANG_CHINESE_TRADITIONAL
+				MENUITEM "中文(简体)",				IDM_LANG_CHINESE_SIMPLIFIED
 			END
 #endif
 		END
@@ -677,7 +677,7 @@ BEGIN
 			END
 			POPUP "RTL レイアウト (GDI)(&R)"
 			BEGIN
-				MENUITEM "Edit ウィンドウ(&E)",			IDM_SET_RTL_LAYOUT_EDIT
+				MENUITEM "編集ウィンドウ(&E)",			IDM_SET_RTL_LAYOUT_EDIT
 				MENUITEM "他のウィンドウ(&O)",			IDM_SET_RTL_LAYOUT_OTHER
 			END
 			POPUP "書字方向 (Direct2D)(&B)"
@@ -2166,7 +2166,7 @@ BEGIN
 	NP2STYLE_IMEIndicator			"IME変換"
 	NP2STYLE_Bookmark				"ブックマーク"
 	NP2STYLE_CallTip				"コールチップ"
-	NP2STYLE_CurrentBlock			"現在のブロック"
+	NP2STYLE_CodeFolding			"コード折りたたみ"
 
 	NP2STYLE_Default				"標準"
 END

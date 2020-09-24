@@ -362,12 +362,12 @@ enum GlobalStyleIndex {
 	GlobalStyleIndex_IndentationGuide,	// inherited style. `fore`, `back`
 	GlobalStyleIndex_Selection,			// standalone style. main selection (`back`, `alpha`), additional selection (`fore`, `outline`), `eolfilled`
 	GlobalStyleIndex_Whitespace,		// standalone style. `fore`, `back`, `size`: dot size
-	GlobalStyleIndex_CurrentBlock,		// standalone style. `fore`
 	GlobalStyleIndex_CurrentLine,		// standalone style. frame (`fore`, `size`, `outline`), background (`back`, `alpha`)
 	GlobalStyleIndex_Caret,				// standalone style. `fore`: main caret color, `back`: additional caret color
 	GlobalStyleIndex_IMEIndicator,		// indicator style. `fore`: IME indicator color
 	GlobalStyleIndex_LongLineMarker,	// standalone style. `fore`: edge line color, `back`: background color for text exceeds long line limit
 	GlobalStyleIndex_ExtraLineSpacing,	// standalone style. descent = `size`/2, ascent = `size` - descent
+	GlobalStyleIndex_CodeFolding,		// standalone style. `fore`, `back`
 	GlobalStyleIndex_FoldingMarker,		// standalone style. `fore`: folding line color, `back`: plus/minus box fill color
 	GlobalStyleIndex_FoldDispalyText,	// inherited style.
 	GlobalStyleIndex_MarkOccurrences,	// indicator style. `fore`, `alpha`, `outline`
@@ -460,6 +460,7 @@ static inline UINT GetLexerStyleControlMask(int rid, int index) {
 		case GlobalStyleIndex_CurrentLine:
 		case GlobalStyleIndex_Caret:
 		case GlobalStyleIndex_LongLineMarker:
+		case GlobalStyleIndex_CodeFolding:
 		case GlobalStyleIndex_FoldingMarker:
 		case GlobalStyleIndex_Bookmark:
 			return StyleControl_Fore | StyleControl_Back;
@@ -467,7 +468,6 @@ static inline UINT GetLexerStyleControlMask(int rid, int index) {
 			return StyleControl_Fore | StyleControl_Back | StyleControl_EOLFilled;
 		case GlobalStyleIndex_MatchBrace:
 		case GlobalStyleIndex_MatchBraceError:
-		case GlobalStyleIndex_CurrentBlock:
 		case GlobalStyleIndex_IMEIndicator:
 		case GlobalStyleIndex_MarkOccurrences:
 			return StyleControl_Fore;
@@ -1188,12 +1188,6 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 	case NP2LEX_JAVA:
 		attr[10] = KeywordAttr_NoLexer;		// Package
 		break;
-	case NP2LEX_JS:
-		//attr[1] = KeywordAttr_NoAutoComp;	// Reserved Word
-		attr[9] = KeywordAttr_NoLexer;		// Function
-		attr[10] = KeywordAttr_NoLexer;		// Property
-		attr[11] = KeywordAttr_NoLexer;		// Method
-		break;
 	case NP2LEX_NSIS:
 		attr[0] = KeywordAttr_MakeLower;
 		break;
@@ -1224,11 +1218,6 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[11] = KeywordAttr_NoLexer;		// Constant
 		attr[12] = KeywordAttr_NoLexer;		// Attribute
 		break;
-	case NP2LEX_SQL:
-		attr[6] = KeywordAttr_NoLexer;		// Upper Case Keyword
-		attr[7] = KeywordAttr_NoLexer;		// Upper Case Type
-		attr[8] = KeywordAttr_NoLexer;		// Upper Case Function
-		break;
 	case NP2LEX_XML:
 		attr[6] = KeywordAttr_NoLexer;		// Attribute
 		attr[7] = KeywordAttr_NoLexer;		// Value
@@ -1246,6 +1235,10 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[7] = KeywordAttr_NoLexer;		// variables
 		attr[8] = KeywordAttr_NoLexer;		// function
 		attr[9] = KeywordAttr_NoLexer;		// package
+		break;
+	case NP2LEX_JS:
+		attr[9] = KeywordAttr_NoLexer;		// function
+		attr[10] = KeywordAttr_NoLexer;		// properties
 		break;
 	case NP2LEX_JULIA:
 		attr[1] = KeywordAttr_NoAutoComp;	// code fold
@@ -1269,6 +1262,11 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[9] = KeywordAttr_NoLexer;		// macro
 		attr[10] = KeywordAttr_NoLexer;		// module
 		attr[11] = KeywordAttr_NoLexer;		// function
+		break;
+	case NP2LEX_SQL:
+		attr[3] = KeywordAttr_NoLexer;		// upper case keywords
+		attr[4] = KeywordAttr_NoLexer;		// upper case data types
+		attr[5] = KeywordAttr_NoLexer;		// upper case functions
 		break;
 	case NP2LEX_WASM:
 		attr[3] = KeywordAttr_NoLexer;		// full instruction
@@ -1377,6 +1375,11 @@ void Style_InitDefaultColor(void) {
 	SciCall_StyleSetBack(STYLE_DEFAULT, rgb);
 	//SciCall_StyleClearAll();
 
+	const COLORREF backColor = rgb;
+	szValue = pLexGlobal->Styles[GlobalStyleIndex_CodeFolding].szValue;
+	if (!Style_StrGetBackColor(szValue, &rgb)) {
+		rgb = backColor;
+	}
 	SciCall_SetFoldMarginColour(TRUE, rgb);
 	SciCall_SetFoldMarginHiColour(TRUE, rgb);
 
@@ -1671,13 +1674,15 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 			fillColor = (bUse2ndGlobalStyle || np2StyleTheme == StyleTheme_Dark) ? FoldingMarkerFillColorDark : FoldingMarkerFillColorDefault;
 		}
 
-		szValue = pLexGlobal->Styles[GlobalStyleIndex_CurrentBlock].szValue;
+		szValue = pLexGlobal->Styles[GlobalStyleIndex_CodeFolding].szValue;
 		if (!Style_StrGetForeColor(szValue, &highlightColor)) {
 			highlightColor = RGB(0xFF, 0x00, 0x00); // Scintilla default red color
 		}
-
-		SciCall_SetFoldMarginColour(TRUE, backColor);
-		SciCall_SetFoldMarginHiColour(TRUE, backColor);
+		if (!Style_StrGetBackColor(szValue, &rgb)) {
+			rgb = backColor;
+		}
+		SciCall_SetFoldMarginColour(TRUE, rgb);
+		SciCall_SetFoldMarginHiColour(TRUE, rgb);
 #if 0	// use gray fold color
 		COLORREF foreColor = SciCall_StyleGetFore(STYLE_DEFAULT);
 		// Marker fore/back colors
@@ -1784,6 +1789,41 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	// update style font, color, etc. don't need colorizing (analyzing whole document) again,
 	// thus we not call SciCall_ClearDocumentStyle() in previous block.
 	if (bLexerChanged) {
+		// cache layout for visible lines.
+		// SC_CACHE_PAGE depends on line height (i.e. styles in current lexer) and edit window height.
+		/* estimated memory usage when using SC_CACHE_DOCUMENT:
+		CellBuffer:
+			docLength*2
+		Document:
+			lineCount*(4 + 4)
+		ContractionState:
+			lineCount*(1 + 1 + 4 + 4)
+
+		base => docLength*2 + lineCount*18
+
+		LineLayoutCache:
+			lineCount*(8 + 136 + 4*ChunkHeaderSize)
+			+ (lineCount + docLength)*(1 + 1 + 4) + lineCount*4
+
+			lineStarts:
+				wrappedLineCount*(ChunkHeaderSize + 20*4) + sum(subLineCount)*4
+			bidiData:
+				lineCount*(ChunkHeaderSize + 48) + (lineCount + docLength)*(8 + 4)
+				=> docLength*12 + lineCount*68
+
+			with memory chunk header size=8, ignore lineStarts and PositionCache
+			cache without bidiData => docLength*6 + lineCount*186
+			cache with bidiData => docLength*18 + lineCount*254
+
+		total without bidiData => docLength*8 + lineCount*204
+		total with bidiData => docLength*20 + lineCount*272
+
+		python command to make a 4 MiB file with new line only:
+		f = open('4mb.txt', 'wb'); f.write(('\n'*1024*1024*4).encode('utf-8')); f.close()
+		*/
+		//const int cache = (SciCall_GetLength() < 4*1024*1024)? SC_CACHE_DOCUMENT : SC_CACHE_PAGE;
+		SciCall_SetLayoutCache(SC_CACHE_PAGE);
+
 #if 0
 		// profile lexer performance
 		SciCall_ColouriseAll();
@@ -1804,10 +1844,6 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	UpdateLineNumberWidth();
 	UpdateBookmarkMarginWidth();
 	UpdateFoldMarginWidth();
-}
-
-static inline BOOL IsASpace(int ch) {
-	return (ch == ' ') || ((ch >= 0x09) && (ch <= 0x0d));
 }
 
 //=============================================================================
@@ -2033,7 +2069,7 @@ int Style_GetDocTypeLanguage(void) {
 	}
 	if (*p == '<') {
 		p++;
-		if (!isalpha((unsigned char)(*p))) {
+		if (!IsAlpha(*p)) {
 			return 0;
 		}
 	} else {
@@ -2130,7 +2166,7 @@ BOOL MatchCPPKeyword(const char *p, int index) {
 	while (len < 30 && (*p == '_' || (*p >= 'a' && *p <= 'z'))) {
 		word[len++] = *p++;
 	}
-	if (len == 30 || isalnum((unsigned char)(*p))) {
+	if (len == 30 || IsAlphaNumeric(*p)) {
 		return FALSE;
 	}
 	word[len++] = ' ';
@@ -2753,10 +2789,10 @@ BOOL Style_MaybeBinaryFile(LPCWSTR lpszFile) {
 	UINT count = 0;
 	while (ptr < end) {
 		uint8_t ch = *ptr++;
-		if (ch < 32 && (C0Mask & (1U << ch))) {
+		if (ch < 32 && ((C0Mask >> ch) & 1)) {
 			++count;
 			ch = *ptr++;
-			if ((count >= 8) || (ch < 32 && (C0Mask & (1U << ch)))) {
+			if ((count >= 8) || (ch < 32 && ((C0Mask >> ch) & 1))) {
 				return TRUE;
 			}
 		}
@@ -3235,7 +3271,8 @@ BOOL Style_StrGetFontEx(LPCWSTR lpszStyle, LPWSTR lpszFont, int cchFont, BOOL bD
 			++p;
 		}
 		lstrcpyn(lpszFont, p, cchFont);
-		if ((p = StrChr(lpszFont, L';')) != NULL) {
+		p = StrChr(lpszFont, L';');
+		if (p != NULL) {
 			*p = L'\0';
 		}
 		TrimString(lpszFont);
@@ -3340,7 +3377,8 @@ static BOOL Style_StrGetValueEx(LPCWSTR lpszStyle, LPCWSTR key, int keyLen, LPWS
 			++p;
 		}
 		lstrcpyn(lpszValue, p, cchValue);
-		if ((p = StrChr(lpszValue, L';')) != NULL) {
+		p = StrChr(lpszValue, L';');
+		if (p != NULL) {
 			*p = L'\0';
 		}
 		TrimString(lpszValue);
@@ -4300,8 +4338,9 @@ static INT_PTR CALLBACK Style_ConfigDlgProc(HWND hwnd, UINT umsg, WPARAM wParam,
 						WCHAR wch[MAX_EDITLEXER_EXT_SIZE];
 
 						GetDlgItemText(hwnd, IDC_STYLELABELS, wch, COUNTOF(wch));
-						if (StrChr(wch, L'|')) {
-							*StrChr(wch, L'|') = 0;
+						LPWSTR p = StrChr(wch, L'|');
+						if (p != NULL) {
+							*p = L'\0';
 						}
 
 						SetDlgItemText(hwnd, IDC_STYLELABEL, wch);
@@ -4318,8 +4357,9 @@ static INT_PTR CALLBACK Style_ConfigDlgProc(HWND hwnd, UINT umsg, WPARAM wParam,
 						WCHAR wch[MAX_EDITSTYLE_VALUE_SIZE];
 
 						GetDlgItemText(hwnd, IDC_STYLELABELS, wch, COUNTOF(wch));
-						if (StrChr(wch, L'|')) {
-							*StrChr(wch, L'|') = 0;
+						LPWSTR p = StrChr(wch, L'|');
+						if (p != NULL) {
+							*p = L'\0';
 						}
 
 						SetDlgItemText(hwnd, IDC_STYLELABEL, StrEnd(wch) + 1);

@@ -7,7 +7,6 @@
 
 #include <cassert>
 #include <cstring>
-#include <cctype>
 
 #include <string>
 #include <map>
@@ -402,7 +401,7 @@ constexpr int defaultStateForSGML(script_type scriptLanguage) noexcept {
 
 bool issgmlwordchar(int ch) noexcept {
 	return !IsASCII(ch) ||
-		(isalnum(ch) || ch == '.' || ch == '_' || ch == ':' || ch == '!' || ch == '#' || ch == '[');
+		(IsAlphaNumeric(ch) || ch == '.' || ch == '_' || ch == ':' || ch == '!' || ch == '#' || ch == '[');
 }
 
 constexpr bool InTagState(int state) noexcept {
@@ -600,16 +599,14 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 	// property fold.html
 	//	Folding is turned on or off for HTML and XML files with this option.
 	//	The fold option must also be on for folding to occur.
-	const bool foldHTML = styler.GetPropertyInt("fold.html", 0) != 0;
+	const bool foldHTML = styler.GetPropertyInt("fold.html", 1) != 0;
 
-	const bool fold = foldHTML && styler.GetPropertyInt("fold", 0);
+	const bool fold = foldHTML && styler.GetPropertyInt("fold", 1);
 
 	// property fold.html.preprocessor
 	//	Folding is turned on or off for scripts embedded in HTML files with this option.
 	//	The default is on.
 	const bool foldHTMLPreprocessor = foldHTML && styler.GetPropertyInt("fold.html.preprocessor", 1);
-
-	const bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;
 
 	// property fold.hypertext.comment
 	//	Allow folding for comments in scripts embedded in HTML.
@@ -653,7 +650,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 
 	int levelPrev = styler.LevelAt(lineCurrent) & SC_FOLDLEVELNUMBERMASK;
 	int levelCurrent = levelPrev;
-	int visibleChars = 0;
 	int lineStartVisibleChars = 0;
 
 	int chPrev = ' ';
@@ -693,10 +689,9 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			continue;
 		}
 
-		if ((!IsASpace(ch) || !foldCompact) && fold)
-			visibleChars++;
-		if (!IsASpace(ch))
+		if (!IsASpace(ch)) {
 			lineStartVisibleChars++;
+		}
 
 		// decide what is the current state to print (depending of the script tag)
 		StateToPrint = statePrintForState(state, inScriptType);
@@ -765,13 +760,10 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			// New line -> record any line state onto /next/ line
 			if (fold) {
 				int lev = levelPrev;
-				if (visibleChars == 0)
-					lev |= SC_FOLDLEVELWHITEFLAG;
-				if ((levelCurrent > levelPrev) && (visibleChars > 0))
+				if ((levelCurrent > levelPrev))
 					lev |= SC_FOLDLEVELHEADERFLAG;
 
 				styler.SetLevel(lineCurrent, lev);
-				visibleChars = 0;
 				levelPrev = levelCurrent;
 			}
 			styler.SetLineState(lineCurrent,
@@ -857,7 +849,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				scriptLanguage = eScriptNone;
 				clientScript = eScriptJS;
 				i += 2;
-				visibleChars += 2;
 				tagClosing = true;
 				if (foldXmlAtTagOpen) {
 					levelCurrent--;
@@ -881,7 +872,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			styler.ColourTo(i - 1, StateToPrint);
 			beforePreProc = state;
 			i++;
-			visibleChars++;
 			i += PrintScriptingIndicatorOffset(styler, styler.GetStartSegment() + 2, i + 6);
 			if (scriptLanguage == eScriptXML)
 				styler.ColourTo(i, SCE_H_XMLSTART);
@@ -924,10 +914,8 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 
 			if (chNext == '/') {
 				i += 2;
-				visibleChars += 2;
 			} else if (ch != '%') {
 				i++;
-				visibleChars++;
 			}
 			state = SCE_HP_START;
 			scriptLanguage = eScriptPython;
@@ -935,7 +923,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 
 			if (ch != '%' && ch != '$' && ch != '/') {
 				i += static_cast<int>(strlen(makoBlockType));
-				visibleChars += static_cast<int>(strlen(makoBlockType));
 				if (keywords_PY.InList(makoBlockType))
 					styler.ColourTo(i, SCE_HP_WORD);
 				else
@@ -956,7 +943,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			else
 				inScriptType = eNonHtmlPreProc;
 			i += 1;
-			visibleChars += 1;
 			scriptLanguage = eScriptComment;
 			state = SCE_H_COMMENT;
 			styler.ColourTo(i, SCE_H_ASP);
@@ -965,7 +951,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 		} else if (isDjango && state == SCE_H_COMMENT && (ch == '#' && chNext == '}')) {
 			styler.ColourTo(i - 1, StateToPrint);
 			i += 1;
-			visibleChars += 1;
 			styler.ColourTo(i, SCE_H_ASP);
 			state = beforePreProc;
 			if (inScriptType == eNonHtmlScriptPreProc)
@@ -990,7 +975,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				inScriptType = eNonHtmlPreProc;
 
 			i += 1;
-			visibleChars += 1;
 			state = SCE_HP_START;
 			beforeLanguage = scriptLanguage;
 			scriptLanguage = eScriptPython;
@@ -1011,7 +995,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 
 			if (chNext2 == '@') {
 				i += 2; // place as if it was the second next char treated
-				visibleChars += 2;
 				state = SCE_H_ASPAT;
 			} else if ((chNext2 == '-') && (styler.SafeGetCharAt(i + 3) == '-')) {
 				styler.ColourTo(i + 3, SCE_H_ASP);
@@ -1021,10 +1004,8 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			} else {
 				if (chNext2 == '=') {
 					i += 2; // place as if it was the second next char treated
-					visibleChars += 2;
 				} else {
 					i++; // place as if it was the next char treated
-					visibleChars++;
 				}
 
 				state = StateForScript(aspScript);
@@ -1082,11 +1063,9 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			}
 			if (0 != strcmp(makoBlockType, "%") && (0 != strcmp(makoBlockType, "{")) && ch != '>') {
 				i++;
-				visibleChars++;
 		    }
 			else if (0 == strcmp(makoBlockType, "%") && ch == '/') {
 				i++;
-				visibleChars++;
 			}
 			if (0 != strcmp(makoBlockType, "%") || ch == '/') {
 				styler.ColourTo(i, SCE_H_ASP);
@@ -1115,7 +1094,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				styler.ColourTo(i - 1, StateToPrint);
 			}
 			i += 1;
-			visibleChars += 1;
 			styler.ColourTo(i, SCE_H_ASP);
 			state = beforePreProc;
 			if (inScriptType == eNonHtmlScriptPreProc)
@@ -1158,7 +1136,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			}
 			if (scriptLanguage != eScriptSGML) {
 				i++;
-				visibleChars++;
 			}
 			if (ch == '%')
 				styler.ColourTo(i, SCE_H_ASP);
@@ -1218,7 +1195,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 					styler.ColourTo(i - 2, StateToPrint);
 				}
 				state = SCE_H_SGML_COMMENT;
-			} else if (IsASCII(ch) && isalpha(ch) && (chPrev == '%')) {
+			} else if (IsAlpha(ch) && (chPrev == '%')) {
 				styler.ColourTo(i - 2, StateToPrint);
 				state = SCE_H_SGML_ENTITY;
 			} else if (ch == '#') {
@@ -1274,7 +1251,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 					size++;
 				styler.ColourTo(i + size - 1, StateToPrint);
 				i += size - 1;
-				visibleChars += size - 1;
 				ch = static_cast<unsigned char>(styler.SafeGetCharAt(i));
 				state = defaultStateForSGML(scriptLanguage);
 				continue;
@@ -1333,7 +1309,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 		case SCE_H_SGML_SPECIAL:
 			if (!IsUpperCase(ch)) {
 				styler.ColourTo(i - 1, StateToPrint);
-				if (IsASCII(ch) && isalnum(ch)) {
+				if (IsAlphaNumeric(ch)) {
 					state = SCE_H_SGML_ERROR;
 				} else {
 					state = SCE_H_SGML_DEFAULT;
@@ -1344,7 +1320,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			if (ch == ';') {
 				styler.ColourTo(i, StateToPrint);
 				state = SCE_H_SGML_DEFAULT;
-			} else if (!(IsASCII(ch) && isalnum(ch)) && ch != '-' && ch != '.') {
+			} else if (!(IsAlphaNumeric(ch) || ch == '-' || ch == '.')) {
 				styler.ColourTo(i, SCE_H_SGML_ERROR);
 				state = SCE_H_SGML_DEFAULT;
 			}
@@ -1354,7 +1330,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				styler.ColourTo(i, StateToPrint);
 				state = SCE_H_DEFAULT;
 			}
-			if (ch != '#' && !(IsASCII(ch) && isalnum(ch))	// Should check that '#' follows '&', but it is unlikely anyway...
+			if (ch != '#' && !IsAlphaNumeric(ch)	// Should check that '#' follows '&', but it is unlikely anyway...
 				&& ch != '.' && ch != '-' && ch != '_' && ch != ':') { // valid in XML
 				if (!IsASCII(ch))	// Possibly start of a multibyte character so don't allow this byte to be in entity style
 					styler.ColourTo(i-1, SCE_H_TAGUNKNOWN);

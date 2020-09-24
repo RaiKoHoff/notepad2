@@ -445,14 +445,6 @@ void WordList_AddSubWord(struct WordList *pWList, LPSTR pWord, int wordLength, i
 }
 
 
-static inline BOOL IsASpaceOrTab(int ch) {
-	return ch == ' ' || ch == '\t';
-}
-
-static inline BOOL IsAAlpha(int ch) {
-	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z');
-}
-
 static inline BOOL IsEscapeChar(int ch) {
 	return ch == 't' || ch == 'n' || ch == 'r' || ch == 'a' || ch == 'b' || ch == 'v' || ch == 'f'
 		|| ch == '0'
@@ -480,6 +472,12 @@ static inline BOOL IsCppStringStyle(int style) {
 		|| style == SCE_C_DSTRINGT;
 }
 
+static inline BOOL IsSpecialStart(int ch) {
+	return ch == ':' || ch == '.' || ch == '#' || ch == '@'
+		|| ch == '<' || ch == '\\' || ch == '/' || ch == '-'
+		|| ch == '>' || ch == '$' || ch == '%';
+}
+
 static inline BOOL IsSpecialStartChar(int ch, int chPrev) {
 	return (ch == '.')	// member
 		|| (ch == '#')	// preprocessor
@@ -501,11 +499,11 @@ extern struct EditAutoCompletionConfig autoCompletionConfig;
 
 // CharClassify::SetDefaultCharClasses()
 static inline BOOL IsDefaultWordChar(int ch) {
-	return ch >= 0x80 || isalnum(ch) || ch == '_';
+	return ch >= 0x80 || IsAlphaNumeric(ch) || ch == '_';
 }
 
 BOOL IsDocWordChar(int ch) {
-	if (isalnum(ch) || ch == '_' || ch == '.') {
+	if (IsAlphaNumeric(ch) || ch == '_' || ch == '.') {
 		return TRUE;
 	}
 
@@ -621,7 +619,7 @@ static inline BOOL IsWordStyleToIgnore(int style) {
 
 // https://en.wikipedia.org/wiki/Printf_format_string
 static inline BOOL IsStringFormatChar(int ch, int style) {
-	if (!IsAAlpha(ch)) {
+	if (!IsAlpha(ch)) {
 		return FALSE;
 	}
 	switch (pLexCurrent->iLexer) {
@@ -1090,7 +1088,7 @@ void EditCompleteUpdateConfig(void) {
 		if (c == L'\0') {
 			break;
 		}
-		if (c < 0x80 && ispunct((unsigned char)c)) {
+		if (IsPunctuation(c)) {
 			autoCompletionConfig.wszAutoCompleteFillUp[k++] = c;
 			if (punctuation) {
 				autoCompletionConfig.szAutoCompleteFillUp[i++] = (char)c;
@@ -1281,7 +1279,7 @@ static BOOL EditCompleteWordCore(int iCondition, BOOL autoInsert) {
 		if (pWList->nWordCount == 0 && iRootLen != 0) {
 			const char *pSubRoot = strpbrk(pWList->pWordStart, ":.#@<\\/->$%");
 			if (pSubRoot) {
-				while (*pSubRoot && strchr(":.#@<\\/->$%", *pSubRoot)) {
+				while (IsSpecialStart(*pSubRoot)) {
 					pSubRoot++;
 				}
 				if (*pSubRoot) {
@@ -1373,12 +1371,12 @@ static BOOL CanAutoCloseSingleQuote(int chPrev, int iCurrentStyle) {
 	}
 
 	// someone's, don't
-	if (isalnum(chPrev)) {
+	if (IsAlphaNumeric(chPrev)) {
 		// character prefix
 		if (pLexCurrent->rid == NP2LEX_CPP || pLexCurrent->rid == NP2LEX_RC || iLexer == SCLEX_PYTHON || iLexer == SCLEX_SQL || iLexer == SCLEX_RUST) {
 			const int lower = chPrev | 0x20;
 			const int chPrev2 = SciCall_GetCharAt(SciCall_GetCurrentPos() - 3);
-			const BOOL bSubWord = chPrev2 >= 0x80 || isalnum(chPrev2);
+			const BOOL bSubWord = chPrev2 >= 0x80 || IsAlphaNumeric(chPrev2);
 
 			switch (iLexer) {
 			case SCLEX_CPP:
@@ -1592,7 +1590,7 @@ void EditAutoCloseXMLTag(void) {
 
 			if (*pCur == '<') {
 				pCur++;
-				while (strchr(":_-.", *pCur) || isalnum((unsigned char)(*pCur))) {
+				while (IsHtmlTagChar(*pCur)) {
 					tchIns[cchIns++] = *pCur;
 					pCur++;
 				}
@@ -1673,7 +1671,7 @@ const char *EditKeywordIndent(const char *head, int *indent) {
 	const char *endPart = NULL;
 	*indent = 0;
 
-	while (*head && length < 63 && IsAAlpha(*head)) {
+	while (*head && length < 63 && IsAlpha(*head)) {
 		word[length] = *head;
 		word_low[length] = (char)((*head) | 0x20);
 		++length;
@@ -1911,7 +1909,7 @@ void EditAutoIndent(void) {
 		const char *endPart = NULL;
 		for (pPos = pLineBuf; *pPos; pPos++) {
 			if (*pPos != ' ' && *pPos != '\t') {
-				if (!indent && IsAAlpha(*pPos)) { // indent on keywords
+				if (!indent && IsAlpha(*pPos)) { // indent on keywords
 					const int style = SciCall_GetStyleAt(SciCall_PositionFromLine(iCurLine - 1) + iIndentLen);
 					if (IsIndentKeywordStyle(style)) {
 						endPart = EditKeywordIndent(pPos, &indent);
