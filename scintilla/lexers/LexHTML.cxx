@@ -5,6 +5,7 @@
 // Copyright 1998-2005 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
 
+#include <cstdlib>
 #include <cassert>
 #include <cstring>
 
@@ -90,8 +91,8 @@ int PrintScriptingIndicatorOffset(Accessor &styler, Sci_PositionU start, Sci_Pos
 	int iResult = 0;
 	char s[8];
 	GetTextSegment(styler, start, end, s, sizeof(s));
-	if (0 == strncmp(s, "php", 3)) {
-		iResult = 3;
+	if (StrStartsWith(s, "php")) {
+		iResult = CSTRLEN("php");
 	}
 
 	return iResult;

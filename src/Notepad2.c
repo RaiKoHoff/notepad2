@@ -58,6 +58,8 @@ HWND	hwndMain;
 static HWND hwndNextCBChain = NULL;
 HWND	hDlgFindReplace = NULL;
 static BOOL bInitDone = FALSE;
+static HACCEL hAccMain;
+static HACCEL hAccFindReplace;
 
 // tab width for notification text
 #define TAB_WIDTH_NOTIFICATION		8
@@ -183,6 +185,7 @@ static BOOL bMinimizeToTray;
 static BOOL bTransparentMode;
 static int	iEndAtLastLine;
 BOOL	bFindReplaceTransparentMode;
+BOOL	bFindReplaceUseMonospacedFont;
 static BOOL bEditLayoutRTL;
 BOOL	bWindowLayoutRTL;
 static int iRenderingTechnology;
@@ -280,10 +283,11 @@ static WIN32_FIND_DATA fdCurFile;
 static EDITFINDREPLACE efrData;
 UINT	cpLastFind = 0;
 BOOL	bReplaceInitialized = FALSE;
+EditMarkAllStatus editMarkAllStatus;
+HANDLE idleTaskTimer;
 
 static int iSortOptions = 0;
 static int iAlignMode	= 0;
-Sci_Position iMatchesCount = 0;
 extern int iFontQuality;
 extern int iCaretStyle;
 extern int iOvrCaretStyle;
@@ -455,6 +459,19 @@ static void CleanUpResources(BOOL initialized) {
 	OleUninitialize();
 }
 
+static void DispatchMessageMain(MSG *msg) {
+	if (IsWindow(hDlgFindReplace) && (msg->hwnd == hDlgFindReplace || IsChild(hDlgFindReplace, msg->hwnd))) {
+		if (TranslateAccelerator(hDlgFindReplace, hAccFindReplace, msg) || IsDialogMessage(hDlgFindReplace, msg)) {
+			return;
+		}
+	}
+
+	if (!TranslateAccelerator(hwndMain, hAccMain, msg)) {
+		TranslateMessage(msg);
+		DispatchMessage(msg);
+	}
+}
+
 BOOL WINAPI ConsoleHandlerRoutine(DWORD dwCtrlType) {
 	if (dwCtrlType == CTRL_C_EVENT) {
 		SendWMCommand(hwndMain, IDM_FILE_EXIT);
@@ -589,7 +606,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 #endif
 
 	// we need DPI-related functions before create Scintilla window.
-#if NP2_TARGET_ARM64
+#if NP2_HAS_GETDPIFORWINDOW
 	g_uSystemDPI = GetDpiForSystem();
 #else
 	Scintilla_LoadDpiForWindow();
@@ -604,29 +621,34 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 		return FALSE;
 	}
 
-	HWND hwnd;
-	if ((hwnd = InitInstance(hInstance, nShowCmd)) == NULL) {
-		CleanUpResources(TRUE);
-		return FALSE;
-	}
-
-	HACCEL hAccMain = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDR_MAINWND));
-	HACCEL hAccFindReplace = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDR_ACCFINDREPLACE));
+	// create the timer first, to make flagMatchText working.
+	HANDLE timer = idleTaskTimer = WaitableTimer_Create();
+	QueryPerformanceFrequency(&editMarkAllStatus.watch.freq);
+	InitInstance(hInstance, nShowCmd);
+	hAccMain = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDR_MAINWND));
+	hAccFindReplace = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDR_ACCFINDREPLACE));
 	MSG msg;
 
-	while (GetMessage(&msg, NULL, 0, 0)) {
-		if (IsWindow(hDlgFindReplace) && (msg.hwnd == hDlgFindReplace || IsChild(hDlgFindReplace, msg.hwnd))) {
-			if (TranslateAccelerator(hDlgFindReplace, hAccFindReplace, &msg) || IsDialogMessage(hDlgFindReplace, &msg)) {
-				continue;
+	while (TRUE) {
+		if (editMarkAllStatus.pending) {
+			WaitableTimer_Set(timer, WaitableTimer_IdleTaskDelayTime);
+			while (editMarkAllStatus.pending && WaitableTimer_Continue(timer)) {
+				if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+					DispatchMessageMain(&msg);
+				}
+			}
+			if (editMarkAllStatus.pending) {
+				EditMarkAll_Continue(&editMarkAllStatus, timer);
 			}
 		}
-
-		if (!TranslateAccelerator(hwnd, hAccMain, &msg)) {
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
+		if (GetMessage(&msg, NULL, 0, 0)) {
+			DispatchMessageMain(&msg);
+		} else {
+			break;
 		}
 	}
 
+	WaitableTimer_Destroy(timer);
 	CleanUpResources(TRUE);
 	return (int)(msg.wParam);
 }
@@ -659,7 +681,7 @@ BOOL InitApplication(HINSTANCE hInstance) {
 // InitInstance()
 //
 //
-HWND InitInstance(HINSTANCE hInstance, int nCmdShow) {
+void InitInstance(HINSTANCE hInstance, int nCmdShow) {
 #if 0
 	StopWatch watch;
 	StopWatch_Start(watch);
@@ -820,11 +842,11 @@ HWND InitInstance(HINSTANCE hInstance, int nCmdShow) {
 			if (flagChangeNotify == 1) {
 				iFileWatchingMode = 0;
 				bResetFileWatching = TRUE;
-				InstallFileWatching(szCurFile);
+				InstallFileWatching(FALSE);
 			} else if (flagChangeNotify == 2) {
 				iFileWatchingMode = 2;
 				bResetFileWatching = TRUE;
-				InstallFileWatching(szCurFile);
+				InstallFileWatching(FALSE);
 			}
 		}
 	} else {
@@ -955,7 +977,6 @@ HWND InitInstance(HINSTANCE hInstance, int nCmdShow) {
 	StopWatch_Stop(watch);
 	StopWatch_ShowLog(&watch, "InitInstance() time");
 #endif
-	return hwndMain;
 }
 
 static inline void NP2MinimizeWind(HWND hwnd) {
@@ -970,12 +991,20 @@ static inline void NP2RestoreWind(HWND hwnd) {
 	ShowOwnedPopups(hwnd, TRUE);
 }
 
-static inline void NP2ExitWind(HWND hwnd) {
+static inline void EditMarkAll_Stop(void) {
+	editMarkAllStatus.pending = FALSE;
+	editMarkAllStatus.matchCount = 0;
+	WaitableTimer_Set(idleTaskTimer, 0);
+	EditMarkAll_Clear();
+}
+
+static inline void ExitApplication(HWND hwnd) {
 	if (FileSave(FALSE, TRUE, FALSE, FALSE)) {
 		if (bInFullScreenMode) {
 			bInFullScreenMode = FALSE;
 			ToggleFullScreenMode();
 		}
+		EditMarkAll_Stop();
 		DestroyWindow(hwnd);
 	}
 }
@@ -1040,8 +1069,9 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 		if (!bShutdownOK) {
 			WINDOWPLACEMENT wndpl;
 
+			EditMarkAll_Stop();
 			// Terminate file watching
-			InstallFileWatching(NULL);
+			InstallFileWatching(TRUE);
 
 			// GetWindowPlacement
 			wndpl.length = sizeof(WINDOWPLACEMENT);
@@ -1107,7 +1137,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 		if (bMinimizeToTray) {
 			NP2MinimizeWind(hwnd);
 		} else {
-			NP2ExitWind(hwnd);
+			ExitApplication(hwnd);
 		}
 		break;
 
@@ -1224,11 +1254,11 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 					if (params->flagChangeNotify == 1) {
 						iFileWatchingMode = 0;
 						bResetFileWatching = TRUE;
-						InstallFileWatching(szCurFile);
+						InstallFileWatching(FALSE);
 					} else if (params->flagChangeNotify == 2) {
 						iFileWatchingMode = 2;
 						bResetFileWatching = TRUE;
-						InstallFileWatching(szCurFile);
+						InstallFileWatching(FALSE);
 					}
 
 					if (0 != params->flagSetEncoding) {
@@ -1380,7 +1410,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 		}
 
 		if (!bRunningWatch) {
-			InstallFileWatching(szCurFile);
+			InstallFileWatching(FALSE);
 		}
 		break;
 
@@ -1430,7 +1460,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 			if (iCmd == IDM_TRAY_RESTORE) {
 				NP2RestoreWind(hwnd);
 			} else if (iCmd == IDM_TRAY_EXIT) {
-				NP2ExitWind(hwnd);
+				ExitApplication(hwnd);
 			}
 		}
 		return TRUE;
@@ -2672,8 +2702,13 @@ static inline BOOL IsBraceMatchChar(int ch) {
 		|| ch == '<' || ch == '>';
 #else
 	// tools/GenerateTable.py
+#if defined(_WIN64)
+	static const uint64_t table[4] = { UINT64_C(0x5000030000000000), UINT64_C(0x2800000028000000) };
+	return (table[ch >> 6] >> (ch & 63)) & 1;
+#else
 	static const uint32_t table[8] = { 0, 0x50000300, 0x28000000, 0x28000000 };
 	return (table[ch >> 5] >> (ch & 31)) & 1;
+#endif
 #endif
 }
 
@@ -2956,7 +2991,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_FILE_EXIT:
-		NP2ExitWind(hwnd);
+		ExitApplication(hwnd);
 		break;
 
 	case IDM_ENCODING_ANSI:
@@ -4367,7 +4402,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_VIEW_CHANGENOTIFY:
 		if (ChangeNotifyDlg(hwnd)) {
-			InstallFileWatching(szCurFile);
+			InstallFileWatching(FALSE);
 		}
 		break;
 
@@ -4436,12 +4471,12 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		} else if (iEscFunction == 1) {
 			SendMessage(hwnd, WM_SYSCOMMAND, SC_MINIMIZE, 0);
 		} else if (iEscFunction == 2) {
-			NP2ExitWind(hwnd);
+			ExitApplication(hwnd);
 		}
 		break;
 
 	case CMD_SHIFTESC:
-		NP2ExitWind(hwnd);
+		ExitApplication(hwnd);
 		break;
 
 	// Newline with toggled auto indent setting
@@ -4881,7 +4916,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDT_FILE_EXIT:
-		NP2ExitWind(hwnd);
+		ExitApplication(hwnd);
 		break;
 
 	case IDT_FILE_SAVEAS:
@@ -4935,24 +4970,27 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			if (scn->updated & ~(SC_UPDATE_V_SCROLL | SC_UPDATE_H_SCROLL)) {
 				UpdateToolbar();
 
+				BOOL updated = FALSE;
 				if (scn->updated & (SC_UPDATE_SELECTION)) {
+					UpdateStatusBarCache_OVRMode(FALSE);
 					// mark occurrences of text currently selected
 					if (bMarkOccurrences) {
 						if (SciCall_IsSelectionEmpty()) {
-							if (iMatchesCount) {
+							if (editMarkAllStatus.matchCount) {
 								EditMarkAll_Clear();
 							}
 						} else {
-							EditMarkAll((scn->updated & SC_UPDATE_CONTENT), bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
+							updated = EditMarkAll((scn->updated & SC_UPDATE_CONTENT), bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
 						}
 					}
-					UpdateStatusBarCache_OVRMode(FALSE);
 				} else if (scn->updated & (SC_UPDATE_CONTENT)) {
-					if (iMatchesCount) {
-						EditMarkAll(TRUE, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
+					if (editMarkAllStatus.matchCount) {
+						updated = EditMarkAll(TRUE, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
 					}
 				}
-				UpdateStatusbar();
+				if (!updated) {
+					UpdateStatusbar();
+				}
 
 				// Brace Match
 				if (bMatchBraces) {
@@ -5036,6 +5074,17 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 		case SCN_AUTOCSELECTION:
 		case SCN_USERLISTSELECTION: {
+			if ((scn->listCompletionMethod == SC_AC_NEWLINE && !(autoCompletionConfig.fAutoCompleteFillUpMask & AutoCompleteFillUpEnter))
+			|| (scn->listCompletionMethod == SC_AC_TAB && !(autoCompletionConfig.fAutoCompleteFillUpMask & AutoCompleteFillUpTab))) {
+				SciCall_AutoCCancel();
+				if (scn->listCompletionMethod == SC_AC_NEWLINE) {
+					SciCall_NewLine();
+				} else {
+					SciCall_Tab();
+				}
+				return 0;
+			}
+
 			LPCSTR text = scn->text;
 			// function/array/template/generic
 			LPSTR braces = (LPSTR)strpbrk(text, "([{<");
@@ -5395,6 +5444,8 @@ void LoadSettings(void) {
 	autoCompletionConfig.bCloseTags = IniSectionGetBool(pIniSection, L"AutoCloseTags", 1);
 	autoCompletionConfig.bCompleteWord = IniSectionGetBool(pIniSection, L"AutoCompleteWords", 1);
 	autoCompletionConfig.bScanWordsInDocument = IniSectionGetBool(pIniSection, L"AutoCScanWordsInDocument", 1);
+	iValue = IniSectionGetInt(pIniSection, L"AutoCScanWordsTimeout", AUTOC_SCAN_WORDS_DEFAULT_TIMEOUT);
+	autoCompletionConfig.dwScanWordsTimeout = max_i(iValue, AUTOC_SCAN_WORDS_MIN_TIMEOUT);
 	autoCompletionConfig.bEnglistIMEModeOnly = IniSectionGetBool(pIniSection, L"AutoCEnglishIMEModeOnly", 0);
 	autoCompletionConfig.bIgnoreCase = IniSectionGetBool(pIniSection, L"AutoCIgnoreCase", 0);
 	iValue = IniSectionGetInt(pIniSection, L"AutoCVisibleItemCount", 16);
@@ -5528,6 +5579,7 @@ void LoadSettings(void) {
 	bMinimizeToTray = IniSectionGetBool(pIniSection, L"MinimizeToTray", 0);
 	bTransparentMode = IniSectionGetBool(pIniSection, L"TransparentMode", 0);
 	bFindReplaceTransparentMode = IniSectionGetBool(pIniSection, L"FindReplaceTransparentMode", 1);
+	bFindReplaceUseMonospacedFont = IniSectionGetBool(pIniSection, L"FindReplaceUseMonospacedFont", 0);
 	iValue = IniSectionGetInt(pIniSection, L"EndAtLastLine", 1);
 	iEndAtLastLine = clamp_i(iValue, 0, 4);
 	bEditLayoutRTL = IniSectionGetBool(pIniSection, L"EditLayoutRTL", 0);
@@ -5763,6 +5815,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBoolEx(pIniSection, L"AutoCloseTags", autoCompletionConfig.bCloseTags, 1);
 	IniSectionSetBoolEx(pIniSection, L"AutoCompleteWords", autoCompletionConfig.bCompleteWord, 1);
 	IniSectionSetBoolEx(pIniSection, L"AutoCScanWordsInDocument", autoCompletionConfig.bScanWordsInDocument, 1);
+	IniSectionSetIntEx(pIniSection, L"AutoCScanWordsTimeout", autoCompletionConfig.dwScanWordsTimeout, AUTOC_SCAN_WORDS_DEFAULT_TIMEOUT);
 	IniSectionSetBoolEx(pIniSection, L"AutoCEnglishIMEModeOnly", autoCompletionConfig.bEnglistIMEModeOnly, 0);
 	IniSectionSetBoolEx(pIniSection, L"AutoCIgnoreCase", autoCompletionConfig.bIgnoreCase, 0);
 	IniSectionSetIntEx(pIniSection, L"AutoCVisibleItemCount", autoCompletionConfig.iVisibleItemCount, 16);
@@ -5824,6 +5877,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBoolEx(pIniSection, L"MinimizeToTray", bMinimizeToTray, 0);
 	IniSectionSetBoolEx(pIniSection, L"TransparentMode", bTransparentMode, 0);
 	IniSectionSetBoolEx(pIniSection, L"FindReplaceTransparentMode", bFindReplaceTransparentMode, 1);
+	IniSectionSetBoolEx(pIniSection, L"FindReplaceUseMonospacedFont", bFindReplaceUseMonospacedFont, 0);
 	IniSectionSetIntEx(pIniSection, L"EndAtLastLine", iEndAtLastLine, 1);
 	IniSectionSetBoolEx(pIniSection, L"EditLayoutRTL", bEditLayoutRTL, 0);
 	IniSectionSetBoolEx(pIniSection, L"WindowLayoutRTL", bWindowLayoutRTL, 0);
@@ -6941,7 +6995,7 @@ void UpdateStatusbar(void) {
 	StopWatch watch;
 	StopWatch_Start(watch);
 #endif
-	struct Sci_TextToFind ft = { { SciCall_PositionFromLine(iLine), iPos }, NULL, { 0, 0 }};
+	struct Sci_TextToFind ft = { { SciCall_PositionFromLine(iLine), iPos }, NULL, { 0, 0 } };
 	SciCall_CountCharactersAndColumns(&ft);
 	const Sci_Position iChar = ft.chrgText.cpMin;
 	const Sci_Position iCol = ft.chrgText.cpMax;
@@ -7012,7 +7066,6 @@ void UpdateStatusbar(void) {
 	WCHAR tchMatchesCount[32];
 	if (iSelStart == iSelEnd) {
 		lstrcpy(tchLinesSelected, L"0");
-		lstrcpy(tchMatchesCount, L"0");
 	} else {
 		const Sci_Line iStartLine = SciCall_LineFromPosition(iSelStart);
 		const Sci_Line iEndLine = SciCall_LineFromPosition(iSelEnd);
@@ -7023,8 +7076,13 @@ void UpdateStatusbar(void) {
 		}
 		PosToStrW(iLinesSelected, tchLinesSelected);
 		FormatNumberStr(tchLinesSelected);
-		PosToStrW(iMatchesCount, tchMatchesCount);
-		FormatNumberStr(tchMatchesCount);
+	}
+
+	// find all and mark occurrences
+	PosToStrW(editMarkAllStatus.matchCount, tchMatchesCount);
+	FormatNumberStr(tchMatchesCount);
+	if (editMarkAllStatus.pending) {
+		lstrcat(tchMatchesCount, L" ...");
 	}
 
 	WCHAR tchDocPos[256];
@@ -7246,7 +7304,7 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 		if (bResetFileWatching) {
 			iFileWatchingMode = 0;
 		}
-		InstallFileWatching(NULL);
+		InstallFileWatching(TRUE);
 
 		return TRUE;
 	}
@@ -7368,7 +7426,7 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 		if (!bReload && bResetFileWatching) {
 			iFileWatchingMode = 0;
 		}
-		InstallFileWatching(szCurFile);
+		InstallFileWatching(FALSE);
 
 		// check for binary file (file with unknown encoding: ANSI)
 		const BOOL binary = (iEncoding == CPI_DEFAULT) && Style_MaybeBinaryFile(szCurFile);
@@ -7579,7 +7637,7 @@ BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy) {
 			if (bSaveAs && bResetFileWatching) {
 				iFileWatchingMode = 0;
 			}
-			InstallFileWatching(szCurFile);
+			InstallFileWatching(FALSE);
 		}
 	} else if (!status.bCancelDataLoss) {
 		if (StrNotEmpty(szCurFile) != 0) {
@@ -8315,33 +8373,27 @@ void ShowNotificationMessage(int notifyPos, UINT uidMessage, ...) {
 // InstallFileWatching()
 //
 //
-void InstallFileWatching(LPCWSTR lpszFile) {
+void InstallFileWatching(BOOL terminate) {
+	terminate = terminate || !iFileWatchingMode || StrIsEmpty(szCurFile);
 	// Terminate
-	if (!iFileWatchingMode || StrIsEmpty(lpszFile)) {
-		if (bRunningWatch) {
-			if (hChangeHandle) {
-				FindCloseChangeNotification(hChangeHandle);
-				hChangeHandle = NULL;
-			}
+	if (bRunningWatch) {
+		if (hChangeHandle) {
+			FindCloseChangeNotification(hChangeHandle);
+			hChangeHandle = NULL;
+		}
+		if (terminate) {
 			KillTimer(NULL, ID_WATCHTIMER);
-			bRunningWatch = FALSE;
-			dwChangeNotifyTime = 0;
 		}
-	} else { // Install
-		// Terminate previous watching
-		if (bRunningWatch) {
-			if (hChangeHandle) {
-				FindCloseChangeNotification(hChangeHandle);
-				hChangeHandle = NULL;
-			}
-			dwChangeNotifyTime = 0;
-		} else {
-			// No previous watching installed, so launch the timer first
-			SetTimer(NULL, ID_WATCHTIMER, dwFileCheckInterval, WatchTimerProc);
-		}
+	}
+
+	bRunningWatch = !terminate;
+	dwChangeNotifyTime = 0;
+	if (!terminate) {
+		// Install
+		SetTimer(NULL, ID_WATCHTIMER, dwFileCheckInterval, WatchTimerProc);
 
 		WCHAR tchDirectory[MAX_PATH];
-		lstrcpy(tchDirectory, lpszFile);
+		lstrcpy(tchDirectory, szCurFile);
 		PathRemoveFileSpec(tchDirectory);
 
 		// Save data of current file
@@ -8355,9 +8407,6 @@ void InstallFileWatching(LPCWSTR lpszFile) {
 						FILE_NOTIFY_CHANGE_ATTRIBUTES	| \
 						FILE_NOTIFY_CHANGE_SIZE			| \
 						FILE_NOTIFY_CHANGE_LAST_WRITE);
-
-		bRunningWatch = TRUE;
-		dwChangeNotifyTime = 0;
 	}
 }
 

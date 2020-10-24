@@ -156,7 +156,7 @@ for:
 
     artifacts:
       - path: 'build\Notepad2*.zip'
-        name: Notepad2_i18n_x64
+        name: Notepad2_MSVC_i18n_x64
 
   - # Clang x64 Release
     matrix:
@@ -168,11 +168,11 @@ for:
     build_script:
       - cmd: CALL "build\install_llvm.bat" 1
       - cmd: CALL "build\VS2017\build.bat" Build x64 LLVMRelease 1
-      - cmd: CALL "build\make_zip.bat" Clang x64 Release 1
+      - cmd: CALL "build\make_zip.bat" LLVM x64 Release 1
 
     artifacts:
       - path: 'build\Notepad2*.zip'
-        name: Notepad2_Clang_x64
+        name: Notepad2_Clang_MSVC_en_x64
 
   - # MSVC Win32 Release
     matrix:
@@ -188,7 +188,7 @@ for:
 
     artifacts:
       - path: 'build\Notepad2*.zip'
-        name: Notepad2_i18n_Win32
+        name: Notepad2_MSVC_i18n_Win32
 
   - # Clang Win32 Release
     matrix:
@@ -200,11 +200,11 @@ for:
     build_script:
       - cmd: CALL "build\install_llvm.bat" 1
       - cmd: CALL "build\VS2017\build.bat" Build Win32 LLVMRelease 1
-      - cmd: CALL "build\make_zip.bat" Clang Win32 Release 1
+      - cmd: CALL "build\make_zip.bat" LLVM Win32 Release 1
 
     artifacts:
       - path: 'build\Notepad2*.zip'
-        name: Notepad2_Clang_Win32
+        name: Notepad2_Clang_MSVC_en_Win32
 
   - # MSVC AVX2 Release
     matrix:
@@ -220,7 +220,7 @@ for:
 
     artifacts:
       - path: 'build\Notepad2*.zip'
-        name: Notepad2_i18n_AVX2
+        name: Notepad2_MSVC_i18n_AVX2
 
   - # Clang AVX2 Release
     matrix:
@@ -232,11 +232,11 @@ for:
     build_script:
       - cmd: CALL "build\install_llvm.bat" 1
       - cmd: CALL "build\VS2017\build.bat" Build AVX2 LLVMRelease 1
-      - cmd: CALL "build\make_zip.bat" Clang AVX2 Release 1
+      - cmd: CALL "build\make_zip.bat" LLVM AVX2 Release 1
 
     artifacts:
       - path: 'build\Notepad2*.zip'
-        name: Notepad2_Clang_AVX2
+        name: Notepad2_Clang_MSVC_en_AVX2
 
   - # MSVC ARM64 Release
     matrix:
@@ -252,7 +252,7 @@ for:
 
     artifacts:
       - path: 'build\Notepad2*.zip'
-        name: Notepad2_i18n_ARM64
+        name: Notepad2_MSVC_i18n_ARM64
 
   - # Clang ARM64 Release
     matrix:
@@ -264,11 +264,11 @@ for:
     build_script:
       - cmd: CALL "build\install_llvm.bat" 1
       - cmd: CALL "build\VS2017\build.bat" Build ARM64 LLVMRelease 1
-      - cmd: CALL "build\make_zip.bat" Clang ARM64 Release 1
+      - cmd: CALL "build\make_zip.bat" LLVM ARM64 Release 1
 
     artifacts:
       - path: 'build\Notepad2*.zip'
-        name: Notepad2_Clang_ARM64
+        name: Notepad2_Clang_MSVC_en_ARM64
 
   - # MSVC ARM Release
     matrix:
@@ -283,7 +283,7 @@ for:
 
     artifacts:
       - path: 'build\Notepad2*.zip'
-        name: Notepad2_ARM
+        name: Notepad2_MSVC_ARM_en
 
   - # Clang ARM Release
     matrix:
@@ -295,8 +295,8 @@ for:
     build_script:
       - cmd: CALL "build\install_llvm.bat" 1
       - cmd: CALL "build\VS2017\build.bat" Build ARM LLVMRelease 1
-      - cmd: CALL "build\make_zip.bat" Clang ARM Release 1
+      - cmd: CALL "build\make_zip.bat" LLVM ARM Release 1
 
     artifacts:
       - path: 'build\Notepad2*.zip'
-        name: Notepad2_Clang_ARM
+        name: Notepad2_Clang_MSVC_en_ARM

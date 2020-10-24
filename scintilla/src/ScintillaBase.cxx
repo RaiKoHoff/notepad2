@@ -390,7 +390,7 @@ void ScintillaBase::AutoCompleteCharacterDeleted() {
 	NotifyParent(scn);
 }
 
-void ScintillaBase::AutoCompleteCompleted(char ch, unsigned int completionMethod) {
+void ScintillaBase::AutoCompleteCompleted(char ch, int completionMethod) {
 	const int item = ac.GetSelection();
 	if (item == -1) {
 		AutoCompleteCancel();

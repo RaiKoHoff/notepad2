@@ -290,7 +290,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 #endif
 
 // since Windows 10, version 1607
-#if defined(__aarch64__) || defined(_ARM64_) || defined(_M_ARM64)
+#if (defined(__aarch64__) || defined(_ARM64_) || defined(_M_ARM64)) && !defined(__MINGW32__)
 // 1709 was the first version for Windows 10 on ARM64.
 	g_uSystemDPI = GetDpiForSystem();
 #else
@@ -313,12 +313,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 		return FALSE;
 	}
 
-	HWND hwnd;
-	if ((hwnd = InitInstance(hInstance, nShowCmd)) == NULL) {
-		CleanUpResources(TRUE);
-		return FALSE;
-	}
-
+	InitInstance(hInstance, nShowCmd);
+	HWND hwnd = hwndMain;
 	HACCEL hAcc = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDR_MAINWND));
 	MSG msg;
 
@@ -361,7 +357,7 @@ BOOL InitApplication(HINSTANCE hInstance) {
 //  InitInstance()
 //
 //
-HWND InitInstance(HINSTANCE hInstance, int nCmdShow) {
+void InitInstance(HINSTANCE hInstance, int nCmdShow) {
 	const BOOL defaultPos = (wi.x == CW_USEDEFAULT || wi.y == CW_USEDEFAULT || wi.cx == CW_USEDEFAULT || wi.cy == CW_USEDEFAULT);
 	RECT rc = { wi.x, wi.y, (defaultPos ? CW_USEDEFAULT : (wi.x + wi.cx)), (defaultPos ? CW_USEDEFAULT : (wi.y + wi.cy)) };
 
@@ -470,8 +466,6 @@ HWND InitInstance(HINSTANCE hInstance, int nCmdShow) {
 	if (!ListView_GetItemCount(hwndDirList)) {
 		PostWMCommand(hwndMain, IDM_VIEW_UPDATE);
 	}
-
-	return hwndMain;
 }
 
 //=============================================================================
