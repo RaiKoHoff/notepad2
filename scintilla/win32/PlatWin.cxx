@@ -63,7 +63,7 @@ extern UINT g_uSystemDPI;
 extern "C" UINT g_uSystemDPI;
 #endif
 
-#if !NP2_TARGET_ARM64
+#if !NP2_HAS_GETDPIFORWINDOW
 namespace {
 
 using GetDpiForWindowSig = UINT (WINAPI *)(HWND hwnd);
@@ -1350,7 +1350,7 @@ void SurfaceD2D::InitPixMap(int width, int height, Surface *surface_, WindowID w
 	PLATFORM_ASSERT(psurfOther);
 	const D2D1_SIZE_F desiredSize = D2D1::SizeF(static_cast<float>(width), static_cast<float>(height));
 	D2D1_PIXEL_FORMAT desiredFormat;
-#ifdef __MINGW32__
+#if defined(__MINGW32__)
 	desiredFormat.format = DXGI_FORMAT_UNKNOWN;
 #else
 	desiredFormat = psurfOther->pRenderTarget->GetPixelFormat();
@@ -1559,25 +1559,27 @@ void SurfaceD2D::RoundedRectangle(PRectangle rc, ColourDesired fore, ColourDesir
 void SurfaceD2D::AlphaRectangle(PRectangle rc, int cornerSize, ColourDesired fill, int alphaFill,
 	ColourDesired outline, int alphaOutline, int /* flags*/) {
 	if (pRenderTarget) {
+		const float left = std::round(rc.left);
+		const float right = std::round(rc.right);
 		if (cornerSize == 0) {
 			// When corner size is zero, draw square rectangle to prevent blurry pixels at corners
-			const D2D1_RECT_F rectFill = D2D1::RectF(std::round(rc.left) + 1.0f, rc.top + 1.0f, std::round(rc.right) - 1.0f, rc.bottom - 1.0f);
+			const D2D1_RECT_F rectFill = D2D1::RectF(left + 1.0f, rc.top + 1.0f, right - 1.0f, rc.bottom - 1.0f);
 			D2DPenColour(fill, alphaFill);
 			pRenderTarget->FillRectangle(rectFill, pBrush);
 
-			const D2D1_RECT_F rectOutline = D2D1::RectF(std::round(rc.left) + 0.5f, rc.top + 0.5f, std::round(rc.right) - 0.5f, rc.bottom - 0.5f);
+			const D2D1_RECT_F rectOutline = D2D1::RectF(left + 0.5f, rc.top + 0.5f, right - 0.5f, rc.bottom - 0.5f);
 			D2DPenColour(outline, alphaOutline);
 			pRenderTarget->DrawRectangle(rectOutline, pBrush);
 		} else {
 			const float cornerSizeF = static_cast<float>(cornerSize);
 			D2D1_ROUNDED_RECT roundedRectFill = {
-				D2D1::RectF(std::round(rc.left) + 1.0f, rc.top + 1.0f, std::round(rc.right) - 1.0f, rc.bottom - 1.0f),
+				D2D1::RectF(left + 1.0f, rc.top + 1.0f, right - 1.0f, rc.bottom - 1.0f),
 				cornerSizeF - 1.0f, cornerSizeF - 1.0f };
 			D2DPenColour(fill, alphaFill);
 			pRenderTarget->FillRoundedRectangle(roundedRectFill, pBrush);
 
 			D2D1_ROUNDED_RECT roundedRect = {
-				D2D1::RectF(std::round(rc.left) + 0.5f, rc.top + 0.5f, std::round(rc.right) - 0.5f, rc.bottom - 0.5f),
+				D2D1::RectF(left + 0.5f, rc.top + 0.5f, right - 0.5f, rc.bottom - 0.5f),
 				cornerSizeF, cornerSizeF };
 			D2DPenColour(outline, alphaOutline);
 			pRenderTarget->DrawRoundedRectangle(roundedRect, pBrush);
@@ -3659,7 +3661,7 @@ void Platform_Finalise(bool fromDllMain) noexcept {
 		}
 	}
 #endif
-#if !NP2_TARGET_ARM64
+#if !NP2_HAS_GETDPIFORWINDOW
 	if (!fromDllMain && hShcoreDLL) {
 		FreeLibrary(hShcoreDLL);
 		hShcoreDLL = {};

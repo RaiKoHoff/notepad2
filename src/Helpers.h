@@ -54,6 +54,22 @@ NP2_inline long max_l(long x, long y) {
 	return (x > y) ? x : y;
 }
 
+NP2_inline float min_f(float x, float y) {
+	return (x < y) ? x : y;
+}
+
+NP2_inline float max_f(float x, float y) {
+	return (x > y) ? x : y;
+}
+
+NP2_inline double min_d(double x, double y) {
+	return (x < y) ? x : y;
+}
+
+NP2_inline double max_d(double x, double y) {
+	return (x > y) ? x : y;
+}
+
 NP2_inline int clamp_i(int x, int lower, int upper) {
 	return (x < lower) ? lower : (x > upper) ? upper : x;
 }
@@ -177,6 +193,11 @@ NP2_inline LPWSTR StrStrEx(LPCWSTR pszFirst, LPCWSTR pszSrch, BOOL bIgnoreCase) 
 #define StrHasPrefixCaseEx(s, prefix, len)	(_wcsnicmp((s), (prefix), (len)) == 0)
 #endif
 
+#define StrStartsWith(s, prefix)			(strncmp((s), (prefix), CSTRLEN(prefix)) == 0)
+#define StrStartsWithEx(s, prefix, len)		(strncmp((s), (prefix), (len)) == 0)
+#define StrStartsWithCase(s, prefix)		(_strnicmp((s), (prefix), CSTRLEN(prefix)) == 0)
+#define StrStartsWithCaseEx(s, prefix, len)	(_strnicmp((s), (prefix), (len)) == 0)
+
 NP2_inline BOOL StrToFloat(LPCWSTR str, float *value) {
 	LPWSTR end;
 #if defined(__USE_MINGW_STRTOX)
@@ -209,6 +230,7 @@ NP2_inline BOOL HexStrToInt(LPCWSTR str, int *value) {
 
 int ParseCommaList(LPCWSTR str, int result[], int count);
 int ParseCommaList64(LPCWSTR str, int64_t result[], int count);
+LPCSTR GetCurrentLogTime(void);
 
 typedef struct StopWatch {
 	LARGE_INTEGER freq; // not changed after system boot
@@ -341,16 +363,16 @@ extern UINT g_uCurrentDPI;
 extern UINT g_uSystemDPI;
 
 // since Windows 10, version 1607
-#if defined(__aarch64__) || defined(_ARM64_) || defined(_M_ARM64)
+#if (defined(__aarch64__) || defined(_ARM64_) || defined(_M_ARM64)) && !defined(__MINGW32__)
 // 1709 was the first version for Windows 10 on ARM64.
-#define NP2_TARGET_ARM64	1
+#define NP2_HAS_GETDPIFORWINDOW				1
 #define GetWindowDPI(hwnd)					GetDpiForWindow(hwnd)
 #define SystemMetricsForDpi(nIndex, dpi)	GetSystemMetricsForDpi((nIndex), (dpi))
 #define AdjustWindowRectForDpi(lpRect, dwStyle, dwExStyle, dpi) \
 		AdjustWindowRectExForDpi((lpRect), (dwStyle), FALSE, (dwExStyle), (dpi))
 
 #else
-#define NP2_TARGET_ARM64	0
+#define NP2_HAS_GETDPIFORWINDOW				0
 extern UINT GetWindowDPI(HWND hwnd) NP2_noexcept;
 extern int SystemMetricsForDpi(int nIndex, UINT dpi) NP2_noexcept;
 extern BOOL AdjustWindowRectForDpi(LPRECT lpRect, DWORD dwStyle, DWORD dwExStyle, UINT dpi) NP2_noexcept;
@@ -571,6 +593,35 @@ NP2_inline int DStringW_GetDlgItemText(DStringW *s, HWND hwndDlg, int nCtlId) {
 NP2_inline BOOL KeyboardIsKeyDown(int key) {
 	return (GetKeyState(key) & 0x8000) != 0;
 }
+
+#define WaitableTimer_IdleTaskTimeSlot		100
+#define WaitableTimer_IdleTaskDelayTime		50
+#define WaitableTimer_Create()				CreateWaitableTimer(NULL, TRUE, NULL)
+#define WaitableTimer_Destroy(timer)		CloseHandle(timer)
+NP2_inline void WaitableTimer_Set(HANDLE timer, DWORD milliseconds) {
+	LARGE_INTEGER dueTime;
+	dueTime.QuadPart = -INT64_C(10*1000)*milliseconds; // convert to 100ns
+	SetWaitableTimer(timer, &dueTime, 0, NULL, NULL, FALSE);
+}
+NP2_inline HANDLE WaitableTimer_New(DWORD milliseconds) {
+	HANDLE timer = WaitableTimer_Create();
+	WaitableTimer_Set(timer, milliseconds);
+	return timer;
+}
+#define WaitableTimer_Continue(timer)	\
+	(WaitForSingleObject((timer), 0) != WAIT_OBJECT_0)
+
+typedef struct BackgroundWorker {
+	HWND hwnd;
+	HANDLE eventCancel;
+	HANDLE workerThread;
+} BackgroundWorker;
+
+void BackgroundWorker_Init(BackgroundWorker *worker, HWND hwnd);
+void BackgroundWorker_Cancel(BackgroundWorker *worker);
+void BackgroundWorker_Destroy(BackgroundWorker *worker);
+#define BackgroundWorker_Continue(worker)	\
+	(WaitForSingleObject((worker)->eventCancel, 0) != WAIT_OBJECT_0)
 
 HRESULT PrivateSetCurrentProcessExplicitAppUserModelID(PCWSTR AppID);
 BOOL IsElevated(void);

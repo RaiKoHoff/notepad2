@@ -28,8 +28,8 @@
 typedef struct EDITFINDREPLACE {
 	char	szFind[512];
 	char	szReplace[512];
-	char	szFindUTF8[3 * 512];
-	char	szReplaceUTF8[3 * 512];
+	char	szFindUTF8[512 * kMaxMultiByteCount];
+	char	szReplaceUTF8[512 * kMaxMultiByteCount];
 	HWND	hwnd;
 	UINT	fuFlags;
 	BOOL	bTransformBS;
@@ -163,8 +163,9 @@ void	EditGetExcerpt(LPWSTR lpszExcerpt, DWORD cchExcerpt);
 void	EditSelectWord(void);
 void	EditSelectLines(BOOL currentBlock, BOOL lineSelection);
 HWND	EditFindReplaceDlg(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bReplace);
-BOOL	EditFindNext(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection);
-BOOL	EditFindPrev(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection);
+void	EditFindNext(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection);
+void	EditFindPrev(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection);
+void	EditFindAll(LPEDITFINDREPLACE lpefr);
 BOOL	EditReplace(HWND hwnd, LPEDITFINDREPLACE lpefr);
 BOOL	EditReplaceAll(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bShowInfo);
 BOOL	EditReplaceAllInSelection(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bShowInfo);
@@ -210,12 +211,34 @@ enum {
 	MarkerBitmask_Bookmark = 1 << MarkerNumber_Bookmark,
 };
 
-void	EditMarkAll_Clear(void);
-void	EditMarkAll(BOOL bChanged, BOOL bMarkOccurrencesMatchCase, BOOL bMarkOccurrencesMatchWords);
+typedef struct EditMarkAllStatus {
+	BOOL pending;
+	int findFlag;
+	Sci_Position iSelCount;		// length for pszText
+	LPSTR pszText;				// pattern or text to find
+	BOOL rewind;				// need rewind start position?
+	int incrementSize;			// increment search size
+	double duration;			// search duration in milliseconds
+	Sci_Position matchCount;	// total match count
+	Sci_Position lastMatchPos;	// last matching position
+	Sci_Position iStartPos;		// previous stop position
+	StopWatch watch;			// used to dynamic compute increment size
+} EditMarkAllStatus;
+
+void EditMarkAll_ClearEx(int findFlag, Sci_Position iSelCount, LPCSTR pszText);
+NP2_inline void EditMarkAll_Clear(void) {
+	EditMarkAll_ClearEx(0, 0, NULL);
+}
+BOOL EditMarkAll_Start(BOOL bChanged, int findFlag, Sci_Position iSelCount, LPCSTR pszText);
+BOOL EditMarkAll_Continue(EditMarkAllStatus *status, HANDLE timer);
+BOOL EditMarkAll(BOOL bChanged, BOOL bMarkOccurrencesMatchCase, BOOL bMarkOccurrencesMatchWords);
 
 // auto completion fill-up characters
 #define MAX_AUTO_COMPLETION_FILLUP_LENGTH	32		// Only 32 ASCII punctuation
 #define AUTO_COMPLETION_FILLUP_DEFAULT		L";,()[]{}\\/"
+// timeout for scanning words in document
+#define AUTOC_SCAN_WORDS_MIN_TIMEOUT		50
+#define AUTOC_SCAN_WORDS_DEFAULT_TIMEOUT	500
 enum {
 	AutoCompleteFillUpEnter = 1,
 	AutoCompleteFillUpTab = 2,
@@ -256,6 +279,7 @@ typedef struct EditAutoCompletionConfig {
 	BOOL bCloseTags;
 	BOOL bCompleteWord;
 	BOOL bScanWordsInDocument;
+	UINT dwScanWordsTimeout;
 	BOOL bEnglistIMEModeOnly;
 	BOOL bIgnoreCase;
 	UINT iVisibleItemCount;

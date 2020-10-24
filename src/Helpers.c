@@ -32,6 +32,14 @@
 #include "Helpers.h"
 #include "resource.h"
 
+LPCSTR GetCurrentLogTime(void) {
+	static char buf[16];
+	SYSTEMTIME lt;
+	GetLocalTime(&lt);
+	sprintf(buf, "%02d:%02d:%02d.%03d", lt.wHour, lt.wMinute, lt.wSecond, lt.wMilliseconds);
+	return buf;
+}
+
 void StopWatch_Show(const StopWatch *watch, LPCWSTR msg) {
 	const double elapsed = StopWatch_Get(watch);
 	WCHAR buf[256];
@@ -441,6 +449,39 @@ HBITMAP ResizeImageForDPI(HBITMAP hbmp, UINT dpi, int height) {
 	}
 
 	return hbmp;
+}
+
+
+void BackgroundWorker_Init(BackgroundWorker *worker, HWND hwnd) {
+	worker->hwnd = hwnd;
+	worker->eventCancel = CreateEvent(NULL, TRUE, FALSE, NULL);
+	worker->workerThread = NULL;
+}
+
+void BackgroundWorker_Stop(BackgroundWorker *worker) {
+	SetEvent(worker->eventCancel);
+	HANDLE workerThread = worker->workerThread;
+	if (workerThread) {
+		worker->workerThread = NULL;
+		while (WaitForSingleObject(workerThread, 0) != WAIT_OBJECT_0) {
+			MSG msg;
+			if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+				TranslateMessage(&msg);
+				DispatchMessage(&msg);
+			}
+		}
+		CloseHandle(workerThread);
+	}
+}
+
+void BackgroundWorker_Cancel(BackgroundWorker *worker) {
+	BackgroundWorker_Stop(worker);
+	ResetEvent(worker->eventCancel);
+}
+
+void BackgroundWorker_Destroy(BackgroundWorker *worker) {
+	BackgroundWorker_Stop(worker);
+	CloseHandle(worker->eventCancel);
 }
 
 //=============================================================================

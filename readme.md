@@ -9,7 +9,7 @@ Latest release: [![Latest release](https://img.shields.io/github/release/zufuliu
 
 Latest development builds (artifacts in Release configuration for each compiler and platform) are available on [GitHub Actions](https://github.com/zufuliu/notepad2/actions) and [AppVeyor](https://ci.appveyor.com/project/zufuliu/notepad2). Or you can build from source, see the [Wiki](https://github.com/zufuliu/notepad2/wiki/Build-Notepad2).
 
-| GitHub Actions | AppVeyor |
+| GitHub Actions (MSVC, Clang, GCC) | AppVeyor (MSVC, Clang) |
 | --------------- | -------- |
 | [![Build status](https://github.com/zufuliu/notepad2/workflows/CI/badge.svg)](https://github.com/zufuliu/notepad2/actions) | [![Build status](https://ci.appveyor.com/api/projects/status/github/zufuliu/notepad2?branch=master&svg=true)](https://ci.appveyor.com/project/zufuliu/notepad2) |
 
@@ -114,9 +114,9 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* [SQL Standard](../master/tools/lang/SQL.sql), up to SQL:2016.
 		* [MySQL](../master/tools/lang/MySQL.sql), up to MySQL 8.0, MariaDB 10.3.
 		* [SQLite3](../master/tools/lang/SQLite3.sql), up to 3.33.
-		* [PostgreSQL](../master/tools/lang/PostgreSQL.sql), up to 12.
-		* [Transact-SQL](../master/tools/lang/Transact-SQL.sql), up to SQL Server 2019.
-		* [Oracle](../master/tools/lang/Oracle.sql), up Oracle 20, incomplete.
+		* [PostgreSQL](../master/tools/lang/PostgreSQL.sql), PostgreSQL 13.
+		* [Transact-SQL](../master/tools/lang/Transact-SQL.sql), SQL Server 2019.
+		* [Oracle](../master/tools/lang/Oracle.sql), Oracle 20, incomplete.
 	* TCL, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#tcl)
 	* Texinfo
 	* TOML File

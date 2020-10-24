@@ -11,6 +11,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cmath>
+#include <climits>
 
 #include <stdexcept>
 #include <string>
@@ -1581,8 +1582,8 @@ void Document::CountCharactersAndColumns(Sci_TextToFind *ft) const noexcept {
 		count++;
 	}
 
-	ft->chrgText.cpMin = static_cast<Sci_PositionCR>(count);
-	ft->chrgText.cpMax = static_cast<Sci_PositionCR>(column);
+	ft->chrgText.cpMin = count;
+	ft->chrgText.cpMax = column;
 }
 
 Sci::Position Document::CountUTF16(Sci::Position startPos, Sci::Position endPos) const noexcept {
@@ -1978,17 +1979,18 @@ Document::CharacterExtracted Document::ExtractCharacter(Sci::Position position) 
  */
 Sci::Position Document::FindText(Sci::Position minPos, Sci::Position maxPos, const char *search,
 	int flags, Sci::Position *length) {
-	if (*length <= 0)
+	if (*length <= 0) {
 		return minPos;
+	}
 	const bool caseSensitive = (flags & SCFIND_MATCHCASE) != 0;
-	const bool word = (flags & SCFIND_WHOLEWORD) != 0;
-	const bool wordStart = (flags & SCFIND_WORDSTART) != 0;
-	const bool regExp = (flags & SCFIND_REGEXP) != 0;
-	if (regExp) {
-		if (!regex)
+	if (flags & SCFIND_REGEXP) {
+		if (!regex) {
 			regex = std::unique_ptr<RegexSearchBase>(CreateRegexSearch(&charClass));
-		return regex->FindText(this, minPos, maxPos, search, caseSensitive, word, wordStart, flags, length);
+		}
+		return regex->FindText(this, minPos, maxPos, search, caseSensitive, flags, length);
 	} else {
+		const bool word = (flags & SCFIND_WHOLEWORD) != 0;
+		const bool wordStart = (flags & SCFIND_WORDSTART) != 0;
 
 		const bool forward = minPos <= maxPos;
 		const int increment = forward ? 1 : -1;
@@ -2000,36 +2002,82 @@ Sci::Position Document::FindText(Sci::Position minPos, Sci::Position maxPos, con
 		// Compute actual search ranges needed
 		const Sci::Position lengthFind = *length;
 
+		// character less than safeChar is encoded in single byte in the encoding.
+		constexpr int safeCharASCII = 0x80;		// UTF-8 forward & backward search, DBCS forward search
+		constexpr int safeCharSBCS = 256;		// all
+
 		//Platform::DebugPrintf("Find %d %d %s %d\n", startPos, endPos, search, lengthFind);
 		const Sci::Position limitPos = std::max(startPos, endPos);
 		Sci::Position pos = startPos;
-		if (!forward) {
+		if (!forward && !caseSensitive) {
 			// Back all of a character
-			pos = NextPosition(pos, increment);
+			pos = NextPosition(pos, -1);
 		}
 		if (caseSensitive) {
 			const Sci::Position endSearch = (startPos <= endPos) ? endPos - lengthFind + 1 : endPos;
-			const char charStartSearch = search[0];
+			const unsigned char * const searchData = reinterpret_cast<const unsigned char *>(search);
+			const unsigned char charStartSearch = searchData[0];
+			const int safeChar = (0 == dbcsCodePage) ? safeCharSBCS : ((forward || SC_CP_UTF8 == dbcsCodePage) ? safeCharASCII : dbcsCharClass->MinTrailByte());
+			// Boyer-Moore-Horspool-Sunday Algorithm / Quick Search Algorithm
+			// http://www-igm.univ-mlv.fr/~lecroq/string/index.html
+			// http://www-igm.univ-mlv.fr/~lecroq/string/node19.html
+			// https://www.inf.hs-flensburg.de/lang/algorithmen/pattern/sundayen.htm
+			Sci::Position shiftTable[256];
+			if (lengthFind != 1) {
+				Sci::Position shift = lengthFind;
+				std::fill_n(shiftTable, std::size(shiftTable), (shift + 1) * increment);
+				if (forward) {
+					const unsigned char *ptr = searchData;
+					while (*ptr != 0) {
+						shiftTable[*ptr++] = shift--;
+					}
+				} else {
+					const unsigned char *ptr = searchData + shift - 1;
+					shift = -shift;
+					while (ptr >= searchData) {
+						shiftTable[*ptr--] = shift++;
+					}
+				}
+			}
+
+			const Sci::Position skip = forward ? lengthFind : -1;
+			if (!forward) {
+				pos = MovePositionOutsideChar(pos - lengthFind, -1, false);
+			}
 			while (forward ? (pos < endSearch) : (pos >= endSearch)) {
-				if (CharAt(pos) == charStartSearch) {
+				const unsigned char leadByte = UCharAt(pos);
+				if (charStartSearch == leadByte) {
 					bool found = (pos + lengthFind) <= limitPos;
-					for (int indexSearch = 1; (indexSearch < lengthFind) && found; indexSearch++) {
-						found = CharAt(pos + indexSearch) == search[indexSearch];
+					for (Sci::Position indexSearch = 1; (indexSearch < lengthFind) && found; indexSearch++) {
+						const unsigned char ch = UCharAt(pos + indexSearch);
+						found = ch == searchData[indexSearch];
 					}
 					if (found && MatchesWordOptions(word, wordStart, pos, lengthFind)) {
 						return pos;
 					}
 				}
-				if (!NextCharacter(pos, increment))
-					break;
+
+				if (lengthFind == 1) {
+					if (leadByte < safeChar) {
+						pos += increment;
+					} else {
+						if (!NextCharacter(pos, increment)) {
+							break;
+						}
+					}
+				} else {
+					const unsigned char nextByte = UCharAt(pos + skip);
+					pos += shiftTable[nextByte];
+					if (nextByte >= safeChar) {
+						pos = MovePositionOutsideChar(pos, increment, false);
+					}
+				}
 			}
 		} else if (SC_CP_UTF8 == dbcsCodePage) {
 			constexpr size_t maxFoldingExpansion = 4;
 			std::vector<char> searchThing((lengthFind + 1) * UTF8MaxBytes * maxFoldingExpansion + 1);
-			const size_t lenSearch =
-				pcf->Fold(searchThing.data(), searchThing.size(), search, lengthFind);
-			char bytes[UTF8MaxBytes + 1] = "";
-			char folded[UTF8MaxBytes * maxFoldingExpansion + 1] = "";
+			const size_t lenSearch = pcf->Fold(searchThing.data(), searchThing.size(), search, lengthFind);
+			const unsigned char * const searchData = reinterpret_cast<const unsigned char *>(searchThing.data());
 			while (forward ? (pos < endPos) : (pos >= endPos)) {
 				int widthFirstCharacter = 0;
 				Sci::Position posIndexDocument = pos;
@@ -2037,30 +2085,41 @@ Sci::Position Document::FindText(Sci::Position minPos, Sci::Position maxPos, con
 				bool characterMatches = true;
 				for (;;) {
 					const unsigned char leadByte = cb.UCharAt(posIndexDocument);
-					bytes[0] = static_cast<char>(leadByte);
+					char bytes[UTF8MaxBytes + 1];
 					int widthChar = 1;
 					if (!UTF8IsAscii(leadByte)) {
 						const int widthCharBytes = UTF8BytesOfLead(leadByte);
+						bytes[0] = static_cast<char>(leadByte);
 						for (int b = 1; b < widthCharBytes; b++) {
 							bytes[b] = cb.CharAt(posIndexDocument + b);
 						}
 						widthChar = UTF8ClassifyMulti(reinterpret_cast<const unsigned char *>(bytes), widthCharBytes) & UTF8MaskWidth;
 					}
-					if (!widthFirstCharacter)
+					if (!widthFirstCharacter) {
 						widthFirstCharacter = widthChar;
-					if ((posIndexDocument + widthChar) > limitPos)
+					}
+					if ((posIndexDocument + widthChar) > limitPos) {
 						break;
-					const size_t lenFlat = pcf->Fold(folded, sizeof(folded), bytes, widthChar);
-					// memcmp may examine lenFlat bytes in both arguments so assert it doesn't read past end of searchThing
-					assert((indexSearch + lenFlat) <= searchThing.size());
-					// Does folded match the buffer
-					characterMatches = 0 == memcmp(folded, searchThing.data() + indexSearch, lenFlat);
-					if (!characterMatches)
+					}
+					size_t lenFlat = 1;
+					if (widthChar == 1) {
+						characterMatches = searchData[indexSearch] == MakeLowerCase(leadByte);
+					} else {
+						char folded[UTF8MaxBytes * maxFoldingExpansion + 1];
+						lenFlat = pcf->Fold(folded, sizeof(folded), bytes, widthChar);
+						// memcmp may examine lenFlat bytes in both arguments so assert it doesn't read past end of searchThing
+						assert((indexSearch + lenFlat) <= searchThing.size());
+						// Does folded match the buffer
+						characterMatches = 0 == memcmp(folded, searchData + indexSearch, lenFlat);
+					}
+					if (!characterMatches) {
 						break;
+					}
 					posIndexDocument += widthChar;
 					indexSearch += lenFlat;
-					if (indexSearch >= lenSearch)
+					if (indexSearch >= lenSearch) {
 						break;
+					}
 				}
 				if (characterMatches && (indexSearch == lenSearch)) {
 					if (MatchesWordOptions(word, wordStart, pos, posIndexDocument - pos)) {
@@ -2071,8 +2130,9 @@ Sci::Position Document::FindText(Sci::Position minPos, Sci::Position maxPos, con
 				if (forward) {
 					pos += widthFirstCharacter;
 				} else {
-					if (!NextCharacter(pos, increment))
+					if (!NextCharacter(pos, increment)) {
 						break;
+					}
 				}
 			}
 		} else if (dbcsCodePage) {
@@ -2080,28 +2140,43 @@ Sci::Position Document::FindText(Sci::Position minPos, Sci::Position maxPos, con
 			constexpr size_t maxFoldingExpansion = 4;
 			std::vector<char> searchThing((lengthFind + 1) * maxBytesCharacter * maxFoldingExpansion + 1);
 			const size_t lenSearch = pcf->Fold(searchThing.data(), searchThing.size(), search, lengthFind);
+			const unsigned char * const searchData = reinterpret_cast<const unsigned char *>(searchThing.data());
 			while (forward ? (pos < endPos) : (pos >= endPos)) {
+				int widthFirstCharacter = 0;
 				Sci::Position indexDocument = 0;
 				size_t indexSearch = 0;
 				bool characterMatches = true;
-				while (characterMatches &&
-					((pos + indexDocument) < limitPos) &&
-					(indexSearch < lenSearch)) {
-					char bytes[maxBytesCharacter + 1];
-					bytes[0] = cb.CharAt(pos + indexDocument);
-					const Sci::Position widthChar = IsDBCSLeadByteNoExcept(bytes[0]) ? 2 : 1;
-					if (widthChar == 2)
-						bytes[1] = cb.CharAt(pos + indexDocument + 1);
-					if ((pos + indexDocument + widthChar) > limitPos)
+				for (;;) {
+					const unsigned char leadByte = cb.UCharAt(pos + indexDocument);
+					const int widthChar = IsDBCSLeadByteNoExcept(leadByte) ? 2 : 1;
+					if (!widthFirstCharacter) {
+						widthFirstCharacter = widthChar;
+					}
+					if ((pos + indexDocument + widthChar) > limitPos) {
 						break;
-					char folded[maxBytesCharacter * maxFoldingExpansion + 1];
-					const size_t lenFlat = pcf->Fold(folded, sizeof(folded), bytes, widthChar);
-					// memcmp may examine lenFlat bytes in both arguments so assert it doesn't read past end of searchThing
-					assert((indexSearch + lenFlat) <= searchThing.size());
-					// Does folded match the buffer
-					characterMatches = 0 == memcmp(folded, searchThing.data() + indexSearch, lenFlat);
+					}
+					size_t lenFlat = 1;
+					if (widthChar == 1) {
+						characterMatches = searchData[indexSearch] == MakeLowerCase(leadByte);
+					} else {
+						char bytes[maxBytesCharacter + 1];
+						bytes[0] = static_cast<char>(leadByte);
+						bytes[1] = cb.CharAt(pos + indexDocument + 1);
+						char folded[maxBytesCharacter * maxFoldingExpansion + 1];
+						lenFlat = pcf->Fold(folded, sizeof(folded), bytes, widthChar);
+						// memcmp may examine lenFlat bytes in both arguments so assert it doesn't read past end of searchThing
+						assert((indexSearch + lenFlat) <= searchThing.size());
+						// Does folded match the buffer
+						characterMatches = 0 == memcmp(folded, searchData + indexSearch, lenFlat);
+					}
+					if (!characterMatches) {
+						break;
+					}
 					indexDocument += widthChar;
 					indexSearch += lenFlat;
+					if (indexSearch >= lenSearch) {
+						break;
+					}
 				}
 				if (characterMatches && (indexSearch == lenSearch)) {
 					if (MatchesWordOptions(word, wordStart, pos, indexDocument)) {
@@ -2109,26 +2184,36 @@ Sci::Position Document::FindText(Sci::Position minPos, Sci::Position maxPos, con
 						return pos;
 					}
 				}
-				if (!NextCharacter(pos, increment))
-					break;
+				if (forward) {
+					pos += widthFirstCharacter;
+				} else {
+					if (!NextCharacter(pos, increment)) {
+						break;
+					}
+				}
 			}
 		} else {
 			const Sci::Position endSearch = (startPos <= endPos) ? endPos - lengthFind + 1 : endPos;
 			std::vector<char> searchThing(lengthFind + 1);
 			pcf->Fold(searchThing.data(), searchThing.size(), search, lengthFind);
+			const char * const searchData = searchThing.data();
 			while (forward ? (pos < endSearch) : (pos >= endSearch)) {
 				bool found = (pos + lengthFind) <= limitPos;
-				for (int indexSearch = 0; (indexSearch < lengthFind) && found; indexSearch++) {
+				for (Sci::Position indexSearch = 0; (indexSearch < lengthFind) && found; indexSearch++) {
 					const char ch = CharAt(pos + indexSearch);
-					char folded[2];
-					pcf->Fold(folded, sizeof(folded), &ch, 1);
-					found = folded[0] == searchThing[indexSearch];
+					const char chTest = searchData[indexSearch];
+					if (UTF8IsAscii(ch)) {
+						found = chTest == MakeLowerCase(ch);
+					} else {
+						char folded[2];
+						pcf->Fold(folded, sizeof(folded), &ch, 1);
+						found = folded[0] == chTest;
+					}
 				}
 				if (found && MatchesWordOptions(word, wordStart, pos, lengthFind)) {
 					return pos;
 				}
-				if (!NextCharacter(pos, increment))
-					break;
+				pos += increment;
 			}
 		}
 	}
@@ -2673,8 +2758,7 @@ public:
 	~BuiltinRegex() override = default;
 
 	Sci::Position FindText(Document *doc, Sci::Position minPos, Sci::Position maxPos, const char *s,
-		bool caseSensitive, bool word, bool wordStart, int flags,
-		Sci::Position *length) override;
+		bool caseSensitive, int flags, Sci::Position *length) override;
 
 	const char *SubstituteByPosition(Document *doc, const char *text, Sci::Position *length) override;
 
@@ -3151,13 +3235,11 @@ Sci::Position Cxx11RegexFindText(const Document *doc, Sci::Position minPos, Sci:
 }
 
 Sci::Position BuiltinRegex::FindText(Document *doc, Sci::Position minPos, Sci::Position maxPos, const char *s,
-	bool caseSensitive, bool, bool, int flags,
-	Sci::Position *length) {
+	bool caseSensitive, int flags, Sci::Position *length) {
 
 #ifndef NO_CXX11_REGEX
 	if (flags & SCFIND_CXX11REGEX) {
-		return Cxx11RegexFindText(doc, minPos, maxPos, s,
-			caseSensitive, length, search);
+		return Cxx11RegexFindText(doc, minPos, maxPos, s, caseSensitive, length, search);
 	}
 #endif
 

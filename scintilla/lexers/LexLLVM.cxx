@@ -2,6 +2,7 @@
 // See License.txt for details about distribution and modification.
 //! Lexer for LLVM.
 
+#include <cstdlib>
 #include <cassert>
 #include <cstring>
 
@@ -68,7 +69,7 @@ int CheckLLVMVarType(StyleContext &sc, int kwType) noexcept {
 			char s[8];
 			sc.GetCurrent(s, sizeof(s));
 			const bool quoted = state == SCE_LLVM_QUOTED_VARIABLE || state == SCE_LLVM_QUOTED_GLOBAL_VARIABLE;
-			if (strncmp(s + (quoted? 2 : 1), "llvm.", 5) == 0) {
+			if (StrStartsWith(s + (quoted? 2 : 1), "llvm.")) {
 				state = SCE_LLVM_INTRINSIC;
 			} else {
 				state = SCE_LLVM_FUNCTION;
