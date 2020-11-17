@@ -25,6 +25,8 @@
 #define NP2_FIND_REPLACE_LIMIT	2048
 #define NP2_LONG_LINE_LIMIT		4096
 
+#define NP2_InvalidSearchFlags	(-1)
+
 typedef struct EDITFINDREPLACE {
 	char	szFind[512];
 	char	szReplace[512];
@@ -33,7 +35,6 @@ typedef struct EDITFINDREPLACE {
 	HWND	hwnd;
 	UINT	fuFlags;
 	BOOL	bTransformBS;
-	//BOOL	bFindUp;
 	BOOL	bFindClose;
 	BOOL	bReplaceClose;
 	BOOL	bNoFindWrap;
@@ -163,12 +164,12 @@ void	EditGetExcerpt(LPWSTR lpszExcerpt, DWORD cchExcerpt);
 void	EditSelectWord(void);
 void	EditSelectLines(BOOL currentBlock, BOOL lineSelection);
 HWND	EditFindReplaceDlg(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bReplace);
-void	EditFindNext(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection);
-void	EditFindPrev(LPEDITFINDREPLACE lpefr, BOOL fExtendSelection);
-void	EditFindAll(LPEDITFINDREPLACE lpefr);
-BOOL	EditReplace(HWND hwnd, LPEDITFINDREPLACE lpefr);
-BOOL	EditReplaceAll(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bShowInfo);
-BOOL	EditReplaceAllInSelection(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bShowInfo);
+void	EditFindNext(LPCEDITFINDREPLACE lpefr, BOOL fExtendSelection);
+void	EditFindPrev(LPCEDITFINDREPLACE lpefr, BOOL fExtendSelection);
+void	EditFindAll(LPCEDITFINDREPLACE lpefr);
+BOOL	EditReplace(HWND hwnd, LPCEDITFINDREPLACE lpefr);
+BOOL	EditReplaceAll(HWND hwnd, LPCEDITFINDREPLACE lpefr, BOOL bShowInfo);
+BOOL	EditReplaceAllInSelection(HWND hwnd, LPCEDITFINDREPLACE lpefr, BOOL bShowInfo);
 BOOL	EditLineNumDlg(HWND hwnd);
 void	EditModifyLinesDlg(HWND hwnd);
 void	EditEncloseSelectionDlg(HWND hwnd);
@@ -225,11 +226,11 @@ typedef struct EditMarkAllStatus {
 	StopWatch watch;			// used to dynamic compute increment size
 } EditMarkAllStatus;
 
-void EditMarkAll_ClearEx(int findFlag, Sci_Position iSelCount, LPCSTR pszText);
+void EditMarkAll_ClearEx(int findFlag, Sci_Position iSelCount, LPSTR pszText);
 NP2_inline void EditMarkAll_Clear(void) {
 	EditMarkAll_ClearEx(0, 0, NULL);
 }
-BOOL EditMarkAll_Start(BOOL bChanged, int findFlag, Sci_Position iSelCount, LPCSTR pszText);
+BOOL EditMarkAll_Start(BOOL bChanged, int findFlag, Sci_Position iSelCount, LPSTR pszText);
 BOOL EditMarkAll_Continue(EditMarkAllStatus *status, HANDLE timer);
 BOOL EditMarkAll(BOOL bChanged, BOOL bMarkOccurrencesMatchCase, BOOL bMarkOccurrencesMatchWords);
 
@@ -345,6 +346,10 @@ typedef struct NP2ENCODING {
 	LPWSTR wchLabel;
 } NP2ENCODING;
 
+// https://www.unicode.org/faq/utf_bom.html
+#define SURROGATE_OFFSET			(0x10000 - (0xD800 << 10) - 0xDC00)
+#define UTF16_TO_UTF32(lead, trail)	(((lead) << 10) + (trail) + SURROGATE_OFFSET)
+
 // 932 Shift-JIS, 936 GBK, 949 UHC, 950 Big5, 1361 Johab
 static inline BOOL IsDBCSCodePage(UINT page) {
 	return page == 932 || page == 936 || page == 949 || page == 950 || page == 1361;
@@ -396,6 +401,9 @@ BOOL	IsUTF7(const char *pTest, DWORD nLength);
 static inline BOOL IsUTF8Signature(const char *p) {
 	return p[0] == '\xEF' && p[1] == '\xBB' && p[2] == '\xBF';
 }
+
+BOOL IsStringCaseSensitiveW(LPCWSTR pszTextW);
+BOOL IsStringCaseSensitiveA(LPCSTR pszText);
 
 //void SciInitThemes(HWND hwnd);
 
