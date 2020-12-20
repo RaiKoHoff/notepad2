@@ -54,8 +54,6 @@ enum {
 	GoFunction_Name,
 	GoFunction_Param,
 	GoFunction_Return,
-
-	GoLineStateMaskLineComment = (1 << 0), // line comment
 };
 
 constexpr bool IsFormatSpecifier(uint8_t ch) noexcept {
@@ -366,7 +364,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 			if (sc.Match('/', '/')) {
 				sc.SetState(SCE_GO_COMMENTLINE);
 				if (visibleChars == 0) {
-					lineStateLineComment = GoLineStateMaskLineComment;
+					lineStateLineComment = SimpleLineStateMaskLineComment;
 				}
 				visibleCharsBefore = visibleChars;
 			} else if (sc.Match('/', '*')) {
@@ -378,7 +376,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 				sc.SetState(SCE_GO_CHARACTER);
 			} else if (sc.ch == '`') {
 				sc.SetState(SCE_GO_RAW_STRING);
-			} else if (IsADigit(sc.ch) || (sc.ch == '.' && IsADigit(sc.chNext))) {
+			} else if (IsNumberStart(sc.ch, sc.chNext)) {
 				sc.SetState(SCE_GO_NUMBER);
 			} else if (IsIdentifierStartEx(sc.ch)) {
 				sc.SetState(SCE_GO_IDENTIFIER);
@@ -441,7 +439,7 @@ constexpr bool IsInnerStyle(int style) noexcept {
 }
 
 constexpr int GetLineCommentState(int lineState) noexcept {
-	return lineState & GoLineStateMaskLineComment;
+	return lineState & SimpleLineStateMaskLineComment;
 }
 
 void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
@@ -461,13 +459,10 @@ void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
 	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
 
-	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
 	int style = initStyle;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
-		const char ch = chNext;
-		chNext = styler.SafeGetCharAt(i + 1);
 		const int stylePrev = style;
 		style = styleNext;
 		styleNext = styler.StyleAt(i + 1);
@@ -479,6 +474,7 @@ void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 				levelNext--;
 			}
 		} else if (style == SCE_GO_OPERATOR) {
+			const char ch = styler[i];
 			if (ch == '{' || ch == '[' || ch == '(') {
 				levelNext++;
 			} else if (ch == '}' || ch == ']' || ch == ')') {

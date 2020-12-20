@@ -37,6 +37,9 @@ typedef struct EDITSTYLE {
 } EDITSTYLE, *PEDITSTYLE;
 
 #define EDITSTYLE_BufferSize(iStyleCount)	((iStyleCount) * MAX_EDITSTYLE_VALUE_SIZE * sizeof(WCHAR))
+#define	MULTI_STYLE(a, b, c, d)			((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
+#define	MULTI_STYLE8(a, b, c, d, e, f, g, h) \
+	(((int64_t)MULTI_STYLE(a, b, c, d) << 32) | MULTI_STYLE(e, f, g, h))
 
 // Not used by Scintilla lexer, listed for auto completion.
 #define KeywordAttr_NoLexer		1
@@ -133,6 +136,7 @@ typedef const EDITLEXER *LPCEDITLEXER;
 #define NP2LEX_LLVM			63060	// SCLEX_LLVM		LLVM IR
 #define NP2LEX_OCTAVE		63061	// SCLEX_MATLAB		Octave Code
 #define NP2LEX_SCILAB		63062	// SCLEX_MATLAB		SciLab Code
+#define NP2LEX_R			63063	// SCLEX_R			R Code
 
 #define NP2LEX_JULIA		63066	// SCLEX_JULIA		Julia Script
 #define NP2LEX_RUST			63067	// SCLEX_RUST		Rust Source
@@ -141,6 +145,8 @@ typedef const EDITLEXER *LPCEDITLEXER;
 #define NP2LEX_WASM			63070	// SCLEX_WASM		WebAssembly
 #define NP2LEX_TOML			63071	// SCLEX_TOML		TOML File
 #define NP2LEX_GN			63072	// SCLEX_GN			GN Build Script
+#define NP2LEX_DART			63073	// SCLEX_DART		Dart Source
+#define NP2LEX_REBOL		63074	// SCLEX_REBOL		Rebol Script
 
 #define NP2LEX_AVS			63087	// SCLEX_AVS		AviSynth Script
 #define NP2LEX_TEHEX		63088	// SCLEX_TEHEX		Tektronix extended HEX

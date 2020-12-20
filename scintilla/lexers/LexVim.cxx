@@ -65,9 +65,9 @@ constexpr bool IsVimOp(int ch) noexcept {
 }
 
 enum {
-	VimLineStateMaskAutoCommand = 1, // autocmd
-	VimLineStateMaskLineComment = 1 << 1, // line comment
-	VimLineStateMaskLineContinue = 1 << 2, // line continue
+	VimLineStateMaskLineComment = 1 << 0,	// line comment
+	VimLineStateMaskLineContinue = 1 << 1,	// line continue
+	VimLineStateMaskAutoCommand = 1 << 2,	// autocmd
 };
 
 void ColouriseVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
@@ -105,7 +105,9 @@ void ColouriseVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 				if (keywordLists[0]->InList(s)) {
 					if (!lineStateLineAutoCommand && visibleChars == sc.LengthCurrent()) {
 						sc.ChangeState(SCE_VIM_WORD);
-						lineStateLineAutoCommand = strcmp(s, "au") == 0 || strcmp(s, "autocmd") == 0;
+						if (strcmp(s, "au") == 0 || strcmp(s, "autocmd") == 0) {
+							lineStateLineAutoCommand = VimLineStateMaskAutoCommand;
+						}
 					} else {
 						sc.ChangeState(SCE_VIM_WORD_DEMOTED);
 					}
@@ -186,7 +188,7 @@ void ColouriseVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 				sc.SetState(SCE_VIM_CHARACTER);
 			} else if (sc.ch == '0' && (sc.chNext == 'z' || sc.chNext == 'Z')) {
 				sc.SetState(SCE_VIM_BLOB_HEX);
-			} else if (IsADigit(sc.ch) || (sc.ch == '.' && IsADigit(sc.chNext))) {
+			} else if (IsNumberStart(sc.ch, sc.chNext)) {
 				sc.SetState(SCE_VIM_NUMBER);
 			} else if ((sc.ch == '$' || sc.ch == '&') && IsIdentifierChar(sc.chNext)) {
 				sc.SetState((sc.ch == '$') ? SCE_VIM_ENV_VARIABLE : SCE_VIM_OPTION);
@@ -241,8 +243,8 @@ struct FoldLineState {
 	int lineComment;
 	int lineContinue;
 	constexpr explicit FoldLineState(int lineState) noexcept:
-		lineComment((lineState >> 1) & 1),
-		lineContinue((lineState >> 2) & 1) {
+		lineComment(lineState & VimLineStateMaskLineComment),
+		lineContinue((lineState >> 1) & 1) {
 	}
 };
 

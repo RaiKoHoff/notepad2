@@ -99,11 +99,11 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 	if (sc.currentLine > 0) {
 		const int lineState = styler.GetLineState(sc.currentLine - 1);
 		/*
+		2: lineType
 		8: tableLevel
 		8: braceCount
-		3: lineType
 		*/
-		braceCount = (lineState >> 8) & 0xff;
+		braceCount = (lineState >> 10) & 0xff;
 	}
 
 	while (sc.More()) {
@@ -188,7 +188,7 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			}
 			break;
 
-		case SCE_TOML_STRING1:
+		case SCE_TOML_STRING_SQ:
 			if (sc.atLineStart) {
 				sc.SetState(SCE_TOML_DEFAULT);
 			} else if (sc.ch == '\'') {
@@ -199,7 +199,7 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				sc.SetState(SCE_TOML_DEFAULT);
 			}
 			break;
-		case SCE_TOML_STRING2:
+		case SCE_TOML_STRING_DQ:
 			if (sc.atLineStart) {
 				sc.SetState(SCE_TOML_DEFAULT);
 			} else if (sc.ch == '\\') {
@@ -215,13 +215,13 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			}
 			break;
 
-		case SCE_TOML_TRIPLE_STRING1:
+		case SCE_TOML_TRIPLE_STRING_SQ:
 			if (sc.Match('\'', '\'', '\'')) {
 				sc.Forward(2);
 				sc.ForwardSetState(SCE_TOML_DEFAULT);
 			}
 			break;
-		case SCE_TOML_TRIPLE_STRING2:
+		case SCE_TOML_TRIPLE_STRING_DQ:
 			if (sc.ch == '\\') {
 				escSeq.resetEscapeState(sc.state, sc.chNext);
 				sc.SetState(SCE_TOML_ESCAPECHAR);
@@ -283,15 +283,15 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 						lineType = TOMLLineType_CommentLine;
 					}
 				} else if (sc.Match('\'', '\'', '\'')) {
-					sc.SetState(SCE_TOML_TRIPLE_STRING1);
+					sc.SetState(SCE_TOML_TRIPLE_STRING_SQ);
 					sc.Forward(2);
 				} else if (sc.Match('"', '"', '"')) {
-					sc.SetState(SCE_TOML_TRIPLE_STRING2);
+					sc.SetState(SCE_TOML_TRIPLE_STRING_DQ);
 					sc.Forward(2);
 				} else if (sc.ch == '\'') {
-					sc.SetState(SCE_TOML_STRING1);
+					sc.SetState(SCE_TOML_STRING_SQ);
 				} else if (sc.ch == '\"') {
-					sc.SetState(SCE_TOML_STRING2);
+					sc.SetState(SCE_TOML_STRING_DQ);
 				} else if (IsADigit(sc.ch)) {
 					sc.SetState(SCE_TOML_NUMBER);
 				} else if (IsLowerCase(sc.ch)) {
@@ -315,7 +315,7 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			++visibleChars;
 		}
 		if (sc.atLineEnd) {
-			const int lineState = tableLevel | (braceCount << 8) | (lineType << 16);
+			const int lineState = (tableLevel << 2) | (braceCount << 10) | lineType;
 			styler.SetLineState(sc.currentLine, lineState);
 			lineType = TOMLLineType_None;
 			visibleChars = 0;
@@ -328,8 +328,12 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 	sc.Complete();
 }
 
-constexpr int GetTOMLLineType(int lineState) noexcept {
-	return lineState >> 16;
+constexpr int GetLineType(int lineState) noexcept {
+	return lineState & 3;
+}
+
+constexpr int GetTableLevel(int lineState) noexcept {
+	return (lineState >> 2) & 0xff;
 }
 
 // code folding based on LexProps
@@ -346,15 +350,15 @@ void FoldTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle
 	bool prev2Comment = false;
 	if (lineCurrent > 0) {
 		prevLevel = styler.LevelAt(lineCurrent - 1);
-		prevComment = foldComment && GetTOMLLineType(styler.GetLineState(lineCurrent - 1)) == TOMLLineType_CommentLine;
-		prev2Comment = foldComment && lineCurrent > 1 && GetTOMLLineType(styler.GetLineState(lineCurrent - 2)) == TOMLLineType_CommentLine;
+		prevComment = foldComment && GetLineType(styler.GetLineState(lineCurrent - 1)) == TOMLLineType_CommentLine;
+		prev2Comment = foldComment && lineCurrent > 1 && GetLineType(styler.GetLineState(lineCurrent - 2)) == TOMLLineType_CommentLine;
 	}
 
 	bool commentHead = prevComment && (prevLevel & SC_FOLDLEVELHEADERFLAG);
 	while (lineCurrent <= maxLines) {
 		int nextLevel;
 		const int lineState = styler.GetLineState(lineCurrent);
-		const int lineType = GetTOMLLineType(lineState);
+		const int lineType = GetLineType(lineState);
 
 		const bool currentComment = foldComment && lineType == TOMLLineType_CommentLine;
 		if (currentComment) {
@@ -367,7 +371,7 @@ void FoldTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle
 			nextLevel |= commentHead ? SC_FOLDLEVELHEADERFLAG : 0;
 		} else {
 			if (lineType == TOMLLineType_Table) {
-				nextLevel = SC_FOLDLEVELBASE + (lineState & 0xff);
+				nextLevel = SC_FOLDLEVELBASE + GetTableLevel(lineState);
 				if (prevComment && prevLevel <= nextLevel) {
 					// comment above nested table
 					commentHead = false;

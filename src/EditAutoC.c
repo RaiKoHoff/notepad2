@@ -1063,6 +1063,10 @@ INT AutoC_AddSpecWord(struct WordList *pWList, int iCurrentStyle, int ch, int ch
 			return AutoC_AddSpecWord_Finish;
 		}
 	}
+	else if (pLexCurrent->iLexer == SCLEX_DART && ch == '@' && iCurrentStyle == SCE_DART_DEFAULT) {
+		WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[4]); // metadata
+		return AutoC_AddSpecWord_Keyword;
+	}
 	return 0;
 }
 
@@ -1075,7 +1079,7 @@ void EditCompleteUpdateConfig(void) {
 
 	const BOOL punctuation = mask & AutoCompleteFillUpPunctuation;
 	int k = 0;
-	for (UINT j = 0; j < (UINT)COUNTOF(autoCompletionConfig.wszAutoCompleteFillUp); j++) {
+	for (UINT j = 0; j < COUNTOF(autoCompletionConfig.wszAutoCompleteFillUp); j++) {
 		const WCHAR c = autoCompletionConfig.wszAutoCompleteFillUp[j];
 		if (c == L'\0') {
 			break;
@@ -2038,7 +2042,8 @@ void EditToggleCommentLine(void) {
 		break;
 
 	case SCLEX_CIL:
-	case SCLEX_CSS:
+	case SCLEX_CSS: // for SCSS, LESS, HSS
+	case SCLEX_DART:
 	case SCLEX_FSHARP:
 	case SCLEX_GO:
 	case SCLEX_GRAPHVIZ:
@@ -2050,6 +2055,7 @@ void EditToggleCommentLine(void) {
 		EditToggleLineComments(L"//", FALSE);
 		break;
 
+	case SCLEX_AVS:
 	case SCLEX_CMAKE:
 	case SCLEX_CONF:
 	case SCLEX_GN:
@@ -2059,6 +2065,7 @@ void EditToggleCommentLine(void) {
 	case SCLEX_PERL:
 	case SCLEX_POWERSHELL:
 	case SCLEX_PYTHON:
+	case SCLEX_R:
 	case SCLEX_RUBY:
 	case SCLEX_SMALI:
 	case SCLEX_TCL:
@@ -2098,7 +2105,6 @@ void EditToggleCommentLine(void) {
 		case HTML_TEXT_BLOCK_CDATA:
 		case HTML_TEXT_BLOCK_JS:
 		case HTML_TEXT_BLOCK_PHP:
-		case HTML_TEXT_BLOCK_CSS:
 			EditToggleLineComments(L"//", FALSE);
 			break;
 		}
@@ -2172,8 +2178,10 @@ void EditEncloseSelectionNewLine(LPCWSTR pwszOpen, LPCWSTR pwszClose) {
 void EditToggleCommentBlock(void) {
 	switch (pLexCurrent->iLexer) {
 	case SCLEX_ASM:
+	case SCLEX_AVS:
 	case SCLEX_CIL:
 	case SCLEX_CSS:
+	case SCLEX_DART:
 	case SCLEX_GO:
 	case SCLEX_GRAPHVIZ:
 	case SCLEX_JSON:
@@ -2220,10 +2228,6 @@ void EditToggleCommentBlock(void) {
 		switch (block) {
 		case HTML_TEXT_BLOCK_TAG:
 			EditEncloseSelection(L"<!--", L"-->");
-			break;
-
-		case HTML_TEXT_BLOCK_VBS:
-		case HTML_TEXT_BLOCK_PYTHON:
 			break;
 
 		case HTML_TEXT_BLOCK_CDATA:
@@ -2273,6 +2277,10 @@ void EditToggleCommentBlock(void) {
 
 	case SCLEX_POWERSHELL:
 		EditEncloseSelection(L"<#", L"#>");
+		break;
+
+	case SCLEX_R:
+		EditEncloseSelectionNewLine(L"if (FALSE) {", L"}");
 		break;
 
 	case SCLEX_TCL:

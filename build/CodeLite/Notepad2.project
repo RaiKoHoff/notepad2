@@ -15,6 +15,7 @@
     <VirtualDirectory Name="lexers">
       <File Name="../../scintilla/lexers/LexAsm.cxx"/>
       <File Name="../../scintilla/lexers/LexAutoIt3.cxx"/>
+      <File Name="../../scintilla/lexers/LexAviSynth.cxx"/>
       <File Name="../../scintilla/lexers/LexBash.cxx"/>
       <File Name="../../scintilla/lexers/LexBatch.cxx"/>
       <File Name="../../scintilla/lexers/LexCIL.cxx"/>
@@ -22,6 +23,7 @@
       <File Name="../../scintilla/lexers/LexConfig.cxx"/>
       <File Name="../../scintilla/lexers/LexCPP.cxx"/>
       <File Name="../../scintilla/lexers/LexCSS.cxx"/>
+      <File Name="../../scintilla/lexers/LexDart.cxx"/>
       <File Name="../../scintilla/lexers/LexDiff.cxx"/>
       <File Name="../../scintilla/lexers/LexFortran.cxx"/>
       <File Name="../../scintilla/lexers/LexFSharp.cxx"/>
@@ -46,6 +48,7 @@
       <File Name="../../scintilla/lexers/LexPowerShell.cxx"/>
       <File Name="../../scintilla/lexers/LexProps.cxx"/>
       <File Name="../../scintilla/lexers/LexPython.cxx"/>
+      <File Name="../../scintilla/lexers/LexR.cxx"/>
       <File Name="../../scintilla/lexers/LexRuby.cxx"/>
       <File Name="../../scintilla/lexers/LexRust.cxx"/>
       <File Name="../../scintilla/lexers/LexSmali.cxx"/>
@@ -169,6 +172,7 @@
       <File Name="../../src/EditLexers/stlAsm.c"/>
       <File Name="../../src/EditLexers/stlAsymptote.c"/>
       <File Name="../../src/EditLexers/stlAutoIt3.c"/>
+      <File Name="../../src/EditLexers/stlAviSynth.c"/>
       <File Name="../../src/EditLexers/stlAwk.c"/>
       <File Name="../../src/EditLexers/stlBash.c"/>
       <File Name="../../src/EditLexers/stlBatch.c"/>
@@ -178,6 +182,7 @@
       <File Name="../../src/EditLexers/stlCSharp.c"/>
       <File Name="../../src/EditLexers/stlCSS.c"/>
       <File Name="../../src/EditLexers/stlD.c"/>
+      <File Name="../../src/EditLexers/stlDart.c"/>
       <File Name="../../src/EditLexers/stlDefault.c"/>
       <File Name="../../src/EditLexers/stlFortran.c"/>
       <File Name="../../src/EditLexers/stlFSharp.c"/>
@@ -207,6 +212,7 @@
       <File Name="../../src/EditLexers/stlPHP.c"/>
       <File Name="../../src/EditLexers/stlPowerShell.c"/>
       <File Name="../../src/EditLexers/stlPython.c"/>
+      <File Name="../../src/EditLexers/stlR.c"/>
       <File Name="../../src/EditLexers/stlResource.c"/>
       <File Name="../../src/EditLexers/stlRuby.c"/>
       <File Name="../../src/EditLexers/stlRust.c"/>

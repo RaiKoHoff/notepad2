@@ -37,6 +37,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* NASM
 	* Asymptote Vector Graphics Language
 	* AutoIt Script
+	* [AviSynth Script](../master/tools/lang/AviSynth.avs), up to AviSynth 2.6, AviSynth+ 3.6, GScript 1.1
 	* AWK, GNU AWK
 	* Batch Script, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#batch)
 	* C#, Vala, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#c)
@@ -103,6 +104,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* Boo
 	* PHP Script, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#php)
 	* Windows Rescouce Script
+	* [R](../master/tools/lang/R.r), up to R 4.0.3.
 	* [Ruby](../master/tools/lang/Ruby.rb), [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#ruby)
 	* [Rust](../master/tools/lang/Rust.rs), up to Rust 1.38. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#rust)
 	* Scala Script

@@ -47,6 +47,10 @@ NP2_inline Sci_Position max_pos(Sci_Position x, Sci_Position y) {
 }
 
 #if defined(_WIN64)
+NP2_inline Sci_Position abs_pos(Sci_Position x) {
+	return llabs(x);
+}
+
 NP2_inline void PosToStrW(Sci_Position pos, LPWSTR tch) {
 	_i64tow(pos, tch, 10);
 }
@@ -55,6 +59,10 @@ NP2_inline void PosToStrA(Sci_Position pos, LPSTR tch) {
 	_i64toa(pos, tch, 10);
 }
 #else
+NP2_inline Sci_Position abs_pos(Sci_Position x) {
+	return labs(x);
+}
+
 NP2_inline void PosToStrW(Sci_Position pos, LPWSTR tch) {
 	_ltow(pos, tch, 10);
 }
@@ -430,12 +438,32 @@ NP2_inline void SciCall_SetVirtualSpaceOptions(int virtualSpaceOptions) {
 	SciCall(SCI_SETVIRTUALSPACEOPTIONS, virtualSpaceOptions, 0);
 }
 
+NP2_inline size_t SciCall_GetSelectionCount(void) {
+	return SciCall(SCI_GETSELECTIONS, 0, 0);
+}
+
+NP2_inline BOOL SciCall_IsMultipleSelection(void) {
+	return SciCall(SCI_GETSELECTIONS, 0, 0) > 1;
+}
+
 NP2_inline BOOL SciCall_IsSelectionEmpty(void) {
 	return (BOOL)SciCall(SCI_GETSELECTIONEMPTY, 0, 0);
 }
 
 NP2_inline void SciCall_ClearSelections(void) {
 	SciCall(SCI_CLEARSELECTIONS, 0, 0);
+}
+
+NP2_inline void SciCall_SetSelection(Sci_Position caret, Sci_Position anchor) {
+	SciCall(SCI_SETSELECTION, caret, anchor);
+}
+
+NP2_inline void SciCall_AddSelection(Sci_Position caret, Sci_Position anchor) {
+	SciCall(SCI_ADDSELECTION, caret, anchor);
+}
+
+NP2_inline void SciCall_SetMainSelection(size_t selection) {
+	SciCall(SCI_SETMAINSELECTION, selection, 0);
 }
 
 NP2_inline void SciCall_SetRectangularSelectionCaret(Sci_Position caret) {
@@ -605,6 +633,10 @@ NP2_inline void SciCall_StyleResetDefault(void) {
 
 NP2_inline void SciCall_StyleClearAll(void) {
 	SciCall(SCI_STYLECLEARALL, 0, 0);
+}
+
+NP2_inline void SciCall_CopyStyles(size_t sourceIndex, LPARAM destStyles) {
+	SciCall(SCI_COPYSTYLES, sourceIndex, destStyles);	
 }
 
 NP2_inline void SciCall_StyleSetFont(int style, const char *fontName) {

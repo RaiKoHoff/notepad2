@@ -26,6 +26,9 @@
 #define NP2_LONG_LINE_LIMIT		4096
 
 #define NP2_InvalidSearchFlags	(-1)
+#define NP2_MarkAllMultiline	0x00001000
+#define NP2_MarkAllBookmark		0x00002000
+#define NP2_MarkAllSelectAll	0x00004000
 
 typedef struct EDITFINDREPLACE {
 	char	szFind[512];
@@ -166,7 +169,7 @@ void	EditSelectLines(BOOL currentBlock, BOOL lineSelection);
 HWND	EditFindReplaceDlg(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bReplace);
 void	EditFindNext(LPCEDITFINDREPLACE lpefr, BOOL fExtendSelection);
 void	EditFindPrev(LPCEDITFINDREPLACE lpefr, BOOL fExtendSelection);
-void	EditFindAll(LPCEDITFINDREPLACE lpefr);
+void	EditFindAll(LPCEDITFINDREPLACE lpefr, BOOL selectAll);
 BOOL	EditReplace(HWND hwnd, LPCEDITFINDREPLACE lpefr);
 BOOL	EditReplaceAll(HWND hwnd, LPCEDITFINDREPLACE lpefr, BOOL bShowInfo);
 BOOL	EditReplaceAllInSelection(HWND hwnd, LPCEDITFINDREPLACE lpefr, BOOL bShowInfo);
@@ -214,15 +217,16 @@ enum {
 
 typedef struct EditMarkAllStatus {
 	BOOL pending;
+	BOOL ignoreSelectionUpdate;
 	int findFlag;
+	int incrementSize;			// increment search size
 	Sci_Position iSelCount;		// length for pszText
 	LPSTR pszText;				// pattern or text to find
-	BOOL rewind;				// need rewind start position?
-	int incrementSize;			// increment search size
 	double duration;			// search duration in milliseconds
 	Sci_Position matchCount;	// total match count
 	Sci_Position lastMatchPos;	// last matching position
 	Sci_Position iStartPos;		// previous stop position
+	Sci_Line bookmarkLine;		// previous bookmark line
 	StopWatch watch;			// used to dynamic compute increment size
 } EditMarkAllStatus;
 
@@ -232,7 +236,9 @@ NP2_inline void EditMarkAll_Clear(void) {
 }
 BOOL EditMarkAll_Start(BOOL bChanged, int findFlag, Sci_Position iSelCount, LPSTR pszText);
 BOOL EditMarkAll_Continue(EditMarkAllStatus *status, HANDLE timer);
-BOOL EditMarkAll(BOOL bChanged, BOOL bMarkOccurrencesMatchCase, BOOL bMarkOccurrencesMatchWords);
+BOOL EditMarkAll(BOOL bChanged, BOOL matchCase, BOOL wholeWord, BOOL bookmark);
+void EditToggleBookmarkAt(Sci_Position iPos);
+void EditBookmarkSelectAll(void);
 
 // auto completion fill-up characters
 #define MAX_AUTO_COMPLETION_FILLUP_LENGTH	32		// Only 32 ASCII punctuation
