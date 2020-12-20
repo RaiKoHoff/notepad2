@@ -4765,6 +4765,7 @@ void AddBackslashComboBoxSetup(HWND hwndDlg, int nCtlId) {
 extern BOOL bFindReplaceTransparentMode;
 extern int iFindReplaceOpacityLevel;
 extern BOOL bFindReplaceUseMonospacedFont;
+extern BOOL bFindReplaceFindAllBookmark;
 
 static void FindReplaceSetFont(HWND hwnd, BOOL monospaced, HFONT *hFontFindReplaceEdit) {
 	HWND hwndFind = GetDlgItem(hwnd, IDC_FINDTEXT);
@@ -4956,6 +4957,9 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 		if (bFindReplaceTransparentMode) {
 			CheckDlgButton(hwnd, IDC_TRANSPARENT, BST_CHECKED);
 		}
+		if (bFindReplaceFindAllBookmark) {
+			CheckDlgButton(hwnd, IDC_FINDALLBOOKMARK, BST_CHECKED);
+		}
 		if (bFindReplaceUseMonospacedFont) {
 			CheckDlgButton(hwnd, IDC_USEMONOSPACEDFONT, BST_CHECKED);
 			FindReplaceSetFont(hwnd, TRUE, &hFontFindReplaceEdit);
@@ -4993,7 +4997,7 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 
 		const BOOL isReplace = GetDlgItem(hwnd, IDC_REPLACETEXT) != NULL;
 		ResizeDlg_Size(hwnd, lParam, &dx, NULL);
-		HDWP hdwp = BeginDeferWindowPos(isReplace ? 13 : 8);
+		HDWP hdwp = BeginDeferWindowPos(isReplace ? 13 : 9);
 		hdwp = DeferCtlPos(hdwp, hwnd, IDC_RESIZEGRIP2, dx, 0, SWP_NOSIZE);
 		hdwp = DeferCtlPos(hdwp, hwnd, IDOK, dx, 0, SWP_NOSIZE);
 		hdwp = DeferCtlPos(hdwp, hwnd, IDC_FINDTEXT, dx, 0, SWP_NOMOVE);
@@ -5002,11 +5006,11 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 		hdwp = DeferCtlPos(hdwp, hwnd, IDC_SAVEPOSITION, dx, 0, SWP_NOSIZE);
 		hdwp = DeferCtlPos(hdwp, hwnd, IDC_RESETPOSITION, dx, 0, SWP_NOSIZE);
 		hdwp = DeferCtlPos(hdwp, hwnd, IDC_FINDALL, dx, 0, SWP_NOSIZE);
+		hdwp = DeferCtlPos(hdwp, hwnd, IDC_REPLACEALL, dx, 0, SWP_NOSIZE);
 		if (isReplace) {
 			hdwp = DeferCtlPos(hdwp, hwnd, IDC_REPLACETEXT, dx, 0, SWP_NOMOVE);
 			hdwp = DeferCtlPos(hdwp, hwnd, IDC_CLEAR_REPLACE, dx, 0, SWP_NOSIZE);
 			hdwp = DeferCtlPos(hdwp, hwnd, IDC_REPLACE, dx, 0, SWP_NOSIZE);
-			hdwp = DeferCtlPos(hdwp, hwnd, IDC_REPLACEALL, dx, 0, SWP_NOSIZE);
 			hdwp = DeferCtlPos(hdwp, hwnd, IDC_REPLACEINSEL, dx, 0, SWP_NOSIZE);
 		}
 		EndDeferWindowPos(hdwp);
@@ -5061,6 +5065,10 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 
 		case IDC_TRANSPARENT:
 			bFindReplaceTransparentMode = IsButtonChecked(hwnd, IDC_TRANSPARENT);
+			break;
+
+		case IDC_FINDALLBOOKMARK:
+			bFindReplaceFindAllBookmark = IsButtonChecked(hwnd, IDC_FINDALLBOOKMARK);
 			break;
 
 		case IDOK:
@@ -5195,12 +5203,16 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 				break;
 
 			case IDC_FINDALL:
-				EditFindAll(lpefr);
+				EditFindAll(lpefr, FALSE);
 				break;
 
 			case IDC_REPLACEALL:
-				bReplaceInitialized = TRUE;
-				EditReplaceAll(lpefr->hwnd, lpefr, TRUE);
+				if (bIsFindDlg) {
+					EditFindAll(lpefr, TRUE);
+				} else {
+					bReplaceInitialized = TRUE;
+					EditReplaceAll(lpefr->hwnd, lpefr, TRUE);
+				}
 				break;
 
 			case IDC_REPLACEINSEL:
@@ -5223,15 +5235,6 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 			PostWMCommand(hwndMain, IDM_EDIT_REPLACE);
 			break;
 
-		case IDACC_SAVEPOS:
-			GetDlgPos(hwnd, &xFindReplaceDlg, &yFindReplaceDlg);
-			break;
-
-		case IDACC_RESETPOS:
-			CenterDlgInParent(hwnd);
-			xFindReplaceDlg = yFindReplaceDlg = 0;
-			break;
-
 		case IDACC_FINDNEXT:
 			PostWMCommand(hwnd, IDOK);
 			break;
@@ -5241,7 +5244,7 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 			break;
 
 		case IDACC_REPLACENEXT:
-			if (GetDlgItem(hwnd, IDC_REPLACE) != NULL) {
+			if (GetDlgItem(hwnd, IDC_REPLACETEXT) != NULL) {
 				PostWMCommand(hwnd, IDC_REPLACE);
 			}
 			break;
@@ -5283,7 +5286,7 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 			switch (pnmhdr->idFrom) {
 			case IDC_TOGGLEFINDREPLACE:
 				bSwitchedFindReplace = 1;
-				if (GetDlgItem(hwnd, IDC_REPLACE)) {
+				if (GetDlgItem(hwnd, IDC_REPLACETEXT)) {
 					PostWMCommand(hwndMain, IDM_EDIT_FIND);
 				} else {
 					PostWMCommand(hwndMain, IDM_EDIT_REPLACE);
@@ -5327,11 +5330,12 @@ static INT_PTR CALLBACK EditFindReplaceDlgProc(HWND hwnd, UINT umsg, WPARAM wPar
 			break;
 
 			case IDC_SAVEPOSITION:
-				PostWMCommand(hwnd, IDACC_SAVEPOS);
+				GetDlgPos(hwnd, &xFindReplaceDlg, &yFindReplaceDlg);
 				break;
 
 			case IDC_RESETPOSITION:
-				PostWMCommand(hwnd, IDACC_RESETPOS);
+				CenterDlgInParent(hwnd);
+				xFindReplaceDlg = yFindReplaceDlg = 0;
 				break;
 			}
 			break;
@@ -5614,6 +5618,7 @@ extern HANDLE idleTaskTimer;
 // increment search size will return to normal after several runs
 // when selection no longer changed, this make continuous selecting smooth.
 #define EditMarkAll_DefaultDuration		64
+#define EditMarkAll_RangeCacheCount		256
 //static UINT EditMarkAll_Runs;
 
 void EditMarkAll_ClearEx(int findFlag, Sci_Position iSelCount, LPSTR pszText) {
@@ -5621,22 +5626,26 @@ void EditMarkAll_ClearEx(int findFlag, Sci_Position iSelCount, LPSTR pszText) {
 		// clear existing indicator
 		SciCall_SetIndicatorCurrent(IndicatorNumber_MarkOccurrence);
 		SciCall_IndicatorClearRange(0, SciCall_GetLength());
+		if ((findFlag | editMarkAllStatus.findFlag) & NP2_MarkAllBookmark) {
+			SciCall_MarkerDeleteAll(MarkerNumber_Bookmark);
+		}
 	}
 	if (editMarkAllStatus.pszText) {
 		NP2HeapFree(editMarkAllStatus.pszText);
 	}
 
 	editMarkAllStatus.pending = FALSE;
+	editMarkAllStatus.ignoreSelectionUpdate = FALSE;
 	editMarkAllStatus.findFlag = findFlag;
+	editMarkAllStatus.incrementSize = 1;
 	editMarkAllStatus.iSelCount= iSelCount;
 	editMarkAllStatus.pszText = pszText;
-	editMarkAllStatus.rewind = FALSE;
 	// timing for increment search is only useful for current search.
-	editMarkAllStatus.incrementSize = 1;
 	editMarkAllStatus.duration = EditMarkAll_DefaultDuration;
 	editMarkAllStatus.matchCount = 0;
 	editMarkAllStatus.lastMatchPos = 0;
 	editMarkAllStatus.iStartPos = 0;
+	editMarkAllStatus.bookmarkLine = -1;
 }
 
 BOOL EditMarkAll_Start(BOOL bChanged, int findFlag, Sci_Position iSelCount, LPSTR pszText) {
@@ -5660,7 +5669,51 @@ BOOL EditMarkAll_Start(BOOL bChanged, int findFlag, Sci_Position iSelCount, LPST
 	}
 
 	//EditMarkAll_Runs = 0;
+	if (findFlag & NP2_MarkAllBookmark) {
+		Style_SetBookmark();
+	}
 	return EditMarkAll_Continue(&editMarkAllStatus, idleTaskTimer);
+}
+
+static Sci_Line EditMarkAll_Bookmark(Sci_Line bookmarkLine, const Sci_Position *ranges, UINT index, int findFlag, Sci_Position matchCount) {
+	if (findFlag & NP2_MarkAllSelectAll) {
+		UINT i = 0;
+		if (matchCount == (Sci_Position)(index/2)) {
+			i = 2;
+			SciCall_SetSelection(ranges[0] + ranges[1], ranges[0]);
+		}
+		for (; i < index; i += 2) {
+			SciCall_AddSelection(ranges[i] + ranges[i + 1], ranges[i]);
+		}
+	} else {
+		for (UINT i = 0; i < index; i += 2) {
+			SciCall_IndicatorFillRange(ranges[i], ranges[i + 1]);
+		}
+	}
+	if (!(findFlag & NP2_MarkAllBookmark)) {
+		return bookmarkLine;
+	}
+	if (findFlag & NP2_MarkAllMultiline) {
+		for (UINT i = 0; i < index; i += 2) {
+			Sci_Line line = SciCall_LineFromPosition(ranges[i]);
+			const Sci_Line lineEnd = SciCall_LineFromPosition(ranges[i] + ranges[i + 1]);
+			line = max_pos(bookmarkLine + 1, line);
+			while (line <= lineEnd) {
+				SciCall_MarkerAdd(line, MarkerNumber_Bookmark);
+				++line;
+			}
+			bookmarkLine = lineEnd;
+		}
+	} else {
+		for (UINT i = 0; i < index; i += 2) {
+			const Sci_Line line = SciCall_LineFromPosition(ranges[i]);
+			if (line != bookmarkLine) {
+				SciCall_MarkerAdd(line, MarkerNumber_Bookmark);
+				bookmarkLine = line;
+			}
+		}
+	}
+	return bookmarkLine;
 }
 
 BOOL EditMarkAll_Continue(EditMarkAllStatus *status, HANDLE timer) {
@@ -5683,20 +5736,24 @@ BOOL EditMarkAll_Continue(EditMarkAllStatus *status, HANDLE timer) {
 
 	// rewind start position
 	const int findFlag = status->findFlag;
-	if (status->rewind) {
+	if (findFlag & NP2_MarkAllMultiline) {
 		iStartPos = max_pos(iStartPos - status->iSelCount + 1, status->lastMatchPos);
 	}
 
-	struct Sci_TextToFind ttf = { { iStartPos, iMaxLength }, status->pszText, { 0, 0 } };
+	Sci_Position cpMin = iStartPos;
+	struct Sci_TextToFind ttf = { { cpMin, iMaxLength }, status->pszText, { 0, 0 } };
 
 	Sci_Position matchCount = status->matchCount;
 	UINT index = 0;
-	Sci_Position ranges[256*2];
+	Sci_Position ranges[EditMarkAll_RangeCacheCount*2];
+	Sci_Line bookmarkLine = status->bookmarkLine;
 
+	SciCall_SetIndicatorCurrent(IndicatorNumber_MarkOccurrence);
 	WaitableTimer_Set(timer, WaitableTimer_IdleTaskTimeSlot);
-	while (ttf.chrg.cpMin < iMaxLength && WaitableTimer_Continue(timer)) {
+	while (cpMin < iMaxLength && WaitableTimer_Continue(timer)) {
+		ttf.chrg.cpMin = cpMin;
 		const Sci_Position iPos = SciCall_FindText(findFlag, &ttf);
-		if (iPos == -1) {
+		if (iPos < 0) {
 			iStartPos = iMaxLength;
 			break;
 		}
@@ -5705,35 +5762,29 @@ BOOL EditMarkAll_Continue(EditMarkAllStatus *status, HANDLE timer) {
 		const Sci_Position iSelCount = ttf.chrgText.cpMax - iPos;
 		if (iSelCount == 0) {
 			// empty regex
-			ttf.chrg.cpMin = SciCall_PositionAfter(iPos);
+			cpMin = SciCall_PositionAfter(iPos);
 			continue;
 		}
 
-		if (index != 0 && iPos == ttf.chrg.cpMin) {
+		if (index != 0 && iPos == cpMin && (findFlag & NP2_MarkAllSelectAll) == 0) {
 			// merge adjacent indicator ranges
 			ranges[index - 1] += iSelCount;
 		} else {
-			if (index == COUNTOF(ranges)) {
-				SciCall_SetIndicatorCurrent(IndicatorNumber_MarkOccurrence);
-				for (UINT i = 0; i < index; i += 2) {
-					SciCall_IndicatorFillRange(ranges[i], ranges[i + 1]);
-				}
-				index = 0;
-			}
 			ranges[index] = iPos;
 			ranges[index + 1] = iSelCount;
 			index += 2;
+			if (index == COUNTOF(ranges)) {
+				bookmarkLine = EditMarkAll_Bookmark(bookmarkLine, ranges, index, findFlag, matchCount);
+				index = 0;
+			}
 		}
-		ttf.chrg.cpMin = ttf.chrgText.cpMax;
+		cpMin = ttf.chrgText.cpMax;
 	}
 	if (index) {
-		SciCall_SetIndicatorCurrent(IndicatorNumber_MarkOccurrence);
-		for (UINT i = 0; i < index; i += 2) {
-			SciCall_IndicatorFillRange(ranges[i], ranges[i + 1]);
-		}
+		bookmarkLine = EditMarkAll_Bookmark(bookmarkLine, ranges, index, findFlag, matchCount);
 	}
 
-	iStartPos = max_pos(iStartPos, ttf.chrg.cpMin);
+	iStartPos = max_pos(iStartPos, cpMin);
 	const BOOL pending = iStartPos < iLength;
 	if (pending) {
 		// dynamic compute increment search size, see ActionDuration in Scintilla.
@@ -5752,8 +5803,10 @@ BOOL EditMarkAll_Continue(EditMarkAllStatus *status, HANDLE timer) {
 	}
 
 	status->pending = pending;
-	status->lastMatchPos = ttf.chrg.cpMin;
+	status->ignoreSelectionUpdate = matchCount ? (findFlag & NP2_MarkAllSelectAll) : FALSE;
+	status->lastMatchPos = cpMin;
 	status->iStartPos = iStartPos;
+	status->bookmarkLine = bookmarkLine;
 	if (!pending || matchCount != status->matchCount) {
 		status->matchCount = matchCount;
 		UpdateStatusbar();
@@ -5762,7 +5815,7 @@ BOOL EditMarkAll_Continue(EditMarkAllStatus *status, HANDLE timer) {
 	return FALSE;
 }
 
-BOOL EditMarkAll(BOOL bChanged, BOOL bMarkOccurrencesMatchCase, BOOL bMarkOccurrencesMatchWords) {
+BOOL EditMarkAll(BOOL bChanged, BOOL matchCase, BOOL wholeWord, BOOL bookmark) {
 	// get current selection
 	Sci_Position iSelStart = SciCall_GetSelectionStart();
 	const Sci_Position iSelEnd = SciCall_GetSelectionEnd();
@@ -5780,7 +5833,7 @@ BOOL EditMarkAll(BOOL bChanged, BOOL bMarkOccurrencesMatchCase, BOOL bMarkOccurr
 	SciCall_GetSelText(pszText);
 
 	// exit if selection is not a word and Match whole words only is enabled
-	if (bMarkOccurrencesMatchWords) {
+	if (wholeWord) {
 		const UINT cpEdit = SciCall_GetCodePage();
 		const BOOL dbcs = !(cpEdit == CP_UTF8 || cpEdit == 0);
 		// CharClassify::SetDefaultCharClasses()
@@ -5795,31 +5848,72 @@ BOOL EditMarkAll(BOOL bChanged, BOOL bMarkOccurrencesMatchCase, BOOL bMarkOccurr
 			}
 		}
 	}
-	if (!bMarkOccurrencesMatchCase) {
+	if (!matchCase) {
 		const BOOL sensitive = IsStringCaseSensitiveA(pszText);
 		//printf("%s sensitive=%d\n", __func__, sensitive);
-		bMarkOccurrencesMatchCase = sensitive ^ 1;
+		matchCase = sensitive ^ 1;
 	}
 
-	const int findFlag = (bMarkOccurrencesMatchCase * SCFIND_MATCHCASE)
-		| (bMarkOccurrencesMatchWords * SCFIND_WHOLEWORD);
+	const int findFlag = (matchCase * SCFIND_MATCHCASE)
+		| (wholeWord * SCFIND_WHOLEWORD)
+		| (bookmark * NP2_MarkAllBookmark);
 	return EditMarkAll_Start(bChanged, findFlag, iSelCount, pszText);
 }
 
-void EditFindAll(LPCEDITFINDREPLACE lpefr) {
+void EditFindAll(LPCEDITFINDREPLACE lpefr, BOOL selectAll) {
 	char *szFind2 = (char *)NP2HeapAlloc(NP2_FIND_REPLACE_LIMIT);
-	const int searchFlags = EditPrepareFind(szFind2, lpefr);
+	int searchFlags = EditPrepareFind(szFind2, lpefr);
 	if (searchFlags == NP2_InvalidSearchFlags) {
 		NP2HeapFree(szFind2);
 		return;
 	}
 
-	EditMarkAll_Start(FALSE, searchFlags, strlen(szFind2), szFind2);
+	searchFlags |= (bFindReplaceFindAllBookmark * NP2_MarkAllBookmark)
+		| (selectAll * NP2_MarkAllSelectAll);
 	// rewind start position when transform backslash is checked,
 	// all other searching doesn't across lines.
 	// NOTE: complex fix is needed when multiline regex is supported.
-	if (lpefr->bTransformBS && editMarkAllStatus.pending) {
-		editMarkAllStatus.rewind = strpbrk(szFind2, "\r\n") != NULL;
+	if (lpefr->bTransformBS && strpbrk(szFind2, "\r\n") != NULL) {
+		searchFlags |= NP2_MarkAllMultiline;
+	}
+	EditMarkAll_Start(FALSE, searchFlags, strlen(szFind2), szFind2);
+}
+
+void EditToggleBookmarkAt(Sci_Position iPos) {
+	if (iPos < 0) {
+		iPos = SciCall_GetCurrentPos();
+	}
+
+	const Sci_Line iLine = SciCall_LineFromPosition(iPos);
+	const Sci_MarkerMask bitmask = SciCall_MarkerGet(iLine);
+	if (bitmask & MarkerBitmask_Bookmark) {
+		SciCall_MarkerDelete(iLine, MarkerNumber_Bookmark);
+	} else {
+		Style_SetBookmark();
+		SciCall_MarkerAdd(iLine, MarkerNumber_Bookmark);
+	}
+}
+
+void EditBookmarkSelectAll(void) {
+	Sci_Line line = SciCall_MarkerNext(0, MarkerBitmask_Bookmark);
+	if (line >= 0) {
+		editMarkAllStatus.ignoreSelectionUpdate = TRUE;
+		const Sci_Line iCurLine = SciCall_LineFromPosition(SciCall_GetCurrentPos());
+		SciCall_SetSelection(SciCall_PositionFromLine(line), SciCall_PositionFromLine(line + 1));
+		// set main selection near current line to ensure caret is visible after delete selected lines.
+		size_t main = 0;
+		size_t selection = 0;
+		Sci_Line minDiff = abs_pos(line - iCurLine);
+		while ((line = SciCall_MarkerNext(line + 1, MarkerBitmask_Bookmark)) >= 0) {
+			SciCall_AddSelection(SciCall_PositionFromLine(line), SciCall_PositionFromLine(line + 1));
+			++selection;
+			const Sci_Line diff = abs_pos(line - iCurLine);
+			if (diff < minDiff) {
+				minDiff = diff;
+				main = selection;
+			}
+		}
+		SciCall_SetMainSelection(main);
 	}
 }
 
@@ -6712,7 +6806,7 @@ void EditInsertUnicodeControlCharacter(int menu) {
 }
 
 void EditShowUnicodeControlCharacter(BOOL bShow) {
-	for (UINT i = 0; i < (UINT)COUNTOF(kUnicodeControlCharacterTable); i++) {
+	for (UINT i = 0; i < COUNTOF(kUnicodeControlCharacterTable); i++) {
 		const UnicodeControlCharacter ucc = kUnicodeControlCharacterTable[i];
 		if (StrIsEmptyA(ucc.representation)) {
 			// built-in
@@ -6858,7 +6952,7 @@ BOOL EditSortDlg(HWND hwnd, int *piSortFlags) {
 }
 
 void EditSelectionAction(int action) {
-	static const LPCWSTR kActionKeys[] = {
+	const LPCWSTR kActionKeys[] = {
 		L"GoogleSearchUrl",
 		L"BingSearchUrl",
 		L"WikiSearchUrl",
@@ -7609,12 +7703,6 @@ static void FoldLevelStack_Push(struct FoldLevelStack *levelStack, int level) {
 
 	levelStack->levelStack[levelStack->levelCount] = level;
 	++levelStack->levelCount;
-}
-
-static inline BOOL IsFoldIndentationBased(int iLexer) {
-	return iLexer == SCLEX_NULL
-		|| iLexer == SCLEX_PYTHON
-		|| iLexer == SCLEX_YAML;
 }
 
 static UINT Style_GetDefaultFoldState(int rid, int *maxLevel) {

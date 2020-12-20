@@ -142,6 +142,7 @@ static BOOL bShowLineNumbers;
 static BOOL bMarkOccurrences;
 static BOOL bMarkOccurrencesMatchCase;
 static BOOL bMarkOccurrencesMatchWords;
+static BOOL bMarkOccurrencesBookmark;
 struct EditAutoCompletionConfig autoCompletionConfig;
 static BOOL bEnableLineSelectionMode;
 static BOOL bShowCodeFolding;
@@ -186,6 +187,7 @@ static BOOL bTransparentMode;
 static int	iEndAtLastLine;
 BOOL	bFindReplaceTransparentMode;
 BOOL	bFindReplaceUseMonospacedFont;
+BOOL	bFindReplaceFindAllBookmark;
 static BOOL bEditLayoutRTL;
 BOOL	bWindowLayoutRTL;
 static int iRenderingTechnology;
@@ -410,12 +412,12 @@ static inline void UpdateStatusBarCache_OVRMode(BOOL force) {
 	}
 }
 
-// temporary fix for issue #77: force InvalidateStyleRedraw().
+// temporary fix for https://github.com/zufuliu/notepad2/issues/77: force InvalidateStyleRedraw().
 static inline void InvalidateStyleRedraw(void) {
 	SciCall_SetViewEOL(bViewEOLs);
 }
 
-// temporary fix for issue #134: Direct2D on arm32
+// temporary fix for https://github.com/zufuliu/notepad2/issues/134: Direct2D on arm32
 static inline int GetDefualtRenderingTechnology(void) {
 #if defined(__arm__) || defined(_ARM_) || defined(_M_ARM)
 	return SC_TECHNOLOGY_DIRECTWRITERETAIN;
@@ -2517,6 +2519,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	EnableCmd(hmenu, BME_EDIT_BOOKMARKPREV, i);
 	EnableCmd(hmenu, BME_EDIT_BOOKMARKNEXT, i);
 	EnableCmd(hmenu, BME_EDIT_BOOKMARKTOGGLE, i);
+	EnableCmd(hmenu, BME_EDIT_BOOKMARKSELECT, i);
 	EnableCmd(hmenu, BME_EDIT_BOOKMARKCLEAR, i);
 	EnableCmd(hmenu, IDM_EDIT_GOTOLINE, nonEmpty);
 	EnableCmd(hmenu, IDM_EDIT_GOTO_BLOCK_START, nonEmpty);
@@ -2571,8 +2574,10 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	CheckCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_OFF, !bMarkOccurrences);
 	CheckCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_CASE, bMarkOccurrencesMatchCase);
 	CheckCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_WORD, bMarkOccurrencesMatchWords);
+	CheckCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_BOOKMARK, bMarkOccurrencesBookmark);
 	EnableCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_CASE, bMarkOccurrences);
 	EnableCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_WORD, bMarkOccurrences);
+	EnableCmd(hmenu, IDM_VIEW_MARKOCCURRENCES_BOOKMARK, bMarkOccurrences);
 
 	CheckCmd(hmenu, IDM_VIEW_SHOWWHITESPACE, bViewWhiteSpace);
 	CheckCmd(hmenu, IDM_VIEW_SHOWEOLS, bViewEOLs);
@@ -2678,20 +2683,6 @@ static void ConvertLineEndings(int iNewEOLMode) {
 	UpdateToolbar();
 	UpdateStatusbar();
 	UpdateWindowTitle();
-}
-
-void EditToggleBookmarkAt(Sci_Position iPos) {
-	const Sci_Line iLine = SciCall_LineFromPosition(iPos);
-
-	const Sci_MarkerMask bitmask = SciCall_MarkerGet(iLine);
-	if (bitmask & MarkerBitmask_Bookmark) {
-		// unset
-		SciCall_MarkerDelete(iLine, MarkerNumber_Bookmark);
-	} else {
-		Style_SetBookmark();
-		// set
-		SciCall_MarkerAdd(iLine, MarkerNumber_Bookmark);
-	}
 }
 
 static inline BOOL IsBraceMatchChar(int ch) {
@@ -3798,6 +3789,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		}
 
 		if (iNextLine != -1) {
+			editMarkAllStatus.ignoreSelectionUpdate = TRUE;
 			SciCall_EnsureVisible(iNextLine);
 			SciCall_GotoLine(iNextLine);
 			SciCall_SetYCaretPolicy(CARET_SLOP | CARET_STRICT | CARET_EVEN, 10);
@@ -3818,6 +3810,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		}
 
 		if (iNextLine != -1) {
+			editMarkAllStatus.ignoreSelectionUpdate = TRUE;
 			SciCall_EnsureVisible(iNextLine);
 			SciCall_GotoLine(iNextLine);
 			SciCall_SetYCaretPolicy(CARET_SLOP | CARET_STRICT | CARET_EVEN, 10);
@@ -3828,7 +3821,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	break;
 
 	case BME_EDIT_BOOKMARKTOGGLE:
-		EditToggleBookmarkAt(SciCall_GetCurrentPos());
+		EditToggleBookmarkAt(-1);
+		break;
+
+	case BME_EDIT_BOOKMARKSELECT:
+		EditBookmarkSelectAll();
 		break;
 
 	case BME_EDIT_BOOKMARKCLEAR:
@@ -3841,7 +3838,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		if (!IsWindow(hDlgFindReplace)) {
 			hDlgFindReplace = EditFindReplaceDlg(hwndEdit, &efrData, bReplace);
 		} else {
-			if (bReplace ^ (GetDlgItem(hDlgFindReplace, IDC_REPLACE) != NULL)) {
+			if (bReplace ^ (GetDlgItem(hDlgFindReplace, IDC_REPLACETEXT) != NULL)) {
 				SendWMCommand(hDlgFindReplace, IDC_TOGGLEFINDREPLACE);
 				DestroyWindow(hDlgFindReplace);
 				hDlgFindReplace = EditFindReplaceDlg(hwndEdit, &efrData, bReplace);
@@ -4081,24 +4078,28 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_VIEW_MARKOCCURRENCES_OFF:
-		bMarkOccurrences = !bMarkOccurrences;
+	case IDM_VIEW_MARKOCCURRENCES_CASE:
+	case IDM_VIEW_MARKOCCURRENCES_WORD:
+	case IDM_VIEW_MARKOCCURRENCES_BOOKMARK:
+		switch (LOWORD(wParam)) {
+		case IDM_VIEW_MARKOCCURRENCES_OFF:
+			bMarkOccurrences = !bMarkOccurrences;
+			break;
+		case IDM_VIEW_MARKOCCURRENCES_CASE:
+			bMarkOccurrencesMatchCase = !bMarkOccurrencesMatchCase;
+			break;
+		case IDM_VIEW_MARKOCCURRENCES_WORD:
+			bMarkOccurrencesMatchWords = !bMarkOccurrencesMatchWords;
+			break;
+		case IDM_VIEW_MARKOCCURRENCES_BOOKMARK:
+			bMarkOccurrencesBookmark = !bMarkOccurrencesBookmark;
+			break;
+		}
 		if (bMarkOccurrences) {
-			EditMarkAll(FALSE, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
+			EditMarkAll(FALSE, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords, bMarkOccurrencesBookmark);
 		} else {
 			EditMarkAll_Clear();
 		}
-		UpdateStatusbar();
-		break;
-
-	case IDM_VIEW_MARKOCCURRENCES_CASE:
-		bMarkOccurrencesMatchCase = !bMarkOccurrencesMatchCase;
-		EditMarkAll(FALSE, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
-		UpdateStatusbar();
-		break;
-
-	case IDM_VIEW_MARKOCCURRENCES_WORD:
-		bMarkOccurrencesMatchWords = !bMarkOccurrencesMatchWords;
-		EditMarkAll(FALSE, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
 		UpdateStatusbar();
 		break;
 
@@ -4623,7 +4624,6 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_LEXER_XSD:
 	case IDM_LEXER_XSLT:
 	case IDM_LEXER_DTD:
-
 	case IDM_LEXER_ANT_BUILD:
 	case IDM_LEXER_MAVEN_POM:
 	case IDM_LEXER_MAVEN_SETTINGS:
@@ -4631,7 +4631,6 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_LEXER_IVY_SETTINGS:
 	case IDM_LEXER_PMD_RULESET:
 	case IDM_LEXER_CHECKSTYLE:
-
 	case IDM_LEXER_TOMCAT:
 	case IDM_LEXER_WEB_JAVA:
 	case IDM_LEXER_STRUTS:
@@ -4639,24 +4638,19 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_LEXER_HIB_MAP:
 	case IDM_LEXER_SPRING_BEANS:
 	case IDM_LEXER_JBOSS:
-
 	case IDM_LEXER_WEB_NET:
 	case IDM_LEXER_RESX:
 	case IDM_LEXER_XAML:
-
 	case IDM_LEXER_PROPERTY_LIST:
 	case IDM_LEXER_ANDROID_MANIFEST:
 	case IDM_LEXER_ANDROID_LAYOUT:
 	case IDM_LEXER_SVG:
-
 	case IDM_LEXER_BASH:
 	case IDM_LEXER_CSHELL:
 	case IDM_LEXER_M4:
-
 	case IDM_LEXER_MATLAB:
 	case IDM_LEXER_OCTAVE:
 	case IDM_LEXER_SCILAB:
-
 	case IDM_LEXER_CSS:
 	case IDM_LEXER_SCSS:
 	case IDM_LEXER_LESS:
@@ -4751,43 +4745,25 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		}
 		break;
 
-	case CMD_EMBRACKETR:	// Ctrl+4
-		EditEncloseSelection(L"(", L")");
-		break;
-	case CMD_EMBRACKETC:	// Ctrl+5
-		EditEncloseSelection(L"{", L"}");
-		break;
-	case CMD_EMBRACKETA:	// Ctrl+6
-		EditEncloseSelection(L"<", L">");
-		break;
-	case CMD_EMBRACKETS:	// Ctrl+7
-		EditEncloseSelection(L"[", L"]");
-		break;
-	case CMD_STRINGIFYS:	// Ctrl+1
-		EditEncloseSelection(L"'", L"'");
-		break;
-	case CMD_STRINGIFYD:	// Ctrl+2
-		EditEncloseSelection(L"\"", L"\"");
-		break;
-	case CMD_STRINGIFYT2:	// Ctrl+3
-		EditEncloseSelection(L"\"\"\"", L"\"\"\"");
-		break;
-	case CMD_STRINGIFYT1:	// Ctrl+9
+	case CMD_ENCLOSE_TRIPLE_SQ:
 		EditEncloseSelection(L"'''", L"'''");
 		break;
-	case CMD_STRINGIFYB:	// Ctrl+8
-		EditEncloseSelection(L"`", L"`");
+	case CMD_ENCLOSE_TRIPLE_DQ:
+		EditEncloseSelection(L"\"\"\"", L"\"\"\"");
+		break;
+	case CMD_ENCLOSE_TRIPLE_BT:
+		EditEncloseSelection(L"```", L"```");
 		break;
 
-	case CMD_INCREASENUM:	// Ctrl+Alt++
+	case CMD_INCREASENUM:
 		EditModifyNumber(TRUE);
 		break;
 
-	case CMD_DECREASENUM:	// Ctrl+Alt+-
+	case CMD_DECREASENUM:
 		EditModifyNumber(FALSE);
 		break;
 
-	case CMD_JUMP2SELSTART:	// Ctrl+'
+	case CMD_JUMP2SELSTART:
 		if (!SciCall_IsRectangleSelection()) {
 			const Sci_Position iAnchorPos = SciCall_GetAnchor();
 			const Sci_Position iCursorPos = SciCall_GetCurrentPos();
@@ -4800,7 +4776,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		}
 		break;
 
-	case CMD_JUMP2SELEND:	// Ctrl+.
+	case CMD_JUMP2SELEND:
 		if (!SciCall_IsRectangleSelection()) {
 			const Sci_Position iAnchorPos = SciCall_GetAnchor();
 			const Sci_Position iCursorPos = SciCall_GetCurrentPos();
@@ -4974,18 +4950,20 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				if (scn->updated & (SC_UPDATE_SELECTION)) {
 					UpdateStatusBarCache_OVRMode(FALSE);
 					// mark occurrences of text currently selected
-					if (bMarkOccurrences) {
+					if (editMarkAllStatus.ignoreSelectionUpdate) {
+						editMarkAllStatus.ignoreSelectionUpdate = FALSE;
+					} else if (bMarkOccurrences) {
 						if (SciCall_IsSelectionEmpty()) {
 							if (editMarkAllStatus.matchCount) {
 								EditMarkAll_Clear();
 							}
 						} else {
-							updated = EditMarkAll((scn->updated & SC_UPDATE_CONTENT), bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
+							updated = EditMarkAll((scn->updated & SC_UPDATE_CONTENT), bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords, bMarkOccurrencesBookmark);
 						}
 					}
 				} else if (scn->updated & (SC_UPDATE_CONTENT)) {
 					if (editMarkAllStatus.matchCount) {
-						updated = EditMarkAll(TRUE, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords);
+						updated = EditMarkAll(TRUE, bMarkOccurrencesMatchCase, bMarkOccurrencesMatchWords, bMarkOccurrencesBookmark);
 					}
 				}
 				if (!updated) {
@@ -5031,6 +5009,10 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			break;
 
 		case SCN_CHARADDED: {
+			//if (SciCall_IsMultipleSelection()) {
+			//	// not work for multiple selection.
+			//	return 0;
+			//}
 			// tentative input characters already ignored in Editor::InsertCharacter()
 			const int ch = scn->ch;
 			if (ch < 0x80) {
@@ -5359,6 +5341,9 @@ void LoadSettings(void) {
 	bSaveSettings = IniSectionGetBool(pIniSection, L"SaveSettings", 1);
 	bSaveRecentFiles = IniSectionGetBool(pIniSection, L"SaveRecentFiles", 0);
 	bSaveFindReplace = IniSectionGetBool(pIniSection, L"SaveFindReplace", 0);
+	bFindReplaceTransparentMode = IniSectionGetBool(pIniSection, L"FindReplaceTransparentMode", 1);
+	bFindReplaceUseMonospacedFont = IniSectionGetBool(pIniSection, L"FindReplaceUseMonospacedFont", 0);
+	bFindReplaceFindAllBookmark = IniSectionGetBool(pIniSection, L"FindReplaceFindAllBookmark", 0);
 
 	efrData.bFindClose = IniSectionGetBool(pIniSection, L"CloseFind", 0);
 	efrData.bReplaceClose = IniSectionGetBool(pIniSection, L"CloseReplace", 0);
@@ -5512,6 +5497,7 @@ void LoadSettings(void) {
 	bMarkOccurrences = IniSectionGetBool(pIniSection, L"MarkOccurrences", 1);
 	bMarkOccurrencesMatchCase = IniSectionGetBool(pIniSection, L"MarkOccurrencesMatchCase", 0);
 	bMarkOccurrencesMatchWords = IniSectionGetBool(pIniSection, L"MarkOccurrencesMatchWholeWords", 0);
+	bMarkOccurrencesBookmark = IniSectionGetBool(pIniSection, L"MarkOccurrencesBookmark", 0);
 
 	bViewWhiteSpace = IniSectionGetBool(pIniSection, L"ViewWhiteSpace", 0);
 	bViewEOLs = IniSectionGetBool(pIniSection, L"ViewEOLs", 0);
@@ -5578,8 +5564,6 @@ void LoadSettings(void) {
 	bAlwaysOnTop = IniSectionGetBool(pIniSection, L"AlwaysOnTop", 0);
 	bMinimizeToTray = IniSectionGetBool(pIniSection, L"MinimizeToTray", 0);
 	bTransparentMode = IniSectionGetBool(pIniSection, L"TransparentMode", 0);
-	bFindReplaceTransparentMode = IniSectionGetBool(pIniSection, L"FindReplaceTransparentMode", 1);
-	bFindReplaceUseMonospacedFont = IniSectionGetBool(pIniSection, L"FindReplaceUseMonospacedFont", 0);
 	iValue = IniSectionGetInt(pIniSection, L"EndAtLastLine", 1);
 	iEndAtLastLine = clamp_i(iValue, 0, 4);
 	bEditLayoutRTL = IniSectionGetBool(pIniSection, L"EditLayoutRTL", 0);
@@ -5784,6 +5768,9 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBoolEx(pIniSection, L"CloseFind", efrData.bFindClose, 0);
 	IniSectionSetBoolEx(pIniSection, L"CloseReplace", efrData.bReplaceClose, 0);
 	IniSectionSetBoolEx(pIniSection, L"NoFindWrap", efrData.bNoFindWrap, 0);
+	IniSectionSetBoolEx(pIniSection, L"FindReplaceTransparentMode", bFindReplaceTransparentMode, 1);
+	IniSectionSetBoolEx(pIniSection, L"FindReplaceUseMonospacedFont", bFindReplaceUseMonospacedFont, 0);
+	IniSectionSetBoolEx(pIniSection, L"FindReplaceFindAllBookmark", bFindReplaceFindAllBookmark, 0);
 	if (bSaveFindReplace) {
 		IniSectionSetBoolEx(pIniSection, L"FindReplaceMatchCase", (efrData.fuFlags & SCFIND_MATCHCASE), 0);
 		IniSectionSetBoolEx(pIniSection, L"FindReplaceMatchWholeWorldOnly", (efrData.fuFlags & SCFIND_WHOLEWORD), 0);
@@ -5845,6 +5832,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBoolEx(pIniSection, L"MarkOccurrences", bMarkOccurrences, 1);
 	IniSectionSetBoolEx(pIniSection, L"MarkOccurrencesMatchCase", bMarkOccurrencesMatchCase, 0);
 	IniSectionSetBoolEx(pIniSection, L"MarkOccurrencesMatchWholeWords", bMarkOccurrencesMatchWords, 0);
+	IniSectionSetBoolEx(pIniSection, L"MarkOccurrencesBookmark", bMarkOccurrencesBookmark, 0);
 	IniSectionSetBoolEx(pIniSection, L"ViewWhiteSpace", bViewWhiteSpace, 0);
 	IniSectionSetBoolEx(pIniSection, L"ViewEOLs", bViewEOLs, 0);
 	IniSectionSetIntEx(pIniSection, L"DefaultEncoding", Encoding_MapIniSetting(FALSE, iDefaultEncoding), Encoding_MapIniSetting(FALSE, CPI_UTF8));
@@ -5876,8 +5864,6 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBoolEx(pIniSection, L"AlwaysOnTop", bAlwaysOnTop, 0);
 	IniSectionSetBoolEx(pIniSection, L"MinimizeToTray", bMinimizeToTray, 0);
 	IniSectionSetBoolEx(pIniSection, L"TransparentMode", bTransparentMode, 0);
-	IniSectionSetBoolEx(pIniSection, L"FindReplaceTransparentMode", bFindReplaceTransparentMode, 1);
-	IniSectionSetBoolEx(pIniSection, L"FindReplaceUseMonospacedFont", bFindReplaceUseMonospacedFont, 0);
 	IniSectionSetIntEx(pIniSection, L"EndAtLastLine", iEndAtLastLine, 1);
 	IniSectionSetBoolEx(pIniSection, L"EditLayoutRTL", bEditLayoutRTL, 0);
 	IniSectionSetBoolEx(pIniSection, L"WindowLayoutRTL", bWindowLayoutRTL, 0);
@@ -7450,9 +7436,8 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 #endif
 			if (bRestoreView) {
 				SciCall_SetSel(iAnchorPos, iCurPos);
-				Sci_Line iCurLine = iLine - SciCall_LineFromPosition(SciCall_GetCurrentPos());
-				iCurLine = (iCurLine < 0) ? -iCurLine : iCurLine;
-				if (iCurLine > 5) {
+				const Sci_Line iCurLine = iLine - SciCall_LineFromPosition(SciCall_GetCurrentPos());
+				if (abs_pos(iCurLine) > 5) {
 					EditJumpTo(iLine, iCol);
 				} else {
 					SciCall_EnsureVisible(iDocTopLine);

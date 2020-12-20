@@ -125,9 +125,15 @@ enum {
 	YAMLLineType_EmptyLine = 1,
 	YAMLLineType_CommentLine = 2,
 	YAMLLineType_BlockSequence = 3,
-
-	YAMLLineStateMask_IndentCount = 0xfff,
 };
+
+constexpr int GetIndentCount(int lineState) noexcept {
+	return lineState >> 19;
+}
+
+constexpr int GetLineType(int lineState) noexcept {
+	return lineState & 3;
+}
 
 void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	// ns-uri-char
@@ -141,6 +147,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 	int textIndentCount = 0;
 	int braceCount = 0;
 	int lineType = YAMLLineType_None;
+	int lineStatePrev = 0;
 	EscapeSequence escSeq;
 
 	// backtrack to previous line for better coloring for indented text on typing.
@@ -154,15 +161,15 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 	StyleContext sc(startPos, lengthDoc, initStyle, styler);
 	if (sc.currentLine > 0) {
-		const int lineState = styler.GetLineState(sc.currentLine - 1);
+		lineStatePrev = styler.GetLineState(sc.currentLine - 1);
 		/*
-		7: braceCount
+		2: lineType
+		8: braceCount
 		9: textIndentCount
 		12: indentCount
-		3: lineType
 		*/
-		braceCount = lineState & 0x7f;
-		textIndentCount = (lineState >> 7) & 0x1ff;
+		braceCount = (lineStatePrev >> 2) & 0xff;
+		textIndentCount = (lineStatePrev >> 10) & 0x1ff;
 	}
 
 	while (sc.More()) {
@@ -188,6 +195,14 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					// inside block scalar or indented text
 					indentCount = textIndentCount + 1;
 				}
+			} else if (sc.state == SCE_YAML_STRING_SQ || sc.state == SCE_YAML_STRING_DQ) {
+				// multiline quoted string
+				indentCount = GetIndentCount(lineStatePrev);
+				if (indentCount == textIndentCount) {
+					++indentCount;
+				}
+				indentEnded = true;
+				visibleChars = 1;
 			}
 		}
 
@@ -257,12 +272,12 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			}
 			break;
 
-		case SCE_YAML_STRING1:
+		case SCE_YAML_STRING_SQ:
 			if (sc.ch == '\'') {
 				if (sc.chNext == '\'') {
 					sc.SetState(SCE_YAML_ESCAPECHAR);
 					sc.Forward(2);
-					sc.SetState(SCE_YAML_STRING1);
+					sc.SetState(SCE_YAML_STRING_SQ);
 					continue;
 				}
 
@@ -275,7 +290,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			}
 			break;
 
-		case SCE_YAML_STRING2:
+		case SCE_YAML_STRING_DQ:
 			if (sc.ch == '\\') {
 				escSeq.resetEscapeState(sc.chNext);
 				sc.SetState(SCE_YAML_ESCAPECHAR);
@@ -296,7 +311,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					escSeq.resetEscapeState(sc.chNext);
 					sc.Forward();
 				} else {
-					sc.SetState(SCE_YAML_STRING2);
+					sc.SetState(SCE_YAML_STRING_DQ);
 					continue;
 				}
 			}
@@ -326,14 +341,17 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				visibleChars = 1;
 				sc.SetState(SCE_YAML_DOCUMENT);
 				sc.Forward(3);
-				const int chNext = sc.GetLineNextChar(1);
+				const int chNext = sc.GetLineNextChar();
 				if (chNext != '\0') {
 					sc.SetState(SCE_YAML_DEFAULT);
+					// no `continue;` here: a white space is required after document marker.
 				}
 			} else if (sc.ch == '\'') {
-				sc.SetState(SCE_YAML_STRING1);
+				textIndentCount = indentCount;
+				sc.SetState(SCE_YAML_STRING_SQ);
 			} else if (sc.ch == '\"') {
-				sc.SetState(SCE_YAML_STRING2);
+				textIndentCount = indentCount;
+				sc.SetState(SCE_YAML_STRING_DQ);
 			} else if ((sc.ch == '&' || sc.ch == '*') && IsYAMLAnchorChar(sc.chNext)) {
 				sc.SetState((sc.ch == '&')? SCE_YAML_ANCHOR : SCE_YAML_ALIAS);
 			} else if (sc.ch == '!') {
@@ -352,7 +370,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					textIndentCount = indentCount;
 				}
 				sc.SetState(SCE_YAML_BLOCK_SCALAR);
-			} else if (IsADigit(sc.ch) || (sc.ch == '.' && IsADigit(sc.chNext))) {
+			} else if (IsNumberStart(sc.ch, sc.chNext)) {
 				sc.SetState(SCE_YAML_NUMBER);
 			} else if (IsAlpha(sc.ch) || (sc.ch == '.' && IsAlpha(sc.chNext))) {
 				sc.SetState(SCE_YAML_IDENTIFIER);
@@ -368,7 +386,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					sc.SetState(SCE_YAML_OPERATOR);
 					sc.ForwardSetState(SCE_YAML_DEFAULT);
 					if (visibleChars == 0 && lineType == YAMLLineType_None) {
-						// spaces after '-' are indentation white space when '- ' followed by key
+						// spaces after '-' are indentation white space when '- ' followed by key.
 						indentBefore = indentCount;
 						indentEnded = false;
 						lineType = YAMLLineType_BlockSequence;
@@ -418,8 +436,8 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				lineType = YAMLLineType_EmptyLine;
 			}
 
-			const int lineState = braceCount | (textIndentCount << 7) | (indentCount << 16) | (lineType << 28);
-			styler.SetLineState(sc.currentLine, lineState);
+			lineStatePrev = (braceCount << 2) | (textIndentCount << 10) | (indentCount << 19) | lineType;
+			styler.SetLineState(sc.currentLine, lineStatePrev);
 			lineType = YAMLLineType_None;
 		}
 		sc.Forward();
@@ -432,8 +450,8 @@ struct FoldLineState {
 	int indentCount;
 	int lineType;
 	constexpr explicit FoldLineState(int lineState) noexcept:
-		indentCount((lineState >> 16) & YAMLLineStateMask_IndentCount),
-		lineType(lineState >> 28) {
+		indentCount(GetIndentCount(lineState)),
+		lineType(GetLineType(lineState)) {
 	}
 	constexpr bool Empty() const noexcept {
 		return lineType == YAMLLineType_EmptyLine || lineType == YAMLLineType_CommentLine;
@@ -487,7 +505,7 @@ void FoldYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle
 
 		if (foldComment && lineCurrent < lineNext) {
 			int prevLineType = stateCurrent.lineType;
-			int nextLineType = styler.GetLineState(lineCurrent) >> 28;
+			int nextLineType = GetLineType(styler.GetLineState(lineCurrent));
 			int prevLevel = skipLevel;
 			// comment on first line
 			if (prevLineType == YAMLLineType_CommentLine) {
@@ -498,7 +516,7 @@ void FoldYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle
 			for (; lineCurrent < lineNext; lineCurrent++) {
 				int level = skipLevel;
 				const int currentLineType = nextLineType;
-				nextLineType = styler.GetLineState(lineCurrent + 1) >> 28;
+				nextLineType = GetLineType(styler.GetLineState(lineCurrent + 1));
 				if (currentLineType == YAMLLineType_CommentLine) {
 					if (nextLineType == YAMLLineType_CommentLine && prevLineType != YAMLLineType_CommentLine) {
 						level |= SC_FOLDLEVELHEADERFLAG;

@@ -156,6 +156,60 @@ def to_upper_conditional(items):
 	return result
 
 
+def parse_avisynth_api_file(path):
+	sections = read_api_file(path, '#')
+	keywordMap = {}
+	for key, doc in sections:
+		if key == 'keywords':
+			items = doc.split()
+			items.extend([item.lower() for item in items])
+			keywordMap[key] = items
+		elif key == 'functions':
+			items = re.findall(r'^(\w+\s+)?(\w+\()', doc, re.MULTILINE)
+			functions = [item[1] for item in items if 'global' not in item[0]]
+			keywordMap['functions'] = functions
+			items = re.findall(r'^global\s+(\w+\(?)', doc, re.MULTILINE)
+			keywordMap['options'] = items
+		elif key == 'properties':
+			items = re.findall(r'clip\.(\w+\(?)', doc)
+			properties = []
+			functions = []
+			for item in items:
+				if item[-1] == '(':
+					functions.append(item)
+				else:
+					properties.append(item)
+			items = re.findall(r'^\w+\s+(\w+\(?)', doc, re.MULTILINE)
+			for item in items:
+				if item != 'clip':
+					if item[-1] == '(':
+						functions.append(item)
+					else:
+						properties.append(item)
+			keywordMap[key] = properties
+			keywordMap['functions'].extend(functions)
+		elif key in ('filters', 'plugins'):
+			items = re.findall(r'^(\w+\()', doc, re.MULTILINE)
+			keywordMap[key] = items
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'functions',
+		'filters',
+		'plugins',
+		'properties',
+		'options',
+	])
+	keywordList = [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('internal functions', keywordMap['functions'], KeywordAttr.MakeLower),
+		('internal filters', keywordMap['filters'], KeywordAttr.MakeLower),
+		('external filters', keywordMap['plugins'], KeywordAttr.MakeLower),
+		('properties', keywordMap['properties'], KeywordAttr.MakeLower),
+		('options', keywordMap['options'], KeywordAttr.NoLexer),
+	]
+	return keywordList
+
 def parse_cmake_api_file(path):
 	# languages from https://gitlab.kitware.com/cmake/cmake/blob/master/Auxiliary/vim/extract-upper-case.pl
 	cmakeLang = "ASM C CSharp CUDA CXX Fortran Java RC Swift".split()
@@ -268,6 +322,44 @@ def parse_cmake_api_file(path):
 		#('long variables', keywordMap['long variables'], KeywordAttr.NoLexer),
 		('long properties', [], KeywordAttr.NoLexer),
 		('long variables', [], KeywordAttr.NoLexer),
+	]
+	return keywordList
+
+def parse_dart_api_file(path):
+	sections = read_api_file(path, '//')
+	keywordMap = {}
+	for key, doc in sections:
+		if key in ('keywords', 'types'):
+			items = set(doc.split())
+			keywordMap[key] = items
+		elif key == 'libraries':
+			items = re.findall(r'(class|typedef)\s+(\w+)', doc)
+			keywordMap['class'] = [item[1] for item in items]
+
+			items = re.findall(r'(enum)\s+(\w+)', doc)
+			keywordMap['enum'] = [item[1] for item in items]
+
+			items = re.findall(r'@(\w+\(?)', doc)
+			keywordMap['metadata'] = items
+
+			items = re.findall(r'\s\w+\(', doc)
+			keywordMap['function'] = [item.strip() for item in items]
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'types',
+		'class',
+		'enum',
+		'metadata',
+		'function',
+	])
+	keywordList = [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('types', keywordMap['types'], KeywordAttr.Default),
+		('class', keywordMap['class'], KeywordAttr.Default),
+		('enum', keywordMap['enum'], KeywordAttr.Default),
+		('metadata', keywordMap['metadata'], KeywordAttr.NoLexer),
+		('function', keywordMap['function'], KeywordAttr.NoLexer),
 	]
 	return keywordList
 
@@ -551,6 +643,7 @@ def parse_kotlin_api_file(path):
 def parse_lua_api_file(path):
 	sections = read_api_file(path, '--')
 	keywordMap = {}
+	constant = []
 	for key, doc in sections:
 		if key in ('keywords', 'metamethod'):
 			keywordMap[key] = doc.split()
@@ -577,13 +670,11 @@ def parse_lua_api_file(path):
 			keywordMap[key] = functions
 			keywordMap.setdefault('basic function', []).extend(modules)
 
-			# some values
-			constant = []
 			items = re.findall(r'^"([\w\s]+)"', doc, re.MULTILINE)
 			for item in items:
 				constant.extend(item.split())
-			keywordMap.setdefault('library', []).extend(constant)
 
+	keywordMap.setdefault('library', []).extend(constant)
 	RemoveDuplicateKeyword(keywordMap, [
 		'keywords',
 		'basic function',
@@ -622,6 +713,31 @@ def parse_llvm_api_file(path):
 		('type', keywordMap['type'], KeywordAttr.Default),
 		('attribute', keywordMap['attribute'], KeywordAttr.Default),
 		('instruction', keywordMap['instruction'], KeywordAttr.Default),
+	]
+	return keywordList
+
+def parse_r_api_file(path):
+	sections = read_api_file(path, '#')
+	keywordMap = {}
+	for key, doc in sections:
+		if key == 'keywords':
+			items = set(doc.split())
+		else:
+			result = re.findall(r'^[\w\.]+\(?', doc, re.MULTILINE)
+			items = []
+			for item in result:
+				item = item.strip('.')
+				if len(item.rstrip('(')) > 2:
+					items.append(item)
+		keywordMap[key] = items
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'package',
+	])
+	keywordList = [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('package', keywordMap['package'], KeywordAttr.NoLexer),
 	]
 	return keywordList
 
@@ -741,9 +857,9 @@ def parse_rust_api_file(path):
 	]
 	return keywordList
 
-def parse_sql_api_files(path_list):
+def parse_sql_api_files(pathList):
 	keywordMap = {}
-	for path in path_list:
+	for path in pathList:
 		sections = read_api_file(path, '--')
 		for key, doc in sections:
 			items = []

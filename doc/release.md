@@ -1,40 +1,17 @@
-The builds (*unsigned*) works for Windows XP or Windows Server 2003 and above. The AVX2 build works for Windows 7 SP1 (or Windows Server 2008 R2 SP1) and above (64-bit only), requires CPU support for [AVX2](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions), e.g. CPU sold since 2013, such as Intel Core i3, i5, i7, i9 or AMD Excavator, Zen, and more.
-
-Latest development builds (artifacts in Release configuration for each compiler and platform) are available on https://github.com/zufuliu/notepad2/actions and https://ci.appveyor.com/project/zufuliu/notepad2
-
 💡Tips: To keep your current settings, do **NOT** replace *Notepad2.ini*, *metapath.ini* or any theme (INI) files with the bundled one, but please mind the breaking changes if any.
 
-## Changes Since v4.20.?
+## Changes Since
 
 ## Breaking Changes
 
 ## File List
-| File | SHA-256 |
-| ---|--|
-| [ARM_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [ARM64_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [AVX2_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [Win32_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [x64_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| Localization | English, 日本語, 中文 (繁體, 简体) |
-| [ARM_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [ARM64_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [AVX2_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [Win32_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [x64_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
+| Localization | Language | Architecture | Minimum System |
+|--|--|--|--|
+| en | English | ARM | Windows RT |
+| i18n | English, 日本語, 中文 (繁體, 简体) | ARM64 | Windows 10 on ARM |
+| ja | 日本語 | AVX2 | 64-bit Windows 7, Server 2008 R2 |
+| zh-Hans | 中文 (简体) | Win32 | Windows XP, Server 2003 |
+| zh-Hant | 中文 (繁體) | x64 | 64-bit Windows XP, Server 2003 |
 | 한국어 | https://teus.me/category/IT/Notepad2 |
-| ja | 日本語 |
-| [ARM64_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [AVX2_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [Win32_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [x64_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| zh-Hans | 中文 (简体) |
-| [ARM64_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [AVX2_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [Win32_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [x64_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| zh-Hant | 中文 (繁體) |
-| [ARM64_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [AVX2_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [Win32_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
-| [x64_v4.20.?.zip](https://www.virustotal.com/gui/url/?/detection) | ? |
+
+Latest development builds (artifacts in Release configuration for each compiler and platform) are available at https://github.com/zufuliu/notepad2/actions and https://ci.appveyor.com/project/zufuliu/notepad2.

@@ -908,7 +908,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <AdditionalOptions>/source-charset:utf-8 /GA -Wextra -Wshadow -Wimplicit-fallthrough -Wformat=2 -Wcomma %(AdditionalOptions)</AdditionalOptions>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
       <DiagnosticsFormat>Caret</DiagnosticsFormat>
     </ClCompile>
     <Link>
@@ -962,6 +962,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\scintilla\lexers\LexAsm.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexAutoIt3.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexAviSynth.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexBash.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexBatch.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexCIL.cxx" />
@@ -969,6 +970,7 @@
     <ClCompile Include="..\..\scintilla\lexers\LexConfig.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexCPP.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexCSS.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexDart.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexDiff.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexFortran.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexFSharp.cxx" />
@@ -993,6 +995,7 @@
     <ClCompile Include="..\..\scintilla\lexers\LexPowerShell.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexProps.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexPython.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexR.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexRuby.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexRust.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexSmali.cxx" />
@@ -1061,6 +1064,7 @@
     <ClCompile Include="..\..\src\EditLexers\stlAsm.c" />
     <ClCompile Include="..\..\src\EditLexers\stlAsymptote.c" />
     <ClCompile Include="..\..\src\EditLexers\stlAutoIt3.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlAviSynth.c" />
     <ClCompile Include="..\..\src\EditLexers\stlAwk.c" />
     <ClCompile Include="..\..\src\EditLexers\stlBash.c" />
     <ClCompile Include="..\..\src\EditLexers\stlBatch.c" />
@@ -1070,6 +1074,7 @@
     <ClCompile Include="..\..\src\EditLexers\stlCSharp.c" />
     <ClCompile Include="..\..\src\EditLexers\stlCSS.c" />
     <ClCompile Include="..\..\src\EditLexers\stlD.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlDart.c" />
     <ClCompile Include="..\..\src\EditLexers\stlDefault.c" />
     <ClCompile Include="..\..\src\EditLexers\stlFortran.c" />
     <ClCompile Include="..\..\src\EditLexers\stlFSharp.c" />
@@ -1099,6 +1104,7 @@
     <ClCompile Include="..\..\src\EditLexers\stlPHP.c" />
     <ClCompile Include="..\..\src\EditLexers\stlPowerShell.c" />
     <ClCompile Include="..\..\src\EditLexers\stlPython.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlR.c" />
     <ClCompile Include="..\..\src\EditLexers\stlResource.c" />
     <ClCompile Include="..\..\src\EditLexers\stlRuby.c" />
     <ClCompile Include="..\..\src\EditLexers\stlRust.c" />
