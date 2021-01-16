@@ -39,7 +39,7 @@ typedef struct EDITSTYLE {
 #define EDITSTYLE_BufferSize(iStyleCount)	((iStyleCount) * MAX_EDITSTYLE_VALUE_SIZE * sizeof(WCHAR))
 #define	MULTI_STYLE(a, b, c, d)			((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
 #define	MULTI_STYLE8(a, b, c, d, e, f, g, h) \
-	(((int64_t)MULTI_STYLE(a, b, c, d) << 32) | MULTI_STYLE(e, f, g, h))
+	(MULTI_STYLE(a, b, c, d) | ((int64_t)MULTI_STYLE(e, f, g, h) << 32))
 
 // Not used by Scintilla lexer, listed for auto completion.
 #define KeywordAttr_NoLexer		1
@@ -80,18 +80,18 @@ typedef const EDITLEXER *LPCEDITLEXER;
 #define NP2LEX_CPP			63001	// SCLEX_CPP		C/C++ Source
 #define NP2LEX_JAVA			63002	// SCLEX_CPP		Java Source
 #define NP2LEX_CSHARP		63003	// SCLEX_CPP		C# Source
-#define NP2LEX_JS			63004	// SCLEX_CPP		JavaScript
+#define NP2LEX_JAVASCRIPT	63004	// SCLEX_JAVASCRIPT	JavaScript
 #define NP2LEX_RC			63005	// SCLEX_CPP		Resource Script
 //#define NP2LEX_IDL		63006	// SCLEX_CPP		Interface Definition Language
 #define NP2LEX_D			63007	// SCLEX_CPP		D Source
 #define NP2LEX_ASY			63008	// SCLEX_CPP		Asymptote Code
 #define NP2LEX_CIL			63009	// SCLEX_CIL		CIL Assembly
 //#define NP2LEX_OBJC		63010	// SCLEX_CPP		Objective C/C++
-#define NP2LEX_AS			63011	// SCLEX_CPP		ActionScript
+#define NP2LEX_ACTIONSCRIPT	63011	// SCLEX_JAVASCRIPT	ActionScript
 #define NP2LEX_HAXE			63012	// SCLEX_CPP		HaXe Script
 #define NP2LEX_GROOVY		63013	// SCLEX_CPP		Groovy Script
 #define NP2LEX_SCALA		63014	// SCLEX_CPP		Scala Script
-#define NP2LEX_GO			63015	// SCLEX_CPP		Go Source
+#define NP2LEX_GO			63015	// SCLEX_GO			Go Source
 #define NP2LEX_GRADLE		63016	// SCLEX_CPP		Gradle Build Script
 
 #define NP2LEX_VB			63021	// SCLEX_VB			Visual Basic
@@ -147,6 +147,8 @@ typedef const EDITLEXER *LPCEDITLEXER;
 #define NP2LEX_GN			63072	// SCLEX_GN			GN Build Script
 #define NP2LEX_DART			63073	// SCLEX_DART		Dart Source
 #define NP2LEX_REBOL		63074	// SCLEX_REBOL		Rebol Script
+#define NP2LEX_SWIFT		63075	// SCLEX_SWIFT		Swift Source
+#define NP2LEX_TYPESCRIPT	63076	// SCLEX_JAVASCRIPT	TypeScript
 
 #define NP2LEX_AVS			63087	// SCLEX_AVS		AviSynth Script
 #define NP2LEX_TEHEX		63088	// SCLEX_TEHEX		Tektronix extended HEX

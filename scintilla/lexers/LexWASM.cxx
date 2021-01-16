@@ -137,7 +137,7 @@ void ColouriseWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					sc.ForwardSetState(SCE_KOTLIN_DEFAULT);
 				}
 			} else if (sc.Match('(', ';')) {
-				sc.Forward(2);
+				sc.Forward();
 				++commentLevel;
 			}
 			break;
@@ -190,7 +190,7 @@ void FoldWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle
 	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
 
 	const Sci_PositionU endPos = startPos + lengthDoc;
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
 	int lineCommentPrev = 0;
 	if (lineCurrent > 0) {
@@ -201,7 +201,7 @@ void FoldWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle
 	int levelNext = levelCurrent;
 	int lineCommentCurrent = GetLineCommentState(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+	Sci_PositionU lineEndPos = sci::min(lineStartNext, endPos) - 1;
 
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
@@ -247,7 +247,7 @@ void FoldWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+			lineEndPos = sci::min(lineStartNext, endPos) - 1;
 			levelCurrent = levelNext;
 			lineCommentPrev = lineCommentCurrent;
 			lineCommentCurrent = lineCommentNext;

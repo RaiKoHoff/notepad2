@@ -57,16 +57,20 @@ using namespace Scintilla;
 
 namespace {
 
-inline int translateBashDigit(int ch) noexcept {
+constexpr int translateBashDigit(int ch) noexcept {
 	if (ch >= '0' && ch <= '9') {
 		return ch - '0';
-	} else if (ch >= 'a' && ch <= 'z') {
+	}
+	if (ch >= 'a' && ch <= 'z') {
 		return ch - 'a' + 10;
-	} else if (ch >= 'A' && ch <= 'Z') {
+	}
+	if (ch >= 'A' && ch <= 'Z') {
 		return ch - 'A' + 36;
-	} else if (ch == '@') {
+	}
+	if (ch == '@') {
 		return 62;
-	} else if (ch == '_') {
+	}
+	if (ch == '_') {
 		return 63;
 	}
 	return BASH_BASE_ERROR;
@@ -243,7 +247,7 @@ static void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int in
 
 	// Always backtracks to the start of a line that is not a continuation
 	// of the previous line (i.e. start of a bash command segment)
-	Sci_Position ln = styler.GetLine(startPos);
+	Sci_Line ln = styler.GetLine(startPos);
 	if (ln > 0 && startPos == static_cast<Sci_PositionU>(styler.LineStart(ln)))
 		ln--;
 	for (;;) {
@@ -815,14 +819,14 @@ static void FoldBashDoc(Sci_PositionU startPos, Sci_Position length, int, LexerW
 
 	const Sci_PositionU endPos = startPos + length;
 	int skipHereCh = 0;
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelPrev = styler.LevelAt(lineCurrent) & SC_FOLDLEVELNUMBERMASK;
 	int levelCurrent = levelPrev;
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
 
 	constexpr int MaxFoldWordLength = 7 + 1; // foreach
-	char word[MaxFoldWordLength + 1] = "";
+	char word[MaxFoldWordLength + 1];
 	int wordlen = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
@@ -844,15 +848,15 @@ static void FoldBashDoc(Sci_PositionU startPos, Sci_Position length, int, LexerW
 				word[wordlen] = '\0';
 				wordlen = 0;
 				if (isCShell) {
-					if (strcmp(word, "if") == 0 || strcmp(word, "foreach") == 0 || strcmp(word, "switch") == 0 || strcmp(word, "while") == 0) {
+					if (EqualsAny(word, "if", "foreach", "switch", "while")) {
 						levelCurrent++;
-					} else if (strcmp(word, "end") == 0 || strcmp(word, "endif") == 0 || strcmp(word, "endsw") == 0) {
+					} else if (EqualsAny(word, "end", "endif", "endsw")) {
 						levelCurrent--;
 					}
 				} else {
-					if (strcmp(word, "if") == 0 || strcmp(word, "case") == 0 || strcmp(word, "do") == 0) {
+					if (EqualsAny(word, "if", "case", "do")) {
 						levelCurrent++;
-					} else if (strcmp(word, "fi") == 0 || strcmp(word, "esac") == 0 || strcmp(word, "done") == 0) {
+					} else if (EqualsAny(word, "fi", "esac", "done")) {
 						levelCurrent--;
 					}
 				}

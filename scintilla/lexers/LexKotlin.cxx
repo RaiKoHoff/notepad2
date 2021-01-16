@@ -43,76 +43,45 @@ struct EscapeSequence {
 };
 
 enum {
-	MaxKotlinNestedStateCount = 4,
 	KotlinLineStateMaskLineComment = 1, // line comment
 	KotlinLineStateMaskImport = 1 << 1, // import
 };
 
-constexpr int PackState(int state) noexcept {
-	switch (state) {
-	case SCE_KOTLIN_STRING:
-		return 1;
-	case SCE_KOTLIN_RAWSTRING:
-		return 2;
-	default:
-		return 0;
-	}
-}
-
-constexpr int UnpackState(int state) noexcept  {
-	switch (state) {
-	case 1:
-		return SCE_KOTLIN_STRING;
-	case 2:
-		return SCE_KOTLIN_RAWSTRING;
-	default:
-		return SCE_KOTLIN_DEFAULT;
-	}
-}
-
-int PackNestedState(const std::vector<int>& nestedState) noexcept {
-	return PackLineState<2, MaxKotlinNestedStateCount, PackState>(nestedState) << 16;
-}
-
-void UnpackNestedState(int lineState, int count, std::vector<int>& nestedState) {
-	UnpackLineState<2, MaxKotlinNestedStateCount, UnpackState>(lineState, count, nestedState);
-}
+static_assert(DefaultNestedStateBaseStyle + 1 == SCE_KOTLIN_STRING);
+static_assert(DefaultNestedStateBaseStyle + 2 == SCE_KOTLIN_RAWSTRING);
 
 void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
-	int lineStateLineComment = 0;
-	int lineStateImport = 0;
+	int lineStateLineType = 0;
 	int commentLevel = 0;	// nested block comment level
 
 	int kwType = SCE_KOTLIN_DEFAULT;
 	int chBeforeIdentifier = 0;
 
-	int curlyBrace = 0; // "${}"
-	int variableOuter = SCE_KOTLIN_DEFAULT;	// variable inside string
-	std::vector<int> nestedState;
+	std::vector<int> nestedState; // string interpolation "${}"
 
 	int visibleChars = 0;
 	EscapeSequence escSeq;
 
 	StyleContext sc(startPos, lengthDoc, initStyle, styler);
 	if (sc.currentLine > 0) {
-		const int lineState = styler.GetLineState(sc.currentLine - 1);
+		int lineState = styler.GetLineState(sc.currentLine - 1);
 		/*
-		1: lineStateLineComment
-		1: lineStateImport
+		2: lineStateLineType
 		6: commentLevel
-		8: curlyBrace
-		2*4: nestedState
+		3: nestedState count
+		3*4: nestedState
 		*/
 		commentLevel = (lineState >> 2) & 0x3f;
-		curlyBrace = (lineState >> 8) & 0xff;
-		if (curlyBrace) {
-			UnpackNestedState((lineState >> 16) & 0xff, curlyBrace, nestedState);
+		lineState >>= 8;
+		if (lineState) {
+			UnpackLineState(lineState, nestedState);
 		}
 	}
 	if (startPos == 0 && sc.Match('#', '!')) {
 		// Shell Shebang at beginning of file
 		sc.SetState(SCE_KOTLIN_COMMENTLINE);
-		lineStateLineComment = KotlinLineStateMaskLineComment;
+		sc.Forward();
+		lineStateLineType = KotlinLineStateMaskLineComment;
 	}
 
 	while (sc.More()) {
@@ -136,7 +105,7 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 					sc.ChangeState(SCE_KOTLIN_WORD);
 					if (strcmp(s, "import") == 0) {
 						if (visibleChars == sc.LengthCurrent()) {
-							lineStateImport = KotlinLineStateMaskImport;
+							lineStateLineType = KotlinLineStateMaskImport;
 						}
 					} else if (EqualsAny(s, "break", "continue", "return", "this", "super")) {
 						kwType = SCE_KOTLIN_LABEL;
@@ -206,7 +175,7 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 
 		case SCE_KOTLIN_COMMENTBLOCK:
 		case SCE_KOTLIN_COMMENTBLOCKDOC:
-			if (sc.state == SCE_KOTLIN_COMMENTBLOCKDOC && sc.ch == '@' && IsLowerCase(sc.chNext) && isspacechar(sc.chPrev)) {
+			if (sc.state == SCE_KOTLIN_COMMENTBLOCKDOC && sc.ch == '@' && IsLowerCase(sc.chNext) && IsCommentTagPrev(sc.chPrev)) {
 				sc.SetState(SCE_KOTLIN_COMMENTDOCWORD);
 			} else if (sc.Match('*', '/')) {
 				sc.Forward();
@@ -215,7 +184,7 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 					sc.ForwardSetState(SCE_KOTLIN_DEFAULT);
 				}
 			} else if (sc.Match('/', '*')) {
-				sc.Forward(2);
+				sc.Forward();
 				++commentLevel;
 			}
 			break;
@@ -236,19 +205,12 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 					sc.Forward();
 				}
 			} else if (sc.ch == '$' && IsIdentifierStartEx(sc.chNext)) {
-				variableOuter = sc.state;
+				escSeq.outerState = sc.state;
 				sc.SetState(SCE_KOTLIN_VARIABLE);
 			} else if (sc.Match('$', '{')) {
-				++curlyBrace;
 				nestedState.push_back(sc.state);
 				sc.SetState(SCE_KOTLIN_OPERATOR2);
 				sc.Forward();
-			} else if (curlyBrace && sc.ch == '}') {
-				const int outerState = TryPopBack(nestedState);
-				--curlyBrace;
-				sc.SetState(SCE_KOTLIN_OPERATOR2);
-				sc.ForwardSetState(outerState);
-				continue;
 			} else if (sc.ch == '\"' && (sc.state == SCE_KOTLIN_STRING || sc.Match('"', '"', '"'))) {
 				if (sc.state == SCE_KOTLIN_RAWSTRING) {
 					sc.SetState(SCE_KOTLIN_RAWSTRINGEND);
@@ -270,6 +232,7 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 				sc.ForwardSetState(SCE_KOTLIN_DEFAULT);
 			}
 			break;
+
 		case SCE_KOTLIN_ESCAPECHAR:
 			if (escSeq.atEscapeEnd(sc.ch)) {
 				const int outerState = escSeq.outerState;
@@ -290,9 +253,10 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 				}
 			}
 			break;
+
 		case SCE_KOTLIN_VARIABLE:
 			if (!IsIdentifierCharEx(sc.ch)) {
-				sc.SetState(variableOuter);
+				sc.SetState(escSeq.outerState);
 				continue;
 			}
 			break;
@@ -311,7 +275,7 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 				const int chNext = sc.GetRelative(2);
 				sc.SetState((chNext == '!' || chNext == '/') ? SCE_KOTLIN_COMMENTLINEDOC : SCE_KOTLIN_COMMENTLINE);
 				if (visibleChars == 0) {
-					lineStateLineComment = KotlinLineStateMaskLineComment;
+					lineStateLineType = KotlinLineStateMaskLineComment;
 				}
 			} else if (sc.Match('/', '*')) {
 				const int chNext = sc.GetRelative(2);
@@ -338,14 +302,13 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 				chBeforeIdentifier = sc.chPrev;
 				sc.SetState(SCE_KOTLIN_IDENTIFIER);
 			} else if (isoperator(sc.ch)) {
-				sc.SetState(curlyBrace ? SCE_KOTLIN_OPERATOR2 : SCE_KOTLIN_OPERATOR);
-				if (curlyBrace) {
+				const bool interpolating = !nestedState.empty();
+				sc.SetState(interpolating ? SCE_KOTLIN_OPERATOR2 : SCE_KOTLIN_OPERATOR);
+				if (interpolating) {
 					if (sc.ch == '{') {
-						++curlyBrace;
 						nestedState.push_back(SCE_KOTLIN_DEFAULT);
 					} else if (sc.ch == '}') {
-						--curlyBrace;
-						const int outerState = TryPopBack(nestedState);
+						const int outerState = TakeAndPop(nestedState);
 						sc.ForwardSetState(outerState);
 						continue;
 					}
@@ -357,13 +320,12 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 			visibleChars++;
 		}
 		if (sc.atLineEnd) {
-			int lineState = (curlyBrace << 8) | (commentLevel << 2) | lineStateLineComment | lineStateImport;
-			if (curlyBrace) {
-				lineState |= PackNestedState(nestedState);
+			int lineState = (commentLevel << 2) | lineStateLineType;
+			if (!nestedState.empty()) {
+				lineState |= PackLineState(nestedState) << 8;
 			}
 			styler.SetLineState(sc.currentLine, lineState);
-			lineStateLineComment = 0;
-			lineStateImport = 0;
+			lineStateLineType = 0;
 			visibleChars = 0;
 			kwType = SCE_KOTLIN_DEFAULT;
 		}
@@ -390,7 +352,7 @@ void FoldKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle
 	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
 
 	const Sci_PositionU endPos = startPos + lengthDoc;
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	FoldLineState foldPrev(0);
 	int levelCurrent = SC_FOLDLEVELBASE;
 	if (lineCurrent > 0) {
@@ -401,7 +363,7 @@ void FoldKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle
 	int levelNext = levelCurrent;
 	FoldLineState foldCurrent(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+	Sci_PositionU lineEndPos = sci::min(lineStartNext, endPos) - 1;
 
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
@@ -459,7 +421,7 @@ void FoldKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+			lineEndPos = sci::min(lineStartNext, endPos) - 1;
 			levelCurrent = levelNext;
 			foldPrev = foldCurrent;
 			foldCurrent = foldNext;

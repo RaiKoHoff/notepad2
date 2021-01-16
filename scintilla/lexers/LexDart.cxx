@@ -40,84 +40,53 @@ struct EscapeSequence {
 };
 
 enum {
-	MaxDartNestedStateCount = 4,
 	DartLineStateMaskLineComment = 1,	// line comment
 	DartLineStateMaskImport = (1 << 1),	// import
 };
 
-constexpr int PackState(int state) noexcept {
-	switch (state) {
-	case SCE_DART_STRING_SQ:
-		return 1;
-	case SCE_DART_STRING_DQ:
-		return 2;
-	case SCE_DART_TRIPLE_STRING_SQ:
-		return 3;
-	case SCE_DART_TRIPLE_STRING_DQ:
-		return 4;
-	default:
-		return 0;
-	}
-}
+static_assert(DefaultNestedStateBaseStyle + 1 == SCE_DART_STRING_SQ);
+static_assert(DefaultNestedStateBaseStyle + 2 == SCE_DART_STRING_DQ);
+static_assert(DefaultNestedStateBaseStyle + 3 == SCE_DART_TRIPLE_STRING_SQ);
+static_assert(DefaultNestedStateBaseStyle + 4 == SCE_DART_TRIPLE_STRING_DQ);
 
-constexpr int UnpackState(int state) noexcept  {
-	switch (state) {
-	case 1:
-		return SCE_DART_STRING_SQ;
-	case 2:
-		return SCE_DART_STRING_DQ;
-	case 3:
-		return SCE_DART_TRIPLE_STRING_SQ;
-	case 4:
-		return SCE_DART_TRIPLE_STRING_DQ;
-	default:
-		return SCE_DART_DEFAULT;
-	}
-}
-
-int PackNestedState(const std::vector<int>& nestedState) noexcept {
-	return PackLineState<3, MaxDartNestedStateCount, PackState>(nestedState) << 16;
-}
-
-void UnpackNestedState(int lineState, int count, std::vector<int>& nestedState) {
-	UnpackLineState<3, MaxDartNestedStateCount, UnpackState>(lineState, count, nestedState);
+constexpr bool IsDeclarableOperator(int ch) noexcept {
+	// https://github.com/dart-lang/sdk/blob/master/sdk/lib/core/symbol.dart
+	return AnyOf(ch, '+', '-', '*', '/', '%', '~', '&', '|',
+					 '^', '<', '>', '=', '[', ']');
 }
 
 void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
-	int lineStateLineComment = 0;
-	int lineStateImport = 0;
+	int lineStateLineType = 0;
 	int commentLevel = 0;	// nested block comment level
 
 	int kwType = SCE_DART_DEFAULT;
 	int chBeforeIdentifier = 0;
 
-	int curlyBrace = 0; // "${}"
-	int variableOuter = SCE_DART_DEFAULT;	// variable inside string
-	std::vector<int> nestedState;
+	std::vector<int> nestedState; // string interpolation "${}"
 
 	int visibleChars = 0;
 	EscapeSequence escSeq;
 
 	StyleContext sc(startPos, lengthDoc, initStyle, styler);
 	if (sc.currentLine > 0) {
-		const int lineState = styler.GetLineState(sc.currentLine - 1);
+		int lineState = styler.GetLineState(sc.currentLine - 1);
 		/*
-		1: lineStateLineComment
-		1: lineStateImport
+		2: lineStateLineType
 		6: commentLevel
-		8: curlyBrace
+		3: nestedState count
 		3*4: nestedState
 		*/
 		commentLevel = (lineState >> 2) & 0x3f;
-		curlyBrace = (lineState >> 8) & 0xff;
-		if (curlyBrace) {
-			UnpackNestedState((lineState >> 16) & 0xff, curlyBrace, nestedState);
+		lineState >>= 8;
+		if (lineState) {
+			UnpackLineState(lineState, nestedState);
 		}
 	}
 	if (startPos == 0 && sc.Match('#', '!')) {
 		// Shell Shebang at beginning of file
 		sc.SetState(SCE_DART_COMMENTLINE);
-		lineStateLineComment = DartLineStateMaskLineComment;
+		sc.Forward();
+		lineStateLineType = DartLineStateMaskLineComment;
 	}
 
 	while (sc.More()) {
@@ -141,12 +110,20 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					sc.ChangeState(SCE_DART_WORD);
 					if (EqualsAny(s, "import", "part")) {
 						if (visibleChars == sc.LengthCurrent()) {
-							lineStateImport = DartLineStateMaskImport;
+							lineStateLineType = DartLineStateMaskImport;
 						}
 					} else if (EqualsAny(s, "as", "class", "extends", "implements", "is", "new", "throw")) {
 						kwType = SCE_DART_CLASS;
 					} else if (strcmp(s, "enum") == 0) {
 						kwType = SCE_DART_ENUM;
+					} else if (EqualsAny(s, "break", "continue")) {
+						kwType = SCE_DART_LABEL;
+					}
+					if (kwType != SCE_DART_DEFAULT) {
+						const int chNext = sc.GetLineNextChar();
+						if (!IsIdentifierStartEx(chNext)) {
+							kwType = SCE_DART_DEFAULT;
+						}
 					}
 				} else if (keywordLists[1]->InList(s)) {
 					sc.ChangeState(SCE_DART_WORD2);
@@ -154,20 +131,25 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					sc.ChangeState(SCE_DART_CLASS);
 				} else if (keywordLists[3]->InList(s)) {
 					sc.ChangeState(SCE_DART_ENUM);
-				} else if (kwType != SCE_DART_DEFAULT) {
-					sc.ChangeState(kwType);
-				} else {
-					const int chNext = sc.GetNextNSChar();
-					if (chNext == '(') {
-						sc.ChangeState(SCE_DART_FUNCTION);
-					} else if ((chBeforeIdentifier == '<' && chNext == '>')
-						|| IsIdentifierStartEx(chNext)) {
-						// type<type>
-						// type identifier
-						sc.ChangeState(SCE_DART_CLASS);
+				} else if (sc.ch != '.') {
+					if (kwType != SCE_DART_DEFAULT) {
+						sc.ChangeState(kwType);
+					} else {
+						const int offset = sc.ch == '?';
+						const int chNext = sc.GetLineNextChar(offset);
+						if (chNext == '(') {
+							sc.ChangeState(SCE_DART_FUNCTION);
+						} else if ((chBeforeIdentifier == '<' && chNext == '>')
+							|| IsIdentifierStartEx(chNext)) {
+							// type<type>
+							// type<type?>
+							// type identifier
+							// type? identifier
+							sc.ChangeState(SCE_DART_CLASS);
+						}
 					}
 				}
-				if (sc.state != SCE_DART_WORD) {
+				if (sc.state != SCE_DART_WORD && sc.ch != '.') {
 					kwType = SCE_DART_DEFAULT;
 				}
 				sc.SetState(SCE_DART_DEFAULT);
@@ -188,7 +170,7 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			break;
 
 		case SCE_DART_SYMBOL_OPERATOR:
-			if (!isoperator(sc.ch)) {
+			if (!IsDeclarableOperator(sc.ch)) {
 				sc.SetState(SCE_DART_DEFAULT);
 			}
 			break;
@@ -209,7 +191,7 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					sc.ForwardSetState(SCE_DART_DEFAULT);
 				}
 			} else if (sc.Match('/', '*')) {
-				sc.Forward(2);
+				sc.Forward();
 				++commentLevel;
 			}
 			break;
@@ -237,7 +219,7 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 		case SCE_DART_STRING_DQ:
 		case SCE_DART_TRIPLE_STRING_SQ:
 		case SCE_DART_TRIPLE_STRING_DQ:
-			if (curlyBrace == 0 && (sc.state == SCE_DART_STRING_SQ || sc.state == SCE_DART_STRING_DQ) && sc.atLineStart) {
+			if ((sc.state == SCE_DART_STRING_SQ || sc.state == SCE_DART_STRING_DQ) && sc.atLineStart) {
 				sc.SetState(SCE_DART_DEFAULT);
 			} else if (sc.ch == '\\') {
 				if (escSeq.resetEscapeState(sc.state, sc.chNext)) {
@@ -245,19 +227,12 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					sc.Forward();
 				}
 			} else if (sc.ch == '$' && IsIdentifierStartEx(sc.chNext)) {
-				variableOuter = sc.state;
+				escSeq.outerState = sc.state;
 				sc.SetState(SCE_DART_VARIABLE);
 			} else if (sc.Match('$', '{')) {
-				++curlyBrace;
 				nestedState.push_back(sc.state);
 				sc.SetState(SCE_DART_OPERATOR2);
 				sc.Forward();
-			} else if (curlyBrace && sc.ch == '}') {
-				const int outerState = TryPopBack(nestedState);
-				--curlyBrace;
-				sc.SetState(SCE_DART_OPERATOR2);
-				sc.ForwardSetState(outerState);
-				continue;
 			} else if (sc.ch == '\'' && (sc.state == SCE_DART_STRING_SQ
 				|| (sc.state == SCE_DART_TRIPLE_STRING_SQ && sc.Match('\'', '\'', '\'')))) {
 				if (sc.state == SCE_DART_TRIPLE_STRING_SQ) {
@@ -274,6 +249,7 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				sc.ForwardSetState(SCE_DART_DEFAULT);
 			}
 			break;
+
 		case SCE_DART_ESCAPECHAR:
 			if (escSeq.atEscapeEnd(sc.ch)) {
 				const int outerState = escSeq.outerState;
@@ -285,9 +261,10 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				}
 			}
 			break;
+
 		case SCE_DART_VARIABLE:
 			if (!IsIdentifierCharEx(sc.ch)) {
-				sc.SetState(variableOuter);
+				sc.SetState(escSeq.outerState);
 				continue;
 			}
 			break;
@@ -298,7 +275,7 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				const int chNext = sc.GetRelative(2);
 				sc.SetState((chNext == '/') ? SCE_DART_COMMENTLINEDOC : SCE_DART_COMMENTLINE);
 				if (visibleChars == 0) {
-					lineStateLineComment = DartLineStateMaskLineComment;
+					lineStateLineType = DartLineStateMaskLineComment;
 				}
 			} else if (sc.Match('/', '*')) {
 				const int chNext = sc.GetRelative(2);
@@ -317,14 +294,14 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				}
 				continue;
 			} else if (sc.Match('"', '"', '"')) {
-				sc.ChangeState(SCE_DART_TRIPLE_STRING_DQSTART);
+				sc.SetState(SCE_DART_TRIPLE_STRING_DQSTART);
 				sc.Forward(2);
 				sc.ForwardSetState(SCE_DART_TRIPLE_STRING_DQ);
 				continue;
 			} else if (sc.ch == '"') {
 				sc.SetState(SCE_DART_STRING_DQ);
 			} else if (sc.Match('\'', '\'', '\'')) {
-				sc.ChangeState(SCE_DART_TRIPLE_STRING_SQSTART);
+				sc.SetState(SCE_DART_TRIPLE_STRING_SQSTART);
 				sc.Forward(2);
 				sc.ForwardSetState(SCE_DART_TRIPLE_STRING_SQ);
 				continue;
@@ -333,26 +310,27 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			} else if (IsNumberStart(sc.ch, sc.chNext)) {
 				sc.SetState(SCE_DART_NUMBER);
 			} else if ((sc.ch == '@' || sc.ch == '$') && IsIdentifierStartEx(sc.chNext)) {
-				variableOuter = SCE_DART_DEFAULT;
+				escSeq.outerState = SCE_DART_DEFAULT;
 				sc.SetState((sc.ch == '@') ? SCE_DART_METADATA : SCE_DART_VARIABLE);
 			} else if (sc.ch == '#') {
 				if (IsIdentifierStartEx(sc.chNext)) {
 					sc.SetState(SCE_DART_SYMBOL_IDENTIFIER);
-				} else if (isoperator(sc.ch)) {
+				} else if (IsDeclarableOperator(sc.chNext)) {
 					sc.SetState(SCE_DART_SYMBOL_OPERATOR);
 				}
 			} else if (IsIdentifierStartEx(sc.ch)) {
-				chBeforeIdentifier = sc.chPrev;
+				if (sc.chPrev != '.') {
+					chBeforeIdentifier = sc.chPrev;
+				}
 				sc.SetState(SCE_DART_IDENTIFIER);
 			} else if (isoperator(sc.ch)) {
-				sc.SetState(curlyBrace ? SCE_DART_OPERATOR2 : SCE_DART_OPERATOR);
-				if (curlyBrace) {
+				const bool interpolating = !nestedState.empty();
+				sc.SetState(interpolating ? SCE_DART_OPERATOR2 : SCE_DART_OPERATOR);
+				if (interpolating) {
 					if (sc.ch == '{') {
-						++curlyBrace;
 						nestedState.push_back(SCE_DART_DEFAULT);
 					} else if (sc.ch == '}') {
-						--curlyBrace;
-						const int outerState = TryPopBack(nestedState);
+						const int outerState = TakeAndPop(nestedState);
 						sc.ForwardSetState(outerState);
 						continue;
 					}
@@ -364,13 +342,12 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			visibleChars++;
 		}
 		if (sc.atLineEnd) {
-			int lineState = (curlyBrace << 8) | (commentLevel << 2) | lineStateLineComment | lineStateImport;
-			if (curlyBrace) {
-				lineState |= PackNestedState(nestedState);
+			int lineState = (commentLevel << 2) | lineStateLineType;
+			if (!nestedState.empty()) {
+				lineState |= PackLineState(nestedState) << 8;
 			}
 			styler.SetLineState(sc.currentLine, lineState);
-			lineStateLineComment = 0;
-			lineStateImport = 0;
+			lineStateLineType = 0;
 			visibleChars = 0;
 			kwType = SCE_DART_DEFAULT;
 		}
@@ -397,7 +374,7 @@ void FoldDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
 
 	const Sci_PositionU endPos = startPos + lengthDoc;
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	FoldLineState foldPrev(0);
 	int levelCurrent = SC_FOLDLEVELBASE;
 	if (lineCurrent > 0) {
@@ -408,7 +385,7 @@ void FoldDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 	int levelNext = levelCurrent;
 	FoldLineState foldCurrent(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+	Sci_PositionU lineEndPos = sci::min(lineStartNext, endPos) - 1;
 
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
@@ -472,7 +449,7 @@ void FoldDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+			lineEndPos = sci::min(lineStartNext, endPos) - 1;
 			levelCurrent = levelNext;
 			foldPrev = foldCurrent;
 			foldCurrent = foldNext;

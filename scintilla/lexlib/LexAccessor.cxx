@@ -5,13 +5,15 @@
 // Copyright 1998-2010 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
 
+#include <cstdint>
 #include <cassert>
 
-#include <algorithm>
+#include <vector>
 
 #include "ILexer.h"
 #include "LexAccessor.h"
 #include "CharacterSet.h"
+#include "LexerUtils.h"
 
 using namespace Scintilla;
 
@@ -27,7 +29,7 @@ bool LexAccessor::MatchIgnoreCase(Sci_Position pos, const char *s) noexcept {
 }
 
 void LexAccessor::GetRange(Sci_PositionU startPos_, Sci_PositionU endPos_, char *s, Sci_PositionU len) noexcept {
-	endPos_ = std::min(endPos_, startPos_ + len - 1);
+	endPos_ = sci::min(endPos_, startPos_ + len - 1);
 	if (startPos_ >= static_cast<Sci_PositionU>(startPos) && endPos_ <= static_cast<Sci_PositionU>(endPos)) {
 		const char *p = buf + (startPos_ - startPos);
 		const char * const t = buf + (endPos_ - startPos);
@@ -43,7 +45,7 @@ void LexAccessor::GetRange(Sci_PositionU startPos_, Sci_PositionU endPos_, char 
 }
 
 void LexAccessor::GetRangeLowered(Sci_PositionU startPos_, Sci_PositionU endPos_, char *s, Sci_PositionU len) noexcept {
-	endPos_ = std::min(endPos_, startPos_ + len - 1);
+	endPos_ = sci::min(endPos_, startPos_ + len - 1);
 	if (startPos_ >= static_cast<Sci_PositionU>(startPos) && endPos_ <= static_cast<Sci_PositionU>(endPos)) {
 		const char *p = buf + (startPos_ - startPos);
 		const char * const t = buf + (endPos_ - startPos);
@@ -58,7 +60,7 @@ void LexAccessor::GetRangeLowered(Sci_PositionU startPos_, Sci_PositionU endPos_
 	*s = '\0';
 }
 
-Sci_Position LexLineSkipSpaceTab(Sci_Position line, LexAccessor &styler) noexcept {
+Sci_Position LexLineSkipSpaceTab(Sci_Line line, LexAccessor &styler) noexcept {
 	const Sci_Position startPos = styler.LineStart(line);
 	const Sci_Position endPos = styler.LineStart(line + 1) - 1;
 	for (Sci_Position i = startPos; i < endPos; i++) {
@@ -70,7 +72,7 @@ Sci_Position LexLineSkipSpaceTab(Sci_Position line, LexAccessor &styler) noexcep
 }
 
 bool IsLexSpaceToEOL(LexAccessor &styler, Sci_Position startPos) noexcept {
-	const Sci_Position line = styler.GetLine(startPos);
+	const Sci_Line line = styler.GetLine(startPos);
 	const Sci_Position endPos = styler.LineStart(line + 1) - 1;
 	for (Sci_Position i = startPos; i < endPos; i++) {
 		if (!IsSpaceOrTab(styler.SafeGetCharAt(i))) {
@@ -80,7 +82,7 @@ bool IsLexSpaceToEOL(LexAccessor &styler, Sci_Position startPos) noexcept {
 	return true;
 }
 
-bool IsLexEmptyLine(LexAccessor &styler, Sci_Position line) noexcept {
+bool IsLexEmptyLine(LexAccessor &styler, Sci_Line line) noexcept {
 	const Sci_Position startPos = styler.LineStart(line);
 	const Sci_Position endPos = styler.LineStart(line + 1) - 1;
 	for (Sci_Position i = startPos; i < endPos; i++) {
@@ -91,7 +93,7 @@ bool IsLexEmptyLine(LexAccessor &styler, Sci_Position line) noexcept {
 	return true;
 }
 
-bool IsLexLineStartsWith(Sci_Position line, LexAccessor &styler, const char *word, bool matchCase, int style) noexcept {
+bool IsLexLineStartsWith(Sci_Line line, LexAccessor &styler, const char *word, bool matchCase, int style) noexcept {
 	const Sci_Position startPos = styler.LineStart(line);
 	const Sci_Position endPos = styler.LineStart(line + 1) - 1;
 	for (Sci_Position pos = startPos; pos < endPos; pos++) {
@@ -103,7 +105,7 @@ bool IsLexLineStartsWith(Sci_Position line, LexAccessor &styler, const char *wor
 	return false;
 }
 
-bool IsLexCommentLine(Sci_Position line, LexAccessor &styler, int style) noexcept {
+bool IsLexCommentLine(Sci_Line line, LexAccessor &styler, int style) noexcept {
 	const Sci_Position startPos = styler.LineStart(line);
 	const Sci_Position endPos = styler.LineStart(line + 1) - 1;
 	for (Sci_Position pos = startPos; pos < endPos; pos++) {
@@ -197,6 +199,33 @@ Sci_PositionU LexGetRangeLowered(Sci_Position startPos, LexAccessor &styler, con
 	}
 	s[i] = '\0';
 	return i;
+}
+
+int PackLineState(const std::vector<int>& states) noexcept {
+	return PackLineState<DefaultNestedStateValueBit, DefaultMaxNestedStateCount, DefaultNestedStateCountBit, DefaultNestedStateBaseStyle>(states);
+}
+
+void UnpackLineState(int lineState, std::vector<int>& states) {
+	UnpackLineState<DefaultNestedStateValueBit, DefaultMaxNestedStateCount, DefaultNestedStateCountBit, DefaultNestedStateBaseStyle>(lineState, states);
+}
+
+void BacktrackToStart(const LexAccessor &styler, int stateMask, Sci_PositionU &startPos, Sci_Position &lengthDoc, int &initStyle) noexcept {
+	const Sci_Line currentLine = styler.GetLine(startPos);
+	if (currentLine != 0) {
+		Sci_Line line = currentLine - 1;
+		int lineState = styler.GetLineState(line);
+		while ((lineState & stateMask) != 0 && line != 0) {
+			--line;
+			lineState = styler.GetLineState(line);
+		}
+		++line;
+		if (line != currentLine) {
+			const Sci_Position endPos = startPos + lengthDoc;
+			startPos = (line == 0)? 0 : styler.LineStart(line);
+			lengthDoc = endPos - startPos;
+			initStyle = (startPos == 0)? 0 : styler.StyleAt(startPos - 1);
+		}
+	}
 }
 
 }

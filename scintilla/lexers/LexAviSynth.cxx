@@ -37,7 +37,7 @@ constexpr int GetLineCommentState(int lineState) noexcept {
 void ColouriseAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	int visibleChars = 0;
 	int lineStateLineComment = 0;
-	int nestedLevel = 0;
+	int commentLevel = 0;
 	int lineContinuation = 0;
 	int insideScript = 0;
 	int scriptEval = ScriptEvalState_None;
@@ -49,11 +49,11 @@ void ColouriseAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 		1: lineStateLineComment
 		1: lineContinuation
 		1: insideScript
-		: nestedLevel
+		: commentLevel
 		*/
 		lineContinuation = lineState & AviSynthLineStateMaskLineContinuation;
 		insideScript = lineState & AviSynthLineStateMaskInsideScript;
-		nestedLevel = lineState >> 3;
+		commentLevel = lineState >> 3;
 		if (lineContinuation) {
 			lineStateLineComment = GetLineCommentState(lineState);
 		}
@@ -146,11 +146,11 @@ void ColouriseAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 		case SCE_AVS_COMMENTBLOCKN:
 			if (sc.Match('[', '*')) {
 				sc.Forward();
-				++nestedLevel;
+				++commentLevel;
 			} else if (sc.Match('*', ']')) {
 				sc.Forward();
-				--nestedLevel;
-				if (nestedLevel <= 0) {
+				--commentLevel;
+				if (commentLevel == 0) {
 					sc.ForwardSetState(SCE_AVS_DEFAULT);
 				}
 			}
@@ -169,7 +169,7 @@ void ColouriseAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			} else if (sc.Match('[', '*')) {
 				sc.SetState(SCE_AVS_COMMENTBLOCKN);
 				sc.Forward();
-				nestedLevel = 1;
+				commentLevel = 1;
 			} else if (sc.Match('\"', '\"', '\"')) {
 				sc.SetState(SCE_AVS_TRIPLESTRING);
 				sc.Forward(2);
@@ -208,7 +208,7 @@ void ColouriseAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			++visibleChars;
 		}
 		if (sc.atLineEnd) {
-			const int lineState = lineStateLineComment | lineContinuation | insideScript | (nestedLevel << 3);
+			const int lineState = lineStateLineComment | lineContinuation | insideScript | (commentLevel << 3);
 			styler.SetLineState(sc.currentLine, lineState);
 			visibleChars = 0;
 			scriptEval = ScriptEvalState_None;
@@ -226,7 +226,7 @@ void FoldAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
 
 	const Sci_PositionU endPos = startPos + lengthDoc;
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
 	int lineCommentPrev = 0;
 	if (lineCurrent > 0) {
@@ -237,7 +237,7 @@ void FoldAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 	int levelNext = levelCurrent;
 	int lineCommentCurrent = GetLineCommentState(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+	Sci_PositionU lineEndPos = sci::min(lineStartNext, endPos) - 1;
 
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
@@ -291,7 +291,7 @@ void FoldAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+			lineEndPos = sci::min(lineStartNext, endPos) - 1;
 			levelCurrent = levelNext;
 			lineCommentPrev = lineCommentCurrent;
 			lineCommentCurrent = lineCommentNext;

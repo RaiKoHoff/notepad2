@@ -8,7 +8,7 @@
 
 namespace Scintilla {
 
-class CharacterSet {
+class CharacterSet final {
 	bool valueAfter;
 	// ASCII character only, not useful for UTF-8 or DBCS multi byte character
 	bool bset[128]{};
@@ -97,6 +97,10 @@ constexpr bool IsADigit(int ch, int base) noexcept {
 
 constexpr bool IsNumberStart(int ch, int chNext) noexcept {
 	return IsADigit(ch) || (ch == '.' && IsADigit(chNext));
+}
+
+constexpr bool IsNumberStartEx(int chPrev, int ch, int chNext) noexcept {
+	return IsADigit(ch) || (chPrev != '.' && ch == '.' && IsADigit(chNext));
 }
 
 constexpr bool IsNumberContinue(int chPrev, int ch, int chNext) noexcept {
@@ -213,16 +217,34 @@ constexpr bool IsPunctuation(int ch) noexcept {
 		|| (ch > 'z' && ch < 127);
 }
 
+constexpr bool IsCommentTagPrev(int chPrev) noexcept {
+	return AnyOf(chPrev, ' ', '\t', '\n', '\r', '*', '!', '/');
+}
+
+constexpr bool IsTaskMarkerPrev(int chPrev) noexcept {
+	return AnyOf(chPrev, ' ', '\t', '*', '!', '/', '\n', '\r');
+}
+
+constexpr bool IsTaskMarkerEnd(int ch) noexcept {
+	return AnyOf(ch, ':', '(', ' ', '\t', '\n', '\r');
+}
+
+constexpr bool IsTaskMarkerStart(int visibleChars, int visibleCharsBefore, int chPrev, int ch, int chNext) noexcept {
+	return (visibleChars == 0 || (visibleChars <= visibleCharsBefore + 3 && IsTaskMarkerPrev(chPrev)))
+		&& IsUpperCase(ch)
+		&& IsUpperCase(chNext);
+}
+
 // Simple case functions for ASCII supersets.
 
 template <typename T>
 constexpr T MakeUpperCase(T ch) noexcept {
-	return (ch < 'a' || ch > 'z') ? ch : (ch - 'a' + 'A');
+	return (ch >= 'a' && ch <= 'z') ? (ch - 'a' + 'A') : ch;
 }
 
 template <typename T>
 constexpr T MakeLowerCase(T ch) noexcept {
-	return (ch < 'A' || ch > 'Z') ? ch : (ch - 'A' + 'a');
+	return (ch >= 'A' && ch <= 'Z') ? (ch - 'A' + 'a') : ch;
 }
 
 #if 0

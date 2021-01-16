@@ -52,6 +52,7 @@ Used by VSCode, Atom etc.
 #define Enable_ChromiumWebCustomMIMEDataFormat	0
 
 #include "Platform.h"
+#include "VectorISA.h"
 
 #include "ILoader.h"
 #include "ILexer.h"
@@ -181,7 +182,7 @@ class ScintillaWin; 	// Forward declaration for COM interface subobjects
 
 /**
  */
-class FormatEnumerator : public IEnumFORMATETC {
+class FormatEnumerator final : public IEnumFORMATETC {
 	ULONG ref;
 	ULONG pos;
 	std::vector<CLIPFORMAT> formats;
@@ -204,7 +205,7 @@ public:
 
 /**
  */
-class DropSource : public IDropSource {
+class DropSource final : public IDropSource {
 public:
 	ScintillaWin *sci = nullptr;
 	DropSource() noexcept = default;
@@ -222,7 +223,7 @@ public:
 
 /**
  */
-class DataObject : public IDataObject {
+class DataObject final : public IDataObject {
 public:
 	ScintillaWin *sci = nullptr;
 	DataObject() noexcept = default;
@@ -247,7 +248,7 @@ public:
 
 /**
  */
-class DropTarget : public IDropTarget {
+class DropTarget final : public IDropTarget {
 public:
 	ScintillaWin *sci = nullptr;
 	DropTarget() noexcept = default;
@@ -372,7 +373,7 @@ public:
 
 /**
  */
-class ScintillaWin :
+class ScintillaWin final :
 	public ScintillaBase {
 
 	bool lastKeyDownConsumed;
@@ -910,7 +911,7 @@ bool BoundsContains(PRectangle rcBounds, HRGN hRgnBounds, PRectangle rcCheck) no
 			contains = false;
 		} else if (hRgnBounds) {
 			// In bounding rectangle so check more accurately using region
-			const RECT rcw = RectFromPRectangle(rcCheck);
+			const RECT rcw = RectFromPRectangleEx(rcCheck);
 			HRGN hRgnCheck = ::CreateRectRgnIndirect(&rcw);
 			if (hRgnCheck) {
 				HRGN hRgnDifference = ::CreateRectRgn(0, 0, 0, 0);
@@ -1067,7 +1068,7 @@ sptr_t ScintillaWin::WndPaint() {
 	hRgnUpdate = ::CreateRectRgn(0, 0, 0, 0);
 	::GetUpdateRgn(MainHWND(), hRgnUpdate, FALSE);
 	::BeginPaint(MainHWND(), &ps);
-	rcPaint = PRectangle::FromInts(ps.rcPaint.left, ps.rcPaint.top, ps.rcPaint.right, ps.rcPaint.bottom);
+	rcPaint = PRectangleFromRectEx(ps.rcPaint);
 	const PRectangle rcClient = GetClientRectangle();
 	paintingAllText = BoundsContains(rcPaint, hRgnUpdate, rcClient);
 	if (!PaintDC(ps.hdc)) {
@@ -2617,16 +2618,14 @@ void ScintillaWin::NotifyURIDropped(const char *list) noexcept {
 	NotifyParent(scn);
 }
 
-class CaseFolderDBCS : public CaseFolderTable {
+class CaseFolderDBCS final : public CaseFolderTable {
 	// Allocate the expandable storage here so that it does not need to be reallocated
 	// for each call to Fold.
 	std::vector<wchar_t> utf16Mixed;
 	std::vector<wchar_t> utf16Folded;
 	UINT cp;
 public:
-	explicit CaseFolderDBCS(UINT cp_) noexcept : cp(cp_) {
-		StandardASCII();
-	}
+	explicit CaseFolderDBCS(UINT cp_) noexcept : cp(cp_) { }
 	size_t Fold(char *folded, size_t sizeFolded, const char *mixed, size_t lenMixed) override {
 		if ((lenMixed == 1) && (sizeFolded > 0)) {
 			folded[0] = mapping[static_cast<unsigned char>(mixed[0])];
@@ -2684,7 +2683,6 @@ CaseFolder *ScintillaWin::CaseFolderForEncoding() {
 	} else {
 		if (pdoc->dbcsCodePage == 0) {
 			CaseFolderTable *pcf = new CaseFolderTable();
-			pcf->StandardASCII();
 			// Only for single byte encodings
 			for (int i = 0x80; i < 0x100; i++) {
 				char sCharacter[2] = "A";

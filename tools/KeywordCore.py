@@ -8,6 +8,7 @@ from enum import IntFlag
 from FileGenerator import Regenerate
 
 AllKeywordAttrList = {}
+JavaScriptKeywordMap = {}
 
 # see EditLexer.h
 class KeywordAttr(IntFlag):
@@ -102,7 +103,7 @@ def BuildKeywordContent(rid, keywordList, keywordCount=16):
 	nonzero = []
 	for index, item in enumerate(keywordList):
 		comment, items, attr = item
-		lines = MakeKeywordLines(items)
+		lines = MakeKeywordLines(set(items))
 		if index != 0:
 			output.append(", // %d %s" % (index, comment))
 		if lines:
@@ -155,6 +156,38 @@ def to_upper_conditional(items):
 			result.append(item.upper())
 	return result
 
+
+def parse_actionscript_api_file(path):
+	sections = read_api_file(path, '//')
+	keywordMap = {}
+	for key, doc in sections:
+		if key in ('keywords', 'types'):
+			keywordMap[key] = doc.split()
+		if key == 'class':
+			items = re.findall(r'class\s+(\w+)', doc)
+			keywordMap[key] = items
+		elif key == 'functions':
+			items = re.findall(r'function\s+(\w+\()', doc)
+			keywordMap[key] = items
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'types',
+		'class',
+	])
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('types', keywordMap['types'], KeywordAttr.Default),
+		('directive', [], KeywordAttr.Default),
+		('class', keywordMap['class'], KeywordAttr.Default),
+		('interface', [], KeywordAttr.Default),
+		('enumeration', [], KeywordAttr.Default),
+		('constant', [], KeywordAttr.Default),
+		('metadata', [], KeywordAttr.Default),
+		('function', [], KeywordAttr.NoLexer),
+		('properties', [], KeywordAttr.Default),
+		('doc tag', [], KeywordAttr.Default),
+	]
 
 def parse_avisynth_api_file(path):
 	sections = read_api_file(path, '#')
@@ -474,13 +507,16 @@ def parse_javascript_api_file(path):
 	for key, doc in sections:
 		if key in ('keywords', 'future reserved words'):
 			keywordMap[key] = set(doc.split())
-		elif key == 'module':
+		elif key == 'directive':
 			items = set()
 			for item in doc.split():
 				index = item.find('(')
 				if index > 0:
 					item = item[:index]
 				items.add(item)
+			keywordMap[key] = items
+		elif key == 'jsdoc':
+			items = re.findall(r'@(\w+)', doc)
 			keywordMap[key] = items
 		elif key == 'api':
 			classes = set(['JSON', 'jQuery'])
@@ -513,25 +549,27 @@ def parse_javascript_api_file(path):
 			keywordMap['properties'] = properties
 
 	RemoveDuplicateKeyword(keywordMap, [
-		'module',
+		'directive',
 		'keywords',
 		'future reserved words',
 		'class',
 		'properties',
 		'constant',
 	])
-	keywordList = [
+
+	JavaScriptKeywordMap.update(keywordMap)
+	return [
 		('keywords', keywordMap['keywords'], KeywordAttr.Default),
 		('future reserved words', keywordMap['future reserved words'], KeywordAttr.Default),
-		('Preprocessor', [], KeywordAttr.Default),
-		('Directive', [], KeywordAttr.Default),
-		('module', keywordMap['module'], KeywordAttr.Default),
+		('directive', keywordMap['directive'], KeywordAttr.Default),
 		('class', keywordMap['class'], KeywordAttr.Default),
-		('Interface', [], KeywordAttr.Default),
-		('Enumeration', [], KeywordAttr.Default),
+		('interface', [], KeywordAttr.Default),
+		('enumeration', [], KeywordAttr.Default),
 		('constant', keywordMap['constant'], KeywordAttr.Default),
+		('decorator', [], KeywordAttr.Default),
 		('function', keywordMap['function'], KeywordAttr.NoLexer),
 		('properties', keywordMap['properties'], KeywordAttr.NoLexer),
+		('JSDoc', keywordMap['jsdoc'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
 	]
 	return keywordList
 
@@ -716,6 +754,40 @@ def parse_llvm_api_file(path):
 	]
 	return keywordList
 
+def parse_nsis_api_file(path):
+	keywordMap = {}
+	sections = read_api_file(path, ';')
+	for key, doc in sections:
+		items = doc.split()
+		if key == 'preprocessor':
+			items = [item.strip('!') for item in items]
+		elif key == 'functions':
+			functions = []
+			for item in items:
+				item = item.strip('.')
+				if item.startswith('un.'):
+					item = item[3:]
+				functions.append(item)
+			items = functions
+		keywordMap[key] = items
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'instructions',
+		'attributes',
+		'functions',
+		'predefined variables',
+	])
+	keywordList = [
+		('keywords', keywordMap['keywords'], KeywordAttr.MakeLower),
+		('preprocessor', keywordMap['preprocessor'], KeywordAttr.NoLexer),
+		('instruction', keywordMap['instructions'], KeywordAttr.NoLexer),
+		('attribute', keywordMap['attributes'], KeywordAttr.NoLexer),
+		('function', keywordMap['functions'], KeywordAttr.NoLexer),
+		('predefined variables', keywordMap['predefined variables'], KeywordAttr.NoLexer),
+	]
+	return keywordList
+
 def parse_r_api_file(path):
 	sections = read_api_file(path, '#')
 	keywordMap = {}
@@ -738,6 +810,30 @@ def parse_r_api_file(path):
 	keywordList = [
 		('keywords', keywordMap['keywords'], KeywordAttr.Default),
 		('package', keywordMap['package'], KeywordAttr.NoLexer),
+	]
+	return keywordList
+
+def parse_rebol_api_file(pathList):
+	keywordMap = {}
+	for path in pathList:
+		sections = read_api_file(path, ';')
+		for key, doc in sections:
+			items = doc.split()
+			if key == 'directive':
+				items = [item[1:] for item in items]
+			elif key == 'functions':
+				items = [item for item in items if len(item.strip('?')) >= 2]
+			keywordMap.setdefault(key, []).extend(items)
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'functions',
+	])
+	keywordList = [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('directive', keywordMap['directive'], KeywordAttr.Default),
+		('datatype', keywordMap['datatypes'], KeywordAttr.NoLexer),
+		('function', keywordMap['functions'], KeywordAttr.NoLexer),
 	]
 	return keywordList
 
@@ -901,6 +997,93 @@ def parse_sql_api_files(pathList):
 		('upper case functions', upper_functions, KeywordAttr.NoLexer),
 	]
 	return keywordList
+
+def parse_swift_api_file(path):
+	sections = read_api_file(path, '//')
+	keywordMap = {}
+	for key, doc in sections:
+		if key == 'keywords':
+			keywordMap[key] = doc.split()
+		elif key == 'directive':
+			items = re.findall(r'#(\w+\(?)', doc)
+			keywordMap[key] = items
+		elif key == 'attribute':
+			items = re.findall(r'@(\w+\(?)', doc)
+			keywordMap[key] = items
+		elif key == 'library':
+			classes = re.findall(r'class\s+(\w+)', doc)
+			structs = re.findall(r'struct\s+(\w+)', doc)
+			protocols = re.findall(r'protocol\s+(\w+)', doc)
+			enums = re.findall(r'enum\s+(\w+)', doc)
+			items = re.findall(r'func\s+(\w+)', doc)
+			functions = [item + '(' for item in items]
+
+			classes.extend(['AnyObject', 'AnyClass'])
+			items = re.findall(r'typealias\s+(\w+)(\s*=\s*(\w+))?', doc)
+			for alias, _, name in items:
+				if name in classes:
+					classes.append(alias)
+				elif name in structs or name == '':
+					structs.append(alias)
+
+			keywordMap['class'] = classes
+			keywordMap['struct'] = structs
+			keywordMap['protocol'] = protocols
+			keywordMap['enumeration'] = enums
+			keywordMap['function'] = functions
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'class',
+		'struct',
+		'protocol',
+		'enumeration',
+	])
+	keywordList = [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('directive', keywordMap['directive'], KeywordAttr.Default),
+		('attribute', keywordMap['attribute'], KeywordAttr.Default),
+		('class', keywordMap['class'], KeywordAttr.Default),
+		('struct', keywordMap['struct'], KeywordAttr.Default),
+		('protocol', keywordMap['protocol'], KeywordAttr.Default),
+		('enumeration', keywordMap['enumeration'], KeywordAttr.Default),
+		('function', keywordMap['function'], KeywordAttr.NoLexer),
+	]
+	return keywordList
+
+def parse_typescript_api_file(path):
+	sections = read_api_file(path, '//')
+	keywordMap = {}
+	for key, doc in sections:
+		if key == 'tsdoc':
+			items = re.findall(r'@(\w+)', doc)
+			items.extend(['reference', 'amd-module', 'amd-dependency'])
+			keywordMap[key] = items
+		else:
+			keywordMap[key] = doc.split()
+
+	keywordMap['interface'] = JavaScriptKeywordMap['class']
+	keywordMap['constant'] = JavaScriptKeywordMap['constant']
+	RemoveDuplicateKeyword(keywordMap, [
+		'directive',
+		'keywords',
+		'types',
+		'interface',
+		'constant',
+	])
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('types', keywordMap['types'], KeywordAttr.Default),
+		('directive', keywordMap['directive'], KeywordAttr.Default),
+		('class', [], KeywordAttr.Default),
+		('interface', keywordMap['interface'], KeywordAttr.Default),
+		('enumeration', [], KeywordAttr.Default),
+		('constant', keywordMap['constant'], KeywordAttr.Default),
+		('decorator', [], KeywordAttr.Default),
+		('function', [], KeywordAttr.Default),
+		('properties', [], KeywordAttr.Default),
+		('TSDoc', keywordMap['tsdoc'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
+	]
 
 def parse_vim_api_file(path):
 	sections = read_api_file(path, '"')

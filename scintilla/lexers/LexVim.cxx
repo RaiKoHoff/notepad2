@@ -86,6 +86,7 @@ void ColouriseVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 	if (startPos == 0 && sc.Match('#', '!')) {
 		// Shell Shebang at beginning of file
 		sc.SetState(SCE_VIM_COMMENTLINE);
+		sc.Forward();
 	}
 
 	while (sc.More()) {
@@ -252,7 +253,7 @@ void FoldVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*
 	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
 
 	const Sci_PositionU endPos = startPos + lengthDoc;
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	FoldLineState foldPrev(0);
 	int levelCurrent = SC_FOLDLEVELBASE;
 	if (lineCurrent > 0) {
@@ -263,12 +264,12 @@ void FoldVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*
 	int levelNext = levelCurrent;
 	FoldLineState foldCurrent(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+	Sci_PositionU lineEndPos = sci::min(lineStartNext, endPos) - 1;
 
 	int styleNext = styler.StyleAt(startPos);
 
 	constexpr int MaxFoldWordLength = 5 + 1; // while
-	char buf[MaxFoldWordLength + 1] = "";
+	char buf[MaxFoldWordLength + 1];
 	int wordLen = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
@@ -282,8 +283,7 @@ void FoldVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*
 			if (styleNext != SCE_VIM_WORD) {
 				buf[wordLen] = '\0';
 				wordLen = 0;
-				if (strcmp(buf, "if") == 0 || strcmp(buf, "while") == 0 || StrStartsWith(buf, "fun")
-					|| strcmp(buf, "for") == 0 || strcmp(buf, "try") == 0) {
+				if (EqualsAny(buf, "if", "while", "for", "try") || StrStartsWith(buf, "fun")) {
 					levelNext++;
 				} else if (StrStartsWith(buf, "end")) {
 					levelNext--;
@@ -310,7 +310,7 @@ void FoldVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+			lineEndPos = sci::min(lineStartNext, endPos) - 1;
 			levelCurrent = levelNext;
 			foldPrev = foldCurrent;
 			foldCurrent = foldNext;

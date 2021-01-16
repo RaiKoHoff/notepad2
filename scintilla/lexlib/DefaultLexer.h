@@ -14,11 +14,8 @@ namespace Scintilla {
 class DefaultLexer : public ILexer5 {
 	const char *languageName;
 	int language;
-	const LexicalClass *lexClasses;
-	size_t nClasses;
 public:
-	DefaultLexer(const char *languageName_, int language_,
-		const LexicalClass *lexClasses_ = nullptr, size_t nClasses_ = 0) noexcept;
+	DefaultLexer(const char *languageName_, int language_) noexcept;
 	virtual ~DefaultLexer();
 	void SCI_METHOD Release() noexcept override;
 	int SCI_METHOD Version() const noexcept override;
@@ -48,6 +45,7 @@ public:
 	// ILexer5 methods
 	const char * SCI_METHOD GetName() const noexcept override;
 	int SCI_METHOD GetIdentifier() const noexcept override;
+	const char *SCI_METHOD PropertyGet(const char *key) const override;
 };
 
 }

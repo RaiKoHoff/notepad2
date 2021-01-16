@@ -1,7 +1,7 @@
 // This file is part of Notepad2.
 // See License.txt for details about distribution and modification.
 //! Lexer for C, C++, C#, Java, Rescouce Script, Asymptote, D, Objective C/C++, PHP
-//! JavaScript, JScript, ActionScript, haXe, Groovy, Scala, Jamfile, AWK, IDL/ODL/AIDL
+//! haXe, Groovy, Scala, Jamfile, AWK, IDL/ODL/AIDL
 
 #include <cassert>
 #include <cstring>
@@ -28,13 +28,11 @@ using namespace Scintilla;
 #define		LEX_CPP		1	// C/C++
 #define		LEX_JAVA	2	// Java
 #define		LEX_CS		3	// C#
-#define		LEX_JS		4	// JavaScript
 #define		LEX_RC		5	// Resouce Script
 #define		LEX_IDL		6	// Interface Definition Language
 #define		LEX_D		7	// D
 #define		LEX_ASY		8	// Asymptote
 #define		LEX_OBJC	10	// Objective C/C++
-#define		LEX_AS		11	// ActionScript
 #define		LEX_HX		12	// haXe
 #define		LEX_GROOVY	13	// Groovy Script
 #define		LEX_SCALA	14	// Scala Script
@@ -50,7 +48,7 @@ static constexpr bool HasAnotation(int lex) noexcept { // @anotation
 	return lex == LEX_JAVA || lex == LEX_GROOVY || lex == LEX_SCALA;
 }
 static constexpr bool HasRegex(int lex) noexcept { // Javascript /regex/
-	return lex == LEX_JS || lex == LEX_GROOVY || lex == LEX_AS || lex == LEX_HX || lex == LEX_AWK;
+	return lex == LEX_GROOVY || lex == LEX_HX || lex == LEX_AWK;
 }
 static constexpr bool HasTripleVerbatim(int lex) noexcept {
 	return lex == LEX_JAVA || lex == LEX_GROOVY || lex == LEX_SCALA;
@@ -59,10 +57,10 @@ static constexpr bool SharpComment(int lex) noexcept {
 	return lex == LEX_AWK || lex == LEX_JAM;
 }
 static constexpr bool HasXML(int lex) noexcept {
-	return lex == LEX_JS || lex == LEX_AS || lex == LEX_SCALA;
+	return lex == LEX_SCALA;
 }
 static constexpr bool SquareBraceAfterType(int lex) noexcept {
-	return lex == LEX_JAVA || lex == LEX_CS || lex == LEX_JS || lex == LEX_AS || lex == LEX_HX || lex == LEX_GROOVY || lex == LEX_SCALA;
+	return lex == LEX_JAVA || lex == LEX_CS || lex == LEX_HX || lex == LEX_GROOVY || lex == LEX_SCALA;
 }
 static constexpr bool IsDStrFix(int ch) noexcept {
 	return ch == 'c' || ch == 'w' || ch == 'd';
@@ -136,7 +134,7 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 		initStyle = SCE_C_XML_DEFAULT;
 	}
 
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	const int curLineState = (lineCurrent > 0) ? styler.GetLineState(lineCurrent - 1) : 0;
 	int lineState = (curLineState >> 24);
 	int numCBrace = (curLineState >> 18) & 0x3F;
@@ -202,6 +200,7 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 	if (startPos == 0 && sc.Match('#', '!')) {
 		// Shell Shebang at beginning of file
 		sc.SetState(SCE_C_COMMENTLINE);
+		sc.Forward();
 	}
 
 	for (; sc.More(); sc.Forward()) {
@@ -215,6 +214,7 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 			// Reset states to begining of colourise so no surprises
 			// if different sets of lines lexed.
 			visibleChars = 0;
+			docTagType = 0;
 			lastWordWasUUID = false;
 			lastWordWasGoto = false;
 			lastPPDefineWord = 0;
@@ -486,8 +486,7 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 				outerStyle = sc.state;
 				sc.SetState(SCE_C_COMMENTDOC_TAG);
 				sc.Forward();
-			} else if ((sc.ch == '@' || sc.ch == '\\') && IsAlpha(sc.chNext) && (IsASpace(sc.chPrev)
-				|| sc.chPrev == '*' || sc.chPrev == '/' || sc.chPrev == '!')) {
+			} else if ((sc.ch == '@' || sc.ch == '\\') && IsAlpha(sc.chNext) && IsCommentTagPrev(sc.chPrev)) {
 				docTagType = DOC_TAG_AT;
 				outerStyle = sc.state;
 				sc.SetState(SCE_C_COMMENTDOC_TAG);
@@ -645,7 +644,7 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 			}
 			break;
 		case SCE_C_DSTRINGB: // D
-			if (sc.ch == '`' && (lexType == LEX_JS || lexType == LEX_D)) {
+			if (sc.ch == '`' && (lexType == LEX_D)) {
 				if (lexType == LEX_D && IsDStrFix(sc.chNext))
 					sc.Forward();
 				sc.ForwardSetState(SCE_C_DEFAULT);
@@ -871,7 +870,7 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 						++numDTSBrace;
 						sc.SetState(SCE_C_DSTRINGT);
 						sc.Forward();
-					} else if (sc.ch == '`' && (lexType == LEX_JS || lexType == LEX_D)) {
+					} else if (sc.ch == '`' && (lexType == LEX_D)) {
 						sc.SetState(SCE_C_DSTRINGB);
 					} else if (!SharpComment(lexType) && sc.Match('/', '*')) {
 						if (visibleChars == 0 && styler.MatchAny(sc.currentPos + 2, '*', '!')) {
@@ -1015,7 +1014,7 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 						} else {
 							sc.SetState(SCE_C_OPERATOR);
 						}
-					} else if (isoperator(sc.ch) || ((lexType == LEX_CS || lexType == LEX_D || lexType == LEX_JS) && sc.ch == '$') || sc.ch == '@'
+					} else if (isoperator(sc.ch) || ((lexType == LEX_CS || lexType == LEX_D) && sc.ch == '$') || sc.ch == '@'
 						|| (lexType == LEX_PHP && sc.ch == '\\')) {
 						sc.SetState(SCE_C_OPERATOR);
 						isPragmaPreprocessor = false;
@@ -1103,7 +1102,7 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 	sc.Complete();
 }
 
-static bool IsCppDefineLine(Sci_Position line, LexAccessor &styler, Sci_Position &DefinePos) noexcept {
+static bool IsCppDefineLine(Sci_Line line, LexAccessor &styler, Sci_Position &DefinePos) noexcept {
 	Sci_Position pos = styler.LineStart(line);
 	const Sci_Position endPos = styler.LineStart(line + 1) - 1;
 	pos = LexSkipSpaceTab(pos, endPos, styler);
@@ -1119,7 +1118,7 @@ static bool IsCppDefineLine(Sci_Position line, LexAccessor &styler, Sci_Position
 }
 // also used in LexAsm.cxx
 bool IsCppInDefine(Sci_Position currentPos, LexAccessor &styler) noexcept {
-	Sci_Position line = styler.GetLine(currentPos);
+	Sci_Line line = styler.GetLine(currentPos);
 	Sci_Position pos;
 	if (IsCppDefineLine(line, styler, pos)) {
 		if (pos < currentPos)
@@ -1133,7 +1132,7 @@ bool IsCppInDefine(Sci_Position currentPos, LexAccessor &styler) noexcept {
 	}
 	return false;
 }
-static bool IsCppFoldingLine(Sci_Position line, LexAccessor &styler, int kind) noexcept {
+static bool IsCppFoldingLine(Sci_Line line, LexAccessor &styler, int kind) noexcept {
 	const Sci_Position startPos = styler.LineStart(line);
 	const Sci_Position endPos = styler.LineStart(line + 1) - 1;
 	Sci_Position pos = LexSkipSpaceTab(startPos, endPos, styler);
@@ -1179,7 +1178,7 @@ static constexpr bool IsStreamCommentStyle(int style) noexcept {
 static constexpr bool IsHear_NowDocStyle(int style) noexcept {
 	return style == SCE_C_HEREDOC || style == SCE_C_NOWDOC;
 }
-static bool IsOpenBraceLine(Sci_Position line, LexAccessor &styler) noexcept {
+static bool IsOpenBraceLine(Sci_Line line, LexAccessor &styler) noexcept {
 	// above line
 	Sci_Position startPos = styler.LineStart(line - 1);
 	Sci_Position endPos = styler.LineStart(line) - 1;
@@ -1224,7 +1223,7 @@ static void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyl
 
 	const Sci_PositionU endPos = startPos + length;
 	int visibleChars = 0;
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
 	if (lineCurrent > 0)
 		levelCurrent = styler.LevelAt(lineCurrent - 1) >> 16;
@@ -1356,15 +1355,6 @@ static void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyl
 			if (isObjCProtocol && ch == ';') {
 				isObjCProtocol = false;
 				levelNext--;
-			}
-		}
-
-		if (lexType == LEX_JS && style == SCE_C_DSTRINGB) {
-			if (ch == '`') {
-				if (styleNext == SCE_C_DSTRINGB)
-					levelNext++;
-				else if (stylePrev == SCE_C_DSTRINGB)
-					levelNext--;
 			}
 		}
 

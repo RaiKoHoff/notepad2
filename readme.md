@@ -26,7 +26,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 * [Auto completion for braces, brackets and quotes](https://github.com/zufuliu/notepad2/wiki/Auto-Completion-in-Notepad2#auto-insert-text)
 * Syntax highlighting, code folding and API list for (see built-in [file extension list](../master/doc/FileExt.txt)):
 	* Plain Text
-	* ActionScript
+	* [ActionScript](../master/tools/lang/ActionScript.as) for ActionScript 3 and 4
 	* Android Smali, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#android-smali)
 		* javap
 		* Jasmin
@@ -54,6 +54,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* Configuration / Properties File
 		* Apache Configuration File
 	* D
+	* [Dart](../master/tools/lang/Dart.dart), up to Dart 2.12.
 	* Diff/Patch File
 	* Doxygen
 	* F#
@@ -75,7 +76,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* Inno Setup
 	* Boost Jam
 	* Java, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#java)
-	* [JavaScript](../master/tools/lang/JavaScript.js), up to ECMAScript 2020 (11th edition) with [Web APIs](https://developer.mozilla.org/en-US/docs/Web/API).
+	* [JavaScript](../master/tools/lang/JavaScript.js), up to ECMAScript 2020 (11th edition) with [JSX](https://facebook.github.io/jsx/) and [Web APIs](https://developer.mozilla.org/en-US/docs/Web/API).
 	* JSON and JSON5 Document
 	* [Julia Script](../master/tools/lang/Julia.jl), up to Julia 1.2. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#julia)
 	* [Kotlin](../master/tools/lang/Kotlin.kt), up to Kotlin 1.3
@@ -93,7 +94,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* Octave
 		* Scilab
 		* Gnuplot
-	* NSIS
+	* [Nullsoft Scriptable Install System](../master/tools/lang/NSIS.nsi), up to NSIS 3.06.
 	* Pascal, Delphi
 	* Perl, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#perl)
 	* PowerShell
@@ -105,6 +106,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* PHP Script, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#php)
 	* Windows Rescouce Script
 	* [R](../master/tools/lang/R.r), up to R 4.0.3.
+	* [REBOL](../master/tools/lang/Rebol.r) 3 and [Red](../master/tools/lang/Red.red)
 	* [Ruby](../master/tools/lang/Ruby.rb), [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#ruby)
 	* [Rust](../master/tools/lang/Rust.rs), up to Rust 1.38. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#rust)
 	* Scala Script
@@ -119,9 +121,11 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* [PostgreSQL](../master/tools/lang/PostgreSQL.sql), PostgreSQL 13.
 		* [Transact-SQL](../master/tools/lang/Transact-SQL.sql), SQL Server 2019.
 		* [Oracle](../master/tools/lang/Oracle.sql), Oracle 20, incomplete.
+	* [Swift](../master/tools/lang/Swift.swift), Swift 5.3.
 	* TCL, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#tcl)
 	* Texinfo
 	* TOML File
+	* [TypeScript](../master/tools/lang/TypeScript.ts) TypeScript 4.2
 	* Visual Basic, VB6, VB.NET
 	* VBScript
 	* VHDL
@@ -191,10 +195,11 @@ Latest development builds (artifacts in Release configuration for each compiler 
 * [Scintilla's website](https://www.scintilla.org/)
 * [Build Notepad2 and metapath](https://github.com/zufuliu/notepad2/wiki/Build-Notepad2)
 * [Localization](https://github.com/zufuliu/notepad2/wiki/Localization)
-	* [日本語](https://github.com/maboroshin/notepad2)
+	* [日本語](https://github.com/maboroshin/notepad2) by @maboroshin
 	* [中文 (繁體)](https://github.com/zufuliu/notepad2/tree/master/locale/zh-Hant)
 	* [中文 (简体)](https://github.com/zufuliu/notepad2/tree/master/locale/zh-Hans)
-	* [한국어](https://teus.me/category/IT/Notepad2)
+	* [한국어](https://github.com/VenusGirl/notepad2) by @VenusGirl
+	* [한국어](https://teus.me/category/IT/Notepad2) by @bluenlive
 * [Notepad2 Wiki](https://github.com/zufuliu/notepad2/wiki)
 * Other projects based on (original) Notepad2 or Notepad2-mod:
 	* [Notepad3](https://github.com/rizonesoft/Notepad3)

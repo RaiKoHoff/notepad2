@@ -37,13 +37,13 @@ struct EscapeSequence {
 
 bool IsRustRawString(LexAccessor &styler, Sci_PositionU pos, bool start, int &hashCount) noexcept {
 	int count = 0;
-	while (styler.SafeGetCharAt(pos) == '#') {
+	char ch;
+	while ((ch = styler.SafeGetCharAt(pos)) == '#') {
 		++count;
 		++pos;
 	}
 
 	if (start) {
-		const char ch = styler.SafeGetCharAt(pos);
 		if (ch == '\"') {
 			hashCount = count;
 			return true;
@@ -63,8 +63,7 @@ enum {
 
 void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	int lineStateAttribute = 0;
-	int lineStateLineComment = 0;
-	int lineStatePubUse = 0;
+	int lineStateLineType = 0;
 
 	int squareBracket = 0;	// count of '[' and ']' for attribute
 	int commentLevel = 0;	// nested block comment level
@@ -79,8 +78,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 	if (sc.currentLine > 0) {
 		const int lineState = styler.GetLineState(sc.currentLine - 1);
 		/*
-		1: lineStateLineComment
-		1: lineStatePubUse
+		2: lineStateLineType
 		1: lineStateAttribute
 		8: squareBracket
 		8: commentLevel
@@ -94,7 +92,8 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 	if (startPos == 0 && sc.Match('#', '!')) {
 		// Shell Shebang at beginning of file
 		sc.SetState(SCE_RUST_COMMENTLINE);
-		lineStateLineComment = RustLineStateMaskLineComment;
+		sc.Forward();
+		lineStateLineType = RustLineStateMaskLineComment;
 	}
 
 	while (sc.More()) {
@@ -144,7 +143,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 							}
 						}
 						if ((visibleChars == 3 || visibleChars == 6) && strcmp(s, "use") == 0) {
-							lineStatePubUse = RustLineStateMaskPubUse;
+							lineStateLineType = RustLineStateMaskPubUse;
 						}
 					} else if (keywordLists[1]->InList(s)) {
 						sc.ChangeState(SCE_RUST_WORD2);
@@ -210,7 +209,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				//} else {
 				//	sc.SetState(SCE_RUST_COMMENTBLOCK);
 				//}
-				sc.Forward(2);
+				sc.Forward();
 				++commentLevel;
 			}
 			break;
@@ -308,7 +307,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					sc.SetState(SCE_RUST_COMMENTLINE);
 				}
 				if (visibleChars == 0) {
-					lineStateLineComment = RustLineStateMaskLineComment;
+					lineStateLineType = RustLineStateMaskLineComment;
 				}
 			} else if (sc.Match('/', '*')) {
 				const int chNext = sc.GetRelative(2);
@@ -385,10 +384,9 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 		}
 		if (sc.atLineEnd) {
 			const int lineState = (squareBracket << 3) | (commentLevel << 11) | (hashCount << 19)
-				| lineStateAttribute | lineStateLineComment | lineStatePubUse;
+				| lineStateAttribute | lineStateLineType;
 			styler.SetLineState(sc.currentLine, lineState);
-			lineStateLineComment = 0;
-			lineStatePubUse = 0;
+			lineStateLineType = 0;
 			visibleChars = 0;
 		}
 		sc.Forward();
@@ -423,7 +421,7 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
 
 	const Sci_PositionU endPos = startPos + lengthDoc;
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	FoldLineState foldPrev(0);
 	int levelCurrent = SC_FOLDLEVELBASE;
 	if (lineCurrent > 0) {
@@ -434,7 +432,7 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 	int levelNext = levelCurrent;
 	FoldLineState foldCurrent(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+	Sci_PositionU lineEndPos = sci::min(lineStartNext, endPos) - 1;
 
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
@@ -491,7 +489,7 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+			lineEndPos = sci::min(lineStartNext, endPos) - 1;
 			levelCurrent = levelNext;
 			foldPrev = foldCurrent;
 			foldCurrent = foldNext;

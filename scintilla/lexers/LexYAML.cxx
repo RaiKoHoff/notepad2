@@ -45,9 +45,10 @@ constexpr bool IsYAMLFlowIndicator(int ch) noexcept {
 	return ch == ',' || ch == '[' || ch == ']' || ch == '{' || ch == '}';
 }
 
-constexpr bool IsYAMLOperator(int ch) noexcept {
+constexpr bool IsYAMLOperator(int ch, int braceCount) noexcept {
 	// remaining c-indicator
-	return IsYAMLFlowIndicator(ch) || ch == '@' || ch == '`';
+	return ch == '{' || ch == '[' || ch == '@' || ch == '`'
+		|| (braceCount && (ch == ',' || ch == '}' || ch == ']'));
 }
 
 constexpr bool IsYAMLAnchorChar(int ch) noexcept {
@@ -90,7 +91,7 @@ bool IsYAMLText(StyleContext& sc, int braceCount, const WordList *kwList) {
 	return false;
 }
 
-bool IsYAMLTextBlockEnd(bool hasComment, int &indentCount, int textIndentCount,
+bool IsYAMLTextBlockEnd(int state, int &indentCount, int textIndentCount,
 	Sci_Position pos, Sci_Position lineStartNext, LexAccessor &styler) noexcept {
 	const Sci_Position endPos = styler.Length();
 	do {
@@ -103,11 +104,14 @@ bool IsYAMLTextBlockEnd(bool hasComment, int &indentCount, int textIndentCount,
 		if (pos < lineStartNext) {
 			indentCount = indentation;
 		}
-		if (hasComment && ch == '#') {
+		if (state != SCE_YAML_BLOCK_SCALAR && ch == '#') {
 			return true;
 		}
-		if (indentation > textIndentCount) {
-			return false;
+		if (indentation != 0 && indentation != textIndentCount) {
+			return indentation < textIndentCount;
+		}
+		if (state == SCE_YAML_TEXT) {
+			return true;
 		}
 		if (!IsEOLChar(ch)) {
 			return true;
@@ -153,7 +157,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 	// backtrack to previous line for better coloring for indented text on typing.
 	if (initStyle == SCE_YAML_INDENTED_TEXT || initStyle == SCE_YAML_TEXT) {
 		const Sci_Position endPos = startPos + lengthDoc;
-		const Sci_Position currentLine = styler.GetLine(startPos);
+		const Sci_Line currentLine = styler.GetLine(startPos);
 		startPos = (currentLine == 0)? 0 : styler.LineStart(currentLine - 1);
 		lengthDoc = endPos - startPos;
 		initStyle = (startPos == 0)? SCE_YAML_DEFAULT : styler.StyleAt(startPos - 1);
@@ -182,8 +186,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 			if (sc.state == SCE_YAML_BLOCK_SCALAR || (sc.state == SCE_YAML_TEXT && !braceCount) || sc.state == SCE_YAML_INDENTED_TEXT) {
 				indentEnded = true;
-				const bool hasComment = sc.state != SCE_YAML_BLOCK_SCALAR;
-				if (IsYAMLTextBlockEnd(hasComment, indentCount, textIndentCount, sc.currentPos, sc.lineStartNext, styler)) {
+				if (IsYAMLTextBlockEnd(sc.state, indentCount, textIndentCount, sc.currentPos, sc.lineStartNext, styler)) {
 					textIndentCount = 0;
 					sc.SetState(SCE_YAML_DEFAULT);
 					sc.Forward(indentCount);
@@ -374,7 +377,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				sc.SetState(SCE_YAML_NUMBER);
 			} else if (IsAlpha(sc.ch) || (sc.ch == '.' && IsAlpha(sc.chNext))) {
 				sc.SetState(SCE_YAML_IDENTIFIER);
-			} else if (IsYAMLOperator(sc.ch) || (sc.ch == '?' && sc.chNext == ' ') || (sc.ch == ':' && isspacechar(sc.chNext))) {
+			} else if (IsYAMLOperator(sc.ch, braceCount) || (sc.ch == '?' && sc.chNext == ' ') || (sc.ch == ':' && isspacechar(sc.chNext))) {
 				sc.SetState(SCE_YAML_OPERATOR);
 				if (sc.ch == '{' || sc.ch == '[') {
 					++braceCount;
@@ -463,10 +466,10 @@ void FoldYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle
 	const bool foldComment = styler.GetPropertyInt("fold.comment", 1) != 0;
 
 	const Sci_Position maxPos = startPos + lengthDoc;
-	const Sci_Position docLines = styler.GetLine(styler.Length());
-	const Sci_Position maxLines = (maxPos == styler.Length()) ? docLines : styler.GetLine(maxPos - 1);
+	const Sci_Line docLines = styler.GetLine(styler.Length());
+	const Sci_Line maxLines = (maxPos == styler.Length()) ? docLines : styler.GetLine(maxPos - 1);
 
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	FoldLineState stateCurrent(styler.GetLineState(lineCurrent));
 	while (lineCurrent > 0) {
 		lineCurrent--;

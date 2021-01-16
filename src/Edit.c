@@ -68,7 +68,6 @@ extern int g_DOSEncoding;
 
 extern LPMRULIST mruFind;
 extern LPMRULIST mruReplace;
-extern WCHAR szCurFile[MAX_PATH + 40];
 
 static DStringW wchPrefixSelection;
 static DStringW wchAppendSelection;
@@ -508,9 +507,9 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	}
 
 	if (ptr < end) {
-		NP2_alignas(32) char buffer[2*sizeof(__m256i)];
+		NP2_alignas(32) uint8_t buffer[2*sizeof(__m256i)];
 		ZeroMemory_32x2(buffer);
-		memcpy(buffer, ptr, end - ptr + 1);
+		__movsb(buffer, ptr, end - ptr + 1);
 		ptr = end + 1;
 
 		const __m256i chunk1 = _mm256_load_si256((__m256i *)buffer);
@@ -600,9 +599,9 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	}
 
 	if (ptr < end) {
-		NP2_alignas(16) char buffer[4*sizeof(__m128i)];
+		NP2_alignas(16) uint8_t buffer[4*sizeof(__m128i)];
 		ZeroMemory_16x4(buffer);
-		memcpy(buffer, ptr, end - ptr + 1);
+		__movsb(buffer, ptr, end - ptr + 1);
 		ptr = end + 1;
 
 		const __m128i chunk1 = _mm_load_si128((__m128i *)buffer);
@@ -691,9 +690,9 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	}
 
 	if (ptr < end) {
-		NP2_alignas(16) char buffer[2*sizeof(__m128i)];
+		NP2_alignas(16) uint8_t buffer[2*sizeof(__m128i)];
 		ZeroMemory_16x2(buffer);
-		memcpy(buffer, ptr, end - ptr + 1);
+		__movsb(buffer, ptr, end - ptr + 1);
 		ptr = end + 1;
 
 		const __m128i chunk1 = _mm_load_si128((__m128i *)buffer);
@@ -2060,15 +2059,12 @@ void EditHex2Char(void) {
 				ci = 0;
 				int ucc = 0;
 				while (*p && (ucc++ < MAX_ESCAPE_HEX_DIGIT)) {
-					if (*p >= '0' && *p <= '9') {
-						ci = ci * 16 + (*p++ - '0');
-					} else if (*p >= 'a' && *p <= 'f') {
-						ci = ci * 16 + (*p++ - 'a') + 10;
-					} else if (*p >= 'A' && *p <= 'F') {
-						ci = ci * 16 + (*p++ - 'A') + 10;
-					} else {
+					const int hex = GetHexDigit(*p);
+					if (hex < 0) {
 						break;
 					}
+					ci = (ci << 4) | hex;
+					p++;
 				}
 			} else {
 				wch[cch++] = L'\\';
@@ -2128,14 +2124,6 @@ void EditShowHex(void) {
 //
 // EditConvertNumRadix()
 //
-static inline BOOL iswordstart(int ch) {
-	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '.' || ch == '_';
-}
-
-static inline BOOL iswordchar(int ch) {
-	return iswordstart(ch) || (ch >= '0' && ch <= '9') || ch == '$';
-}
-
 static int ConvertNumRadix(char *tch, uint64_t num, int radix) {
 	switch (radix) {
 	case 16:
@@ -2223,19 +2211,15 @@ void EditConvertNumRadix(int radix) {
 			if ((*p == 'x' || *p == 'X') && radix != 16) {
 				p++;
 				while (*p) {
-					if (*p >= '0' && *p <= '9') {
-						ci <<= 4;
-						ci += (*p++ - '0');
-					} else if (*p >= 'a' && *p <= 'f') {
-						ci <<= 4;
-						ci += (*p++ - 'a') + 10;
-					} else if (*p >= 'A' && *p <= 'F') {
-						ci <<= 4;
-						ci += (*p++ - 'A') + 10;
-					} else if (*p == '_') {
+					if (*p == '_') {
 						p++;
 					} else {
-						break;
+						const int hex = GetHexDigit(*p);
+						if (hex < 0) {
+							break;
+						}
+						ci = (ci << 4) | hex;
+						p++;
 					}
 				}
 				cch += ConvertNumRadix(tch + cch, ci, radix);
@@ -2298,9 +2282,10 @@ void EditConvertNumRadix(int radix) {
 				}
 			}
 			cch += ConvertNumRadix(tch + cch, ci, radix);
-		} else if (iswordstart(*p)) {
+		} else if (IsAlphaNumeric(*p) || *p == '_') {
+			// radix and number prefix matches, no conversion
 			tch[cch++] = *p++;
-			while (iswordchar(*p)) {
+			while (IsAlphaNumeric(*p) || *p == '_') {
 				tch[cch++] = *p++;
 			}
 		} else {

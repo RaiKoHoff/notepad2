@@ -606,6 +606,7 @@ BEGIN
 				MENUITEM "English",					IDM_LANG_ENGLISH_US
 				MENUITEM "Italiano",				IDM_LANG_ITALIAN
 				MENUITEM "日本語",					IDM_LANG_JAPANESE
+				MENUITEM "한국어",					IDM_LANG_KOREAN
 				MENUITEM "中文(繁體)",				IDM_LANG_CHINESE_TRADITIONAL
 				MENUITEM "中文(简体)",				IDM_LANG_CHINESE_SIMPLIFIED
 			END
@@ -2156,8 +2157,7 @@ BEGIN
 	NP2STYLE_IMEIndicator			"IME Indicator"
 	NP2STYLE_Bookmark				"Bookmark"
 	NP2STYLE_CallTip				"CallTip"
-	NP2STYLE_CurrentBlock			"Current Block"
-	NP2STYLE_FoldMargin				"Fold Margin"
+	NP2STYLE_CodeFolding			"Code Folding"
 
 	NP2STYLE_Default				"Default"
 END

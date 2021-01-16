@@ -1667,6 +1667,8 @@ HWND EditCreate(HWND hwndParent) {
 	SciCall_SetAdditionalCaretsVisible(TRUE);
 	// style both before and after the visible text in the background
 	SciCall_SetIdleStyling(SC_IDLESTYLING_ALL);
+	// profile lexer performance
+	//SciCall_SetIdleStyling(SC_IDLESTYLING_NONE);
 
 	SciCall_AssignCmdKey((SCK_NEXT + (SCMOD_CTRL << 16)), SCI_PARADOWN);
 	SciCall_AssignCmdKey((SCK_PRIOR + (SCMOD_CTRL << 16)), SCI_PARAUP);
@@ -2226,6 +2228,9 @@ void ValidateUILangauge(void) {
 	case LANG_JAPANESE:
 		languageMenu = IDM_LANG_JAPANESE;
 		break;
+	case LANG_KOREAN:
+		languageMenu = IDM_LANG_KOREAN;
+		break;
 	case LANG_NEUTRAL:
 	default:
 		languageMenu = IDM_LANG_USER_DEFAULT;
@@ -2257,6 +2262,9 @@ void SetUILanguage(int menu) {
 		break;
 	case IDM_LANG_JAPANESE:
 		lang = MAKELANGID(LANG_JAPANESE, SUBLANG_DEFAULT);
+		break;
+	case IDM_LANG_KOREAN:
+		lang = MAKELANGID(LANG_KOREAN, SUBLANG_DEFAULT);
 		break;
 	}
 
