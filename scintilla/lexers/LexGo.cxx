@@ -267,12 +267,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 				if (kwType != SCE_GO_DEFAULT && kwPrev == kwType && sc.ch != '.') {
 					kwType = SCE_GO_DEFAULT;
 				}
-				if (sc.ch == '.' && IsIdentifierStartEx(sc.chNext)) {
-					sc.SetState(SCE_GO_OPERATOR);
-					sc.ForwardSetState(SCE_GO_IDENTIFIER);
-				} else {
-					sc.SetState(SCE_GO_DEFAULT);
-				}
+				sc.SetState(SCE_GO_DEFAULT);
 			}
 			break;
 
@@ -299,7 +294,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 			break;
 
 		case SCE_GO_TASK_MARKER:
-			if (sc.ch == ':' || sc.ch == '(') {
+			if (IsTaskMarkerEnd(sc.ch)) {
 				sc.SetState(escSeq.outerState);
 			} else if (!IsUpperCase(sc.ch)) {
 				sc.ChangeState(escSeq.outerState);
@@ -379,8 +374,10 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 			} else if (IsNumberStart(sc.ch, sc.chNext)) {
 				sc.SetState(SCE_GO_NUMBER);
 			} else if (IsIdentifierStartEx(sc.ch)) {
+				if (sc.chPrev != '.') {
+					identifierStart = sc.currentPos;
+				}
 				sc.SetState(SCE_GO_IDENTIFIER);
-				identifierStart = sc.currentPos;
 			} else if (isoperator(sc.ch)) {
 				sc.SetState(SCE_GO_OPERATOR);
 				if (funcState != GoFunction_None) {
@@ -446,7 +443,7 @@ void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
 
 	const Sci_PositionU endPos = startPos + lengthDoc;
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
 	int lineCommentPrev = 0;
 	if (lineCurrent > 0) {
@@ -457,7 +454,7 @@ void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 	int levelNext = levelCurrent;
 	int lineCommentCurrent = GetLineCommentState(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+	Sci_PositionU lineEndPos = sci::min(lineStartNext, endPos) - 1;
 
 	int styleNext = styler.StyleAt(startPos);
 	int style = initStyle;
@@ -499,7 +496,7 @@ void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+			lineEndPos = sci::min(lineStartNext, endPos) - 1;
 			levelCurrent = levelNext;
 			lineCommentPrev = lineCommentCurrent;
 			lineCommentCurrent = lineCommentNext;

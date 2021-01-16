@@ -111,14 +111,14 @@ int ColouriseDiffLine(const char *lineBuffer) noexcept {
 }
 
 void ColouriseDiffDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
-	const bool fold = styler.GetPropertyInt("fold", 1) != 0;
+	const int fold = styler.GetPropertyInt("fold", 1);
 
 	styler.StartAt(startPos);
 	styler.StartSegment(startPos);
 	const Sci_Position endPos = startPos + lengthDoc;
-	const Sci_Position maxLines = (endPos == styler.Length()) ? styler.GetLine(endPos) : styler.GetLine(endPos - 1);	// Requested last line
+	const Sci_Line maxLines = styler.GetLine((endPos == styler.Length()) ? endPos : endPos - 1);
 
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int prevLevel = (lineCurrent > 0) ? styler.LevelAt(lineCurrent - 1) : SC_FOLDLEVELBASE;
 
 	Sci_PositionU lineStartCurrent = styler.LineStart(lineCurrent);

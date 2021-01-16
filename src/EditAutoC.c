@@ -532,8 +532,11 @@ BOOL IsDocWordChar(int ch) {
 		return (ch == '-' || ch == '$');
 
 	case NP2LEX_CIL:
+	case NP2LEX_JAVASCRIPT:
+	case NP2LEX_TYPESCRIPT:
 	case NP2LEX_VERILOG:
 		return (ch == '$');
+
 	case NP2LEX_CPP:
 		return (ch == '#' || ch == '@' || ch == ':');
 	case NP2LEX_CSHARP:
@@ -568,6 +571,10 @@ BOOL IsDocWordChar(int ch) {
 	case NP2LEX_MAKE:
 	case NP2LEX_NSIS:
 		return (ch == '-' || ch == '$' || ch == '!');
+
+	case NP2LEX_REBOL:
+		// http://www.rebol.com/r3/docs/guide/code-syntax.html#section-4
+		return (ch == '-' || ch == '!' || ch == '?' || ch == '~' || ch == '+' || ch == '&' || ch == '*' || ch == '=');
 
 	case NP2LEX_XML:
 		return (ch == '-' || ch == ':');
@@ -667,8 +674,7 @@ static inline BOOL IsEscapeCharEx(int ch, int style) {
 
 	case SCLEX_CPP:
 		return !(style == SCE_C_STRINGRAW || style == SCE_C_VERBATIM
-			|| style == SCE_C_COMMENTDOC_TAG
-			|| (pLexCurrent->rid == NP2LEX_JS && style == SCE_C_DSTRINGB));
+			|| style == SCE_C_COMMENTDOC_TAG);
 
 	case SCLEX_PYTHON:
 		return !(style == SCE_PY_RAW_STRING1 || style == SCE_PY_RAW_STRING2
@@ -695,7 +701,7 @@ static inline BOOL NeedSpaceAfterKeyword(const char *word, Sci_Position length) 
 #define HTML_TEXT_BLOCK_SGML	7
 
 extern EDITLEXER lexCSS;
-extern EDITLEXER lexJS;
+extern EDITLEXER lexJavaScript;
 extern EDITLEXER lexPHP;
 extern EDITLEXER lexPython;
 extern EDITLEXER lexVBS;
@@ -705,12 +711,12 @@ static int GetCurrentHtmlTextBlockEx(int iCurrentStyle) {
 	if (iCurrentStyle == SCE_H_CDATA) {
 		return HTML_TEXT_BLOCK_CDATA;
 	}
-	if ((iCurrentStyle >= SCE_HJ_START && iCurrentStyle <= SCE_HJ_REGEX)
-		|| (iCurrentStyle >= SCE_HJA_START && iCurrentStyle <= SCE_HJA_REGEX)) {
+	if ((iCurrentStyle >= SCE_HJ_START && iCurrentStyle <= SCE_HJ_TEMPLATELITERAL)
+		|| (iCurrentStyle >= SCE_HJA_START && iCurrentStyle <= SCE_HJA_TEMPLATELITERAL)) {
 		return HTML_TEXT_BLOCK_JS;
 	}
-	if ((iCurrentStyle >= SCE_HB_START && iCurrentStyle <= SCE_HB_STRINGEOL)
-		|| (iCurrentStyle >= SCE_HBA_START && iCurrentStyle <= SCE_HBA_STRINGEOL)) {
+	if ((iCurrentStyle >= SCE_HB_START && iCurrentStyle <= SCE_HB_OPERATOR)
+		|| (iCurrentStyle >= SCE_HBA_START && iCurrentStyle <= SCE_HBA_OPERATOR)) {
 		return HTML_TEXT_BLOCK_VBS;
 	}
 	if ((iCurrentStyle >= SCE_HP_START && iCurrentStyle <= SCE_HP_IDENTIFIER)
@@ -956,12 +962,12 @@ void AutoC_AddKeyword(struct WordList *pWList, int iCurrentStyle) {
 	}
 
 	// embedded script
+	PEDITLEXER pLex = NULL;
 	if (pLexCurrent->rid == NP2LEX_HTML) {
 		const int block = GetCurrentHtmlTextBlockEx(iCurrentStyle);
-		PEDITLEXER pLex = NULL;
 		switch (block) {
 		case HTML_TEXT_BLOCK_JS:
-			pLex = &lexJS;
+			pLex = &lexJavaScript;
 			break;
 		case HTML_TEXT_BLOCK_VBS:
 			pLex = &lexVBS;
@@ -976,12 +982,14 @@ void AutoC_AddKeyword(struct WordList *pWList, int iCurrentStyle) {
 			pLex = &lexCSS;
 			break;
 		}
-		if (pLex != NULL) {
-			for (int i = 0; i < NUMKEYWORD; i++) {
-				const char *pKeywords = pLex->pKeyWords->pszKeyWords[i];
-				if (StrNotEmptyA(pKeywords)) {
-					WordList_AddListEx(pWList, pKeywords);
-				}
+	} else if (pLexCurrent->rid == NP2LEX_TYPESCRIPT) {
+		pLex = &lexJavaScript;
+	}
+	if (pLex != NULL) {
+		for (int i = 0; i < NUMKEYWORD; i++) {
+			const char *pKeywords = pLex->pKeyWords->pszKeyWords[i];
+			if (StrNotEmptyA(pKeywords)) {
+				WordList_AddListEx(pWList, pKeywords);
 			}
 		}
 	}
@@ -1058,7 +1066,8 @@ INT AutoC_AddSpecWord(struct WordList *pWList, int iCurrentStyle, int ch, int ch
 		if (iCurrentStyle == SCE_KOTLIN_DEFAULT) {
 			WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[4]); // annotation
 			return AutoC_AddSpecWord_Keyword;
-		} else if (iCurrentStyle >= SCE_KOTLIN_COMMENTLINE && iCurrentStyle <= SCE_KOTLIN_COMMENTDOCWORD) {
+		}
+		if (iCurrentStyle >= SCE_KOTLIN_COMMENTLINE && iCurrentStyle <= SCE_KOTLIN_COMMENTDOCWORD) {
 			WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[6]); // KDoc
 			return AutoC_AddSpecWord_Finish;
 		}
@@ -1066,6 +1075,26 @@ INT AutoC_AddSpecWord(struct WordList *pWList, int iCurrentStyle, int ch, int ch
 	else if (pLexCurrent->iLexer == SCLEX_DART && ch == '@' && iCurrentStyle == SCE_DART_DEFAULT) {
 		WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[4]); // metadata
 		return AutoC_AddSpecWord_Keyword;
+	}
+	else if (pLexCurrent->iLexer == SCLEX_SWIFT && (ch == '@' || ch == '#') && iCurrentStyle == SCE_SWIFT_DEFAULT) {
+		WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[(ch == '#') ? 1 : 2]); // directive, attribute
+		return AutoC_AddSpecWord_Keyword;
+	}
+	else if (pLexCurrent->iLexer == SCLEX_REBOL && ch == '#' && iCurrentStyle == SCE_REBOL_DEFAULT) {
+		WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[1]); // directive
+		return AutoC_AddSpecWord_Keyword;
+	}
+	else if (pLexCurrent->iLexer == SCLEX_JAVASCRIPT && (ch == '@' || (ch == '<' && pLexCurrent->rid == NP2LEX_TYPESCRIPT))) {
+		if (iCurrentStyle >= SCE_JS_COMMENTLINE && iCurrentStyle <= SCE_JS_TASK_MARKER) {
+			WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[9]); // JSDoc, TSDoc
+			return AutoC_AddSpecWord_Finish;
+		}
+#if 0
+		if (ch == '@' && iCurrentStyle == SCE_JS_DEFAULT) {
+			WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[7]); // decorator
+			return AutoC_AddSpecWord_Keyword;
+		}
+#endif
 	}
 	return 0;
 }
@@ -1384,8 +1413,8 @@ static BOOL CanAutoCloseSingleQuote(int chPrev, int iCurrentStyle) {
 		}
 		return FALSE;
 	}
-	if (iLexer == SCLEX_RUST) {
-		// lifetime
+	if (iLexer == SCLEX_RUST || iLexer == SCLEX_REBOL) {
+		// Rust lifetime, REBOL symbol
 		return FALSE;
 	}
 
@@ -1630,7 +1659,7 @@ BOOL IsIndentKeywordStyle(int style) {
 	case SCLEX_MATLAB:
 		return style == SCE_MAT_KEYWORD;
 	//case SCLEX_NSIS:
-	//	return style == SCE_C_WORD || style == SCE_C_PREPROCESSOR;
+	//	return style == SCE_NSIS_WORD || style == SCE_NSIS_PREPROCESSOR;
 
 	//case SCLEX_PASCAL:
 	case SCLEX_RUBY:
@@ -1866,9 +1895,9 @@ void EditAutoIndent(void) {
 		SciCall_GetLine(iCurLine - 1, pLineBuf);
 		pLineBuf[iPrevLineLength] = '\0';
 
-		int ch = pLineBuf[iPrevLineLength - 2];
+		int ch = (uint8_t)pLineBuf[iPrevLineLength - 2];
 		if (ch == '\r') {
-			ch = pLineBuf[iPrevLineLength - 3];
+			ch = (uint8_t)pLineBuf[iPrevLineLength - 3];
 			iIndentLen = 1;
 		}
 		if (ch == '{' || ch == '[' || ch == '(') {
@@ -2030,6 +2059,7 @@ void EditToggleCommentLine(void) {
 	case SCLEX_LISP:
 	case SCLEX_LLVM:
 	case SCLEX_PROPERTIES:
+	case SCLEX_REBOL:
 		EditToggleLineComments(L";", FALSE);
 		break;
 
@@ -2047,10 +2077,12 @@ void EditToggleCommentLine(void) {
 	case SCLEX_FSHARP:
 	case SCLEX_GO:
 	case SCLEX_GRAPHVIZ:
+	case SCLEX_JAVASCRIPT:
 	case SCLEX_JSON:
 	case SCLEX_KOTLIN:
 	case SCLEX_PASCAL:
 	case SCLEX_RUST:
+	case SCLEX_SWIFT:
 	case SCLEX_VERILOG:
 		EditToggleLineComments(L"//", FALSE);
 		break;
@@ -2184,11 +2216,13 @@ void EditToggleCommentBlock(void) {
 	case SCLEX_DART:
 	case SCLEX_GO:
 	case SCLEX_GRAPHVIZ:
+	case SCLEX_JAVASCRIPT:
 	case SCLEX_JSON:
 	case SCLEX_KOTLIN:
 	case SCLEX_NSIS:
 	case SCLEX_RUST:
 	case SCLEX_SQL:
+	case SCLEX_SWIFT:
 	case SCLEX_VERILOG:
 	case SCLEX_VHDL:
 		EditEncloseSelection(L"/*", L"*/");
@@ -2283,6 +2317,10 @@ void EditToggleCommentBlock(void) {
 		EditEncloseSelectionNewLine(L"if (FALSE) {", L"}");
 		break;
 
+	case SCLEX_REBOL:
+		EditEncloseSelectionNewLine(L"comment {", L"}");
+		break;
+
 	case SCLEX_TCL:
 		EditEncloseSelectionNewLine(L"if (0) {", L"}");
 		break;
@@ -2325,7 +2363,7 @@ void EditInsertScriptShebangLine(void) {
 			name = "groovy";
 			break;
 
-		case NP2LEX_JS:
+		case NP2LEX_JAVASCRIPT:
 			name = "node";
 			break;
 

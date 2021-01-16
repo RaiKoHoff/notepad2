@@ -22,14 +22,9 @@
 
 using namespace Scintilla;
 
-static const char styleSubable[] = { 0 };
-
-DefaultLexer::DefaultLexer(const char *languageName_, int language_,
-	const LexicalClass *lexClasses_, size_t nClasses_) noexcept :
+DefaultLexer::DefaultLexer(const char *languageName_, int language_) noexcept :
 	languageName(languageName_),
-	language(language_),
-	lexClasses(lexClasses_),
-	nClasses(nClasses_) {
+	language(language_) {
 }
 
 DefaultLexer::~DefaultLexer() = default;
@@ -56,6 +51,10 @@ const char * SCI_METHOD DefaultLexer::DescribeProperty(const char *) const {
 
 Sci_Position SCI_METHOD DefaultLexer::PropertySet(const char *, const char *) {
 	return -1;
+}
+
+const char *SCI_METHOD DefaultLexer::PropertyGet([[maybe_unused]] const char *key) const {
+	return "";
 }
 
 const char * SCI_METHOD DefaultLexer::DescribeWordListSets() const noexcept {
@@ -108,23 +107,23 @@ int SCI_METHOD DefaultLexer::DistanceToSecondaryStyles() const noexcept {
 }
 
 const char * SCI_METHOD DefaultLexer::GetSubStyleBases() const noexcept {
-	return styleSubable;
+	return "";
 }
 
 int SCI_METHOD DefaultLexer::NamedStyles() const noexcept {
-	return static_cast<int>(nClasses);
+	return 0;
 }
 
-const char * SCI_METHOD DefaultLexer::NameOfStyle(int style) const noexcept {
-	return (style < NamedStyles()) ? lexClasses[style].name : "";
+const char * SCI_METHOD DefaultLexer::NameOfStyle([[maybe_unused]] int style) const noexcept {
+	return "";
 }
 
-const char * SCI_METHOD DefaultLexer::TagsOfStyle(int style) const noexcept {
-	return (style < NamedStyles()) ? lexClasses[style].tags : "";
+const char * SCI_METHOD DefaultLexer::TagsOfStyle([[maybe_unused]] int style) const noexcept {
+	return "";
 }
 
-const char * SCI_METHOD DefaultLexer::DescriptionOfStyle(int style) const noexcept {
-	return (style < NamedStyles()) ? lexClasses[style].description : "";
+const char * SCI_METHOD DefaultLexer::DescriptionOfStyle([[maybe_unused]] int style) const noexcept {
+	return "";
 }
 
 // ILexer5 methods

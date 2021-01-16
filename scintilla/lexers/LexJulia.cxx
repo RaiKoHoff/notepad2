@@ -66,47 +66,10 @@ constexpr bool IsJuliaRegexFlag(int ch) noexcept {
 	return ch == 'i' || ch == 'm' || ch == 's' || ch == 'x' || ch == 'a';
 }
 
-enum {
-	MaxJuliaNestedStateCount = 3,
-};
-
-constexpr int PackState(int state) noexcept {
-	switch (state) {
-	case SCE_JULIA_STRING:
-		return 1;
-	case SCE_JULIA_TRIPLE_STRING:
-		return 2;
-	case SCE_JULIA_BACKTICKS:
-		return 3;
-	case SCE_JULIA_TRIPLE_BACKTICKS:
-		return 4;
-	default:
-		return 0;
-	}
-}
-
-constexpr int UnpackState(int state) noexcept  {
-	switch (state) {
-	case 1:
-		return SCE_JULIA_STRING;
-	case 2:
-		return SCE_JULIA_TRIPLE_STRING;
-	case 3:
-		return SCE_JULIA_BACKTICKS;
-	case 4:
-		return SCE_JULIA_TRIPLE_BACKTICKS;
-	default:
-		return SCE_JULIA_DEFAULT;
-	}
-}
-
-int PackNestedState(const std::vector<int>& nestedState) noexcept {
-	return PackLineState<3, MaxJuliaNestedStateCount, PackState>(nestedState) << 22;
-}
-
-void UnpackNestedState(int lineState, int count, std::vector<int>& nestedState) {
-	UnpackLineState<3, MaxJuliaNestedStateCount, UnpackState>(lineState, count, nestedState);
-}
+static_assert(DefaultNestedStateBaseStyle + 1 == SCE_JULIA_STRING);
+static_assert(DefaultNestedStateBaseStyle + 2 == SCE_JULIA_TRIPLE_STRING);
+static_assert(DefaultNestedStateBaseStyle + 3 == SCE_JULIA_BACKTICKS);
+static_assert(DefaultNestedStateBaseStyle + 4 == SCE_JULIA_TRIPLE_BACKTICKS);
 
 void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	int lineStateLineComment = 0;
@@ -117,9 +80,7 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 	bool maybeType = false;
 
 	int braceCount = 0;
-	int parenCount = 0; // $()
-	int variableOuter = SCE_JULIA_DEFAULT;	// variable inside string
-	std::vector<int> nestedState;
+	std::vector<int> nestedState; // string interpolation "$()"
 
 	int chBeforeIdentifier = 0;
 	bool isTransposeOperator = false; // "'"
@@ -129,19 +90,19 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 
 	StyleContext sc(startPos, lengthDoc, initStyle, styler);
 	if (sc.currentLine > 0) {
-		const int lineState = styler.GetLineState(sc.currentLine - 1);
+		int lineState = styler.GetLineState(sc.currentLine - 1);
 		/*
 		1: lineStateLineComment
 		5: commentLevel
 		8: braceCount
-		8: parenCount
-		3*3: nestedState
+		3: nestedState count
+		3*4: nestedState
 		*/
 		commentLevel = (lineState >> 1) & 0x1f;
 		braceCount = (lineState >> 6) & 0xff;
-		parenCount = (lineState >> 14) & 0xff;
-		if (parenCount != 0) {
-			UnpackNestedState(lineState >> 22, parenCount, nestedState);
+		lineState >>= 14;
+		if (lineState) {
+			UnpackLineState(lineState, nestedState);
 		}
 	}
 
@@ -223,8 +184,8 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 		case SCE_JULIA_MACRO:
 		case SCE_JULIA_SYMBOL:
 			if (!IsIdentifierCharEx(sc.ch)) {
-				if (sc.state == SCE_JULIA_VARIABLE && variableOuter != SCE_JULIA_DEFAULT) {
-					sc.SetState(variableOuter);
+				if (sc.state == SCE_JULIA_VARIABLE && escSeq.outerState != SCE_JULIA_DEFAULT) {
+					sc.SetState(escSeq.outerState);
 					continue;
 				}
 				sc.SetState(SCE_JULIA_DEFAULT);
@@ -241,21 +202,13 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 					sc.Forward();
 				}
 			} else if (sc.ch == '$' && IsIdentifierStartEx(sc.chNext)) {
-				variableOuter = sc.state;
+				escSeq.outerState = sc.state;
 				sc.SetState(SCE_JULIA_VARIABLE);
 			} else if (sc.Match('$', '(')) {
 				++braceCount;
-				++parenCount;
 				nestedState.push_back(sc.state);
 				sc.SetState(SCE_JULIA_OPERATOR2);
 				sc.Forward();
-			} else if (parenCount && sc.ch == ')') {
-				const int outerState = TryPopBack(nestedState);
-				--braceCount;
-				--parenCount;
-				sc.SetState(SCE_JULIA_OPERATOR2);
-				sc.ForwardSetState(outerState);
-				continue;
 			} else if ((sc.state == SCE_JULIA_STRING && sc.ch == '\"')
 				|| (sc.state == SCE_JULIA_TRIPLE_STRING && sc.Match('"', '"', '"'))
 				|| (sc.state == SCE_JULIA_BACKTICKS && sc.ch == '`')
@@ -340,7 +293,7 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 					sc.ForwardSetState(SCE_JULIA_DEFAULT);
 				}
 			} else if (sc.Match('#', '=')) {
-				sc.Forward(2);
+				sc.Forward();
 				++commentLevel;
 			}
 			break;
@@ -386,7 +339,7 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 					sc.ChangeState(SCE_JULIA_TRIPLE_REGEX);
 					sc.Forward(2);
 				}
-			} else if (sc.Match("raw\"")) {
+			} else if (sc.Match('r', 'a', 'w', '"')) {
 				sc.SetState(SCE_JULIA_RAWSTRING);
 				sc.Forward(3);
 				if (sc.Match('"', '"', '"')) {
@@ -405,7 +358,7 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 			} else if (symbol && IsIdentifierStartEx(sc.chNext)) {
 				sc.SetState(SCE_JULIA_SYMBOL);
 			} else if (sc.ch == '$' && IsIdentifierStartEx(sc.chNext)) {
-				variableOuter = SCE_JULIA_DEFAULT;
+				escSeq.outerState = SCE_JULIA_DEFAULT;
 				isTransposeOperator = true;
 				sc.SetState(SCE_JULIA_VARIABLE);
 			} else if (sc.ch == '0') {
@@ -438,14 +391,13 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 					isTransposeOperator = true;
 				}
 
-				sc.SetState(parenCount ? SCE_JULIA_OPERATOR2 : SCE_JULIA_OPERATOR);
-				if (parenCount) {
+				const bool interpolating = !nestedState.empty();
+				sc.SetState(interpolating ? SCE_JULIA_OPERATOR2 : SCE_JULIA_OPERATOR);
+				if (interpolating) {
 					if (sc.ch == '(') {
-						++parenCount;
 						nestedState.push_back(SCE_JULIA_DEFAULT);
 					} else if (sc.ch == ')') {
-						--parenCount;
-						const int outerState = TryPopBack(nestedState);
+						const int outerState = TakeAndPop(nestedState);
 						sc.ForwardSetState(outerState);
 						continue;
 					}
@@ -463,9 +415,9 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 			visibleChars++;
 		}
 		if (sc.atLineEnd) {
-			int lineState = (braceCount << 6) | (parenCount << 14) | (commentLevel << 1) | lineStateLineComment;
-			if (parenCount) {
-				lineState |= PackNestedState(nestedState);
+			int lineState = (braceCount << 6) | (commentLevel << 1) | lineStateLineComment;
+			if (!nestedState.empty()) {
+				lineState |= PackLineState(nestedState) << 14;
 			}
 			styler.SetLineState(sc.currentLine, lineState);
 			lineStateLineComment = 0;
@@ -495,7 +447,7 @@ void FoldJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
 
 	const Sci_PositionU endPos = startPos + lengthDoc;
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
 	int lineCommentPrev = 0;
 	if (lineCurrent > 0) {
@@ -506,10 +458,10 @@ void FoldJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 	int levelNext = levelCurrent;
 	int lineCommentCurrent = GetLineCommentState(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+	Sci_PositionU lineEndPos = sci::min(lineStartNext, endPos) - 1;
 
 	constexpr int MaxFoldWordLength = 10 + 1; // baremodule
-	char buf[MaxFoldWordLength + 1] = "";
+	char buf[MaxFoldWordLength + 1];
 	int wordLen = 0;
 
 	char chNext = styler[startPos];
@@ -586,7 +538,7 @@ void FoldJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+			lineEndPos = sci::min(lineStartNext, endPos) - 1;
 			levelCurrent = levelNext;
 			lineCommentPrev = lineCommentCurrent;
 			lineCommentCurrent = lineCommentNext;

@@ -29,31 +29,19 @@ int LexerModule::GetLanguage() const noexcept {
 }
 
 int LexerModule::GetNumWordLists() const noexcept {
-	if (!wordListDescriptions) {
-		return -1;
-	}
-
-	int numWordLists = 0;
-	while (wordListDescriptions[numWordLists]) {
-		++numWordLists;
-	}
-	return numWordLists;
+	return -1;
 }
 
-const char *LexerModule::GetWordListDescription(int index) const noexcept {
-	assert(index < GetNumWordLists());
-	if (!wordListDescriptions || (index >= GetNumWordLists())) {
-		return "";
-	}
-	return wordListDescriptions[index];
+const char *LexerModule::GetWordListDescription([[maybe_unused]] int index) const noexcept {
+	return "";
 }
 
 const LexicalClass *LexerModule::LexClasses() const noexcept {
-	return lexClasses;
+	return nullptr;
 }
 
 size_t LexerModule::NamedStyles() const noexcept {
-	return nClasses;
+	return 0;
 }
 
 ILexer5 *LexerModule::Create() const {
@@ -61,30 +49,4 @@ ILexer5 *LexerModule::Create() const {
 		return fnFactory();
 	}
 	return new LexerSimple(this);
-}
-
-void LexerModule::Lex(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
-	LexerWordList keywordLists, Accessor &styler) const {
-	if (fnLexer) {
-		fnLexer(startPos, lengthDoc, initStyle, keywordLists, styler);
-	}
-}
-
-void LexerModule::Fold(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
-	LexerWordList keywordLists, Accessor &styler) const {
-	if (fnFolder) {
-		Sci_Position lineCurrent = styler.GetLine(startPos);
-		// Move back one line in case deletion wrecked current line fold state
-		if (lineCurrent > 0) {
-			lineCurrent--;
-			const Sci_Position newStartPos = styler.LineStart(lineCurrent);
-			lengthDoc += startPos - newStartPos;
-			startPos = newStartPos;
-			initStyle = 0;
-			if (startPos > 0) {
-				initStyle = styler.StyleAt(startPos - 1);
-			}
-		}
-		fnFolder(startPos, lengthDoc, initStyle, keywordLists, styler);
-	}
 }

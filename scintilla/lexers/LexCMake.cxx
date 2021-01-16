@@ -32,13 +32,13 @@ constexpr bool IsCmakeChar(int ch) noexcept {
 
 bool IsBracketArgument(Accessor &styler, Sci_PositionU pos, bool start, int &bracketNumber) noexcept {
 	int offset = 0;
+	char ch;
 	++pos; // bracket
-	while (styler.SafeGetCharAt(pos) == '=') {
+	while ((ch = styler.SafeGetCharAt(pos)) == '=') {
 		++offset;
 		++pos;
 	}
 
-	const char ch = styler.SafeGetCharAt(pos);
 	if (start) {
 		if (ch == '[') {
 			bracketNumber = offset;
@@ -323,7 +323,7 @@ void FoldCmakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
 
 	const Sci_PositionU endPos = startPos + lengthDoc;
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
 	int lineCommentPrev = 0;
 	if (lineCurrent > 0) {
@@ -334,13 +334,13 @@ void FoldCmakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 	int levelNext = levelCurrent;
 	int lineCommentCurrent = GetLineCommentState(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+	Sci_PositionU lineEndPos = sci::min(lineStartNext, endPos) - 1;
 
 	int styleNext = styler.StyleAt(startPos);
 	int style = initStyle;
 
 	constexpr int MaxFoldWordLength = 8 + 1; // function
-	char buf[MaxFoldWordLength + 1] = "";
+	char buf[MaxFoldWordLength + 1];
 	int wordLen = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
@@ -370,8 +370,7 @@ void FoldCmakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 				wordLen = 0;
 				if (StrStartsWith(buf, "end")) {
 					levelNext--;
-				} else if (strcmp(buf, "if") == 0 || strcmp(buf, "function") == 0 || strcmp(buf, "macro") == 0
-					|| strcmp(buf, "foreach") == 0 || strcmp(buf, "while") == 0) {
+				} else if (EqualsAny(buf, "if",  "function", "macro", "foreach", "while")) {
 					levelNext++;
 				}
 			}
@@ -394,7 +393,7 @@ void FoldCmakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = ((lineStartNext < endPos) ? lineStartNext : endPos) - 1;
+			lineEndPos = sci::min(lineStartNext, endPos) - 1;
 			levelCurrent = levelNext;
 			lineCommentPrev = lineCommentCurrent;
 			lineCommentCurrent = lineCommentNext;

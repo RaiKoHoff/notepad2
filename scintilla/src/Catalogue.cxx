@@ -115,6 +115,7 @@ void Scintilla_LinkLexers() {
 	//extern LexerModule lmIHex;
 	//extern LexerModule lmIndent;
 	extern LexerModule lmInno;
+	extern LexerModule lmJavaScript;
 	extern LexerModule lmJSON;
 	extern LexerModule lmJulia;
 	//extern LexerModule lmKix;
@@ -160,7 +161,7 @@ void Scintilla_LinkLexers() {
 	extern LexerModule lmPython;
 	extern LexerModule lmR;
 	//extern LexerModule lmRaku;
-	//extern LexerModule lmREBOL;
+	extern LexerModule lmREBOL;
 	//extern LexerModule lmRegistry;
 	extern LexerModule lmRuby;
 	extern LexerModule lmRust;
@@ -176,6 +177,7 @@ void Scintilla_LinkLexers() {
 	//extern LexerModule lmSrec;
 	//extern LexerModule lmStata;
 	//extern LexerModule lmSTTXT;
+	extern LexerModule lmSwift;
 	//extern LexerModule lmTACL;
 	//extern LexerModule lmTADS3;
 	//extern LexerModule lmTAL;
@@ -262,6 +264,7 @@ void Scintilla_LinkLexers() {
 		//&lmIHex,
 		//&lmIndent,
 		&lmInno,
+		&lmJavaScript,
 		&lmJSON,
 		&lmJulia,
 		//&lmKix,
@@ -307,7 +310,7 @@ void Scintilla_LinkLexers() {
 		&lmPython,
 		&lmR,
 		//&lmRaku,
-		//&lmREBOL,
+		&lmREBOL,
 		//&lmRegistry,
 		&lmRuby,
 		&lmRust,
@@ -323,6 +326,7 @@ void Scintilla_LinkLexers() {
 		//&lmSrec,
 		//&lmStata,
 		//&lmSTTXT,
+		&lmSwift,
 		//&lmTACL,
 		//&lmTADS3,
 		//&lmTAL,

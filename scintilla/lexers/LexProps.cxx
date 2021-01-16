@@ -40,17 +40,17 @@ void ColourisePropsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 	const bool allowInitialSpaces = styler.GetPropertyInt("lexer.props.allow.initial.spaces", 1) != 0;
 
 	const Sci_Position endPos = startPos + lengthDoc;
-	const Sci_Position maxLines = (endPos == styler.Length()) ? styler.GetLine(endPos) : styler.GetLine(endPos - 1);	// Requested last line
+	const Sci_Line maxLines = styler.GetLine((endPos == styler.Length()) ? endPos : endPos - 1);
 
 	styler.StartAt(startPos);
 	styler.StartSegment(startPos);
 
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 	Sci_PositionU lineStartCurrent = styler.LineStart(lineCurrent);
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
 
 #if !ENABLE_FOLD_PROPS_COMMENT
-	const bool fold = styler.GetPropertyInt("fold", 1) != 0;
+	const int fold = styler.GetPropertyInt("fold", 1);
 	int prevLevel = (lineCurrent > 0) ? styler.LevelAt(lineCurrent - 1) : SC_FOLDLEVELBASE;
 #endif
 
@@ -136,9 +136,9 @@ void FoldPropsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyl
 	const bool foldComment = styler.GetPropertyInt("fold.comment", 1) != 0;
 
 	const Sci_Position endPos = startPos + lengthDoc;
-	const Sci_Position maxLines = (endPos == styler.Length()) ? styler.GetLine(endPos) : styler.GetLine(endPos - 1);	// Requested last line
+	const Sci_Line maxLines = styler.GetLine((endPos == styler.Length()) ? endPos : endPos - 1);
 
-	Sci_Position lineCurrent = styler.GetLine(startPos);
+	Sci_Line lineCurrent = styler.GetLine(startPos);
 
 	int prevLevel = SC_FOLDLEVELBASE;
 	bool prevComment = false;

@@ -84,34 +84,19 @@
 #define NP2StyleX_JSDefault				EDITSTYLE_HOLE(JSDefault, L"JS Default")
 #define NP2StyleX_JSComment				EDITSTYLE_HOLE(JSComment, L"JS Comment")
 #define NP2StyleX_JSKeyword				EDITSTYLE_HOLE(JSKeyword, L"JS Keyword")
-
+#define NP2StyleX_JSDocComment			EDITSTYLE_HOLE(JSDocComment, L"JS Doc Comment")
 #define NP2StyleX_JSString				EDITSTYLE_HOLE(JSString, L"JS String")
 #define NP2StyleX_JSRegex				EDITSTYLE_HOLE(JSRegex, L"JS Regex")
 #define NP2StyleX_JSNumber				EDITSTYLE_HOLE(JSNumber, L"JS Number")
-#define NP2StyleX_JSSymbol				EDITSTYLE_HOLE(JSSymbol, L"JS Symbol")
-
-#define NP2StyleX_ASPJSDefault			EDITSTYLE_HOLE(ASPJSDefault, L"ASP JS Default")
-#define NP2StyleX_ASPJSComment			EDITSTYLE_HOLE(ASPJSComment, L"ASP JS Comment")
-#define NP2StyleX_ASPJSKeyword			EDITSTYLE_HOLE(ASPJSKeyword, L"ASP JS Keyword")
-
-#define NP2StyleX_ASPJSString			EDITSTYLE_HOLE(ASPJSString, L"ASP JS String")
-#define NP2StyleX_ASPJSRegex			EDITSTYLE_HOLE(ASPJSRegex, L"ASP JS Regex")
-#define NP2StyleX_ASPJSNumber			EDITSTYLE_HOLE(ASPJSNumber, L"ASP JS Number")
-#define NP2StyleX_ASPJSSymbol			EDITSTYLE_HOLE(ASPJSSymbol, L"ASP JS Symbol")
+#define NP2StyleX_JSOperator			EDITSTYLE_HOLE(JSOperator, L"JS Operator")
+#define NP2StyleX_JSTemplateLiteral		EDITSTYLE_HOLE(JSTemplateLiteral, L"JS Template Literal")
 
 #define NP2StyleX_VBSDefault			EDITSTYLE_HOLE(VBSDefault, L"VBS Default")
 #define NP2StyleX_VBSComment			EDITSTYLE_HOLE(VBSComment, L"VBS Comment")
 #define NP2StyleX_VBSKeyword			EDITSTYLE_HOLE(VBSKeyword, L"VBS Keyword")
-
+#define NP2StyleX_VBSOperator			EDITSTYLE_HOLE(VBSOperator, L"VBS Operator")
 #define NP2StyleX_VBSString				EDITSTYLE_HOLE(VBSString, L"VBS String")
 #define NP2StyleX_VBSNumber				EDITSTYLE_HOLE(VBSNumber, L"VBS Number")
-
-#define NP2StyleX_ASPVBSDefault			EDITSTYLE_HOLE(ASPVBSDefault, L"ASP VBS Default")
-#define NP2StyleX_ASPVBSComment			EDITSTYLE_HOLE(ASPVBSComment, L"ASP VBS Comment")
-#define NP2StyleX_ASPVBSKeyword			EDITSTYLE_HOLE(ASPVBSKeyword, L"ASP VBS Keyword")
-
-#define NP2StyleX_ASPVBSString			EDITSTYLE_HOLE(ASPVBSString, L"ASP VBS String")
-#define NP2StyleX_ASPVBSNumber			EDITSTYLE_HOLE(ASPVBSNumber, L"ASP VBS Number")
 
 #define NP2StyleX_TagClass				EDITSTYLE_HOLE(TagClass, L"Tag Class")
 #define NP2StyleX_TagId					EDITSTYLE_HOLE(TagId, L"Tag Id")
@@ -138,9 +123,10 @@
 #define NP2StyleX_Property				EDITSTYLE_HOLE(Property, L"Property")
 #define NP2StyleX_Macro					EDITSTYLE_HOLE(Macro, L"Macro")
 #define NP2StyleX_Annotation			EDITSTYLE_HOLE(Annotation, L"Annotation")
-#define NP2StyleX_Object				EDITSTYLE_HOLE(Object, L"Object")
+
 #define NP2StyleX_Type					EDITSTYLE_HOLE(Type, L"Type")
 #define NP2StyleX_FunctionDefine		EDITSTYLE_HOLE(FunctionDefine, L"Function Define")
+#define NP2StyleX_Protocol				EDITSTYLE_HOLE(Protocol, L"Protocol")
 
 #define NP2StyleX_Label					EDITSTYLE_HOLE(Label, L"Label")
 #define NP2StyleX_Command				EDITSTYLE_HOLE(Command, L"Command")
@@ -226,6 +212,8 @@
 #define NP2StyleX_Key					EDITSTYLE_HOLE(Key, L"Key")
 #define NP2StyleX_ParameterExpansion	EDITSTYLE_HOLE(ParameterExpansion, L"Parameter Expansion")
 #define NP2StyleX_Table					EDITSTYLE_HOLE(Table, L"Table")
+#define NP2StyleX_Pair					EDITSTYLE_HOLE(Pair, L"Pair")
+#define NP2StyleX_Tuple					EDITSTYLE_HOLE(Tuple, L"Tuple")
 
 #define NP2StyleX_SourceDestination		EDITSTYLE_HOLE(SourceDestination, L"Source and Destination")
 #define NP2StyleX_PositionSetting		EDITSTYLE_HOLE(PositionSetting, L"Position Setting")
@@ -239,7 +227,10 @@
 #define NP2StyleX_DirectiveOperand		EDITSTYLE_HOLE(DirectiveOperand, L"Directive Operand")
 #define NP2StyleX_InternalFilter		EDITSTYLE_HOLE(InternalFilter, L"Internal Filter")
 #define NP2StyleX_ExternalFilter		EDITSTYLE_HOLE(ExternalFilter, L"External Filter")
-
+#define NP2StyleX_File					EDITSTYLE_HOLE(File, L"File")
+#define NP2StyleX_Link					EDITSTYLE_HOLE(Link, L"Link")
+#define NP2StyleX_Money					EDITSTYLE_HOLE(Money, L"Money")
+#define NP2StyleX_Issue					EDITSTYLE_HOLE(Issue, L"Issue")
 #define NP2StyleX_MagicMethod			EDITSTYLE_HOLE(MagicMethod, L"Magic Method")
 #define NP2StyleX_MagicConstant			EDITSTYLE_HOLE(MagicConstant, L"Magic Constant")
 #define NP2StyleX_TemplateLiteral		EDITSTYLE_HOLE(TemplateLiteral, L"Template Literal")
@@ -247,7 +238,7 @@
 #define NP2StyleX_NowdocString			EDITSTYLE_HOLE(NowdocString, L"Nowdoc String")
 #define NP2StyleX_DateTime				EDITSTYLE_HOLE(DateTime, L"DateTime")
 #define NP2StyleX_Action				EDITSTYLE_HOLE(Action, L"Action")
-#define NP2StyleX_ModuleDirective		EDITSTYLE_HOLE(ModuleDirective, L"Module Directive")
+
 #define NP2StyleX_Anchor				EDITSTYLE_HOLE(Anchor, L"Anchor")
 #define NP2StyleX_TextBlock				EDITSTYLE_HOLE(TextBlock, L"Text Block")
 #define NP2StyleX_Math					EDITSTYLE_HOLE(Math, L"Math")

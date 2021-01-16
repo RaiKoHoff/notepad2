@@ -77,34 +77,19 @@
 #define NP2STYLE_JSDefault				63301
 #define NP2STYLE_JSComment				63302
 #define NP2STYLE_JSKeyword				63303
-
+#define NP2STYLE_JSDocComment			63304
 #define NP2STYLE_JSString				63305
 #define NP2STYLE_JSRegex				63306
 #define NP2STYLE_JSNumber				63307
-#define NP2STYLE_JSSymbol				63308
-
-#define NP2STYLE_ASPJSDefault			63311
-#define NP2STYLE_ASPJSComment			63312
-#define NP2STYLE_ASPJSKeyword			63313
-
-#define NP2STYLE_ASPJSString			63315
-#define NP2STYLE_ASPJSRegex				63316
-#define NP2STYLE_ASPJSNumber			63317
-#define NP2STYLE_ASPJSSymbol			63318
+#define NP2STYLE_JSOperator				63308
+#define NP2STYLE_JSTemplateLiteral		63309
 
 #define NP2STYLE_VBSDefault				63321
 #define NP2STYLE_VBSComment				63322
 #define NP2STYLE_VBSKeyword				63323
-
+#define NP2STYLE_VBSOperator			63324
 #define NP2STYLE_VBSString				63325
 #define NP2STYLE_VBSNumber				63326
-
-#define NP2STYLE_ASPVBSDefault			63331
-#define NP2STYLE_ASPVBSComment			63332
-#define NP2STYLE_ASPVBSKeyword			63333
-
-#define NP2STYLE_ASPVBSString			63335
-#define NP2STYLE_ASPVBSNumber			63336
 
 #define NP2STYLE_TagClass				63401
 #define NP2STYLE_TagId					63402
@@ -131,9 +116,10 @@
 #define NP2STYLE_Property				63431
 #define NP2STYLE_Macro					63432
 #define NP2STYLE_Annotation				63433
-#define NP2STYLE_Object					63434
+
 #define NP2STYLE_Type					63435
 #define NP2STYLE_FunctionDefine			63436
+#define NP2STYLE_Protocol				63437
 
 #define NP2STYLE_Label					63440
 #define NP2STYLE_Command				63441
@@ -219,6 +205,8 @@
 #define NP2STYLE_Key					63634
 #define NP2STYLE_ParameterExpansion		63635
 #define NP2STYLE_Table					63636
+#define NP2STYLE_Pair					63637
+#define NP2STYLE_Tuple					63638
 
 #define NP2STYLE_SourceDestination		63641
 #define NP2STYLE_PositionSetting		63642
@@ -232,7 +220,10 @@
 #define NP2STYLE_DirectiveOperand		63654
 #define NP2STYLE_InternalFilter			63655
 #define NP2STYLE_ExternalFilter			63656
-
+#define NP2STYLE_File					63657
+#define NP2STYLE_Link					63658
+#define NP2STYLE_Money					63659
+#define NP2STYLE_Issue					63660
 #define NP2STYLE_MagicMethod			63661
 #define NP2STYLE_MagicConstant			63662
 #define NP2STYLE_TemplateLiteral		63663
@@ -240,7 +231,7 @@
 #define NP2STYLE_NowdocString			63665
 #define NP2STYLE_DateTime				63666
 #define NP2STYLE_Action					63667
-#define NP2STYLE_ModuleDirective		63668
+
 #define NP2STYLE_Anchor					63669
 #define NP2STYLE_TextBlock				63670
 #define NP2STYLE_Math					63671

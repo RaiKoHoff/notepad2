@@ -249,7 +249,7 @@ using namespace Scintilla;
 #define BLKIND  0370
 #define BITIND  07
 
-static const char bitarr[] = { 1, 2, 4, 8, 16, 32, 64, '\200' };
+static const unsigned char bitarr[] = { 1, 2, 4, 8, 16, 32, 64, 128 };
 
 #define badpat(x)	(*nfa = END, x)
 
@@ -307,7 +307,7 @@ void RESearch::GrabMatches(const CharacterIndexer &ci) {
 }
 
 void RESearch::ChSet(unsigned char c) noexcept {
-	bittab[((c)& BLKIND) >> 3] |= bitarr[(c)& BITIND];
+	bittab[(c & BLKIND) >> 3] |= bitarr[c & BITIND];
 }
 
 void RESearch::ChSetWithCase(unsigned char c, bool caseSensitive) noexcept {
@@ -321,7 +321,9 @@ void RESearch::ChSetWithCase(unsigned char c, bool caseSensitive) noexcept {
 	}
 }
 
-static inline unsigned char escapeValue(unsigned char ch) noexcept {
+namespace {
+
+constexpr unsigned char escapeValue(unsigned char ch) noexcept {
 	switch (ch) {
 	case 'a':	return '\a';
 	case 'b':	return '\b';
@@ -335,27 +337,26 @@ static inline unsigned char escapeValue(unsigned char ch) noexcept {
 	return 0;
 }
 
-static int GetHexaChar(unsigned char hd1, unsigned char hd2) noexcept {
-	int hexValue = 0;
-	if (hd1 >= '0' && hd1 <= '9') {
-		hexValue += 16 * (hd1 - '0');
-	} else if (hd1 >= 'A' && hd1 <= 'F') {
-		hexValue += 16 * (hd1 - 'A' + 10);
-	} else if (hd1 >= 'a' && hd1 <= 'f') {
-		hexValue += 16 * (hd1 - 'a' + 10);
-	} else {
-		return -1;
+constexpr int GetHexDigit(unsigned char ch) noexcept {
+	unsigned int diff = ch - '0';
+	if (diff < 10) {
+		return diff;
 	}
-	if (hd2 >= '0' && hd2 <= '9') {
-		hexValue += hd2 - '0';
-	} else if (hd2 >= 'A' && hd2 <= 'F') {
-		hexValue += hd2 - 'A' + 10;
-	} else if (hd2 >= 'a' && hd2 <= 'f') {
-		hexValue += hd2 - 'a' + 10;
-	} else {
-		return -1;
+	diff = (ch | 0x20) - 'a';
+	if (diff < 6) {
+		return diff + 10;
 	}
-	return hexValue;
+	return -1;
+}
+
+constexpr int GetHexValue(unsigned char ch1, unsigned char ch2) noexcept {
+	return (GetHexDigit(ch1) << 4) | GetHexDigit(ch2);
+}
+
+inline int isinset(const char *ap, unsigned char c) noexcept {
+	return ap[(c & BLKIND) >> 3] & bitarr[c & BITIND];
+}
+
 }
 
 /**
@@ -393,11 +394,10 @@ int RESearch::GetBackslashExpression(
 	case 'e':
 		result = escapeValue(bsc);
 		break;
-	case 'x':
-	{
+	case 'x': {
 		const unsigned char hd1 = *(pattern + 1);
 		const unsigned char hd2 = *(pattern + 2);
-		const int hexValue = GetHexaChar(hd1, hd2);
+		const int hexValue = GetHexValue(hd1, hd2);
 		if (hexValue >= 0) {
 			result = hexValue;
 			incr = 2;	// Must skip the digits
@@ -541,20 +541,22 @@ const char *RESearch::DoCompile(const char *pattern, Sci::Position length, bool 
 
 			if (*p == '-') {	/* real dash */
 				i++;
-				prevChar = *p;
-				ChSet(*p++);
+				prevChar = '-';
+				ChSet('-');
+				p++;
 			}
 			if (*p == ']') {	/* real brace */
 				i++;
-				prevChar = *p;
-				ChSet(*p++);
+				prevChar = ']';
+				ChSet(']');
+				p++;
 			}
 			while (*p && *p != ']') {
 				if (*p == '-') {
 					if (prevChar < 0) {
 						// Previous def. was a char class like \d, take dash literally
-						prevChar = *p;
-						ChSet(*p);
+						prevChar = '-';
+						ChSet('-');
 					} else if (*(p + 1)) {
 						if (*(p + 1) != ']') {
 							c1 = prevChar + 1;
@@ -592,8 +594,8 @@ const char *RESearch::DoCompile(const char *pattern, Sci::Position length, bool 
 							}
 						} else {
 							// Dash before the ], take it literally
-							prevChar = *p;
-							ChSet(*p);
+							prevChar = '-';
+							ChSet('-');
 						}
 					} else {
 						return badpat("Missing ]");
@@ -899,10 +901,6 @@ int RESearch::Execute(const CharacterIndexer &ci, Sci::Position lp, Sci::Positio
 
 //extern void re_fail(const char *, char);
 
-static inline int isinset(const char *ap, unsigned char c) noexcept {
-	return ap[(c & BLKIND) >> 3] & bitarr[c & BITIND];
-}
-
 /*
  * skip values for CLO XXX to skip past the closure
  */
@@ -912,9 +910,8 @@ static inline int isinset(const char *ap, unsigned char c) noexcept {
 #define CCLSKIP 34	/* [CLO] CCL 32 bytes END */
 
 Sci::Position RESearch::PMatch(const CharacterIndexer &ci, Sci::Position lp, Sci::Position endp, char *ap, int moveDir, Sci::Position *offset) {
-	int op;
-	int c;
-	int n;
+	uint8_t op;
+	uint8_t n;
 	Sci::Position e;		/* extra pointer for CLO  */
 	Sci::Position bp;		/* beginning of subpat... */
 	Sci::Position ep;		/* ending of subpat...    */
@@ -948,10 +945,10 @@ Sci::Position RESearch::PMatch(const CharacterIndexer &ci, Sci::Position lp, Sci
 				return NOTFOUND;
 			break;
 		case BOT:
-			bopat[static_cast<int>(*ap++)] = lp;
+			bopat[static_cast<unsigned char>(*ap++)] = lp;
 			break;
 		case EOT:
-			eopat[static_cast<int>(*ap++)] = lp;
+			eopat[static_cast<unsigned char>(*ap++)] = lp;
 			break;
 		case BOW:
 			if ((lp != bol && iswordc(ci.CharAt(lp - 1))) || !iswordc(ci.CharAt(lp)))
@@ -1017,11 +1014,10 @@ Sci::Position RESearch::PMatch(const CharacterIndexer &ci, Sci::Position lp, Sci
 				} else if (lp < endp) {
 					lp++;
 				}
-
 				n = ANYSKIP;
 				break;
-			case CHR:
-				c = *(ap + 1);
+			case CHR: {
+				const char c = *(ap + 1);
 				if (op == CLO || op == LCLO) {
 					while ((lp < endp) && (c == ci.CharAt(lp))) {
 						lp++;
@@ -1030,7 +1026,7 @@ Sci::Position RESearch::PMatch(const CharacterIndexer &ci, Sci::Position lp, Sci
 					lp++;
 				}
 				n = CHRSKIP;
-				break;
+			} break;
 			case CCL:
 				while ((lp < endp) && isinset(ap + 1, ci.CharAt(lp))) {
 					lp++;

@@ -4,31 +4,55 @@ namespace Scintilla {
 
 // TODO: change packed line state to NestedStateStack (convert lexer to class).
 
-template<int bitCount, int maxStateCount, int PackState(int state) noexcept>
-inline int PackLineState(const std::vector<int>& states) noexcept {
-	int lineState = 0;
-	int count = 0;
+template<int valueBit, int maxStateCount, int countBit, int baseStyle>
+int PackLineState(const std::vector<int>& states) noexcept {
+	constexpr size_t countMask = (1 << countBit) - 1;
 	size_t index = states.size();
-	while (count < maxStateCount && index != 0) {
-		++count;
+	int count = static_cast<int>(sci::min(index, countMask));
+	int lineState = count;
+	lineState <<= countBit;
+	count = sci::min(count, maxStateCount);
+	while (count != 0) {
+		--count;
 		--index;
-		lineState = (lineState << bitCount) | PackState(states[index]);
+		int state = states[index];
+		if (state) {
+			state -= baseStyle;
+		}
+		lineState = (lineState << valueBit) | state;
 	}
 	return lineState;
 }
 
-template<int bitCount, int maxStateCount, int UnpackState(int state) noexcept>
-inline void UnpackLineState(int lineState, int count, std::vector<int>& states) {
-	constexpr int mask = (1 << bitCount) - 1;
-	count = (count > maxStateCount)? maxStateCount : count;
-	while (count > 0) {
-		states.push_back(UnpackState(lineState & mask));
-		lineState >>= bitCount;
+template<int valueBit, int maxStateCount, int countBit, int baseStyle>
+void UnpackLineState(int lineState, std::vector<int>& states) {
+	constexpr int valueMask = (1 << valueBit) - 1;
+	constexpr int countMask = (1 << countBit) - 1;
+	int count = lineState & countMask;
+	lineState >>= countBit;
+	count = sci::min(count, maxStateCount);
+	while (count != 0) {
+		int state = lineState & valueMask;
+		if (state) {
+			state += baseStyle;
+		}
+		states.push_back(state);
+		lineState >>= valueBit;
 		--count;
 	}
 }
 
-inline int TryPopBack(std::vector<int>& states, int value = 0) {
+enum {
+	DefaultNestedStateValueBit = 3,
+	DefaultMaxNestedStateCount = 4,
+	DefaultNestedStateCountBit = 3,
+	DefaultNestedStateBaseStyle = 9,
+};
+
+int PackLineState(const std::vector<int>& states) noexcept;
+void UnpackLineState(int lineState, std::vector<int>& states);
+
+inline int TryTakeAndPop(std::vector<int>& states, int value = 0) {
 	if (!states.empty()) {
 		value = states.back();
 		states.pop_back();
@@ -36,19 +60,35 @@ inline int TryPopBack(std::vector<int>& states, int value = 0) {
 	return value;
 }
 
+inline int TakeAndPop(std::vector<int>& states) {
+	const int value = states.back();
+	states.pop_back();
+	return value;
+}
+
+inline int TryPopAndPeek(std::vector<int>& states, int value = 0) {
+	if (!states.empty()) {
+		states.pop_back();
+		if (!states.empty()) {
+			value = states.back();
+		}
+	}
+	return value;
+}
+
 #if 0
 
 // nested state stack on each line
-using NestedStateStack = std::map<Sci_Position, std::vector<int>>;
+using NestedStateStack = std::map<Sci_Line, std::vector<int>>;
 
-inline void GetNestedState(const NestedStateStack& stateStack, Sci_Position line, std::vector<int>& states) {
+inline void GetNestedState(const NestedStateStack& stateStack, Sci_Line line, std::vector<int>& states) {
 	const auto it = stateStack.find(line);
 	if (it != stateStack.end()) {
 		states = it->second;
 	}
 }
 
-inline void SaveNestedState(NestedStateStack& stateStack, Sci_Position line, const std::vector<int>& states) {
+inline void SaveNestedState(NestedStateStack& stateStack, Sci_Line line, const std::vector<int>& states) {
 	if (states.empty()) {
 		auto it = stateStack.find(line);
 		if (it != stateStack.end()) {
