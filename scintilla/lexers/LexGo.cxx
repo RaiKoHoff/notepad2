@@ -73,23 +73,26 @@ constexpr bool IsFormatSpecifier(uint8_t ch) noexcept {
 		|| ch == 'U';
 }
 
-Sci_Position CheckFormatSpecifier(const StyleContext &sc) noexcept {
+Sci_Position CheckFormatSpecifier(const StyleContext &sc, bool insideUrl) noexcept {
 	if (sc.chNext == '%') {
 		return 2;
+	}
+	if (insideUrl && IsHexDigit(sc.chNext)) {
+		// percent encoded URL string
+		return 0;
 	}
 	if (IsASpaceOrTab(sc.chNext) && IsADigit(sc.chPrev)) {
 		// ignore word after percent: "5% x"
 		return 0;
 	}
 
-	Sci_Position pos = sc.currentPos + 1;
+	Sci_PositionU pos = sc.currentPos + 1;
 	if (sc.chNext == '+' || sc.chNext == '-' || sc.chNext == '#' || sc.chNext == ' ') {
 		++pos;
 	}
 	while (pos < sc.lineStartNext) {
 		const uint8_t ch = sc.styler[pos];
 		if (IsFormatSpecifier(ch)) {
-			// TODO: fix percent encoded URL string
 			return pos - sc.currentPos + 1;
 		}
 		if (!(IsADigit(ch) || ch == '*' || ch == '.' || ch == '[' || ch == ']')) {
@@ -173,6 +176,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 
 	int visibleChars = 0;
 	int visibleCharsBefore = 0;
+	bool insideUrl = false;
 	EscapeSequence escSeq;
 
 	StyleContext sc(startPos, lengthDoc, initStyle, styler);
@@ -274,31 +278,17 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 		case SCE_GO_COMMENTLINE:
 			if (sc.atLineStart) {
 				sc.SetState(SCE_GO_DEFAULT);
-			} else if (visibleChars - visibleCharsBefore == 2) {
-				if (IsUpperCase(sc.ch)) {
-					if (IsUpperCase(sc.chNext)) {
-						escSeq.outerState = sc.state;
-						sc.SetState(SCE_GO_TASK_MARKER);
-						sc.Forward();
-					}
-				} else if ((sc.ch == '+' && sc.Match("+build")) || sc.Match('g', 'o', ':')) {
-					sc.SetState(SCE_GO_TASK_MARKER_LINE);
-				}
+			} else if (visibleChars - visibleCharsBefore == 2
+				&& ((sc.ch == '+' && sc.Match("+build")) || sc.Match('g', 'o', ':'))) {
+				sc.SetState(SCE_GO_TASKMARKERLINE);
+			} else {
+				HighlightTaskMarker(sc, visibleChars, visibleCharsBefore, SCE_GO_TASKMARKER);
 			}
 			break;
 
-		case SCE_GO_TASK_MARKER_LINE:
+		case SCE_GO_TASKMARKERLINE:
 			if (sc.atLineStart) {
 				sc.SetState(SCE_GO_DEFAULT);
-			}
-			break;
-
-		case SCE_GO_TASK_MARKER:
-			if (IsTaskMarkerEnd(sc.ch)) {
-				sc.SetState(escSeq.outerState);
-			} else if (!IsUpperCase(sc.ch)) {
-				sc.ChangeState(escSeq.outerState);
-				continue;
 			}
 			break;
 
@@ -306,10 +296,8 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 			if (sc.Match('*', '/')) {
 				sc.Forward();
 				sc.ForwardSetState(SCE_GO_DEFAULT);
-			} else if (visibleChars == 0 && IsUpperCase(sc.ch) && IsUpperCase(sc.chNext)) {
-				escSeq.outerState = sc.state;
-				sc.SetState(SCE_GO_TASK_MARKER);
-				sc.Forward();
+			} else if (HighlightTaskMarker(sc, visibleChars, visibleCharsBefore, SCE_GO_TASKMARKER)) {
+				continue;
 			}
 			break;
 
@@ -320,7 +308,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 				sc.SetState(SCE_GO_ESCAPECHAR);
 				sc.Forward();
 			} else if (sc.ch == '%') {
-				const Sci_Position length = CheckFormatSpecifier(sc);
+				const Sci_Position length = CheckFormatSpecifier(sc, insideUrl);
 				if (length != 0) {
 					const int state = sc.state;
 					sc.SetState(SCE_GO_FORMAT_SPECIFIER);
@@ -332,6 +320,10 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 				sc.ForwardSetState(SCE_GO_DEFAULT);
 			} else if (sc.state == SCE_GO_STRING && sc.atLineStart) {
 				sc.SetState(SCE_GO_DEFAULT);
+			} else if (sc.Match(':', '/', '/') && IsLowerCase(sc.chPrev)) {
+				insideUrl = true;
+			} else if (insideUrl && IsInvalidUrlChar(sc.ch)) {
+				insideUrl = false;
 			}
 			break;
 
@@ -363,13 +355,16 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 				}
 				visibleCharsBefore = visibleChars;
 			} else if (sc.Match('/', '*')) {
+				visibleCharsBefore = visibleChars;
 				sc.SetState(SCE_GO_COMMENTBLOCK);
 				sc.Forward();
 			} else if (sc.ch == '\"') {
+				insideUrl = false;
 				sc.SetState(SCE_GO_STRING);
 			} else if (sc.ch == '\'') {
 				sc.SetState(SCE_GO_CHARACTER);
 			} else if (sc.ch == '`') {
+				insideUrl = false;
 				sc.SetState(SCE_GO_RAW_STRING);
 			} else if (IsNumberStart(sc.ch, sc.chNext)) {
 				sc.SetState(SCE_GO_NUMBER);
@@ -408,7 +403,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 						}
 						break;
 					}
-				} else if (sc.ch == ')' && IsASpaceOrTab(sc.chNext) && sc.GetLineNextChar(1) == '(') {
+				} else if (sc.ch == ')' && IsASpaceOrTab(sc.chNext) && sc.GetLineNextChar(true) == '(') {
 					funcState = GoFunction_Return;
 				}
 			}
@@ -421,6 +416,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 			styler.SetLineState(sc.currentLine, lineStateLineComment);
 			lineStateLineComment = 0;
 			visibleChars = 0;
+			visibleCharsBefore = 0;
 			funcState = GoFunction_None;
 			lineStartCurrent = sc.lineStartNext;
 			identifierStart = 0;
@@ -432,7 +428,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 }
 
 constexpr bool IsInnerStyle(int style) noexcept {
-	return style == SCE_GO_TASK_MARKER || style == SCE_GO_FORMAT_SPECIFIER;
+	return style == SCE_GO_TASKMARKER || style == SCE_GO_FORMAT_SPECIFIER;
 }
 
 constexpr int GetLineCommentState(int lineState) noexcept {
@@ -440,8 +436,6 @@ constexpr int GetLineCommentState(int lineState) noexcept {
 }
 
 void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
-	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
-
 	const Sci_PositionU endPos = startPos + lengthDoc;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
@@ -464,24 +458,29 @@ void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 		style = styleNext;
 		styleNext = styler.StyleAt(i + 1);
 
-		if (style == SCE_GO_RAW_STRING || (foldComment & (style == SCE_GO_COMMENTBLOCK))) {
+		switch (style) {
+		case SCE_GO_RAW_STRING:
+		case SCE_GO_COMMENTBLOCK:
 			if (style != stylePrev && !IsInnerStyle(stylePrev)) {
 				levelNext++;
 			} else if (style != styleNext && !IsInnerStyle(styleNext)) {
 				levelNext--;
 			}
-		} else if (style == SCE_GO_OPERATOR) {
+			break;
+
+		case SCE_GO_OPERATOR: {
 			const char ch = styler[i];
 			if (ch == '{' || ch == '[' || ch == '(') {
 				levelNext++;
 			} else if (ch == '}' || ch == ']' || ch == ')') {
 				levelNext--;
 			}
+		} break;
 		}
 
 		if (i == lineEndPos) {
 			const int lineCommentNext = GetLineCommentState(styler.GetLineState(lineCurrent + 1));
-			if (foldComment & lineCommentCurrent) {
+			if (lineCommentCurrent) {
 				levelNext += lineCommentNext - lineCommentPrev;
 			}
 

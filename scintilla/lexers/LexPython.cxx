@@ -169,7 +169,7 @@ static void ColourisePyDoc(Sci_PositionU startPos, Sci_Position length, int init
 				} else if (keywords_class.InList(s)) {
 					defType = 0;
 					sc.ChangeState(SCE_PY_CLASSNAME);
-				} else if (sc.GetNextNSChar() == '(') {
+				} else if (sc.GetLineNextChar() == '(') {
 					sc.ChangeState(SCE_PY_FUNCTION);
 				}
 				sc.SetState(SCE_PY_DEFAULT);
@@ -333,10 +333,6 @@ static void FoldPyDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWor
 	const Sci_Line docLines = styler.GetLine(styler.Length());
 	const Sci_Line maxLines = (maxPos == styler.Length()) ? docLines : styler.GetLine(maxPos - 1);
 
-	// property fold.quotes.python
-	//	This option enables folding multi-line quoted strings when using the Python lexer.
-	const bool foldQuotes = styler.GetPropertyInt("fold.quotes.python", 1) != 0;
-
 	// Backtrack to previous non-blank line so we can determine indent level
 	// for any white space lines (needed esp. within triple quoted strings)
 	// and so we can fix any preceding fold level (which is why we go back
@@ -359,7 +355,7 @@ static void FoldPyDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWor
 	if (lineCurrent >= 1) {
 		prev_state = styler.StyleAt(startPos - 1);
 	}
-	int prevQuote = foldQuotes && IsPyTripleStyle(prev_state);
+	int prevQuote = IsPyTripleStyle(prev_state);
 
 	// Process all characters to end of requested range or end of any triple quote
 	//that hangs over the end of the range.  Cap processing in all cases
@@ -376,7 +372,7 @@ static void FoldPyDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWor
 			indentNext = styler.IndentAmount(lineNext);
 			const Sci_Position lookAtPos = (styler.LineStart(lineNext) == styler.Length()) ? styler.Length() - 1 : styler.LineStart(lineNext);
 			const int style = styler.StyleAt(lookAtPos);
-			quote = foldQuotes && IsPyTripleStyle(style);
+			quote = IsPyTripleStyle(style);
 		}
 		const int quote_start = (quote && !prevQuote);
 		const int quote_continue = (quote && prevQuote);

@@ -71,7 +71,7 @@ inline bool IsJsIdentifierStartNext(const StyleContext &sc) noexcept {
 }
 
 constexpr bool IsSpaceEquiv(int state) noexcept {
-	return state <= SCE_JS_TASK_MARKER;
+	return state <= SCE_JS_TASKMARKER;
 }
 
 constexpr bool FollowExpression(int chPrevNonWhite, int stylePrevNonWhite) noexcept {
@@ -181,7 +181,8 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 				sc.SetState(SCE_JS_OPERATOR2);
 				sc.ForwardSetState(state);
 				continue;
-			} else if (sc.Match('\\', 'u') || (sc.ch == '-' && (sc.state == SCE_JSX_TAG || sc.state == SCE_JSX_ATTRIBUTE))) {
+			}
+			if (sc.Match('\\', 'u') || (sc.ch == '-' && (sc.state == SCE_JSX_TAG || sc.state == SCE_JSX_ATTRIBUTE))) {
 				sc.Forward();
 			} else if (!IsJsIdentifierChar(sc.ch)) {
 				if (sc.state == SCE_JS_IDENTIFIER) {
@@ -225,13 +226,13 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 						if (kwType != SCE_JS_DEFAULT) {
 							sc.ChangeState(kwType);
 						} else {
-							const int offset = sc.ch == '?';
-							const int chNext = sc.GetLineNextChar(offset);
+							const int chNext = sc.GetDocNextChar(sc.ch == '?');
 							if (chNext == '(') {
 								sc.ChangeState(SCE_JS_FUNCTION);
-							} else if ((chBeforeIdentifier == '<' && chNext == '>') || sc.Match('[', ']')) {
+							} else if ((chBeforeIdentifier == '<' && (chNext == '>' || chNext == '<')) || sc.Match('[', ']')) {
 								// type<type>
 								// type<type?>
+								// type<type<type>>
 								// type[]
 								sc.ChangeState(SCE_JS_CLASS);
 							}
@@ -382,9 +383,8 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 						sc.SetState(SCE_JS_COMMENTTAGXML);
 						sc.Forward();
 					}
-				} else if (IsTaskMarkerStart(visibleChars, visibleCharsBefore, sc.chPrev, sc.ch, sc.chNext)) {
-					escSeq.outerState = sc.state;
-					sc.SetState(SCE_JS_TASK_MARKER);
+				} else if (HighlightTaskMarker(sc, visibleChars, visibleCharsBefore, SCE_JS_TASKMARKER)) {
+					continue;
 				}
 			}
 			break;
@@ -393,15 +393,6 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 		case SCE_JS_COMMENTTAGXML:
 			if (!(IsIdentifierChar(sc.ch) || sc.ch == '-')) {
 				sc.SetState(escSeq.outerState);
-				continue;
-			}
-			break;
-
-		case SCE_JS_TASK_MARKER:
-			if (IsTaskMarkerEnd(sc.ch)) {
-				sc.SetState(escSeq.outerState);
-			} else if (!IsUpperCase(sc.ch)) {
-				sc.ChangeState(escSeq.outerState);
 				continue;
 			}
 			break;
@@ -570,17 +561,11 @@ struct FoldLineState {
 	}
 };
 
-constexpr bool IsStreamCommentStyle(int style) noexcept {
-	return style == SCE_JS_COMMENTBLOCK || style == SCE_JS_COMMENTBLOCKDOC;
-}
-
 constexpr bool IsInnerCommentStyle(int style) noexcept {
-	return style == SCE_JS_COMMENTTAGAT || style == SCE_JS_COMMENTTAGXML || style == SCE_JS_TASK_MARKER;
+	return style == SCE_JS_COMMENTTAGAT || style == SCE_JS_COMMENTTAGXML || style == SCE_JS_TASKMARKER;
 }
 
 void FoldJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
-	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
-
 	const Sci_PositionU endPos = startPos + lengthDoc;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	FoldLineState foldPrev(0);
@@ -606,29 +591,37 @@ void FoldJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 		style = styleNext;
 		styleNext = styler.StyleAt(i + 1);
 
-		if (IsStreamCommentStyle(style)) {
-			if (foldComment) {
-				if (style != stylePrev && !IsInnerCommentStyle(stylePrev)) {
-					levelNext++;
-				} else if (style != styleNext && !IsInnerCommentStyle(styleNext)) {
-					levelNext--;
-				}
+		switch (style) {
+		case SCE_JS_COMMENTBLOCK:
+		case SCE_JS_COMMENTBLOCKDOC:
+			if (style != stylePrev && !IsInnerCommentStyle(stylePrev)) {
+				levelNext++;
+			} else if (style != styleNext && !IsInnerCommentStyle(styleNext)) {
+				levelNext--;
 			}
-		} else if (style == SCE_JS_STRING_BTSTART) {
+			break;
+
+		case SCE_JS_STRING_BTSTART:
 			if (style != stylePrev) {
 				levelNext++;
 			}
-		} else if (style == SCE_JS_STRING_BTEND) {
+			break;
+
+		case SCE_JS_STRING_BTEND:
 			if (style != styleNext) {
 				levelNext--;
 			}
-		} else if (style == SCE_JS_OPERATOR) {
+			break;
+
+		case SCE_JS_OPERATOR:
 			if (ch == '{' || ch == '[' || ch == '(') {
 				levelNext++;
 			} else if (ch == '}' || ch == ']' || ch == ')') {
 				levelNext--;
 			}
-		} else if (style == SCE_JSX_TAG) {
+			break;
+
+		case SCE_JSX_TAG:
 			if (ch == '<') {
 				if (chNext == '/') {
 					levelNext--;
@@ -641,11 +634,12 @@ void FoldJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 			} else if (ch == '/' && chNext == '>') {
 				levelNext--;
 			}
+			break;
 		}
 
 		if (i == lineEndPos) {
 			const FoldLineState foldNext(styler.GetLineState(lineCurrent + 1));
-			if (foldComment & foldCurrent.lineComment) {
+			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
 			} else if (foldCurrent.packageImport) {
 				levelNext += foldNext.packageImport - foldPrev.packageImport;

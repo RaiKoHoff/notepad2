@@ -21,6 +21,7 @@ public:
 		setAlpha = setLower | setUpper,
 		setAlphaNum = setAlpha | setDigits
 	};
+	//[[deprecated]]
 	CharacterSet(setBase base = setNone, const char *initialSet = "", bool valueAfter_ = false) noexcept;
 	CharacterSet(const CharacterSet &other) = delete;
 	CharacterSet(CharacterSet &&other) = delete;
@@ -205,12 +206,22 @@ constexpr bool isoperator(int ch) noexcept {
 		|| ch == '?' || ch == '!' || ch == '.' || ch == '~';
 }
 
+// isoperator() excludes following eight punctuation: '"', '#', '$', "'", '@', '\\', '_', '`'
+// in most lexers, isoperator(ch) is equivalent to following code:
+// IsAGraphic(ch) && !AnyOf(ch, '#', '$', '@', '\\', '`');
+
+constexpr bool IsAGraphic(int ch) noexcept {
+	// excludes C0 control characters and whitespace
+	return ch > 32 && ch < 127;
+}
+
 constexpr bool IsGraphic(int ch) noexcept {
 	// excludes C0 control characters and whitespace
 	return ch > 32 && ch != 127;
 }
 
 constexpr bool IsPunctuation(int ch) noexcept {
+	//return IsAGraphic(ch) && !IsAlphaNumeric(ch);
 	return (ch > 32 && ch < '0')
 		|| (ch > '9' && ch < 'A')
 		|| (ch > 'Z' && ch < 'a')
@@ -218,21 +229,12 @@ constexpr bool IsPunctuation(int ch) noexcept {
 }
 
 constexpr bool IsCommentTagPrev(int chPrev) noexcept {
-	return AnyOf(chPrev, ' ', '\t', '\n', '\r', '*', '!', '/');
+	return chPrev <= 32 || AnyOf(chPrev, '/', '*', '!');
 }
 
-constexpr bool IsTaskMarkerPrev(int chPrev) noexcept {
-	return AnyOf(chPrev, ' ', '\t', '*', '!', '/', '\n', '\r');
-}
-
-constexpr bool IsTaskMarkerEnd(int ch) noexcept {
-	return AnyOf(ch, ':', '(', ' ', '\t', '\n', '\r');
-}
-
-constexpr bool IsTaskMarkerStart(int visibleChars, int visibleCharsBefore, int chPrev, int ch, int chNext) noexcept {
-	return (visibleChars == 0 || (visibleChars <= visibleCharsBefore + 3 && IsTaskMarkerPrev(chPrev)))
-		&& IsUpperCase(ch)
-		&& IsUpperCase(chNext);
+constexpr bool IsInvalidUrlChar(int ch) noexcept {
+	return ch <= 32 || ch >= 127
+		|| AnyOf(ch, '"', '<', '>', '\\', '^', '`', '{', '|', '}');
 }
 
 // Simple case functions for ASCII supersets.

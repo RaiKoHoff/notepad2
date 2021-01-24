@@ -86,6 +86,7 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 	bool isTransposeOperator = false; // "'"
 
 	int visibleChars = 0;
+	int visibleCharsBefore = 0;
 	EscapeSequence escSeq;
 
 	StyleContext sc(startPos, lengthDoc, initStyle, styler);
@@ -162,7 +163,7 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 						sc.Forward();
 					}
 				} else {
-					const int chNext = sc.GetNextNSChar();
+					const int chNext = sc.GetDocNextChar();
 					if (sc.ch == '!' || chNext == '(') {
 						sc.ChangeState(SCE_JULIA_FUNCTION);
 						if (sc.ch == '!') {
@@ -283,8 +284,11 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 		case SCE_JULIA_COMMENTLINE:
 			if (sc.atLineStart) {
 				sc.SetState(SCE_JULIA_DEFAULT);
+			} else {
+				HighlightTaskMarker(sc, visibleChars, visibleCharsBefore, SCE_JULIA_TASKMARKER);
 			}
 			break;
+
 		case SCE_JULIA_COMMENTBLOCK:
 			if (sc.Match('=', '#')) {
 				sc.Forward();
@@ -295,6 +299,8 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 			} else if (sc.Match('#', '=')) {
 				sc.Forward();
 				++commentLevel;
+			} else if (HighlightTaskMarker(sc, visibleChars, visibleCharsBefore, SCE_JULIA_TASKMARKER)) {
+				continue;
 			}
 			break;
 		}
@@ -306,6 +312,7 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 			if (transposeOperator) {
 				sc.SetState(SCE_JULIA_OPERATOR);
 			} else if (sc.ch == '#') {
+				visibleCharsBefore = visibleChars;
 				if (sc.chNext == '=') {
 					commentLevel = 1;
 					sc.SetState(SCE_JULIA_COMMENTBLOCK);
@@ -411,7 +418,7 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 			}
 		}
 
-		if (visibleChars == 0 && !isspacechar(sc.ch)) {
+		if (!isspacechar(sc.ch)) {
 			visibleChars++;
 		}
 		if (sc.atLineEnd) {
@@ -422,17 +429,12 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 			styler.SetLineState(sc.currentLine, lineState);
 			lineStateLineComment = 0;
 			visibleChars = 0;
+			visibleCharsBefore = 0;
 		}
 		sc.Forward();
 	}
 
 	sc.Complete();
-}
-
-constexpr bool IsMultilineStringStyle(int style) noexcept {
-	return style == SCE_JULIA_RAWSTRING || style == SCE_JULIA_TRIPLE_RAWSTRING
-		|| style == SCE_JULIA_BYTESTRING || style == SCE_JULIA_TRIPLE_BYTESTRING
-		|| style == SCE_JULIA_REGEX || style == SCE_JULIA_TRIPLE_REGEX;
 }
 
 constexpr bool IsStringInnerStyle(int style) noexcept {
@@ -444,8 +446,6 @@ constexpr int GetLineCommentState(int lineState) noexcept {
 }
 
 void FoldJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
-	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
-
 	const Sci_PositionU endPos = startPos + lengthDoc;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
@@ -475,18 +475,19 @@ void FoldJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 		style = styleNext;
 		styleNext = styler.StyleAt(i + 1);
 
-		if (style == SCE_JULIA_COMMENTBLOCK) {
-			if (foldComment) {
-				const int level = (ch == '#' && chNext == '=') ? 1 : ((ch == '=' && chNext == '#') ? -1 : 0);
-				if (level != 0) {
-					levelNext += level;
-					i++;
-					style = styleNext;
-					chNext = styler.SafeGetCharAt(i + 1);
-					styleNext = styler.StyleAt(i + 1);
-				}
+		switch (style) {
+		case SCE_JULIA_COMMENTBLOCK: {
+			const int level = (ch == '#' && chNext == '=') ? 1 : ((ch == '=' && chNext == '#') ? -1 : 0);
+			if (level != 0) {
+				levelNext += level;
+				i++;
+				style = styleNext;
+				chNext = styler.SafeGetCharAt(i + 1);
+				styleNext = styler.StyleAt(i + 1);
 			}
-		} else if (style == SCE_JULIA_WORD) {
+		} break;
+
+		case SCE_JULIA_WORD:
 			if (wordLen < MaxFoldWordLength) {
 				buf[wordLen++] = ch;
 			}
@@ -499,31 +500,47 @@ void FoldJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 					levelNext++;
 				}
 			}
-		} else if (style == SCE_JULIA_OPERATOR) {
+			break;
+
+		case SCE_JULIA_OPERATOR:
 			if (ch == '{' || ch == '[' || ch == '(') {
 				levelNext++;
 			} else if (ch == '}' || ch == ']' || ch == ')') {
 				levelNext--;
 			}
-		} else if (style == SCE_JULIA_TRIPLE_STRINGSTART || style == SCE_JULIA_TRIPLE_BACKTICKSSTART) {
+			break;
+
+		case SCE_JULIA_TRIPLE_STRINGSTART:
+		case SCE_JULIA_TRIPLE_BACKTICKSSTART:
 			if (style != stylePrev) {
 				levelNext++;
 			}
-		} else if (style == SCE_JULIA_TRIPLE_STRINGEND || style == SCE_JULIA_TRIPLE_BACKTICKSEND) {
+			break;
+
+		case SCE_JULIA_TRIPLE_STRINGEND:
+		case SCE_JULIA_TRIPLE_BACKTICKSEND:
 			if (style != styleNext) {
 				levelNext--;
 			}
-		} else if (IsMultilineStringStyle(style)) {
+			break;
+
+		case SCE_JULIA_RAWSTRING:
+		case SCE_JULIA_TRIPLE_RAWSTRING:
+		case SCE_JULIA_BYTESTRING:
+		case SCE_JULIA_TRIPLE_BYTESTRING:
+		case SCE_JULIA_REGEX:
+		case SCE_JULIA_TRIPLE_REGEX:
 			if (style != stylePrev && !IsStringInnerStyle(stylePrev)) {
 				levelNext++;
 			} else if (style != styleNext && !IsStringInnerStyle(styleNext)) {
 				levelNext--;
 			}
+			break;
 		}
 
 		if (i == lineEndPos) {
 			const int lineCommentNext = GetLineCommentState(styler.GetLineState(lineCurrent + 1));
-			if (foldComment & lineCommentCurrent) {
+			if (lineCommentCurrent) {
 				levelNext += lineCommentNext - lineCommentPrev;
 			}
 

@@ -64,7 +64,7 @@ constexpr bool IsYAMLDateTime(int ch, int chNext) noexcept {
 bool IsYAMLText(StyleContext& sc, int braceCount, const WordList *kwList) {
 	const int state = sc.state;
 	const Sci_Position endPos = braceCount? sc.styler.Length() : sc.lineStartNext;
-	const char chNext = LexGetNextChar(sc.currentPos, endPos, sc.styler);
+	const unsigned char chNext = LexGetNextChar(sc.currentPos, endPos, sc.styler);
 	if (chNext == ':') {
 		// possible key
 		sc.ChangeState(SCE_YAML_TEXT);
@@ -140,9 +140,6 @@ constexpr int GetLineType(int lineState) noexcept {
 }
 
 void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
-	// ns-uri-char
-	const CharacterSet setUriChar(CharacterSet::setAlphaNum, "%-#;/?:@&=+$,_.!~*'()[]");
-
 	int visibleChars = 0;
 	bool indentEnded = true;
 	bool hasKey = false;
@@ -270,7 +267,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 		case SCE_YAML_VERBATIM_TAG:
 			if (sc.state == SCE_YAML_VERBATIM_TAG && sc.ch == '>') {
 				sc.ForwardSetState(SCE_YAML_DEFAULT);
-			} else if (!setUriChar.Contains(sc.ch)) {
+			} else if (IsInvalidUrlChar(sc.ch)) {
 				sc.SetState(SCE_YAML_DEFAULT);
 			}
 			break;
@@ -285,7 +282,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				}
 
 				sc.Forward();
-				if (sc.GetNextNSChar() == ':') {
+				if (sc.GetDocNextChar() == ':') {
 					hasKey = true;
 					sc.ChangeState(SCE_YAML_KEY);
 				}
@@ -300,7 +297,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				sc.Forward();
 			} else if (sc.ch == '\"') {
 				sc.Forward();
-				if (sc.GetNextNSChar() == ':') {
+				if (sc.GetDocNextChar() == ':') {
 					hasKey = true;
 					sc.ChangeState(SCE_YAML_KEY);
 				}
@@ -463,8 +460,6 @@ struct FoldLineState {
 
 // code folding based on LexNull
 void FoldYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*/, LexerWordList, Accessor &styler) {
-	const bool foldComment = styler.GetPropertyInt("fold.comment", 1) != 0;
-
 	const Sci_Position maxPos = startPos + lengthDoc;
 	const Sci_Line docLines = styler.GetLine(styler.Length());
 	const Sci_Line maxLines = (maxPos == styler.Length()) ? docLines : styler.GetLine(maxPos - 1);
@@ -506,7 +501,7 @@ void FoldYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle
 		const int levelAfterBlank = stateNext.indentCount;
 		const int skipLevel = levelAfterBlank + SC_FOLDLEVELBASE;
 
-		if (foldComment && lineCurrent < lineNext) {
+		if (lineCurrent < lineNext) {
 			int prevLineType = stateCurrent.lineType;
 			int nextLineType = GetLineType(styler.GetLineState(lineCurrent));
 			int prevLevel = skipLevel;
@@ -533,10 +528,6 @@ void FoldYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle
 				styler.SetLevel(lineCurrent, level);
 				prevLineType = currentLineType;
 				prevLevel = level;
-			}
-		} else {
-			for (; lineCurrent < lineNext; lineCurrent++) {
-				styler.SetLevel(lineCurrent, skipLevel);
 			}
 		}
 

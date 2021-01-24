@@ -1085,7 +1085,7 @@ INT AutoC_AddSpecWord(struct WordList *pWList, int iCurrentStyle, int ch, int ch
 		return AutoC_AddSpecWord_Keyword;
 	}
 	else if (pLexCurrent->iLexer == SCLEX_JAVASCRIPT && (ch == '@' || (ch == '<' && pLexCurrent->rid == NP2LEX_TYPESCRIPT))) {
-		if (iCurrentStyle >= SCE_JS_COMMENTLINE && iCurrentStyle <= SCE_JS_TASK_MARKER) {
+		if (iCurrentStyle >= SCE_JS_COMMENTLINE && iCurrentStyle <= SCE_JS_TASKMARKER) {
 			WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[9]); // JSDoc, TSDoc
 			return AutoC_AddSpecWord_Finish;
 		}
@@ -1568,7 +1568,7 @@ void EditAutoCloseXMLTag(void) {
 	const Sci_Position iCurPos = SciCall_GetCurrentPos();
 	const Sci_Position iStartPos = max_pos(0, iCurPos - (COUNTOF(tchBuf) - 1));
 	const Sci_Position iSize = iCurPos - iStartPos;
-	BOOL shouldAutoClose = iSize >= 3;
+	BOOL shouldAutoClose = iSize >= 3 && autoCompletionConfig.bCloseTags;
 	BOOL autoClosed = FALSE;
 
 	if (shouldAutoClose && pLexCurrent->iLexer == SCLEX_CPP) {
