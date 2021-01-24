@@ -71,6 +71,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 	int kwType = SCE_RUST_DEFAULT;
 
 	int visibleChars = 0;
+	int visibleCharsBefore = 0;
 	Sci_PositionU charStartPos = 0;
 	EscapeSequence escSeq;
 
@@ -137,7 +138,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 							kwType = SCE_RUST_UNION;
 						}
 						if (kwType != SCE_RUST_DEFAULT) {
-							const int chNext = sc.GetNextNSChar();
+							const int chNext = sc.GetDocNextChar();
 							if (!IsIdentifierStart(chNext)) {
 								kwType = SCE_RUST_DEFAULT;
 							}
@@ -160,7 +161,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					} else if (keywordLists[7]->InList(s)) {
 						sc.ChangeState(SCE_RUST_CONSTANT);
 					} else {
-						const int chNext = sc.GetNextNSChar();
+						const int chNext = sc.GetDocNextChar();
 						if (chNext == '(') {
 							sc.ChangeState((kwType == SCE_RUST_FUNCTION_DEFINE)? kwType : SCE_RUST_FUNCTION);
 						} else if (chNext == '!') {
@@ -190,6 +191,8 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 		case SCE_RUST_COMMENTLINEDOC:
 			if (sc.atLineStart) {
 				sc.SetState(SCE_RUST_DEFAULT);
+			} else {
+				HighlightTaskMarker(sc, visibleChars, visibleCharsBefore, SCE_RUST_TASKMARKER);
 			}
 			break;
 
@@ -211,6 +214,8 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				//}
 				sc.Forward();
 				++commentLevel;
+			} else if (HighlightTaskMarker(sc, visibleChars, visibleCharsBefore, SCE_RUST_TASKMARKER)) {
+				continue;
 			}
 			break;
 
@@ -309,6 +314,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				if (visibleChars == 0) {
 					lineStateLineType = RustLineStateMaskLineComment;
 				}
+				visibleCharsBefore = visibleChars;
 			} else if (sc.Match('/', '*')) {
 				const int chNext = sc.GetRelative(2);
 				if (chNext == '!' || (chNext == '*' && sc.GetRelative(3) != '*')) {
@@ -318,6 +324,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				}
 				sc.Forward();
 				commentLevel = 1;
+				visibleCharsBefore = visibleChars;
 			} else if (sc.ch == '\"') {
 				sc.SetState(SCE_RUST_STRING);
 			} else if (sc.ch == '\'') {
@@ -388,20 +395,12 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			styler.SetLineState(sc.currentLine, lineState);
 			lineStateLineType = 0;
 			visibleChars = 0;
+			visibleCharsBefore = 0;
 		}
 		sc.Forward();
 	}
 
 	sc.Complete();
-}
-
-constexpr bool IsStreamCommentStyle(int style) noexcept {
-	return style == SCE_RUST_COMMENTBLOCK || style == SCE_RUST_COMMENTBLOCKDOC;
-}
-
-constexpr bool IsMultilineStringStyle(int style) noexcept {
-	return style == SCE_RUST_STRING || style == SCE_RUST_BYTESTRING
-		|| style == SCE_RUST_RAW_STRING || style == SCE_RUST_RAW_BYTESTRING;
 }
 
 constexpr bool IsStringInnerStyle(int style) noexcept {
@@ -418,8 +417,6 @@ struct FoldLineState {
 };
 
 void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
-	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
-
 	const Sci_PositionU endPos = startPos + lengthDoc;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	FoldLineState foldPrev(0);
@@ -445,34 +442,42 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 		style = styleNext;
 		styleNext = styler.StyleAt(i + 1);
 
-		if (IsStreamCommentStyle(style)) {
-			if (foldComment) {
-				const int level = (ch == '/' && chNext == '*') ? 1 : ((ch == '*' && chNext == '/') ? -1 : 0);
-				if (level != 0) {
-					levelNext += level;
-					i++;
-					style = styleNext;
-					chNext = styler.SafeGetCharAt(i + 1);
-					styleNext = styler.StyleAt(i + 1);
-				}
+		switch (style) {
+		case SCE_RUST_COMMENTBLOCK:
+		case SCE_RUST_COMMENTBLOCKDOC:  {
+			const int level = (ch == '/' && chNext == '*') ? 1 : ((ch == '*' && chNext == '/') ? -1 : 0);
+			if (level != 0) {
+				levelNext += level;
+				i++;
+				style = styleNext;
+				chNext = styler.SafeGetCharAt(i + 1);
+				styleNext = styler.StyleAt(i + 1);
 			}
-		} else if (IsMultilineStringStyle(style)) {
+		} break;
+
+		case SCE_RUST_STRING:
+		case SCE_RUST_BYTESTRING:
+		case SCE_RUST_RAW_STRING:
+		case SCE_RUST_RAW_BYTESTRING:
 			if (style != stylePrev && !IsStringInnerStyle(stylePrev)) {
 				levelNext++;
 			} else if (style != styleNext && !IsStringInnerStyle(styleNext)) {
 				levelNext--;
 			}
-		} else if (style == SCE_RUST_OPERATOR) {
+			break;
+
+		case SCE_RUST_OPERATOR:
 			if (ch == '{' || ch == '[' || ch == '(') {
 				levelNext++;
 			} else if (ch == '}' || ch == ']' || ch == ')') {
 				levelNext--;
 			}
+			break;
 		}
 
 		if (i == lineEndPos) {
 			const FoldLineState foldNext(styler.GetLineState(lineCurrent + 1));
-			if (foldComment & foldCurrent.lineComment) {
+			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
 			} else if (foldCurrent.pubUse) {
 				levelNext += foldNext.pubUse - foldPrev.pubUse;

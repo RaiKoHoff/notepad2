@@ -80,6 +80,7 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 	std::vector<int> nestedState;	// string interpolation "\()"
 
 	int visibleChars = 0;
+	int visibleCharsBefore = 0;
 
 	StyleContext sc(startPos, lengthDoc, initStyle, styler);
 	if (sc.currentLine > 0) {
@@ -165,13 +166,13 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 					if (kwType != SCE_SWIFT_DEFAULT) {
 						sc.ChangeState(kwType);
 					} else {
-						const int offset = sc.ch == '?';
-						const int chNext = sc.GetLineNextChar(offset);
+						const int chNext = sc.GetDocNextChar(sc.ch == '?');
 						if (chNext == '(') {
 							sc.ChangeState(SCE_SWIFT_FUNCTION);
-						} else if ((chBeforeIdentifier == '<' && chNext == '>')) {
+						} else if ((chBeforeIdentifier == '<' && (chNext == '>' || chNext == '<'))) {
 							// type<type>
 							// type<type?>
+							// type<type<type>>
 							sc.ChangeState(SCE_SWIFT_CLASS);
 						}
 					}
@@ -209,6 +210,8 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 		case SCE_SWIFT_COMMENTLINEDOC:
 			if (sc.atLineStart) {
 				sc.SetState(SCE_SWIFT_DEFAULT);
+			} else {
+				HighlightTaskMarker(sc, visibleChars, visibleCharsBefore, SCE_SWIFT_TASKMARKER);
 			}
 			break;
 
@@ -223,6 +226,8 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 			} else if (sc.Match('/', '*')) {
 				sc.Forward();
 				++commentLevel;
+			} else if (HighlightTaskMarker(sc, visibleChars, visibleCharsBefore, SCE_SWIFT_TASKMARKER)) {
+				continue;
 			}
 			break;
 
@@ -295,11 +300,13 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 				if (visibleChars == 0) {
 					lineStateLineType = SwiftLineStateMaskLineComment;
 				}
+				visibleCharsBefore = visibleChars;
 			} else if (sc.Match('/', '*')) {
 				const int chNext = sc.GetRelative(2);
 				sc.SetState((chNext == '*' || chNext == ':'  || chNext == '!') ? SCE_SWIFT_COMMENTBLOCKDOC : SCE_SWIFT_COMMENTBLOCK);
 				sc.Forward();
 				commentLevel = 1;
+				visibleCharsBefore = visibleChars;
 			} else if (sc.Match('"', '"', '"')) {
 				sc.SetState(SCE_SWIFT_TRIPLE_STRINGSTART);
 				sc.Forward(2);
@@ -335,7 +342,9 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 					}
 				}
 			} else if (IsIdentifierStartEx(sc.ch)) {
-				chBeforeIdentifier = sc.chPrev;
+				if (sc.chPrev != '.') {
+					chBeforeIdentifier = sc.chPrev;
+				}
 				sc.SetState(SCE_SWIFT_IDENTIFIER);
 			} else if (isoperator(sc.ch) || sc.ch == '\\') {
 				const bool interpolating = !nestedState.empty();
@@ -363,6 +372,7 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 			styler.SetLineState(sc.currentLine, lineState);
 			lineStateLineType = 0;
 			visibleChars = 0;
+			visibleCharsBefore = 0;
 			kwType = SCE_SWIFT_DEFAULT;
 		}
 		sc.Forward();
@@ -380,13 +390,7 @@ struct FoldLineState {
 	}
 };
 
-constexpr bool IsStreamCommentStyle(int style) noexcept {
-	return style == SCE_SWIFT_COMMENTBLOCK || style == SCE_SWIFT_COMMENTBLOCKDOC;
-}
-
 void FoldSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
-	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
-
 	const Sci_PositionU endPos = startPos + lengthDoc;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	FoldLineState foldPrev(0);
@@ -412,41 +416,54 @@ void FoldSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 		style = styleNext;
 		styleNext = styler.StyleAt(i + 1);
 
-		if (IsStreamCommentStyle(style)) {
-			if (foldComment) {
-				const int level = (ch == '/' && chNext == '*') ? 1 : ((ch == '*' && chNext == '/') ? -1 : 0);
-				if (level != 0) {
-					levelNext += level;
-					i++;
-					chNext = styler.SafeGetCharAt(i + 1);
-					styleNext = styler.StyleAt(i + 1);
-				}
+		switch (style) {
+		case SCE_SWIFT_COMMENTBLOCK:
+		case SCE_SWIFT_COMMENTBLOCKDOC: {
+			const int level = (ch == '/' && chNext == '*') ? 1 : ((ch == '*' && chNext == '/') ? -1 : 0);
+			if (level != 0) {
+				levelNext += level;
+				i++;
+				chNext = styler.SafeGetCharAt(i + 1);
+				styleNext = styler.StyleAt(i + 1);
 			}
-		} else if (style == SCE_SWIFT_TRIPLE_STRINGSTART || style == SCE_SWIFT_TRIPLE_STRING_EDSTART) {
+		} break;
+
+		case SCE_SWIFT_TRIPLE_STRINGSTART:
+		case SCE_SWIFT_TRIPLE_STRING_EDSTART:
 			if (style != stylePrev) {
 				levelNext++;
 			}
-		} else if (style == SCE_SWIFT_TRIPLE_STRINGEND || style == SCE_SWIFT_TRIPLE_STRING_EDEND) {
+			break;
+
+		case SCE_SWIFT_TRIPLE_STRINGEND:
+		case SCE_SWIFT_TRIPLE_STRING_EDEND:
 			if (style != styleNext) {
 				levelNext--;
 			}
-		} else if (style == SCE_SWIFT_OPERATOR) {
+			break;
+
+		case SCE_SWIFT_OPERATOR:
 			if (ch == '{' || ch == '[' || ch == '(') {
 				levelNext++;
 			} else if (ch == '}' || ch == ']' || ch == ')') {
 				levelNext--;
 			}
-		} else if (style == SCE_SWIFT_DIRECTIVE && ch == '#') {
-			if (chNext == 'i' && styler.SafeGetCharAt(i + 2) == 'f') {
-				levelNext++;
-			} else if (chNext == 'e' && styler.Match(i + 1, "endif")) {
-				levelNext--;
+			break;
+
+		case SCE_SWIFT_DIRECTIVE:
+			if (ch == '#') {
+				if (chNext == 'i' && styler.SafeGetCharAt(i + 2) == 'f') {
+					levelNext++;
+				} else if (chNext == 'e' && styler.Match(i + 1, "endif")) {
+					levelNext--;
+				}
 			}
+			break;
 		}
 
 		if (i == lineEndPos) {
 			const FoldLineState foldNext(styler.GetLineState(lineCurrent + 1));
-			if (foldComment & foldCurrent.lineComment) {
+			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
 			} else if (foldCurrent.packageImport) {
 				levelNext += foldNext.packageImport - foldPrev.packageImport;

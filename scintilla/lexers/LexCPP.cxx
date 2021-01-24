@@ -273,7 +273,7 @@ static void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int ini
 				const bool hasAttr = (lexType == LEX_CPP || lexType == LEX_OBJC || isObjCSource || lexType == LEX_CS);
 				const bool mayAttr = lastWordWasAttr && (numRBrace > 0 || (lineState & LEX_BLOCK_MASK_DEFINE));
 				const bool mayCSAttr = (lexType == LEX_CS) && numSBrace == 1 && numRBrace == 0;
-				const int nextChar = sc.GetNextNSChar();
+				const int nextChar = sc.GetDocNextChar();
 
 				if (lastPPDefineWord) {
 					if (lastPPDefineWord == 2 && strcmp(s, "defined") == 0)
@@ -1214,10 +1214,6 @@ static bool IsOpenBraceLine(Sci_Line line, LexAccessor &styler) noexcept {
 }
 
 static void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
-	const bool foldComment = styler.GetPropertyInt("fold.comment", 1) != 0;
-	const bool foldPreprocessor = styler.GetPropertyInt("fold.preprocessor", 1) != 0;
-	//const bool foldAtElse = styler.GetPropertyInt("fold.at.else", 0) != 0;
-
 	const int lexType = styler.GetPropertyInt("lexer.lang.type", LEX_CPP);
 	const bool hasPreprocessor = HasPreprocessor(lexType);
 
@@ -1227,7 +1223,6 @@ static void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyl
 	int levelCurrent = SC_FOLDLEVELBASE;
 	if (lineCurrent > 0)
 		levelCurrent = styler.LevelAt(lineCurrent - 1) >> 16;
-	//int levelMinCurrent = levelCurrent;
 	int levelNext = levelCurrent;
 
 	char chNext = styler[startPos];
@@ -1244,7 +1239,7 @@ static void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyl
 		styleNext = styler.StyleAt(i + 1);
 		const bool atEOL = (ch == '\r' && chNext != '\n') || (ch == '\n');
 
-		if (foldComment) {
+		{
 			if (lineCommentCurrent) {
 				if (atEOL) {
 					levelNext += IsCommentLine(lineCurrent + 1) - IsCommentLine(lineCurrent - 1);
@@ -1305,7 +1300,7 @@ static void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyl
 			levelNext++;
 		}
 
-		if ((hasPreprocessor || lexType == LEX_HX) && foldPreprocessor && (ch == '#') && style == SCE_C_PREPROCESSOR) {
+		if ((hasPreprocessor || lexType == LEX_HX) && (ch == '#') && style == SCE_C_PREPROCESSOR) {
 			Sci_Position pos = LexSkipSpaceTab(i + 1, endPos, styler);
 			if (styler.Match(pos, "if") || styler.Match(pos, "region")) {
 				levelNext++;
@@ -1342,9 +1337,6 @@ static void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyl
 			// maybe failed in multi-line define section, MFC's afx.h is a example
 			if (ch == '{' && !(lineCurrent > 0 && visibleChars == 0 && IsOpenBraceLine(lineCurrent, styler))) {
 				levelNext++;
-				//if (levelMinCurrent > levelNext) {
-				//	levelMinCurrent = levelNext;
-				//}
 			} else if (ch == '}') {
 				levelNext--;
 			} else if (ch == '[' || ch == '(') {
@@ -1380,9 +1372,6 @@ static void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyl
 			visibleChars++;
 		if (atEOL || (i == endPos - 1)) {
 			const int levelUse = levelCurrent;
-			//if (foldAtElse) {
-			//	levelUse = levelMinCurrent;
-			//}
 			int lev = levelUse | levelNext << 16;
 			if (levelUse < levelNext)
 				lev |= SC_FOLDLEVELHEADERFLAG;
@@ -1391,7 +1380,6 @@ static void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyl
 			}
 			lineCurrent++;
 			levelCurrent = levelNext;
-			//levelMinCurrent = levelCurrent;
 			visibleChars = 0;
 			isObjCProtocol = false;
 			lineCommentCurrent = IsCommentLine(lineCurrent);

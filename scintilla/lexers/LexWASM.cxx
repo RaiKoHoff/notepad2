@@ -36,9 +36,13 @@ struct EscapeSequence {
 	}
 };
 
-void ColouriseWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
-	const CharacterSet setIdChar(CharacterSet::setAlphaNum, "!#$%&'*+-./:<=>?@\\^_`|~");
+constexpr bool IsInvalidIdChar(int ch) noexcept {
+	// https://webassembly.github.io/spec/core/text/values.html#text-id
+	return ch <= 32 || ch >= 127
+		|| AnyOf(ch, '"', '(', ')', ',', ';', '[', ']', '{', '}');
+}
 
+void ColouriseWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	int lineStateLineComment = 0;
 	int commentLevel = 0;	// nested block comment level
 
@@ -65,10 +69,10 @@ void ColouriseWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_WASM_NUMBER:
 			if (!IsDecimalNumberEx(sc.chPrev, sc.ch, sc.chNext)) {
-				if (setIdChar.Contains(sc.ch)) {
-					sc.ChangeState(SCE_WASM_IDENTIFIER);
-				} else {
+				if (IsInvalidIdChar(sc.ch)) {
 					sc.SetState(SCE_WASM_DEFAULT);
+				} else {
+					sc.ChangeState(SCE_WASM_IDENTIFIER);
 				}
 			}
 			break;
@@ -76,7 +80,7 @@ void ColouriseWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 		case SCE_WASM_WORD:
 			if (prefixLen == 0 && sc.ch == '.') {
 				prefixLen = sc.LengthCurrent();
-			} else if (!setIdChar.Contains(sc.ch)) {
+			} else if (IsInvalidIdChar(sc.ch)) {
 				char s[128];
 				sc.GetCurrent(s, sizeof(s));
 				if (keywordLists[0]->InList(s)) {
@@ -97,7 +101,7 @@ void ColouriseWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			break;
 
 		case SCE_WASM_IDENTIFIER:
-			if (!setIdChar.Contains(sc.ch)) {
+			if (IsInvalidIdChar(sc.ch)) {
 				sc.SetState(SCE_WASM_DEFAULT);
 			}
 			break;
@@ -162,7 +166,7 @@ void ColouriseWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				prefixLen = 0;
 			} else if (isoperator(sc.ch)) {
 				sc.SetState(SCE_WASM_OPERATOR);
-			} else if (!isspacechar(sc.ch)) {
+			} else if (!IsInvalidIdChar(sc.ch)) {
 				sc.SetState(SCE_WASM_IDENTIFIER);
 			}
 		}
@@ -187,8 +191,6 @@ constexpr int GetLineCommentState(int lineState) noexcept {
 }
 
 void FoldWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*/, LexerWordList, Accessor &styler) {
-	const int foldComment = styler.GetPropertyInt("fold.comment", 1);
-
 	const Sci_PositionU endPos = startPos + lengthDoc;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
@@ -212,27 +214,29 @@ void FoldWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle
 		const int style = styleNext;
 		styleNext = styler.StyleAt(i + 1);
 
-		if (style == SCE_WASM_COMMENTBLOCK) {
-			if (foldComment) {
-				const int level = (ch == '(' && chNext == ';') ? 1 : ((ch == ';' && chNext == ')') ? -1 : 0);
-				if (level != 0) {
-					levelNext += level;
-					i++;
-					chNext = styler.SafeGetCharAt(i + 1);
-					styleNext = styler.StyleAt(i + 1);
-				}
+		switch (style) {
+		case SCE_WASM_COMMENTBLOCK: {
+			const int level = (ch == '(' && chNext == ';') ? 1 : ((ch == ';' && chNext == ')') ? -1 : 0);
+			if (level != 0) {
+				levelNext += level;
+				i++;
+				chNext = styler.SafeGetCharAt(i + 1);
+				styleNext = styler.StyleAt(i + 1);
 			}
-		} else if (style == SCE_WASM_OPERATOR) {
+		} break;
+
+		case SCE_WASM_OPERATOR:
 			if (ch == '{' || ch == '[' || ch == '(') {
 				levelNext++;
 			} else if (ch == '}' || ch == ']' || ch == ')') {
 				levelNext--;
 			}
+			break;
 		}
 
 		if (i == lineEndPos) {
 			const int lineCommentNext = GetLineCommentState(styler.GetLineState(lineCurrent + 1));
-			if (foldComment & lineCommentCurrent) {
+			if (lineCommentCurrent) {
 				levelNext += lineCommentNext - lineCommentPrev;
 			}
 
