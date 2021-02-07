@@ -26,11 +26,13 @@ Latest development builds (artifacts in Release configuration for each compiler 
 * [Auto completion for braces, brackets and quotes](https://github.com/zufuliu/notepad2/wiki/Auto-Completion-in-Notepad2#auto-insert-text)
 * Syntax highlighting, code folding and API list for (see built-in [file extension list](../master/doc/FileExt.txt)):
 	* Plain Text
+	* [ABAQUS](../master/tools/lang/ABAQUS.inp)
 	* [ActionScript](../master/tools/lang/ActionScript.as) for ActionScript 3 and 4.
 	* Android Smali, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#android-smali)
 		* javap
 		* Jasmin
 	* ANSI Art
+	* [ANSYS](../master/tools/lang/APDL.apdl) Parametric Design Language
 	* Assembler, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#assembler)
 		* MASM
 		* GNU Assembler
@@ -66,7 +68,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* GraphViz Dot, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#graphviz)
 		* blockdiag, seqdiag, actdiag and nwdiag
 	* Groovy
-	* Haxe
+	* [Haxe](../master/tools/lang/Haxe.hx), up to Haxe 4.1
 	* [HTML](../master/tools/lang/html.html), up to [WHATWG](https://html.spec.whatwg.org/multipage/) 2020-02-12. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#html)
 		* ASP
 		* ASP.NET
@@ -75,7 +77,8 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* INI Configuration File
 	* Inno Setup
 	* Boost Jam
-	* Java, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#java)
+	* [Java](../master/tools/lang/Java.java), up to Java 16. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#java)
+		* [BeanShell](https://github.com/beanshell/beanshell)
 	* [JavaScript](../master/tools/lang/JavaScript.js), up to ECMAScript 2020 (11th edition) with [JSX](https://facebook.github.io/jsx/) and [Web APIs](https://developer.mozilla.org/en-US/docs/Web/API).
 	* JSON and JSON5 Document
 	* [Julia Script](../master/tools/lang/Julia.jl), up to Julia 1.2. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#julia)

@@ -14,6 +14,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 
 using namespace Scintilla;
@@ -144,11 +145,11 @@ static void ColourisePyDoc(Sci_PositionU startPos, Sci_Position length, int init
 				sc.GetCurrent(s, sizeof(s));
 				if (keywords.InList(s)) {
 					sc.ChangeState(SCE_PY_WORD);
-					if (strcmp(s, "def") == 0)
+					if (StrEqual(s, "def"))
 						defType = PY_DEF_FUNC;
-					else if (strcmp(s, "class") == 0 || strcmp(s, "raise") == 0 || strcmp(s, "except") == 0)
+					else if (StrEqualsAny(s, "class", "raise", "except"))
 						defType = PY_DEF_CLASS;
-					//else if (strcmp(s, "enum") == 0)
+					//else if (StrEqual(s, "enum"))
 					//	defType = PY_DEF_ENUM;
 				} else if (keywords2.InList(s)) {
 					sc.ChangeState(SCE_PY_WORD2);
@@ -457,4 +458,3 @@ static void FoldPyDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWor
 }
 
 LexerModule lmPython(SCLEX_PYTHON, ColourisePyDoc, "python", FoldPyDoc);
-

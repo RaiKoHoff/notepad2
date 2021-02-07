@@ -16,6 +16,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 #include "LexerUtils.h"
 
@@ -66,6 +67,10 @@ bool CheckSwiftStringDelimiter(LexAccessor &styler, Sci_PositionU pos, Delimiter
 		}
 	}
 	return false;
+}
+
+constexpr bool IsSpaceEquiv(int state) noexcept {
+	return state <= SCE_SWIFT_TASKMARKER;
 }
 
 void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
@@ -119,31 +124,39 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 
 		case SCE_SWIFT_IDENTIFIER:
 		case SCE_SWIFT_IDENTIFIER_BT:
+		case SCE_SWIFT_ATTRIBUTE:
+		case SCE_SWIFT_DIRECTIVE:
+		case SCE_SWIFT_VARIABLE:
 			if (!IsIdentifierCharEx(sc.ch)) {
 				if (sc.state == SCE_SWIFT_IDENTIFIER_BT) {
 					if (sc.ch == '`') {
 						sc.Forward();
 					}
-				} else {
+				} else if (sc.state == SCE_SWIFT_IDENTIFIER || sc.state == SCE_SWIFT_DIRECTIVE) {
 					char s[128];
 					sc.GetCurrent(s, sizeof(s));
-					if (keywordLists[0]->InList(s)) {
+					if (sc.state == SCE_SWIFT_DIRECTIVE) {
+						if (!keywordLists[1]->InListPrefixed(s + 1, '(')) {
+							// required for code folding
+							sc.ChangeState(SCE_SWIFT_DEFAULT);
+						}
+					} else if (keywordLists[0]->InList(s)) {
 						sc.ChangeState(SCE_SWIFT_WORD);
-						if (strcmp(s, "import") == 0) {
+						if (StrEqual(s, "import")) {
 							if (visibleChars == sc.LengthCurrent()) {
 								lineStateLineType = SwiftLineStateMaskImport;
 							}
-						} else if (EqualsAny(s, "class", "as", "extension", "is", "typealias")) {
+						} else if (StrEqualsAny(s, "class", "extension", "typealias", "as", "is")) {
 							kwType = SCE_SWIFT_CLASS;
-						} else if (strcmp(s, "struct") == 0) {
+						} else if (StrEqual(s, "struct")) {
 							kwType = SCE_SWIFT_STRUCT;
-						} else if (strcmp(s, "protocol") == 0) {
+						} else if (StrEqual(s, "protocol")) {
 							kwType = SCE_SWIFT_PROTOCOL;
-						} else if (strcmp(s, "enum") == 0) {
+						} else if (StrEqual(s, "enum")) {
 							kwType = SCE_SWIFT_ENUM;
-						} else if (strcmp(s, "func") == 0) {
+						} else if (StrEqual(s, "func")) {
 							kwType = SCE_SWIFT_FUNCTION_DEFINE;
-						} else if (EqualsAny(s, "break", "continue")) {
+						} else if (StrEqualsAny(s, "break", "continue")) {
 							kwType = SCE_SWIFT_LABEL;
 						}
 						if (kwType != SCE_SWIFT_DEFAULT) {
@@ -162,45 +175,35 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 						sc.ChangeState(SCE_SWIFT_ENUM);
 					}
 				}
-				if (sc.ch != '.' && (sc.state == SCE_SWIFT_IDENTIFIER || sc.state == SCE_SWIFT_IDENTIFIER_BT)) {
-					if (kwType != SCE_SWIFT_DEFAULT) {
-						sc.ChangeState(kwType);
-					} else {
-						const int chNext = sc.GetDocNextChar(sc.ch == '?');
-						if (chNext == '(') {
-							sc.ChangeState(SCE_SWIFT_FUNCTION);
-						} else if ((chBeforeIdentifier == '<' && (chNext == '>' || chNext == '<'))) {
-							// type<type>
-							// type<type?>
-							// type<type<type>>
-							sc.ChangeState(SCE_SWIFT_CLASS);
+				if (sc.state == SCE_SWIFT_IDENTIFIER || sc.state == SCE_SWIFT_IDENTIFIER_BT) {
+					if (sc.ch == ':') {
+						if (visibleChars == sc.LengthCurrent()) {
+							const int chNext = sc.GetLineNextChar(true);
+							if (IsJumpLabelNextChar(chNext)) {
+								sc.ChangeState(SCE_SWIFT_LABEL);
+							}
+						}
+					} else if (sc.ch != '.') {
+						if (kwType != SCE_SWIFT_DEFAULT) {
+							sc.ChangeState(kwType);
+						} else {
+							const int chNext = sc.GetDocNextChar(sc.ch == '?');
+							if (chNext == '(') {
+								sc.ChangeState(SCE_SWIFT_FUNCTION);
+							} else if ((chBeforeIdentifier == '<' && (chNext == '>' || chNext == '<'))
+								|| (chBeforeIdentifier == '[' && (sc.ch == ']' && AnyOf(sc.chNext, '(', ']')))) {
+								// type<type>
+								// type<type?>
+								// type<type<type>>
+								// [type]()
+								// [[type]]()
+								sc.ChangeState(SCE_SWIFT_CLASS);
+							}
 						}
 					}
 				}
 				if (sc.state != SCE_SWIFT_WORD && sc.ch != '.') {
 					kwType = SCE_SWIFT_DEFAULT;
-				}
-				sc.SetState(SCE_SWIFT_DEFAULT);
-			}
-			break;
-
-		case SCE_SWIFT_ATTRIBUTE:
-		case SCE_SWIFT_DIRECTIVE:
-		case SCE_SWIFT_VARIABLE:
-			if (!IsIdentifierCharEx(sc.ch)) {
-				if (sc.state != SCE_SWIFT_VARIABLE) {
-					char s[128];
-					sc.GetCurrent(s, sizeof(s));
-					const char *p = s + 1;
-					if (sc.state == SCE_SWIFT_DIRECTIVE) {
-						if (!keywordLists[1]->InListPrefixed(p, '(')) {
-							sc.ChangeState(SCE_SWIFT_OTHER_DIRECTIVE);
-						}
-					} else {
-						if (!keywordLists[2]->InListPrefixed(p, '(')) {
-							sc.ChangeState(SCE_SWIFT_OTHER_ATTRIBUTE);
-						}
-					}
 				}
 				sc.SetState(SCE_SWIFT_DEFAULT);
 			}
@@ -294,19 +297,22 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 		}
 
 		if (sc.state == SCE_SWIFT_DEFAULT) {
-			if (sc.Match('/', '/')) {
-				const int chNext = sc.GetRelative(2);
-				sc.SetState((chNext == '/' || chNext == ':' || chNext == '!') ? SCE_SWIFT_COMMENTLINEDOC : SCE_SWIFT_COMMENTLINE);
-				if (visibleChars == 0) {
-					lineStateLineType = SwiftLineStateMaskLineComment;
+			if (sc.ch == '/' && (sc.chNext == '/' || sc.chNext == '*')) {
+				visibleCharsBefore = visibleChars;
+				const int chNext = sc.chNext;
+				sc.SetState((chNext == '/') ? SCE_SWIFT_COMMENTLINE : SCE_SWIFT_COMMENTBLOCK);
+				sc.Forward(2);
+				if (sc.ch == ':' || sc.ch == '!' || (sc.ch == chNext && sc.chNext != chNext)) {
+					sc.ChangeState((chNext == '/') ? SCE_SWIFT_COMMENTLINEDOC : SCE_SWIFT_COMMENTBLOCKDOC);
 				}
-				visibleCharsBefore = visibleChars;
-			} else if (sc.Match('/', '*')) {
-				const int chNext = sc.GetRelative(2);
-				sc.SetState((chNext == '*' || chNext == ':'  || chNext == '!') ? SCE_SWIFT_COMMENTBLOCKDOC : SCE_SWIFT_COMMENTBLOCK);
-				sc.Forward();
-				commentLevel = 1;
-				visibleCharsBefore = visibleChars;
+				if (chNext == '/') {
+					if (visibleChars == 0) {
+						lineStateLineType = SwiftLineStateMaskLineComment;
+					}
+				} else {
+					commentLevel = 1;
+				}
+				continue;
 			} else if (sc.Match('"', '"', '"')) {
 				sc.SetState(SCE_SWIFT_TRIPLE_STRINGSTART);
 				sc.Forward(2);
@@ -398,6 +404,10 @@ void FoldSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 	if (lineCurrent > 0) {
 		levelCurrent = styler.LevelAt(lineCurrent - 1) >> 16;
 		foldPrev = FoldLineState(styler.GetLineState(lineCurrent - 1));
+		const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent - 1, SCE_SWIFT_OPERATOR, SCE_SWIFT_TASKMARKER, SCE_SWIFT_DIRECTIVE);
+		if (bracePos) {
+			startPos = bracePos + 1; // skip the brace
+		}
 	}
 
 	int levelNext = levelCurrent;
@@ -408,6 +418,7 @@ void FoldSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
 	int style = initStyle;
+	int visibleChars = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
 		const char ch = chNext;
@@ -461,12 +472,22 @@ void FoldSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 			break;
 		}
 
+		if (visibleChars == 0 && !IsSpaceEquiv(style)) {
+			++visibleChars;
+		}
 		if (i == lineEndPos) {
 			const FoldLineState foldNext(styler.GetLineState(lineCurrent + 1));
 			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
 			} else if (foldCurrent.packageImport) {
 				levelNext += foldNext.packageImport - foldPrev.packageImport;
+			} else if (visibleChars) {
+				const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent, SCE_SWIFT_OPERATOR, SCE_SWIFT_TASKMARKER, SCE_SWIFT_DIRECTIVE);
+				if (bracePos) {
+					levelNext++;
+					i = bracePos; // skip the brace
+					chNext = '\0';
+				}
 			}
 
 			const int levelUse = levelCurrent;
@@ -484,6 +505,7 @@ void FoldSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 			levelCurrent = levelNext;
 			foldPrev = foldCurrent;
 			foldCurrent = foldNext;
+			visibleChars = 0;
 		}
 	}
 }

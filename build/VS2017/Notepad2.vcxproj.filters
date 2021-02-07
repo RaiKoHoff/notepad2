@@ -39,6 +39,9 @@
     <ClCompile Include="..\..\scintilla\lexers\LexAsm.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexAPDL.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\scintilla\lexers\LexAutoIt3.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
@@ -48,7 +51,7 @@
     <ClCompile Include="..\..\scintilla\lexers\LexBash.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexers\lexBatch.cxx">
+    <ClCompile Include="..\..\scintilla\lexers\LexBatch.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\lexers\LexCIL.cxx">
@@ -87,10 +90,16 @@
     <ClCompile Include="..\..\scintilla\lexers\LexGraphViz.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexHaxe.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\scintilla\lexers\LexHTML.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\lexers\LexInno.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexJava.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\lexers\LexJavaScript.cxx">
@@ -198,9 +207,6 @@
     <ClCompile Include="..\..\scintilla\lexlib\CharacterCategory.cxx">
       <Filter>Scintilla\lexlib</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexlib\CharacterSet.cxx">
-      <Filter>Scintilla\lexlib</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\scintilla\lexlib\DefaultLexer.cxx">
       <Filter>Scintilla\lexlib</Filter>
     </ClCompile>
@@ -235,9 +241,6 @@
       <Filter>Scintilla\src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\src\CaseFolder.cxx">
-      <Filter>Scintilla\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\src\Catalogue.cxx">
       <Filter>Scintilla\src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\src\CellBuffer.cxx">
@@ -345,7 +348,13 @@
     <ClCompile Include="..\..\src\Styles.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\EditLexers\stlABAQUS.c">
+      <Filter>Source Files\EditLexers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlActionScript.c">
+      <Filter>Source Files\EditLexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\EditLexers\stlAPDL.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlAsm.c">
@@ -414,7 +423,7 @@
     <ClCompile Include="..\..\src\EditLexers\stlGroovy.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\EditLexers\stlHaXe.c">
+    <ClCompile Include="..\..\src\EditLexers\stlHaxe.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlHTML.c">
@@ -563,9 +572,6 @@
     <ClInclude Include="..\..\scintilla\lexlib\Accessor.h">
       <Filter>Scintilla\lexlib</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\scintilla\lexlib\CatalogueModules.h">
-      <Filter>Scintilla\lexlib</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\scintilla\lexlib\CharacterCategory.h">
       <Filter>Scintilla\lexlib</Filter>
     </ClInclude>
@@ -602,6 +608,9 @@
     <ClInclude Include="..\..\scintilla\lexlib\StringCopy.h">
       <Filter>Scintilla\lexlib</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\scintilla\lexlib\StringUtils.h">
+      <Filter>Scintilla\lexlib</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\scintilla\lexlib\StyleContext.h">
       <Filter>Scintilla\lexlib</Filter>
     </ClInclude>
@@ -621,9 +630,6 @@
       <Filter>Scintilla\src</Filter>
     </ClInclude>
     <ClInclude Include="..\..\scintilla\src\CaseFolder.h">
-      <Filter>Scintilla\src</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\scintilla\src\Catalogue.h">
       <Filter>Scintilla\src</Filter>
     </ClInclude>
     <ClInclude Include="..\..\scintilla\src\CellBuffer.h">

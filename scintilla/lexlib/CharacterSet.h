@@ -8,8 +8,9 @@
 
 namespace Scintilla {
 
+//[[deprecated]]
 class CharacterSet final {
-	bool valueAfter;
+	const bool valueAfter;
 	// ASCII character only, not useful for UTF-8 or DBCS multi byte character
 	bool bset[128]{};
 public:
@@ -21,29 +22,81 @@ public:
 		setAlpha = setLower | setUpper,
 		setAlphaNum = setAlpha | setDigits
 	};
+
 	//[[deprecated]]
-	CharacterSet(setBase base = setNone, const char *initialSet = "", bool valueAfter_ = false) noexcept;
+	CharacterSet(setBase base = setNone, bool valueAfter_ = false) noexcept : valueAfter(valueAfter_) {
+		if (base & setLower) {
+			for (int ch = 'a'; ch <= 'z'; ch++) {
+				bset[ch] = true;
+			}
+		}
+		if (base & setUpper) {
+			for (int ch = 'A'; ch <= 'Z'; ch++) {
+				bset[ch] = true;
+			}
+		}
+		if (base & setDigits) {
+			for (int ch = '0'; ch <= '9'; ch++) {
+				bset[ch] = true;
+			}
+		}
+	}
+
+	//[[deprecated]]
+	template <size_t N>
+	CharacterSet(setBase base, const char (&initialSet)[N], bool valueAfter_ = false) noexcept : valueAfter(valueAfter_) {
+		AddString(initialSet);
+		if (base & setLower) {
+			for (int ch = 'a'; ch <= 'z'; ch++) {
+				bset[ch] = true;
+			}
+		}
+		if (base & setUpper) {
+			for (int ch = 'A'; ch <= 'Z'; ch++) {
+				bset[ch] = true;
+			}
+		}
+		if (base & setDigits) {
+			for (int ch = '0'; ch <= '9'; ch++) {
+				bset[ch] = true;
+			}
+		}
+	}
+
 	CharacterSet(const CharacterSet &other) = delete;
 	CharacterSet(CharacterSet &&other) = delete;
+#if 1
 	CharacterSet &operator=(const CharacterSet &other) = delete;
-	CharacterSet &operator=(CharacterSet &&other) = delete;
-	void Add(int val) noexcept {
-		assert(val >= 0);
-		assert(val < 128);
-		bset[val] = true;
-	}
-	void AddString(const char *setToAdd) noexcept;
-	bool Contains(int val) const noexcept {
-		assert(val >= 0);
-		if (val < 0) {
-			return false;
+#else
+	CharacterSet &operator=(const CharacterSet &other) noexcept {
+		valueAfter = other.other;
+		for (size_t i = 0; i < sizeof(bset); i++) {
+			bset[i] = other.bset[i];
 		}
-		return (val < 128) ? bset[val] : valueAfter;
 	}
+#endif
+	CharacterSet &operator=(CharacterSet &&other) = delete;
+
+	void Add(unsigned char ch) noexcept {
+		bset[ch] = true;
+	}
+
+	template <size_t N>
+	void AddString(const char (&setToAdd)[N]) noexcept {
+		for (size_t i = 0; i < N - 1; i++) {
+			const unsigned char ch = setToAdd[i];
+			bset[ch] = true;
+		}
+	}
+
+	bool Contains(int ch) const noexcept {
+		const unsigned int uch = ch;
+		return (uch < sizeof(bset)) ? bset[uch] : valueAfter;
+	}
+
 	bool Contains(char ch) const noexcept {
-		// Overload char as char may be signed
 		const unsigned char uch = ch;
-		return Contains(uch);
+		return (uch < sizeof(bset)) ? bset[uch] : valueAfter;
 	}
 };
 
@@ -52,12 +105,13 @@ constexpr bool AnyOf(T t, Args... args) noexcept {
 	return ((t == args) || ...);
 }
 
-#if defined(_INC_STRING)
-template <typename... Args>
-inline bool EqualsAny(const char *s, Args... args) noexcept {
-	return ((::strcmp(s, args) == 0) || ...);
+// prevent pointer without <type_traits>
+template <typename T, typename... Args>
+constexpr void AnyOf([[maybe_unused]] const T *t, [[maybe_unused]] Args... args) noexcept {}
+
+constexpr bool Between(int value, int lower, int high) noexcept {
+	return value >= lower && value <= high;
 }
-#endif
 
 // Functions for classifying characters
 
@@ -92,8 +146,7 @@ constexpr bool IsADigit(int ch, int base) noexcept {
 		return (ch >= '0' && ch < '0' + base);
 	}
 	return (ch >= '0' && ch <= '9')
-		|| (ch >= 'A' && ch < 'A' + base - 10)
-		|| (ch >= 'a' && ch < 'a' + base - 10);
+		|| Between(ch | 0x20, 'a', 'a' + base - 10);
 }
 
 constexpr bool IsNumberStart(int ch, int chNext) noexcept {
@@ -161,10 +214,12 @@ constexpr bool isspacechar(int ch) noexcept {
 	return ch == ' ' || (ch >= 0x09 && ch <= 0x0d);
 }
 
+//[[deprecated]]
 constexpr bool iswordchar(int ch) noexcept {
 	return IsAlphaNumeric(ch) || ch == '.' || ch == '_';
 }
 
+//[[deprecated]]
 constexpr bool iswordstart(int ch) noexcept {
 	return IsAlphaNumeric(ch) || ch == '_';
 }
@@ -185,16 +240,16 @@ constexpr bool IsDecimalNumberEx(int chPrev, int ch, int chNext) noexcept {
 	return IsIdentifierChar(ch) || IsNumberContinueEx(chPrev, ch, chNext);
 }
 
+// simply treat every character/byte larger than 127 as Unicode identifier,
+// i.e. we don't support Unicode operators. proper implementation will need
+// enable multiByteAccess in StyleContext and use functions from CharacterCategory.
+
 constexpr bool IsIdentifierCharEx(int ch) noexcept {
 	return IsIdentifierChar(ch) || ch >= 0x80;
 }
 
 constexpr bool IsIdentifierStartEx(int ch) noexcept {
 	return IsIdentifierStart(ch) || ch >= 0x80;
-}
-
-constexpr bool IsWordCharEx(int ch) noexcept {
-	return iswordchar(ch) || ch >= 0x80;
 }
 
 constexpr bool isoperator(int ch) noexcept {
@@ -206,7 +261,7 @@ constexpr bool isoperator(int ch) noexcept {
 		|| ch == '?' || ch == '!' || ch == '.' || ch == '~';
 }
 
-// isoperator() excludes following eight punctuation: '"', '#', '$', "'", '@', '\\', '_', '`'
+// isoperator() excludes following eight punctuation: '"', '#', '$', '\'', '@', '\\', '_', '`'
 // in most lexers, isoperator(ch) is equivalent to following code:
 // IsAGraphic(ch) && !AnyOf(ch, '#', '$', '@', '\\', '`');
 
@@ -237,6 +292,15 @@ constexpr bool IsInvalidUrlChar(int ch) noexcept {
 		|| AnyOf(ch, '"', '<', '>', '\\', '^', '`', '{', '|', '}');
 }
 
+// characters can follow jump `label:`, based on Swift's document Labeled Statement at
+// https://docs.swift.org/swift-book/ReferenceManual/Statements.html#grammar_labeled-statement
+// good coding style should place left aligned label on it's own line.
+constexpr bool IsJumpLabelNextChar(int chNext) noexcept {
+	// own line, comment, for, foreach, while, do, if, switch, repeat
+	// TODO: match each word exactly like HighlightTaskMarker().
+	return AnyOf(chNext, '\0', '/', 'f', 'w', 'd', 'i', 's', 'r');
+}
+
 // Simple case functions for ASCII supersets.
 
 template <typename T>
@@ -249,20 +313,12 @@ constexpr T MakeLowerCase(T ch) noexcept {
 	return (ch >= 'A' && ch <= 'Z') ? (ch - 'A' + 'a') : ch;
 }
 
-#if 0
-int CompareCaseInsensitive(const char *a, const char *b) noexcept;
-int CompareNCaseInsensitive(const char *a, const char *b, size_t len) noexcept;
+#ifndef _WIN32
+#define CompareCaseInsensitive		strcasecmp
+#define CompareNCaseInsensitive		strncasecmp
 #else
 #define CompareCaseInsensitive		_stricmp
 #define CompareNCaseInsensitive		_strnicmp
 #endif
-
-#define COUNTOF(ar)	_countof(ar)
-#define CSTRLEN(s)	(_countof(s) - 1)
-
-#define StrStartsWith(s, prefix)			(strncmp((s), (prefix), CSTRLEN(prefix)) == 0)
-#define StrStartsWithEx(s, prefix, len)		(strncmp((s), (prefix), (len)) == 0)
-#define StrStartsWithCase(s, prefix)		(_strnicmp((s), (prefix), CSTRLEN(prefix)) == 0)
-#define StrStartsWithCaseEx(s, prefix, len)	(_strnicmp((s), (prefix), (len)) == 0)
 
 }

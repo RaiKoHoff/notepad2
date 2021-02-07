@@ -101,6 +101,7 @@ Python Script
 	empy			EmPy
 	cobra			Cobra
 	gs				GNOME Genie
+	bzl				Bazel BUILD file, https://docs.bazel.build/versions/master/build-ref.html
 
 Ruby Script
 	rb
@@ -160,12 +161,17 @@ XML Document
 	web.config		ASP.NET Web Configuration
 
 
+ABAQUS
+	inp
+
 ActionScript
 	as
 
 ANSI Art
 	nfo				System Information File
 	diz				Description in Zip File
+
+ANSYS APDL
 
 Assembler Source
 	asm
@@ -291,7 +297,7 @@ Groovy Script
 	grunit			GrUnit
 
 
-HaXe Script
+Haxe Script
 	hx
 
 

@@ -16,6 +16,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 #include "LexerUtils.h"
 
@@ -26,7 +27,7 @@ namespace {
 struct EscapeSequence {
 	int outerState = SCE_JULIA_DEFAULT;
 	int digitsLeft = 0;
-	int numBase = 16;
+	int numBase = 0;
 
 	// highlight any character as escape sequence.
 	bool resetEscapeState(int state, int chNext) noexcept {
@@ -75,7 +76,6 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 	int lineStateLineComment = 0;
 	int commentLevel = 0;
 
-	int numBase = 10;
 	int kwType = SCE_JULIA_DEFAULT;
 	bool maybeType = false;
 
@@ -116,10 +116,10 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 
 		case SCE_JULIA_NUMBER:
 			// strict to avoid color multiply expression as number
-			if (!(IsADigit(sc.ch, numBase) || sc.ch == '_')) {
-				if (IsJuliaExponent(numBase, sc.ch, sc.chNext)) {
+			if (!(IsADigit(sc.ch, escSeq.numBase) || sc.ch == '_')) {
+				if (IsJuliaExponent(escSeq.numBase, sc.ch, sc.chNext)) {
 					sc.Forward();
-				} else if (!(numBase == 10 && sc.ch == '.' && sc.chPrev != '.')) {
+				} else if (!(escSeq.numBase == 10 && sc.ch == '.' && sc.chPrev != '.')) {
 					sc.SetState(SCE_JULIA_DEFAULT);
 				}
 			}
@@ -130,7 +130,7 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 				char s[128];
 				sc.GetCurrent(s, sizeof(s));
 				if (keywordLists[0]->InList(s)) {
-					if (strcmp(s, "type") == 0 ) {
+					if (StrEqual(s, "type")) {
 						// only in `abstract type` or `primitive type`
 						if (kwType == SCE_JULIA_WORD) {
 							sc.ChangeState(SCE_JULIA_WORD);
@@ -141,13 +141,13 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 					} else {
 						isTransposeOperator = false;
 						sc.ChangeState(SCE_JULIA_WORD);
-						if (strcmp(s, "struct") == 0) {
+						if (StrEqual(s, "struct")) {
 							kwType = SCE_JULIA_TYPE;
-						} else if (strcmp(s, "macro") == 0) {
+						} else if (StrEqual(s, "macro")) {
 							kwType = SCE_JULIA_MACRO;
-						} else if (strcmp(s, "function") == 0) {
+						} else if (StrEqual(s, "function")) {
 							kwType = SCE_JULIA_FUNCTION_DEFINE;
-						} else if (strcmp(s, "abstract") == 0 || strcmp(s, "primitive") == 0) {
+						} else if (StrEqualsAny(s, "abstract", "primitive")) {
 							kwType = SCE_JULIA_WORD;
 						}
 					}
@@ -235,15 +235,11 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 				sc.ForwardSetState(SCE_JULIA_DEFAULT);
 			}
 			break;
+
 		case SCE_JULIA_ESCAPECHAR:
 			if (escSeq.atEscapeEnd(sc.ch)) {
-				const int outerState = escSeq.outerState;
-				if (outerState != SCE_JULIA_CHARACTER && sc.ch == '\\' && escSeq.resetEscapeState(outerState, sc.chNext)) {
-					sc.Forward();
-				} else {
-					sc.SetState(outerState);
-					continue;
-				}
+				sc.SetState(escSeq.outerState);
+				continue;
 			}
 			break;
 
@@ -369,21 +365,21 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 				isTransposeOperator = true;
 				sc.SetState(SCE_JULIA_VARIABLE);
 			} else if (sc.ch == '0') {
-				numBase = 10;
+				escSeq.numBase = 10;
 				isTransposeOperator = true;
 				sc.SetState(SCE_JULIA_NUMBER);
 				if (sc.chNext == 'x' || sc.chNext == 'X') {
-					numBase = 16;
+					escSeq.numBase = 16;
 				} else if (sc.chNext == 'b' || sc.chNext == 'B') {
-					numBase = 2;
+					escSeq.numBase = 2;
 				} else if (sc.chNext == 'o' || sc.chNext == 'O') {
-					numBase = 8;
+					escSeq.numBase = 8;
 				}
-				if (numBase != 10) {
+				if (escSeq.numBase != 10) {
 					sc.Forward();
 				}
 			} else if (IsNumberStart(sc.ch, sc.chNext)) {
-				numBase = 10;
+				escSeq.numBase = 10;
 				isTransposeOperator = true;
 				sc.SetState(SCE_JULIA_NUMBER);
 			} else if (IsIdentifierStartEx(sc.ch)) {
@@ -460,8 +456,8 @@ void FoldJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
 	Sci_PositionU lineEndPos = sci::min(lineStartNext, endPos) - 1;
 
-	constexpr int MaxFoldWordLength = 10 + 1; // baremodule
-	char buf[MaxFoldWordLength + 1];
+	char buf[12]; // baremodule
+	constexpr int MaxFoldWordLength = sizeof(buf) - 1;
 	int wordLen = 0;
 
 	char chNext = styler[startPos];
@@ -494,7 +490,7 @@ void FoldJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 			if (styleNext != SCE_JULIA_WORD) {
 				buf[wordLen] = '\0';
 				wordLen = 0;
-				if (strcmp(buf, "end") == 0) {
+				if (StrEqual(buf, "end")) {
 					levelNext--;
 				} else if (keywordLists[1]->InList(buf)) {
 					levelNext++;

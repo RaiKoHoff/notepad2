@@ -17,6 +17,7 @@
 #include "LexAccessor.h"
 #include "Accessor.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 
 using namespace Scintilla;
@@ -27,7 +28,7 @@ namespace {
 // Note that ColouriseDiffLine analyzes only the first DIFF_BUFFER_START_SIZE
 // characters of each line to classify the line.
 
-int ColouriseDiffLine(const char *lineBuffer) noexcept {
+inline int ColouriseDiffLine(const char (&lineBuffer)[DIFF_BUFFER_START_SIZE]) noexcept {
 	// It is needed to remember the current state to recognize starting
 	// comment lines before the first "diff " or "--- ". If a real
 	// difference starts then each line starting with ' ' is a whitespace
@@ -38,15 +39,15 @@ int ColouriseDiffLine(const char *lineBuffer) noexcept {
 	if (StrStartsWith(lineBuffer, "Index: ")) {  // For subversion's diff
 		return SCE_DIFF_COMMAND;
 	}
-	if (StrStartsWith(lineBuffer, "---") && lineBuffer[CSTRLEN("---")] != '-') {
+	if (StrStartsWith(lineBuffer, "---") && lineBuffer[CStrLen("---")] != '-') {
 		// In a context diff, --- appears in both the header and the position markers
-		if (lineBuffer[CSTRLEN("---")] == ' ' && atoi(lineBuffer + CSTRLEN("---") + 1) && !strchr(lineBuffer, '/')) {
+		if (lineBuffer[CStrLen("---")] == ' ' && atoi(lineBuffer + CStrLen("--- ")) && !strchr(lineBuffer, '/')) {
 			return SCE_DIFF_POSITION;
 		}
-		if (IsEOLChar(lineBuffer[CSTRLEN("---")])) {
+		if (IsEOLChar(lineBuffer[CStrLen("---")])) {
 			return SCE_DIFF_POSITION;
 		}
-		if (lineBuffer[CSTRLEN("---")] == ' ') {
+		if (lineBuffer[CStrLen("---")] == ' ') {
 			return SCE_DIFF_HEADER;
 		}
 		return SCE_DIFF_DELETED;
@@ -54,7 +55,7 @@ int ColouriseDiffLine(const char *lineBuffer) noexcept {
 	if (StrStartsWith(lineBuffer, "+++ ")) {
 		// I don't know of any diff where "+++ " is a position marker, but for
 		// consistency, do the same as with "--- " and "*** ".
-		if (atoi(lineBuffer + CSTRLEN("+++ ")) && !strchr(lineBuffer, '/')) {
+		if (atoi(lineBuffer + CStrLen("+++ ")) && !strchr(lineBuffer, '/')) {
 			return SCE_DIFF_POSITION;
 		}
 		return SCE_DIFF_HEADER;
@@ -66,10 +67,10 @@ int ColouriseDiffLine(const char *lineBuffer) noexcept {
 		// In a context diff, *** appears in both the header and the position markers.
 		// Also ******** is a chunk header, but here it's treated as part of the
 		// position marker since there is no separate style for a chunk header.
-		if (lineBuffer[CSTRLEN("***")] == ' ' && atoi(lineBuffer + CSTRLEN("***") + 1) && !strchr(lineBuffer, '/')) {
+		if (lineBuffer[CStrLen("***")] == ' ' && atoi(lineBuffer + CStrLen("*** ")) && !strchr(lineBuffer, '/')) {
 			return SCE_DIFF_POSITION;
 		}
-		if (lineBuffer[CSTRLEN("***")] == '*') {
+		if (lineBuffer[CStrLen("***")] == '*') {
 			return SCE_DIFF_POSITION;
 		}
 		return SCE_DIFF_HEADER;

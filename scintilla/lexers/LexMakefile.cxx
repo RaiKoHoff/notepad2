@@ -14,6 +14,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 
 using namespace Scintilla;
@@ -262,9 +263,9 @@ static void FoldMakeDoc(Sci_PositionU startPos, Sci_Position length, int initSty
 			if (ch == '!' || ch == '.')
 				j++;
 			LexGetRangeLowered(j, styler, iswordchar, buf, MAX_WORD_LENGTH);
-			if ((buf[0] == 'i' && buf[1] == 'f') || strcmp(buf, "define") == 0 || strcmp(buf, "for") == 0)
+			if (StrStartsWith(buf, "if") || StrEqualsAny(buf, "define", "for"))
 				levelNext++;
-			else if (strcmp(buf, "endif") == 0 || strcmp(buf, "endef") == 0 || strcmp(buf, "endfor") == 0)
+			else if (StrEqualsAny(buf, "endif", "endef", "endfor"))
 				levelNext--;
 		}
 

@@ -14,6 +14,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 
 using namespace Scintilla;
@@ -34,8 +35,13 @@ constexpr int GetLineCommentState(int lineState) noexcept {
 	return lineState & AviSynthLineStateMaskLineComment;
 }
 
+constexpr bool IsSpaceEquiv(int state) noexcept {
+	return state <= SCE_AVS_TASKMARKER;
+}
+
 void ColouriseAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	int visibleChars = 0;
+	int visibleCharsBefore = 0;
 	int lineStateLineComment = 0;
 	int commentLevel = 0;
 	int lineContinuation = 0;
@@ -82,7 +88,7 @@ void ColouriseAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 					int state = SCE_AVS_USERDFN;
 					if (keywordLists[1]->InListPrefixed(s, '(')) {
 						state = SCE_AVS_FUNCTION;
-						if (!insideScript && EqualsAny(s, "eval", "gscript", "geval")) {
+						if (!insideScript && StrEqualsAny(s, "eval", "gscript", "geval")) {
 							scriptEval = ScriptEvalState_Name;
 						}
 					} else if (keywordLists[2]->InListPrefixed(s, '(')) {
@@ -133,6 +139,8 @@ void ColouriseAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 				} else {
 					sc.SetState(SCE_AVS_DEFAULT);
 				}
+			} else {
+				HighlightTaskMarker(sc, visibleChars, visibleCharsBefore, SCE_AVS_TASKMARKER);
 			}
 			break;
 
@@ -140,6 +148,8 @@ void ColouriseAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			if (sc.Match('*', '/')) {
 				sc.Forward();
 				sc.ForwardSetState(SCE_AVS_DEFAULT);
+			} else if (HighlightTaskMarker(sc, visibleChars, visibleCharsBefore, SCE_AVS_TASKMARKER)) {
+				continue;
 			}
 			break;
 
@@ -153,23 +163,28 @@ void ColouriseAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 				if (commentLevel == 0) {
 					sc.ForwardSetState(SCE_AVS_DEFAULT);
 				}
+			} else if (HighlightTaskMarker(sc, visibleChars, visibleCharsBefore, SCE_AVS_TASKMARKER)) {
+				continue;
 			}
 			break;
 		}
 
 		if (sc.state == SCE_AVS_DEFAULT) {
 			if (sc.ch == '#') {
+				visibleCharsBefore = visibleChars;
 				sc.SetState(SCE_AVS_COMMENTLINE);
 				if (visibleChars == 0) {
 					lineStateLineComment = AviSynthLineStateMaskLineComment;
 				}
 			} else if (sc.Match('/', '*')) {
+				visibleCharsBefore = visibleChars;
 				sc.SetState(SCE_AVS_COMMENTBLOCK);
 				sc.Forward();
 			} else if (sc.Match('[', '*')) {
+				commentLevel = 1;
+				visibleCharsBefore = visibleChars;
 				sc.SetState(SCE_AVS_COMMENTBLOCKN);
 				sc.Forward();
-				commentLevel = 1;
 			} else if (sc.Match('\"', '\"', '\"')) {
 				sc.SetState(SCE_AVS_TRIPLESTRING);
 				sc.Forward(2);
@@ -204,13 +219,14 @@ void ColouriseAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			}
 		}
 
-		if (visibleChars == 0 && !isspacechar(sc.ch)) {
+		if (!isspacechar(sc.ch)) {
 			++visibleChars;
 		}
 		if (sc.atLineEnd) {
 			const int lineState = lineStateLineComment | lineContinuation | insideScript | (commentLevel << 3);
 			styler.SetLineState(sc.currentLine, lineState);
 			visibleChars = 0;
+			visibleCharsBefore = 0;
 			scriptEval = ScriptEvalState_None;
 			if (!lineContinuation) {
 				lineStateLineComment = 0;
@@ -230,6 +246,10 @@ void FoldAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 	if (lineCurrent > 0) {
 		levelCurrent = styler.LevelAt(lineCurrent - 1) >> 16;
 		lineCommentPrev = GetLineCommentState(styler.GetLineState(lineCurrent - 1));
+		const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent - 1, SCE_AVS_OPERATOR, SCE_AVS_TASKMARKER);
+		if (bracePos) {
+			startPos = bracePos + 1; // skip the brace
+		}
 	}
 
 	int levelNext = levelCurrent;
@@ -240,6 +260,7 @@ void FoldAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
 	int style = initStyle;
+	int visibleChars = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
 		const char ch = chNext;
@@ -277,10 +298,20 @@ void FoldAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 			break;
 		}
 
+		if (visibleChars == 0 && !IsSpaceEquiv(style)) {
+			++visibleChars;
+		}
 		if (i == lineEndPos) {
 			const int lineCommentNext = GetLineCommentState(styler.GetLineState(lineCurrent + 1));
 			if (lineCommentCurrent) {
 				levelNext += lineCommentNext - lineCommentPrev;
+			} else if (visibleChars) {
+				const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent, SCE_AVS_OPERATOR, SCE_AVS_TASKMARKER);
+				if (bracePos) {
+					levelNext++;
+					i = bracePos; // skip the brace
+					chNext = '\0';
+				}
 			}
 
 			const int levelUse = levelCurrent;
@@ -298,6 +329,7 @@ void FoldAvsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 			levelCurrent = levelNext;
 			lineCommentPrev = lineCommentCurrent;
 			lineCommentCurrent = lineCommentNext;
+			visibleChars = 0;
 		}
 	}
 }

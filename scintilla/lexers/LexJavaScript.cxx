@@ -16,6 +16,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 #include "LexerUtils.h"
 
@@ -94,7 +95,7 @@ inline bool IsJsxTagStart(const StyleContext &sc, int chPrevNonWhite, int styleP
 void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	int lineStateLineType = 0;
 	int lineContinuation = 0;
-	bool insideReRange = false; // inside regex character range []
+	bool insideRegexRange = false; // inside regex character range []
 
 	int kwType = SCE_JS_DEFAULT;
 	int chBeforeIdentifier = 0;
@@ -190,15 +191,15 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 					sc.GetCurrent(s, sizeof(s));
 					if (keywordLists[0]->InList(s)) {
 						sc.ChangeState(SCE_JS_WORD);
-						if (EqualsAny(s, "as", "class", "extends", "is", "new", "type")) {
+						if (StrEqualsAny(s, "class", "extends","new", "type", "as", "is")) {
 							kwType = SCE_JS_CLASS;
-						} else if (strcmp(s, "function") == 0) {
+						} else if (StrEqual(s, "function")) {
 							kwType = SCE_JS_FUNCTION_DEFINE;
-						} else if (EqualsAny(s, "interface", "implements")) {
+						} else if (StrEqualsAny(s, "interface", "implements")) {
 							kwType = SCE_JS_INTERFACE;
-						} else if (strcmp(s, "enum") == 0) {
+						} else if (StrEqual(s, "enum")) {
 							kwType = SCE_JS_ENUM;
-						} else if (EqualsAny(s, "break", "continue")) {
+						} else if (StrEqualsAny(s, "break", "continue")) {
 							kwType = SCE_JS_LABEL;
 						}
 						if (kwType != SCE_JS_DEFAULT) {
@@ -211,7 +212,7 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 						sc.ChangeState(SCE_JS_WORD2);
 					} else if (keywordLists[2]->InList(s)) {
 						sc.ChangeState(SCE_JS_DIRECTIVE);
-						if (EqualsAny(s, "import", "require")) {
+						if (StrEqualsAny(s, "import", "require")) {
 							lineStateLineType = JsLineStateMaskImport;
 						}
 					} else if (keywordLists[3]->InList(s)) {
@@ -222,6 +223,13 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 						sc.ChangeState(SCE_JS_ENUM);
 					} else if (keywordLists[6]->InList(s)) {
 						sc.ChangeState(SCE_JS_CONSTANT);
+					} else if (sc.ch == ':') {
+						if (visibleChars == sc.LengthCurrent()) {
+							const int chNext = sc.GetLineNextChar(true);
+							if (IsJumpLabelNextChar(chNext)) {
+								sc.ChangeState(SCE_JS_LABEL);
+							}
+						}
 					} else if (sc.ch != '.') {
 						if (kwType != SCE_JS_DEFAULT) {
 							sc.ChangeState(kwType);
@@ -229,11 +237,12 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 							const int chNext = sc.GetDocNextChar(sc.ch == '?');
 							if (chNext == '(') {
 								sc.ChangeState(SCE_JS_FUNCTION);
-							} else if ((chBeforeIdentifier == '<' && (chNext == '>' || chNext == '<')) || sc.Match('[', ']')) {
+							} else if (sc.Match('[', ']')
+								|| (chBeforeIdentifier == '<' && (chNext == '>' || chNext == '<'))) {
+								// type[]
 								// type<type>
 								// type<type?>
 								// type<type<type>>
-								// type[]
 								sc.ChangeState(SCE_JS_CLASS);
 							}
 						}
@@ -310,8 +319,8 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 			if (sc.ch == '\\') {
 				sc.Forward();
 			} else if (sc.ch == '[' || sc.ch == ']') {
-				insideReRange = sc.ch == '[';
-			} else if (sc.ch == '/' && !insideReRange) {
+				insideRegexRange = sc.ch == '[';
+			} else if (sc.ch == '/' && !insideRegexRange) {
 				sc.Forward();
 				// regex flags
 				while (IsLowerCase(sc.ch)) {
@@ -336,7 +345,6 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 					docTagState = DocTagState::None;
 					sc.SetState(SCE_JS_COMMENTTAGAT);
 					sc.ForwardSetState(SCE_JS_COMMENTBLOCKDOC);
-					break;
 				}
 				break;
 			case DocTagState::XmlOpen:
@@ -346,7 +354,6 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 					sc.SetState(SCE_JS_COMMENTTAGXML);
 					sc.Forward((sc.ch == '/') ? 2 : 1);
 					sc.SetState(SCE_JS_COMMENTLINEDOC);
-					break;
 				}
 				break;
 			default:
@@ -441,22 +448,23 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 
 		if (sc.state == SCE_JS_DEFAULT) {
 			if (sc.ch == '/') {
-				if (sc.chNext == '/') {
+				if (sc.chNext == '/' || sc.chNext == '*') {
 					docTagState = DocTagState::None;
 					visibleCharsBefore = visibleChars;
-					const int chNext = sc.GetRelative(2);
-					sc.SetState((chNext == '/' || chNext == '!') ? SCE_JS_COMMENTLINEDOC : SCE_JS_COMMENTLINE);
-					if (visibleChars == 0) {
-						lineStateLineType = JsLineStateMaskLineComment;
+					const int chNext = sc.chNext;
+					sc.SetState((chNext == '/') ? SCE_JS_COMMENTLINE : SCE_JS_COMMENTBLOCK);
+					sc.Forward(2);
+					if (sc.ch == '!' || (sc.ch == chNext && sc.chNext != chNext)) {
+						sc.ChangeState((chNext == '/') ? SCE_JS_COMMENTLINEDOC : SCE_JS_COMMENTBLOCKDOC);
 					}
-				} else if (sc.chNext == '*') {
-					docTagState = DocTagState::None;
-					visibleCharsBefore = visibleChars;
-					const int chNext = sc.GetRelative(2);
-					sc.SetState((chNext == '*' || chNext == '!') ? SCE_JS_COMMENTBLOCKDOC : SCE_JS_COMMENTBLOCK);
-					sc.Forward();
+					if (chNext == '/') {
+						if (visibleChars == 0) {
+							lineStateLineType = JsLineStateMaskLineComment;
+						}
+					}
+					continue;
 				} else if (!IsEOLChar(sc.chNext) && IsRegexStart(chPrevNonWhite, stylePrevNonWhite)) {
-					insideReRange = false;
+					insideRegexRange = false;
 					sc.SetState(SCE_JS_REGEX);
 				} else {
 					sc.SetState(SCE_JS_OPERATOR);
@@ -555,9 +563,11 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 struct FoldLineState {
 	int lineComment;
 	int packageImport;
+	int lineContinuation;
 	constexpr explicit FoldLineState(int lineState) noexcept:
 		lineComment(lineState & JsLineStateMaskLineComment),
-		packageImport((lineState >> 1) & 1) {
+		packageImport((lineState >> 1) & 1),
+		lineContinuation((lineState >> 4) & 1) {
 	}
 };
 
@@ -573,6 +583,10 @@ void FoldJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 	if (lineCurrent > 0) {
 		levelCurrent = styler.LevelAt(lineCurrent - 1) >> 16;
 		foldPrev = FoldLineState(styler.GetLineState(lineCurrent - 1));
+		const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent - 1, SCE_JS_OPERATOR, SCE_JS_TASKMARKER);
+		if (bracePos) {
+			startPos = bracePos + 1; // skip the brace
+		}
 	}
 
 	int levelNext = levelCurrent;
@@ -583,6 +597,7 @@ void FoldJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
 	int style = initStyle;
+	int visibleChars = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
 		const char ch = chNext;
@@ -637,12 +652,24 @@ void FoldJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 			break;
 		}
 
+		if (visibleChars == 0 && !IsSpaceEquiv(style)) {
+			++visibleChars;
+		}
 		if (i == lineEndPos) {
 			const FoldLineState foldNext(styler.GetLineState(lineCurrent + 1));
 			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
 			} else if (foldCurrent.packageImport) {
 				levelNext += foldNext.packageImport - foldPrev.packageImport;
+			} else if (foldCurrent.lineContinuation | foldPrev.lineContinuation) {
+				levelNext += foldCurrent.lineContinuation - foldPrev.lineContinuation;
+			} else if (visibleChars) {
+				const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent, SCE_JS_OPERATOR, SCE_JS_TASKMARKER);
+				if (bracePos) {
+					levelNext++;
+					i = bracePos; // skip the brace
+					chNext = '\0';
+				}
 			}
 
 			const int levelUse = levelCurrent;
@@ -660,6 +687,7 @@ void FoldJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 			levelCurrent = levelNext;
 			foldPrev = foldCurrent;
 			foldCurrent = foldNext;
+			visibleChars = 0;
 		}
 	}
 }

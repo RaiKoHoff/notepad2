@@ -5,7 +5,7 @@
 // Copyright 1998-2004 by Neil Hodgson <neilh@scintilla.org>
 // This file is in the public domain.
 
-#include <cstdlib>
+#include <cstdint>
 #include <cassert>
 #include <cstring>
 
@@ -15,6 +15,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 
 using namespace Scintilla;
 
@@ -37,33 +38,37 @@ bool StyleContext::MatchIgnoreCase(const char *s) const noexcept {
 	return true;
 }
 
-static constexpr bool IsTaskMarkerPrev(int chPrev) noexcept {
+namespace {
+
+constexpr bool IsTaskMarkerPrev(int chPrev) noexcept {
 	return chPrev <= 32 || AnyOf(chPrev, '/', '*', '!', '#');
 }
 
-static constexpr bool IsTaskMarkerStart(int visibleChars, int visibleCharsBefore, int chPrev, int ch, int chNext) noexcept {
+constexpr bool IsTaskMarkerStart(int visibleChars, int visibleCharsBefore, int chPrev, int ch, int chNext) noexcept {
 	return (visibleChars == 0 || (visibleChars <= visibleCharsBefore + 3 && IsTaskMarkerPrev(chPrev)))
 		&& IsUpperCase(ch) && IsUpperCase(chNext);
+}
+
 }
 
 bool HighlightTaskMarker(StyleContext &sc, int &visibleChars, int visibleCharsBefore, int markerStyle) {
 	if (IsTaskMarkerStart(visibleChars, visibleCharsBefore, sc.chPrev, sc.ch, sc.chNext)) {
 		Sci_PositionU pos = sc.currentPos + 2;
-		int len = 2;
 		unsigned char ch;
-		while (IsUpperCase(ch = sc.styler.SafeGetCharAt(pos))) {
+		while (IsUpperCase(ch = sc.styler[pos])) {
 			++pos;
-			++len;
 		}
 
 		bool marker = false;
+		const int len = static_cast<int>(pos - sc.currentPos);
 		if (ch == ':' || ch == '(') {
 			// highlight first uppercase word after comment characters as task marker.
 			marker = true;
 		} else if (ch <= 32 && len >= 3 && len < 16 && AnyOf(sc.ch, 'T', 'F', 'N', 'X')) {
-			char s[16];
+			char s[8];
 			sc.styler.GetRange(sc.currentPos, pos, s, sizeof(s));
-			marker = EqualsAny(s, "TODO", "FIXME", "NOTE", "XXX", "TBD") || StrStartsWith(s, "NOLINT");
+			marker = StrEqualsAny(s, "TODO", "FIXME", "NOTE", "XXX", "TBD")
+				|| StrStartsWith(s, "NOLINT"); // clang-tidy: NOLINT, NOLINTNEXTLINE
 		}
 
 		visibleChars += len;

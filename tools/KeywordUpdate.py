@@ -3,12 +3,16 @@ from KeywordCore import *
 
 def update_all_keyword():
 	items = [
+		('NP2LEX_ABAQUS', 'stlABAQUS.c', 'ABAQUS.inp', 0, parse_apdl_api_file),
 		('NP2LEX_ACTIONSCRIPT', 'stlActionScript.c', 'ActionScript.as', 1, parse_actionscript_api_file),
+		('NP2LEX_APDL', 'stlAPDL.c', 'APDL.apdl', 0, parse_apdl_api_file),
 		('NP2LEX_AVS', 'stlAviSynth.c', 'AviSynth.avs', 0, parse_avisynth_api_file),
 		('NP2LEX_CMAKE', 'stlCMake.c', 'CMake.cmake', 0, parse_cmake_api_file),
 		('NP2LEX_DART', 'stlDart.c', 'Dart.dart', 0, parse_dart_api_file),
 		('NP2LEX_GN', 'stlGN.c', 'GN.gn', 0, parse_gn_api_file),
 		('NP2LEX_GO', 'stlGO.c', 'Go.go', 0, parse_go_api_file),
+		('NP2LEX_HAXE', 'stlHaxe.c', 'Haxe.hx', 1, parse_haxe_api_file),
+		('NP2LEX_JAVA', 'stlJava.c', 'Java.java', 1, parse_java_api_file),
 		('NP2LEX_JAVASCRIPT', 'stlJavaScript.c', 'JavaScript.js', 1, parse_javascript_api_file),
 		('NP2LEX_JULIA', 'stlJulia.c', 'Julia.jl', 0, parse_julia_api_file),
 		('NP2LEX_KOTLIN', 'stlKotlin.c', 'Kotlin.kt', 0, parse_kotlin_api_file),

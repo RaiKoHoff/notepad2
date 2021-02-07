@@ -18,6 +18,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 
 using namespace Scintilla;
@@ -335,9 +336,9 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 				const bool keywordEnds = IsASpace(sc.ch) || IsBashCmdDelimiter(sc.ch, 0);
 				// 'in' or 'do' may be construct keywords
 				if (cmdState == BASH_CMD_WORD) {
-					if (strcmp(s, "in") == 0 && keywordEnds)
+					if (StrEqual(s, "in") && keywordEnds)
 						cmdStateNew = BASH_CMD_BODY;
-					else if (strcmp(s, "do") == 0 && keywordEnds)
+					else if (StrEqual(s, "do") && keywordEnds)
 						cmdStateNew = BASH_CMD_START;
 					else
 						sc.ChangeState(SCE_SH_IDENTIFIER);
@@ -345,7 +346,7 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 					break;
 				}
 				// a 'test' keyword starts a test expression
-				if (strcmp(s, "test") == 0) {
+				if (StrEqual(s, "test")) {
 					if (cmdState == BASH_CMD_START && keywordEnds) {
 						cmdStateNew = BASH_CMD_TEST;
 						testExprType = 0;
@@ -360,7 +361,7 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 						sc.ChangeState(SCE_SH_IDENTIFIER);
 				}
 				// 'for'|'case'|'select' needs 'in'|'do' to be highlighted later
-				else if (EqualsAny(s, "for", "case", "select")) {
+				else if (StrEqualsAny(s, "for", "case", "select")) {
 					if (cmdState == BASH_CMD_START && keywordEnds)
 						cmdStateNew = BASH_CMD_WORD;
 					else
@@ -378,7 +379,7 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 				}
 
 				// m4
-				if (strcmp(s, "dnl") == 0) {
+				if (StrEqual(s, "dnl")) {
 					sc.ChangeState(SCE_SH_COMMENTLINE);
 					if (sc.atLineEnd) {
 						sc.SetState(SCE_SH_DEFAULT);
@@ -536,9 +537,11 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 						sc.SetState(SCE_SH_DEFAULT);
 					break;
 				}
-				if (s[strlen(s) - 1] == '\r')
-					s[strlen(s) - 1] = '\0';
-				if (strcmp(HereDoc.Delimiter, s) == 0) {
+				char *p = s + strlen(s) - 1;
+				if (*p == '\r') {
+					*p = '\0';
+				}
+				if (strequ(HereDoc.Delimiter, s)) {
 					if ((prefixws == 0) ||	// indentation rule
 						(prefixws > 0 && HereDoc.Indent)) {
 						sc.SetState(SCE_SH_DEFAULT);
@@ -842,8 +845,8 @@ void FoldBashDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWordList
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
 
-	constexpr int MaxFoldWordLength = 7 + 1; // foreach
-	char word[MaxFoldWordLength + 1];
+	char word[8]; // foreach
+	constexpr int MaxFoldWordLength = sizeof(word) - 1;
 	int wordlen = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
@@ -865,15 +868,15 @@ void FoldBashDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWordList
 				word[wordlen] = '\0';
 				wordlen = 0;
 				if (isCShell) {
-					if (EqualsAny(word, "if", "foreach", "switch", "while")) {
+					if (StrEqualsAny(word, "if", "foreach", "switch", "while")) {
 						levelCurrent++;
-					} else if (EqualsAny(word, "end", "endif", "endsw")) {
+					} else if (StrEqualsAny(word, "end", "endif", "endsw")) {
 						levelCurrent--;
 					}
 				} else {
-					if (EqualsAny(word, "if", "case", "do")) {
+					if (StrEqualsAny(word, "if", "case", "do")) {
 						levelCurrent++;
-					} else if (EqualsAny(word, "fi", "esac", "done")) {
+					} else if (StrEqualsAny(word, "fi", "esac", "done")) {
 						levelCurrent--;
 					}
 				}

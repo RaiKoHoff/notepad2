@@ -232,4 +232,111 @@ void BacktrackToStart(const LexAccessor &styler, int stateMask, Sci_PositionU &s
 	}
 }
 
+Sci_PositionU CheckBraceOnNextLine(LexAccessor &styler, Sci_Line line, int operatorStyle, int maxSpaceStyle, int ignoreStyle) noexcept {
+	// check brace on next line
+	Sci_Position startPos = styler.LineStart(line + 1);
+	Sci_Position bracePos = startPos;
+	char ch;
+	while (IsASpaceOrTab(ch = styler[bracePos])) {
+		++bracePos;
+	}
+	if (ch != '{') {
+		return 0;
+	}
+
+	int style = styler.StyleAt(bracePos);
+	if (style != operatorStyle) {
+		return 0;
+	}
+
+	// check current line
+	Sci_Position endPos = startPos - 1;
+	startPos = styler.LineStart(line);
+
+	// ignore current line, e.g. current line is preprocessor.
+	if (ignoreStyle) {
+		while (startPos < endPos) {
+			style = styler.StyleAt(startPos);
+			if (style > maxSpaceStyle) {
+				break;
+			}
+			++startPos;
+		}
+		if (style == ignoreStyle) {
+			return 0;
+		}
+	}
+
+	while (endPos >= startPos) {
+		style = styler.StyleAt(endPos);
+		if (style > maxSpaceStyle) {
+			break;
+		}
+		--endPos;
+	}
+	if (endPos < startPos) {
+		// current line is empty or comment
+		return 0;
+	}
+	if (style == operatorStyle) {
+		ch = styler[endPos];
+		/*
+		function(param)
+			{ body }
+
+		if (expr)
+			{ body }
+		else
+			{ body }
+
+		switch (expr)
+			{ body }
+
+		class name<T>
+			{ body }
+
+		var name =
+			{ body }
+		var name = new type[]
+			{ body }
+
+		case constant:
+			{ body }
+
+		ActionScript:
+			function name(param:*):*
+				{ body }
+		C++:
+			[lambda-capture]
+				{ body }
+		C#:
+			=> { lambda }
+		Java:
+			-> { lambda }
+		Objective-C:
+			^{ block }
+		Rust:
+			fn name() -> optional?
+				{ body }
+		Scala:
+			class name[T]
+				{ body }
+		*/
+		if (!AnyOf(ch, ')', '>', '=', ':', ']', '^', '?', '*')) {
+			return 0;
+		}
+	}
+
+	/*
+		class name
+			{ body }
+
+		try
+			{ body }
+		catch (exception)
+			{ body }
+	*/
+	return bracePos;
+}
+
 }
