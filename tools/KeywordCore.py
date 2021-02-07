@@ -8,6 +8,7 @@ from enum import IntFlag
 from FileGenerator import Regenerate
 
 AllKeywordAttrList = {}
+JavaKeywordMap = {}
 JavaScriptKeywordMap = {}
 
 # see EditLexer.h
@@ -126,13 +127,26 @@ def UpdateKeywordFile(rid, path, keywordList, keywordCount=16):
 	output = BuildKeywordContent(rid, keywordList, keywordCount=keywordCount)
 	Regenerate(path, '//', output)
 
-def read_api_file(path, comment):
+def read_api_file(path, comment, commentKind=0):
 	doc = open(path, encoding='utf-8').read()
-	doc = re.sub(comment + r'[^!].+', '', doc) # normal comment
+	if commentKind == 0:
+		doc = re.sub(comment + r'[^!].+', '', doc) # normal comment
 	sections = []
 	items = doc.split(comment + "!") #! section name
 	for section in items:
 		lines = section.strip().splitlines()
+		if commentKind == 1:
+			result = []
+			for line in lines:
+				index = line.find(comment)
+				if index < 0:
+					result.append(line)
+					continue
+				if index > 0:
+					line = line[:index].strip()
+					if line:
+						result.append(line)
+			lines = result
 		if not lines:
 			continue
 
@@ -161,7 +175,7 @@ def parse_actionscript_api_file(path):
 	sections = read_api_file(path, '//')
 	keywordMap = {}
 	for key, doc in sections:
-		if key in ('keywords', 'types'):
+		if key in ('keywords', 'types', 'directive'):
 			keywordMap[key] = doc.split()
 		if key == 'class':
 			items = re.findall(r'class\s+(\w+)', doc)
@@ -171,6 +185,7 @@ def parse_actionscript_api_file(path):
 			keywordMap[key] = items
 
 	RemoveDuplicateKeyword(keywordMap, [
+		'directive',
 		'keywords',
 		'types',
 		'class',
@@ -178,7 +193,7 @@ def parse_actionscript_api_file(path):
 	return [
 		('keywords', keywordMap['keywords'], KeywordAttr.Default),
 		('types', keywordMap['types'], KeywordAttr.Default),
-		('directive', [], KeywordAttr.Default),
+		('directive', keywordMap['directive'], KeywordAttr.Default),
 		('class', keywordMap['class'], KeywordAttr.Default),
 		('interface', [], KeywordAttr.Default),
 		('enumeration', [], KeywordAttr.Default),
@@ -187,6 +202,31 @@ def parse_actionscript_api_file(path):
 		('function', keywordMap['functions'], KeywordAttr.NoLexer),
 		('properties', [], KeywordAttr.Default),
 		('doc tag', [], KeywordAttr.Default),
+	]
+
+def parse_apdl_api_file(path):
+	ext = os.path.splitext(path)[1].lower()
+	comment = '!' if ext == '.apdl' else '**'
+	sections = read_api_file(path, comment, 1)
+	keywordMap = {}
+	for key, doc in sections:
+		key = key.strip('*! ')
+		if key == 'function':
+			items = re.findall('(\w+\()', doc)
+		else:
+			items = doc.split()
+			if key in ('code folding', 'slash command', 'star command'):
+				items = [item.lstrip('*/') for item in items]
+		keywordMap[key] = items
+
+	keywordMap['star command'].extend(keywordMap['code folding']) # for auto-completion
+	return [
+		('keywords', keywordMap['code folding'], KeywordAttr.Default),
+		('command', keywordMap['command'], KeywordAttr.Default),
+		('slash command', keywordMap['slash command'], KeywordAttr.Default),
+		('star command', keywordMap['star command'], KeywordAttr.Default),
+		('argument', keywordMap['argument'], KeywordAttr.Default),
+		('function', keywordMap['function'], KeywordAttr.Default),
 	]
 
 def parse_avisynth_api_file(path):
@@ -368,7 +408,7 @@ def parse_dart_api_file(path):
 			keywordMap['class'] = [item[1] for item in items]
 
 			items = re.findall(r'(enum)\s+(\w+)', doc)
-			keywordMap['enum'] = [item[1] for item in items]
+			keywordMap['enumeration'] = [item[1] for item in items]
 
 			items = re.findall(r'@(\w+\(?)', doc)
 			keywordMap['metadata'] = items
@@ -380,7 +420,7 @@ def parse_dart_api_file(path):
 		'keywords',
 		'types',
 		'class',
-		'enum',
+		'enumeration',
 		'metadata',
 		'function',
 	])
@@ -388,7 +428,7 @@ def parse_dart_api_file(path):
 		('keywords', keywordMap['keywords'], KeywordAttr.Default),
 		('types', keywordMap['types'], KeywordAttr.Default),
 		('class', keywordMap['class'], KeywordAttr.Default),
-		('enum', keywordMap['enum'], KeywordAttr.Default),
+		('enumeration', keywordMap['enumeration'], KeywordAttr.Default),
 		('metadata', keywordMap['metadata'], KeywordAttr.NoLexer),
 		('function', keywordMap['function'], KeywordAttr.NoLexer),
 	]
@@ -494,6 +534,88 @@ def parse_go_api_file(path):
 		('variables', keywordMap['variables'], KeywordAttr.NoLexer),
 		('function', keywordMap['function'], KeywordAttr.NoLexer),
 		('package', keywordMap['package'], KeywordAttr.NoLexer),
+	]
+
+def parse_haxe_api_file(path):
+	sections = read_api_file(path, '//')
+	keywordMap = {}
+	for key, doc in sections:
+		if key in ('keywords', 'preprocessor'):
+			items = [item.strip('#') for item in doc.split()]
+			keywordMap[key] = items
+		elif key == 'library':
+			items = re.findall(r'(abstract|class|typedef)\s+(\w+)', doc)
+			classes = [item[1] for item in items]
+			interfaces = re.findall(r'interface\s+(\w+)', doc)
+			items = re.findall(r'enum\s+(abstract\s+)?(\w+)', doc)
+			enums = [item[1] for item in items]
+
+			keywordMap['class'] = classes
+			keywordMap['interface'] = interfaces
+			keywordMap['enumeration'] = enums
+		elif key == 'comment':
+			items = re.findall(r'@(\w+)', doc)
+			keywordMap[key] = items
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'enumeration',
+		'class',
+		'interface',
+	])
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('preprocessor', keywordMap['preprocessor'], KeywordAttr.NoAutoComp),
+		('class', keywordMap['class'], KeywordAttr.Default),
+		('interface', keywordMap['interface'], KeywordAttr.Default),
+		('enumeration', keywordMap['enumeration'], KeywordAttr.Default),
+		('constant', [], KeywordAttr.Default),
+		('metadata', [], KeywordAttr.Default),
+		('function', [], KeywordAttr.Default),
+		('comment', keywordMap['comment'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
+	]
+
+def parse_java_api_file(path):
+	sections = read_api_file(path, '//')
+	keywordMap = {}
+	for key, doc in sections:
+		if key in ('keywords', 'types', 'directive'):
+			keywordMap[key] = doc.split()
+		elif key == 'api':
+			classes = re.findall(r'class\s+(\w+)', doc)
+			interfaces = re.findall(r'interface\s+(\w+)', doc)
+			enumeration = re.findall(r'enum\s+(\w+)', doc)
+			annotations = re.findall(r'@(\w+)', doc)
+
+			keywordMap['class'] = classes
+			keywordMap['interface'] = interfaces
+			keywordMap['enumeration'] = enumeration
+			keywordMap['annotation'] = annotations
+		elif key == 'javadoc':
+			items = re.findall(r'@(\w+)', doc)
+			keywordMap[key] = items
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'types',
+		'directive',
+		'class',
+		'interface',
+		'enumeration',
+	])
+
+	JavaKeywordMap.update(keywordMap)
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('types', keywordMap['types'], KeywordAttr.Default),
+		('directive', keywordMap['directive'], KeywordAttr.Default),
+		('class', keywordMap['class'], KeywordAttr.Default),
+		('interface', keywordMap['interface'], KeywordAttr.Default),
+		('enumeration', keywordMap['enumeration'], KeywordAttr.Default),
+		('constant', [], KeywordAttr.Default),
+		('annotation', keywordMap['annotation'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
+		('function', [], KeywordAttr.Default),
+		('Javadoc', keywordMap['javadoc'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
 	]
 
 def parse_javascript_api_file(path):
@@ -643,7 +765,7 @@ def parse_kotlin_api_file(path):
 
 			keywordMap['class'] = classes
 			keywordMap['interface'] = interfaces
-			keywordMap['enum'] = enums
+			keywordMap['enumeration'] = enums
 			keywordMap['annotation'] = annotations
 
 			items = re.findall(r'fun\s+.*?(\w+\()', doc, re.DOTALL)
@@ -652,18 +774,25 @@ def parse_kotlin_api_file(path):
 			items = doc.split()
 		keywordMap[key] = items
 
+	if True:
+		# for JVM target
+		keywordMap['class'].update(JavaKeywordMap['class'])
+		keywordMap['interface'].extend(JavaKeywordMap['interface'])
+		keywordMap['enumeration'].update(JavaKeywordMap['enumeration'])
+		keywordMap['annotation'].update(JavaKeywordMap['annotation'])
+
 	RemoveDuplicateKeyword(keywordMap, [
 		'keywords',
 		'class',
 		'interface',
-		'enum',
+		'enumeration',
 		'annotation',
 	])
 	return [
 		('keywords', keywordMap['keywords'], KeywordAttr.Default),
 		('class', keywordMap['class'], KeywordAttr.Default),
 		('interface', keywordMap['interface'], KeywordAttr.Default),
-		('enum', keywordMap['enum'], KeywordAttr.Default),
+		('enumeration', keywordMap['enumeration'], KeywordAttr.Default),
 		('annotation', keywordMap['annotation'], KeywordAttr.NoLexer),
 		('function', keywordMap['function'], KeywordAttr.NoLexer),
 		('KDoc', keywordMap['kdoc'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),

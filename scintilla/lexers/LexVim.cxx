@@ -2,7 +2,6 @@
 // See License.txt for details about distribution and modification.
 //! Lexer for Vim.
 
-#include <cstdlib>
 #include <cassert>
 #include <cstring>
 
@@ -15,6 +14,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 
 using namespace Scintilla;
@@ -22,19 +22,12 @@ using namespace Scintilla;
 namespace {
 
 constexpr bool IsVimEscapeChar(int ch) noexcept {
-	return ch == '\\'
-		|| ch == '\"'
-		|| ch == 'b'
-		|| ch == 'e'
-		|| ch == 'f'
-		|| ch == 'n'
-		|| ch == 'r'
-		|| ch == 't';
+	return AnyOf(ch, '\\', '\"', 'b', 'e', 'f', 'n', 'r', 't');
 }
 
 struct EscapeSequence {
 	int digitsLeft = 0;
-	int numBase = 16;
+	int numBase = 0;
 
 	bool resetEscapeState(int chNext) noexcept {
 		// https://vimhelp.org/eval.txt.html#string
@@ -65,15 +58,15 @@ constexpr bool IsVimOp(int ch) noexcept {
 }
 
 enum {
-	VimLineStateMaskLineComment = 1 << 0,	// line comment
-	VimLineStateMaskLineContinue = 1 << 1,	// line continue
-	VimLineStateMaskAutoCommand = 1 << 2,	// autocmd
+	VimLineStateMaskLineComment = 1 << 0,		// line comment
+	VimLineStateMaskLineContinuation = 1 << 1,	// line continuation
+	VimLineStateMaskAutoCommand = 1 << 2,		// autocmd
 };
 
 void ColouriseVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	int lineStateLineAutoCommand = 0;
 	int lineStateLineComment = 0;
-	int lineStateLineContinue = 0;
+	int lineStateLineContinuation = 0;
 	int actuallyVisibleChars = 0;
 	int visibleChars = 0;
 	EscapeSequence escSeq;
@@ -109,7 +102,7 @@ void ColouriseVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 				if (keywordLists[0]->InList(s)) {
 					if (!lineStateLineAutoCommand && visibleChars == sc.LengthCurrent()) {
 						sc.ChangeState(SCE_VIM_WORD);
-						if (strcmp(s, "au") == 0 || strcmp(s, "autocmd") == 0) {
+						if (StrEqualsAny(s, "au", "autocmd")) {
 							lineStateLineAutoCommand = VimLineStateMaskAutoCommand;
 						}
 					} else {
@@ -139,17 +132,8 @@ void ColouriseVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 
 		case SCE_VIM_ESCAPECHAR:
 			if (escSeq.atEscapeEnd(sc.ch)) {
-				if (sc.ch == '\\') {
-					if (!escSeq.resetEscapeState(sc.chNext)) {
-						sc.SetState(SCE_VIM_STRING);
-					}
-					sc.Forward();
-				} else {
-					sc.SetState(SCE_VIM_STRING);
-					if (sc.ch == '\"') {
-						sc.ForwardSetState(SCE_VIM_DEFAULT);
-					}
-				}
+				sc.SetState(SCE_VIM_STRING);
+				continue;
 			}
 			break;
 
@@ -174,7 +158,7 @@ void ColouriseVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			break;
 
 		case SCE_VIM_BLOB_HEX:
-			if (!iswordchar(sc.ch)) {
+			if (!(IsIdentifierChar(sc.ch) || sc.ch == '.')) {
 				sc.SetState(SCE_VIM_DEFAULT);
 			}
 			break;
@@ -227,7 +211,7 @@ void ColouriseVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 		if (!isspacechar(sc.ch) && !(actuallyVisibleChars == 0 && sc.ch == ':')) {
 			if (actuallyVisibleChars == 0) {
 				if (sc.ch == '\\') {
-					lineStateLineContinue = VimLineStateMaskLineContinue;
+					lineStateLineContinuation = VimLineStateMaskLineContinuation;
 				} else {
 					lineStateLineAutoCommand = 0;
 				}
@@ -237,9 +221,9 @@ void ColouriseVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 		}
 
 		if (sc.atLineEnd) {
-			styler.SetLineState(sc.currentLine, lineStateLineAutoCommand | lineStateLineComment | lineStateLineContinue);
+			styler.SetLineState(sc.currentLine, lineStateLineAutoCommand | lineStateLineComment | lineStateLineContinuation);
 			lineStateLineComment = 0;
-			lineStateLineContinue = 0;
+			lineStateLineContinuation = 0;
 			actuallyVisibleChars = 0;
 			visibleChars = 0;
 		}
@@ -251,10 +235,10 @@ void ColouriseVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 
 struct FoldLineState {
 	int lineComment;
-	int lineContinue;
+	int lineContinuation;
 	constexpr explicit FoldLineState(int lineState) noexcept:
 		lineComment(lineState & VimLineStateMaskLineComment),
-		lineContinue((lineState >> 1) & 1) {
+		lineContinuation((lineState >> 1) & 1) {
 	}
 };
 
@@ -275,8 +259,8 @@ void FoldVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*
 
 	int styleNext = styler.StyleAt(startPos);
 
-	constexpr int MaxFoldWordLength = 5 + 1; // while
-	char buf[MaxFoldWordLength + 1];
+	char buf[8]; // while
+	constexpr int MaxFoldWordLength = sizeof(buf) - 1;
 	int wordLen = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
@@ -290,7 +274,7 @@ void FoldVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*
 			if (styleNext != SCE_VIM_WORD) {
 				buf[wordLen] = '\0';
 				wordLen = 0;
-				if (EqualsAny(buf, "if", "while", "for", "try") || StrStartsWith(buf, "fun")) {
+				if (StrEqualsAny(buf, "if", "while", "for", "try") || StrStartsWith(buf, "fun")) {
 					levelNext++;
 				} else if (StrStartsWith(buf, "end")) {
 					levelNext--;
@@ -303,7 +287,7 @@ void FoldVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*
 			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
 			} else {
-				levelNext += foldNext.lineContinue - foldCurrent.lineContinue;
+				levelNext += foldNext.lineContinuation - foldCurrent.lineContinuation;
 			}
 
 			const int levelUse = levelCurrent;

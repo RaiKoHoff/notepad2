@@ -5,13 +5,8 @@
 // Copyright 1998-2005 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
 
-#include <cstdlib>
 #include <cassert>
 #include <cstring>
-
-#include <string>
-#include <map>
-#include <set>
 
 #include "ILexer.h"
 #include "Scintilla.h"
@@ -22,6 +17,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 
 using namespace Scintilla;
@@ -35,14 +31,11 @@ namespace {
 enum script_type { eScriptNone = 0, eScriptJS, eScriptVBS, eScriptPython, eScriptPHP, eScriptXML, eScriptSGML, eScriptSGMLblock, eScriptComment };
 enum script_mode { eHtml = 0, eNonHtmlScript, eNonHtmlPreProc, eNonHtmlScriptPreProc };
 
-constexpr bool IsEmpty(const char *text) noexcept {
-	return *text == '\0';
-}
-
 inline void GetTextSegment(Accessor &styler, Sci_PositionU start, Sci_PositionU end, char *s, size_t len) noexcept {
 	styler.GetRangeLowered(start, end + 1, s, len);
 }
 
+#if 0
 const char *GetNextWord(Accessor &styler, Sci_PositionU start, char *s, size_t sLen) noexcept {
 	Sci_PositionU i = 0;
 	for (; i < sLen - 1; i++) {
@@ -57,6 +50,7 @@ const char *GetNextWord(Accessor &styler, Sci_PositionU start, char *s, size_t s
 
 	return s;
 }
+#endif
 
 script_type segIsScriptingIndicator(Accessor &styler, Sci_PositionU start, Sci_PositionU end, script_type prevValue) {
 	char s[128];
@@ -92,7 +86,7 @@ int PrintScriptingIndicatorOffset(Accessor &styler, Sci_PositionU start, Sci_Pos
 	char s[8];
 	GetTextSegment(styler, start, end, s, sizeof(s));
 	if (StrStartsWith(s, "php")) {
-		iResult = CSTRLEN("php");
+		iResult = static_cast<int>(CStrLen("php"));
 	}
 
 	return iResult;
@@ -290,7 +284,7 @@ int classifyTagHTML(Sci_PositionU start, Sci_PositionU end,
 		styler.ColourTo(end, chAttr);
 	}
 	if (chAttr == SCE_H_TAG && !customElement) {
-		if (allowScripts && 0 == strcmp(tag, "script")) {
+		if (allowScripts && StrEqual(tag, "script")) {
 			// check to see if this is a self-closing tag by sniffing ahead
 			bool isSelfClose = false;
 			for (Sci_PositionU cPos = end; cPos <= end + 200; cPos++) {
@@ -306,7 +300,7 @@ int classifyTagHTML(Sci_PositionU start, Sci_PositionU end,
 			// do not enter a script state if the tag self-closed
 			if (!isSelfClose)
 				chAttr = SCE_H_SCRIPT;
-		} else if (!isXml && 0 == strcmp(tag, "comment")) {
+		} else if (!isXml && StrEqual(tag, "comment")) {
 			chAttr = SCE_H_COMMENT;
 		}
 	}
@@ -330,7 +324,7 @@ int classifyWordHTVB(Sci_PositionU start, Sci_PositionU end, const WordList &key
 	GetTextSegment(styler, start, end, s, sizeof(s));
 	if (keywords.InList(s)) {
 		chAttr = SCE_HB_WORD;
-		if (strcmp(s, "rem") == 0)
+		if (StrEqual(s, "rem"))
 			chAttr = SCE_HB_COMMENTLINE;
 	}
 	styler.ColourTo(end, statePrintForState(chAttr, inScriptType));
@@ -344,13 +338,13 @@ void classifyWordHTPy(Sci_PositionU start, Sci_PositionU end, const WordList &ke
 	char s[127 + 1];
 	styler.GetRange(start, end + 1, s, sizeof(s));
 	char chAttr = SCE_HP_IDENTIFIER;
-	if (0 == strcmp(prevWord, "class"))
+	if (StrEqual(prevWord, "class"))
 		chAttr = SCE_HP_CLASSNAME;
-	else if (0 == strcmp(prevWord, "def"))
+	else if (StrEqual(prevWord, "def"))
 		chAttr = SCE_HP_DEFNAME;
 	else if (keywords.InList(s))
 		chAttr = SCE_HP_WORD;
-	else if (isMako && 0 == strcmp(s, "block"))
+	else if (isMako && StrEqual(s, "block"))
 		chAttr = SCE_HP_WORD;
 	styler.ColourTo(end, statePrintForState(chAttr, inScriptType));
 	strcpy(prevWord, s);
@@ -427,17 +421,14 @@ constexpr bool IsScriptCommentState(const int state) noexcept {
 bool isMakoBlockEnd(const int ch, const int chNext, const char *blockType) noexcept {
 	if (IsEmpty(blockType)) {
 		return ((ch == '%') && (chNext == '>'));
-	} else if ((0 == strcmp(blockType, "inherit")) ||
-		(0 == strcmp(blockType, "namespace")) ||
-		(0 == strcmp(blockType, "include")) ||
-		(0 == strcmp(blockType, "page"))) {
+	} else if (StrEqualsAny(blockType, "inherit", "namespace", "include", "page")) {
 		return ((ch == '/') && (chNext == '>'));
-	} else if (0 == strcmp(blockType, "%")) {
+	} else if (StrEqual(blockType, "%")) {
 		if (ch == '/' && IsEOLChar(chNext))
 			return true;
 		else
 			return IsEOLChar(ch);
-	} else if (0 == strcmp(blockType, "{")) {
+	} else if (StrEqual(blockType, "{")) {
 		return ch == '}';
 	} else {
 		return (ch == '>');
@@ -447,9 +438,9 @@ bool isMakoBlockEnd(const int ch, const int chNext, const char *blockType) noexc
 bool isDjangoBlockEnd(const int ch, const int chNext, const char *blockType) noexcept {
 	if (IsEmpty(blockType)) {
 		return false;
-	} else if (0 == strcmp(blockType, "%")) {
+	} else if (StrEqual(blockType, "%")) {
 		return ((ch == '%') && (chNext == '}'));
-	} else if (0 == strcmp(blockType, "{")) {
+	} else if (StrEqual(blockType, "{")) {
 		return ((ch == '}') && (chNext == '}'));
 	} else {
 		return false;
@@ -808,7 +799,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 
 		// Allow falling through to mako handling code if newline is going to end a block
 		if (((ch == '\r' && chNext != '\n') || (ch == '\n')) &&
-			(!isMako || (0 != strcmp(makoBlockType, "%")))) {
+			(!isMako || (!StrEqual(makoBlockType, "%")))) {
 		}
 		// Ignore everything in mako comment until the line ends
 		else if constexpr (isMako && makoComment) {
@@ -904,6 +895,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			continue;
 		}
 
+#if 0
 		// handle the start Mako template Python code
 		else if constexpr (isMako && scriptLanguage == eScriptNone && ((ch == '<' && chNext == '%') ||
 															 (lineStartVisibleChars == 1 && ch == '%') ||
@@ -996,6 +988,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			ch = static_cast<unsigned char>(styler.SafeGetCharAt(i));
 			continue;
 		}
+#endif
 
 		// handle the start of ASP pre-processor = Non-HTML
 		else if (!isMako && !isDjango && !isCommentASPState(state) && (ch == '<') && (chNext == '%') && !isPHPStringState(state)) {
@@ -1074,13 +1067,13 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			} else {
 				styler.ColourTo(i - 1, StateToPrint);
 			}
-			if (0 != strcmp(makoBlockType, "%") && (0 != strcmp(makoBlockType, "{")) && ch != '>') {
+			if (!StrEqual(makoBlockType, "%") && (!StrEqual(makoBlockType, "{")) && ch != '>') {
 				i++;
 		    }
-			else if (0 == strcmp(makoBlockType, "%") && ch == '/') {
+			else if (StrEqual(makoBlockType, "%") && ch == '/') {
 				i++;
 			}
-			if (0 != strcmp(makoBlockType, "%") || ch == '/') {
+			if (!StrEqual(makoBlockType, "%") || ch == '/') {
 				styler.ColourTo(i, SCE_H_ASP);
 			}
 			state = beforePreProc;

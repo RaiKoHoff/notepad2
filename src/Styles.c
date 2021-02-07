@@ -54,9 +54,11 @@ extern EDITLEXER lexSQL;
 extern EDITLEXER lexHTML;
 extern EDITLEXER lexXML;
 
+extern EDITLEXER lexABAQUS;
 extern EDITLEXER lexActionScript;
 extern EDITLEXER lexSmali;
 extern EDITLEXER lexANSI;
+extern EDITLEXER lexAPDL;
 extern EDITLEXER lexASM;
 extern EDITLEXER lexASY;
 extern EDITLEXER lexAU3;
@@ -82,7 +84,7 @@ extern EDITLEXER lexGradle;
 extern EDITLEXER lexDOT;
 extern EDITLEXER lexGroovy;
 
-extern EDITLEXER lexHaXe;
+extern EDITLEXER lexHaxe;
 
 extern EDITLEXER lexINI;
 extern EDITLEXER lexINNO;
@@ -151,9 +153,11 @@ static PEDITLEXER pLexArray[] = {
 	&lexHTML,
 	&lexXML,
 
+	&lexABAQUS,
 	&lexActionScript,
 	&lexSmali,
 	&lexANSI,
+	&lexAPDL,
 	&lexASM,
 	&lexASY,
 	&lexAU3,
@@ -179,7 +183,7 @@ static PEDITLEXER pLexArray[] = {
 	&lexDOT,
 	&lexGroovy,
 
-	&lexHaXe,
+	&lexHaxe,
 
 	&lexINI,
 	&lexINNO,
@@ -1165,8 +1169,6 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 	attr[KEYWORDSET_MAX] = KeywordAttr_NoLexer;
 
 	switch (pLexNew->rid) {
-	case NP2LEX_AU3:
-		break;
 	case NP2LEX_BATCH:
 		attr[6] = KeywordAttr_NoLexer;		// Upper Case Keyword
 		break;
@@ -1186,20 +1188,12 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[11] = KeywordAttr_NoAutoComp;	// Assembler Intruction
 		attr[12] = KeywordAttr_NoAutoComp;	// Assembler Register
 		break;
-	case NP2LEX_HAXE:
-		attr[2] = KeywordAttr_NoAutoComp;	// Preprocessor
-		break;
 	case NP2LEX_HTML:
 		attr[1] = KeywordAttr_NoAutoComp;	// JavaScript
 		attr[2] = KeywordAttr_MakeLower | KeywordAttr_NoAutoComp;	// VBScript
 		attr[3] = KeywordAttr_NoAutoComp;	// Python
 		attr[4] = KeywordAttr_NoAutoComp;	// PHP
 		attr[7] = KeywordAttr_NoLexer;		// Value
-		break;
-	case NP2LEX_INNO:
-		break;
-	case NP2LEX_JAVA:
-		attr[10] = KeywordAttr_NoLexer;		// Package
 		break;
 	case NP2LEX_RC:
 		attr[2] = KeywordAttr_NoAutoComp;	// Preprocessor
@@ -1259,6 +1253,14 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[7] = KeywordAttr_NoLexer;		// variables
 		attr[8] = KeywordAttr_NoLexer;		// function
 		attr[9] = KeywordAttr_NoLexer;		// package
+		break;
+	case NP2LEX_HAXE:
+		attr[1] = KeywordAttr_NoAutoComp;	// preprocessor
+		attr[8] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// comment
+		break;
+	case NP2LEX_JAVA:
+		attr[7] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// annotation
+		attr[9] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// Javadoc
 		break;
 	case NP2LEX_JAVASCRIPT:
 		attr[8] = KeywordAttr_NoLexer;		// function
@@ -1504,6 +1506,11 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 			const char *jsx = (StrNotEmpty(lpszExt) && (StrCaseEqual(lpszExt, L".jsx") || StrCaseEqual(lpszExt, L".tsx")))? "1" : "0";
 			SciCall_SetProperty("lexer.jsx", jsx);
 		} break;
+
+		case NP2LEX_APDL:
+		case NP2LEX_ABAQUS:
+			SciCall_SetProperty("lexer.apdl", (rid == NP2LEX_APDL) ? "1" : "0");
+			break;
 		}
 
 		Style_UpdateLexerKeywords(pLexNew);

@@ -2,7 +2,6 @@
 // See License.txt for details about distribution and modification.
 //! Lexer for NSIS.
 
-#include <cstdlib>
 #include <cassert>
 #include <cstring>
 
@@ -15,6 +14,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 
 using namespace Scintilla;
@@ -71,10 +71,9 @@ void ColouriseNSISDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				sc.GetCurrentLowered(s, sizeof(s));
 				if (s[0] == '!') {
 					sc.ChangeState(SCE_NSIS_PREPROCESSOR);
-					const char *p = s + 1;
-					if (strcmp(p, "include") == 0) {
+					if (StrEqual(s, "!include")) {
 						lineStateLineType = NsisLineTypeInclude;
-					} else if (strcmp(p, "define") == 0) {
+					} else if (StrEqual(s, "!define")) {
 						lineStateLineType = NsisLineTypeDefine;
 					}
 				} else if (visibleChars == sc.LengthCurrent()) {
@@ -217,8 +216,8 @@ void FoldNSISDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 	int styleNext = styler.StyleAt(startPos);
 	int style = initStyle;
 
-	constexpr int MaxFoldWordLength = 15 + 1; // SectionGroupEnd
-	char buf[MaxFoldWordLength + 1];
+	char buf[16]; // SectionGroupEnd
+	constexpr int MaxFoldWordLength = sizeof(buf) - 1;
 	int wordLen = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
@@ -234,20 +233,20 @@ void FoldNSISDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 			}
 			if (styleNext != style) {
 				buf[wordLen] = '\0';
-				wordLen = 0;
 				if (style == SCE_NSIS_WORD) {
-					if (EqualsAny(buf, "section", "function", "sectiongroup", "pageex")) {
-						levelNext++;
-					} else if (EqualsAny(buf, "sectionend", "functionend", "sectiongroupend", "pageexend")) {
+					if (wordLen >= 9 && StrEndsWith(buf, wordLen, "end")) {
 						levelNext--;
+					} else if (StrStartsWith(buf, "section") || StrEqualsAny(buf, "function", "pageex")) {
+						levelNext++;
 					}
 				} else {
-					if (StrStartsWith(buf, "!if") || strcmp(buf, "!macro") == 0) {
+					if (StrStartsWith(buf, "!if") || StrEqual(buf, "!macro")) {
 						levelNext++;
-					} else if (StrStartsWith(buf, "!end") || strcmp(buf, "!macroend") == 0) {
+					} else if (StrStartsWith(buf, "!end") || StrEqual(buf, "!macroend")) {
 						levelNext--;
 					}
 				}
+				wordLen = 0;
 			}
 			break;
 

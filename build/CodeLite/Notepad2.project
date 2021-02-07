@@ -13,6 +13,7 @@
       <File Name="../../scintilla/include/VectorISA.h"/>
     </VirtualDirectory>
     <VirtualDirectory Name="lexers">
+      <File Name="../../scintilla/lexers/LexAPDL.cxx"/>
       <File Name="../../scintilla/lexers/LexAsm.cxx"/>
       <File Name="../../scintilla/lexers/LexAutoIt3.cxx"/>
       <File Name="../../scintilla/lexers/LexAviSynth.cxx"/>
@@ -30,8 +31,10 @@
       <File Name="../../scintilla/lexers/LexGN.cxx"/>
       <File Name="../../scintilla/lexers/LexGo.cxx"/>
       <File Name="../../scintilla/lexers/LexGraphViz.cxx"/>
+      <File Name="../../scintilla/lexers/LexHaxe.cxx"/>
       <File Name="../../scintilla/lexers/LexHTML.cxx"/>
       <File Name="../../scintilla/lexers/LexInno.cxx"/>
+      <File Name="../../scintilla/lexers/LexJava.cxx"/>
       <File Name="../../scintilla/lexers/LexJavaScript.cxx"/>
       <File Name="../../scintilla/lexers/LexJSON.cxx"/>
       <File Name="../../scintilla/lexers/LexJulia.cxx"/>
@@ -69,10 +72,8 @@
     <VirtualDirectory Name="lexlib">
       <File Name="../../scintilla/lexlib/Accessor.cxx"/>
       <File Name="../../scintilla/lexlib/Accessor.h"/>
-      <File Name="../../scintilla/lexlib/CatalogueModules.h"/>
       <File Name="../../scintilla/lexlib/CharacterCategory.cxx"/>
       <File Name="../../scintilla/lexlib/CharacterCategory.h"/>
-      <File Name="../../scintilla/lexlib/CharacterSet.cxx"/>
       <File Name="../../scintilla/lexlib/CharacterSet.h"/>
       <File Name="../../scintilla/lexlib/DefaultLexer.cxx"/>
       <File Name="../../scintilla/lexlib/DefaultLexer.h"/>
@@ -90,6 +91,7 @@
       <File Name="../../scintilla/lexlib/PropSetSimple.h"/>
       <File Name="../../scintilla/lexlib/SparseState.h"/>
       <File Name="../../scintilla/lexlib/StringCopy.h"/>
+      <File Name="../../scintilla/lexlib/StringUtils.h"/>
       <File Name="../../scintilla/lexlib/StyleContext.cxx"/>
       <File Name="../../scintilla/lexlib/StyleContext.h"/>
       <File Name="../../scintilla/lexlib/SubStyles.h"/>
@@ -105,8 +107,6 @@
       <File Name="../../scintilla/src/CaseConvert.h"/>
       <File Name="../../scintilla/src/CaseFolder.cxx"/>
       <File Name="../../scintilla/src/CaseFolder.h"/>
-      <File Name="../../scintilla/src/Catalogue.cxx"/>
-      <File Name="../../scintilla/src/Catalogue.h"/>
       <File Name="../../scintilla/src/CellBuffer.cxx"/>
       <File Name="../../scintilla/src/CellBuffer.h"/>
       <File Name="../../scintilla/src/CharClassify.cxx"/>
@@ -171,7 +171,9 @@
   </VirtualDirectory>
   <VirtualDirectory Name="Source Files">
     <VirtualDirectory Name="EditLexers">
+      <File Name="../../src/EditLexers/stlABAQUS.c"/>
       <File Name="../../src/EditLexers/stlActionScript.c"/>
+      <File Name="../../src/EditLexers/stlAPDL.c"/>
       <File Name="../../src/EditLexers/stlAsm.c"/>
       <File Name="../../src/EditLexers/stlAsymptote.c"/>
       <File Name="../../src/EditLexers/stlAutoIt3.c"/>
@@ -194,7 +196,7 @@
       <File Name="../../src/EditLexers/stlGradle.c"/>
       <File Name="../../src/EditLexers/stlGraphViz.c"/>
       <File Name="../../src/EditLexers/stlGroovy.c"/>
-      <File Name="../../src/EditLexers/stlHaXe.c"/>
+      <File Name="../../src/EditLexers/stlHaxe.c"/>
       <File Name="../../src/EditLexers/stlHTML.c"/>
       <File Name="../../src/EditLexers/stlInno.c"/>
       <File Name="../../src/EditLexers/stlJamfile.c"/>
@@ -288,7 +290,6 @@
         <Preprocessor Value="NOMINMAX"/>
         <Preprocessor Value="UNICODE"/>
         <Preprocessor Value="_UNICODE"/>
-        <Preprocessor Value="SCI_LEXER"/>
         <Preprocessor Value="NO_CXX11_REGEX"/>
       </Compiler>
       <Linker Options="-mwindows;-municode">

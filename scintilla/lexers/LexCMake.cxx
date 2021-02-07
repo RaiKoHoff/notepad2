@@ -2,7 +2,6 @@
 // See License.txt for details about distribution and modification.
 //! Lexer for CMake.
 
-#include <cstdlib>
 #include <cassert>
 #include <cstring>
 
@@ -15,19 +14,20 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 
 using namespace Scintilla;
 
 namespace {
 
-constexpr bool IsCmakeOperator(int ch) noexcept {
-	return ch == '(' || ch == ')' || ch == '=' || ch == ':' || ch == ';'
-		|| ch == '$' || ch == '<' || ch == '>' || ch == ','; // Generator expressions
+constexpr bool IsCMakeOperator(int ch) noexcept {
+	return AnyOf(ch, '(', ')', '=', ':', ';',
+					 '$', '<', '>', ','); // Generator expressions
 }
 
-constexpr bool IsCmakeChar(int ch) noexcept {
-	return iswordchar(ch) || ch == '-' || ch == '+';
+constexpr bool IsCMakeChar(int ch) noexcept {
+	return IsIdentifierChar(ch) || ch == '.' || ch == '-' || ch == '+';
 }
 
 bool IsBracketArgument(Accessor &styler, Sci_PositionU pos, bool start, int &bracketNumber) noexcept {
@@ -52,7 +52,7 @@ bool IsBracketArgument(Accessor &styler, Sci_PositionU pos, bool start, int &bra
 	return false;
 }
 
-void ColouriseCmakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
+void ColouriseCMakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	int lineStateLineComment = 0;
 
 	int outerStyle = SCE_CMAKE_DEFAULT;
@@ -87,7 +87,7 @@ void ColouriseCmakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 
 		case SCE_CMAKE_NUMBER:
 			if (!IsNumberStart(sc.ch, sc.chNext)) {
-				if (IsCmakeChar(sc.ch) || IsCmakeChar(chBeforeNumber)) {
+				if (IsCMakeChar(sc.ch) || IsCMakeChar(chBeforeNumber)) {
 					sc.ChangeState(SCE_CMAKE_DEFAULT);
 				}
 				sc.SetState(SCE_CMAKE_DEFAULT);
@@ -105,9 +105,9 @@ void ColouriseCmakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 					userDefType = SCE_CMAKE_DEFAULT;
 					if (keywordLists[0]->InListPrefixed(s, '(')) {
 						sc.ChangeState(SCE_CMAKE_WORD);
-						if (strcmp(s, "function") == 0) {
+						if (StrEqual(s, "function")) {
 							userDefType = SCE_CMAKE_FUNCATION;
-						} else if (strcmp(s, "macro") == 0) {
+						} else if (StrEqual(s, "macro")) {
 							userDefType = SCE_CMAKE_MACRO;
 						}
 					} else if (keywordLists[1]->InListPrefixed(s, '(')) {
@@ -169,7 +169,7 @@ void ColouriseCmakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 				sc.SetState(SCE_CMAKE_OPERATOR);
 			} else if ((sc.ch == '$' || sc.ch == '@') && IsIdentifierStart(sc.chNext)) {
 				sc.SetState((sc.ch == '$') ? SCE_CMAKE_VARIABLE_DOLLAR : SCE_CMAKE_VARIABLE_AT);
-			} else if (generatorExpr && IsCmakeOperator(sc.ch)) {
+			} else if (generatorExpr && IsCMakeOperator(sc.ch)) {
 				if (sc.ch == '>') {
 					--generatorExpr;
 				}
@@ -228,7 +228,7 @@ void ColouriseCmakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 				if (sc.ch == '{') {
 					char s[8];
 					sc.GetCurrent(s, sizeof(s));
-					if (strcmp(s, "$ENV") == 0 || strcmp(s, "$CACHE") == 0) {
+					if (StrEqualsAny(s, "$ENV", "$CACHE")) {
 						sc.SetState(SCE_CMAKE_VARIABLE);
 						varNestedLevel = 1;
 						done = true;
@@ -297,7 +297,7 @@ void ColouriseCmakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 			} else if (IsADigit(sc.ch) || (sc.ch == '-' && IsADigit(sc.chNext))) {
 				sc.SetState(SCE_CMAKE_NUMBER);
 				chBeforeNumber = sc.chPrev;
-			} else if (IsCmakeOperator(sc.ch)) {
+			} else if (IsCMakeOperator(sc.ch)) {
 				sc.SetState(SCE_CMAKE_OPERATOR);
 				if (generatorExpr) {
 					if (sc.Match('$', '<')) {
@@ -329,7 +329,7 @@ constexpr int GetLineCommentState(int lineState) noexcept {
 	return lineState & SimpleLineStateMaskLineComment;
 }
 
-void FoldCmakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
+void FoldCMakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
 	const Sci_PositionU endPos = startPos + lengthDoc;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
@@ -347,8 +347,8 @@ void FoldCmakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 	int styleNext = styler.StyleAt(startPos);
 	int style = initStyle;
 
-	constexpr int MaxFoldWordLength = 8 + 1; // function
-	char buf[MaxFoldWordLength + 1];
+	char buf[16]; // function
+	constexpr int MaxFoldWordLength = sizeof(buf) - 1;
 	int wordLen = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
@@ -384,7 +384,7 @@ void FoldCmakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 				wordLen = 0;
 				if (StrStartsWith(buf, "end")) {
 					levelNext--;
-				} else if (EqualsAny(buf, "if",  "function", "macro", "foreach", "while")) {
+				} else if (StrEqualsAny(buf, "if", "function", "macro", "foreach", "while")) {
 					levelNext++;
 				}
 			}
@@ -418,4 +418,4 @@ void FoldCmakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 
 }
 
-LexerModule lmCmake(SCLEX_CMAKE, ColouriseCmakeDoc, "cmake", FoldCmakeDoc);
+LexerModule lmCMake(SCLEX_CMAKE, ColouriseCMakeDoc, "cmake", FoldCMakeDoc);

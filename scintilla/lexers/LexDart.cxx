@@ -16,6 +16,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 #include "LexerUtils.h"
 
@@ -53,6 +54,10 @@ constexpr bool IsDeclarableOperator(int ch) noexcept {
 	// https://github.com/dart-lang/sdk/blob/master/sdk/lib/core/symbol.dart
 	return AnyOf(ch, '+', '-', '*', '/', '%', '~', '&', '|',
 					 '^', '<', '>', '=', '[', ']');
+}
+
+constexpr bool IsSpaceEquiv(int state) noexcept {
+	return state <= SCE_DART_TASKMARKER;
 }
 
 void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
@@ -109,15 +114,15 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				sc.GetCurrent(s, sizeof(s));
 				if (keywordLists[0]->InList(s)) {
 					sc.ChangeState(SCE_DART_WORD);
-					if (EqualsAny(s, "import", "part")) {
+					if (StrEqualsAny(s, "import", "part")) {
 						if (visibleChars == sc.LengthCurrent()) {
 							lineStateLineType = DartLineStateMaskImport;
 						}
-					} else if (EqualsAny(s, "as", "class", "extends", "implements", "is", "new", "throw")) {
+					} else if (StrEqualsAny(s, "class", "extends", "implements", "new", "throw", "as", "is")) {
 						kwType = SCE_DART_CLASS;
-					} else if (strcmp(s, "enum") == 0) {
+					} else if (StrEqual(s, "enum")) {
 						kwType = SCE_DART_ENUM;
-					} else if (EqualsAny(s, "break", "continue")) {
+					} else if (StrEqualsAny(s, "break", "continue")) {
 						kwType = SCE_DART_LABEL;
 					}
 					if (kwType != SCE_DART_DEFAULT) {
@@ -132,6 +137,13 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					sc.ChangeState(SCE_DART_CLASS);
 				} else if (keywordLists[3]->InList(s)) {
 					sc.ChangeState(SCE_DART_ENUM);
+				} else if (sc.ch == ':') {
+					if (visibleChars == sc.LengthCurrent()) {
+						const int chNext = sc.GetLineNextChar(true);
+						if (IsJumpLabelNextChar(chNext)) {
+							sc.ChangeState(SCE_DART_LABEL);
+						}
+					}
 				} else if (sc.ch != '.') {
 					if (kwType != SCE_DART_DEFAULT) {
 						sc.ChangeState(kwType);
@@ -257,13 +269,8 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_DART_ESCAPECHAR:
 			if (escSeq.atEscapeEnd(sc.ch)) {
-				const int outerState = escSeq.outerState;
-				if (sc.ch == '\\' && escSeq.resetEscapeState(outerState, sc.chNext)) {
-					sc.Forward();
-				} else {
-					sc.SetState(outerState);
-					continue;
-				}
+				sc.SetState(escSeq.outerState);
+				continue;
 			}
 			break;
 
@@ -276,19 +283,22 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 		}
 
 		if (sc.state == SCE_DART_DEFAULT) {
-			if (sc.Match('/', '/')) {
-				const int chNext = sc.GetRelative(2);
-				sc.SetState((chNext == '/') ? SCE_DART_COMMENTLINEDOC : SCE_DART_COMMENTLINE);
-				if (visibleChars == 0) {
-					lineStateLineType = DartLineStateMaskLineComment;
+			if (sc.ch == '/' && (sc.chNext == '/' || sc.chNext == '*')) {
+				visibleCharsBefore = visibleChars;
+				const int chNext = sc.chNext;
+				sc.SetState((chNext == '/') ? SCE_DART_COMMENTLINE : SCE_DART_COMMENTBLOCK);
+				sc.Forward(2);
+				if (sc.ch == chNext && sc.chNext != chNext) {
+					sc.ChangeState((chNext == '/') ? SCE_DART_COMMENTLINEDOC : SCE_DART_COMMENTBLOCKDOC);
 				}
-				visibleCharsBefore = visibleChars;
-			} else if (sc.Match('/', '*')) {
-				const int chNext = sc.GetRelative(2);
-				sc.SetState((chNext == '*') ? SCE_DART_COMMENTBLOCKDOC : SCE_DART_COMMENTBLOCK);
-				sc.Forward();
-				commentLevel = 1;
-				visibleCharsBefore = visibleChars;
+				if (chNext == '/') {
+					if (visibleChars == 0) {
+						lineStateLineType = DartLineStateMaskLineComment;
+					}
+				 } else {
+					commentLevel = 1;
+				 }
+				 continue;
 			} else if (sc.ch == 'r' && (sc.chNext == '\'' || sc.chNext == '"')) {
 				sc.SetState((sc.chNext == '\'') ? SCE_DART_RAWSTRING_SQ : SCE_DART_RAWSTRING_DQ);
 				sc.Forward(2);
@@ -382,6 +392,10 @@ void FoldDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 	if (lineCurrent > 0) {
 		levelCurrent = styler.LevelAt(lineCurrent - 1) >> 16;
 		foldPrev = FoldLineState(styler.GetLineState(lineCurrent - 1));
+		const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent - 1, SCE_DART_OPERATOR, SCE_DART_TASKMARKER);
+		if (bracePos) {
+			startPos = bracePos + 1; // skip the brace
+		}
 	}
 
 	int levelNext = levelCurrent;
@@ -392,6 +406,7 @@ void FoldDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
 	int style = initStyle;
+	int visibleChars = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
 		const char ch = chNext;
@@ -444,12 +459,22 @@ void FoldDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 			break;
 		}
 
+		if (visibleChars == 0 && !IsSpaceEquiv(style)) {
+			++visibleChars;
+		}
 		if (i == lineEndPos) {
 			const FoldLineState foldNext(styler.GetLineState(lineCurrent + 1));
 			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
 			} else if (foldCurrent.packageImport) {
 				levelNext += foldNext.packageImport - foldPrev.packageImport;
+			} else if (visibleChars) {
+				const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent, SCE_DART_OPERATOR, SCE_DART_TASKMARKER);
+				if (bracePos) {
+					levelNext++;
+					i = bracePos; // skip the brace
+					chNext = '\0';
+				}
 			}
 
 			const int levelUse = levelCurrent;
@@ -467,6 +492,7 @@ void FoldDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 			levelCurrent = levelNext;
 			foldPrev = foldCurrent;
 			foldCurrent = foldNext;
+			visibleChars = 0;
 		}
 	}
 }

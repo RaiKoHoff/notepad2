@@ -2,7 +2,6 @@
 // See License.txt for details about distribution and modification.
 //! Lexer for LLVM.
 
-#include <cstdlib>
 #include <cassert>
 #include <cstring>
 
@@ -15,6 +14,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 
 using namespace Scintilla;
@@ -120,7 +120,7 @@ void ColouriseLLVMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 						state = SCE_LLVM_WORD;
 					} else if (keywordLists[1]->InList(s)) {
 						state = SCE_LLVM_WORD2;
-						if (strcmp(s, "label") == 0) {
+						if (StrEqual(s, "label")) {
 							kwType = SCE_LLVM_LABEL;
 						}
 					} else if (keywordLists[2]->InListPrefixed(s, '(')) {
@@ -178,15 +178,8 @@ void ColouriseLLVMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_LLVM_ESCAPECHAR:
 			if (escSeq.atEscapeEnd(sc.ch)) {
-				const int outerState = escSeq.outerState;
-				if (sc.ch == '\\' && escSeq.resetEscapeState(outerState, sc.chNext)) {
-					sc.Forward();
-				} else {
-					sc.SetState(outerState);
-					if (sc.ch == '\"') {
-						sc.ForwardSetState(SCE_LLVM_DEFAULT);
-					}
-				}
+				sc.SetState(escSeq.outerState);
+				continue;
 			}
 			break;
 

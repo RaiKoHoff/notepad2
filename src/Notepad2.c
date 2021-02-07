@@ -1033,7 +1033,7 @@ static inline BOOL IsFileStartsWithDotLog(void) {
 	char tch[5] = "";
 	const Sci_Position len = SciCall_GetText(COUNTOF(tch), tch);
 	// upper case
-	return len >= 4 && strcmp(tch, ".LOG") == 0;
+	return len >= 4 && StrEqualA(tch, ".LOG");
 }
 #endif
 
@@ -2701,13 +2701,8 @@ static inline BOOL IsBraceMatchChar(int ch) {
 		|| ch == '<' || ch == '>';
 #else
 	// tools/GenerateTable.py
-#if defined(_WIN64)
-	static const uint64_t table[4] = { UINT64_C(0x5000030000000000), UINT64_C(0x2800000028000000) };
-	return (table[ch >> 6] >> (ch & 63)) & 1;
-#else
 	static const uint32_t table[8] = { 0, 0x50000300, 0x28000000, 0x28000000 };
 	return (table[ch >> 5] >> (ch & 31)) & 1;
-#endif
 #endif
 }
 

@@ -14,6 +14,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 
 using namespace Scintilla;
@@ -61,6 +62,10 @@ enum {
 	MaxRustCharLiteralLength = 2 + 2 + 2 + 6,	// '\u{10FFFF}'
 };
 
+constexpr bool IsSpaceEquiv(int state) noexcept {
+	return state <= SCE_RUST_TASKMARKER;
+}
+
 void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	int lineStateAttribute = 0;
 	int lineStateLineType = 0;
@@ -70,6 +75,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 	int hashCount = 0;		// count of '#' for raw (byte) string
 	int kwType = SCE_RUST_DEFAULT;
 
+	int chBeforeIdentifier = 0;
 	int visibleChars = 0;
 	int visibleCharsBefore = 0;
 	Sci_PositionU charStartPos = 0;
@@ -111,7 +117,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			break;
 
 		case SCE_RUST_IDENTIFIER:
-			if (!IsIdentifierChar(sc.ch)) {
+			if (!IsIdentifierCharEx(sc.ch)) {
 				if (lineStateAttribute) {
 					sc.ChangeState(SCE_RUST_ATTRIBUTE);
 				} else if (sc.ch == '!') {
@@ -122,28 +128,28 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					sc.GetCurrent(s, sizeof(s));
 					if (keywordLists[0]->InList(s)) {
 						sc.ChangeState(SCE_RUST_WORD);
-						if (strcmp(s, "struct") == 0) {
+						if (StrEqual(s, "struct")) {
 							kwType = SCE_RUST_STRUCT;
-						} else if (strcmp(s, "fn") == 0) {
+						} else if (StrEqual(s, "fn")) {
 							kwType = SCE_RUST_FUNCTION_DEFINE;
-						} else if (strcmp(s, "trait") == 0) {
+						} else if (StrEqual(s, "trait")) {
 							kwType = SCE_RUST_TRAIT;
-						} else if (strcmp(s, "enum") == 0) {
+						} else if (StrEqual(s, "enum")) {
 							kwType = SCE_RUST_ENUMERATION;
-						} else if (strcmp(s, "type") == 0) {
+						} else if (StrEqual(s, "type")) {
 							kwType = SCE_RUST_TYPE; // type alias
-						} else if (strcmp(s, "const") == 0) {
+						} else if (StrEqual(s, "const")) {
 							kwType = SCE_RUST_CONSTANT;
-						} else if (strcmp(s, "union") == 0) {
+						} else if (StrEqual(s, "union")) {
 							kwType = SCE_RUST_UNION;
 						}
 						if (kwType != SCE_RUST_DEFAULT) {
 							const int chNext = sc.GetDocNextChar();
-							if (!IsIdentifierStart(chNext)) {
+							if (!IsIdentifierStartEx(chNext)) {
 								kwType = SCE_RUST_DEFAULT;
 							}
 						}
-						if ((visibleChars == 3 || visibleChars == 6) && strcmp(s, "use") == 0) {
+						if ((visibleChars == 3 || visibleChars == 6) && StrEqual(s, "use")) {
 							lineStateLineType = RustLineStateMaskPubUse;
 						}
 					} else if (keywordLists[1]->InList(s)) {
@@ -160,7 +166,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 						sc.ChangeState(SCE_RUST_UNION);
 					} else if (keywordLists[7]->InList(s)) {
 						sc.ChangeState(SCE_RUST_CONSTANT);
-					} else {
+					} else if (sc.ch != '.') {
 						const int chNext = sc.GetDocNextChar();
 						if (chNext == '(') {
 							sc.ChangeState((kwType == SCE_RUST_FUNCTION_DEFINE)? kwType : SCE_RUST_FUNCTION);
@@ -169,11 +175,14 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 						} else if (kwType != SCE_RUST_DEFAULT) {
 							if (kwType != SCE_RUST_CONSTANT || chNext == ':') {
 								sc.ChangeState(kwType);
+							} else if (chBeforeIdentifier == '[' && sc.ch == ';') {
+								// array: [T; N]
+								sc.ChangeState(SCE_RUST_TYPE);
 							}
 						}
 					}
 				}
-				if (sc.state != SCE_RUST_WORD) {
+				if (sc.state != SCE_RUST_WORD && sc.ch != '.') {
 					kwType = SCE_RUST_DEFAULT;
 				}
 				sc.SetState(SCE_RUST_DEFAULT);
@@ -182,7 +191,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_RUST_VARIABLE:
 		case SCE_RUST_LIFETIME:
-			if (!IsIdentifierChar(sc.ch)) {
+			if (!IsIdentifierCharEx(sc.ch)) {
 				sc.SetState(SCE_RUST_DEFAULT);
 			}
 			break;
@@ -224,7 +233,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			if (sc.ch == '\\') {
 				const int state = sc.state;
 				if (IsEOLChar(sc.chNext)) {
-					sc.SetState(SCE_RUST_LINE_CONTINUE);
+					sc.SetState(SCE_RUST_LINE_CONTINUATION);
 					sc.ForwardSetState(state);
 				} else {
 					escSeq.resetEscapeState(state, sc.chNext);
@@ -239,9 +248,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 		case SCE_RUST_CHARACTER:
 		case SCE_RUST_BYTE_CHARACTER:
 			if (sc.ch == '\\') {
-				if (IsEOLChar(sc.chNext)) {
-					sc.ForwardSetState(SCE_RUST_DEFAULT);
-				} else {
+				if (!IsEOLChar(sc.chNext)) {
 					escSeq.resetEscapeState(sc.state, sc.chNext);
 					sc.SetState(SCE_RUST_ESCAPECHAR);
 					sc.Forward();
@@ -256,29 +263,8 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_RUST_ESCAPECHAR:
 			if (escSeq.atEscapeEnd(sc.ch)) {
-				const int outerState = escSeq.outerState;
-				if (outerState == SCE_RUST_STRING || outerState == SCE_RUST_BYTESTRING) {
-					if (sc.ch == '\\') {
-						if (IsEOLChar(sc.chNext)) {
-							sc.SetState(SCE_RUST_LINE_CONTINUE);
-							sc.ForwardSetState(outerState);
-						} else {
-							escSeq.resetEscapeState(outerState, sc.chNext);
-							sc.Forward();
-						}
-					} else {
-						sc.SetState(outerState);
-						if (sc.ch == '\"') {
-							sc.ForwardSetState(SCE_RUST_DEFAULT);
-						}
-					}
-				} else {
-					sc.SetState(outerState);
-					if (sc.ch == '\'') {
-						sc.ForwardSetState(SCE_RUST_DEFAULT);
-					}
-					continue;
-				}
+				sc.SetState(escSeq.outerState);
+				continue;
 			}
 			break;
 
@@ -304,31 +290,26 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					}
 					lineStateAttribute = RustLineStateMaskAttribute;
 				}
-			} else if (sc.Match('/', '/')) {
-				const int chNext = sc.GetRelative(2);
-				if (chNext == '!' || (chNext == '/' && sc.GetRelative(3) != '/')) {
-					sc.SetState(SCE_RUST_COMMENTLINEDOC);
-				} else {
-					sc.SetState(SCE_RUST_COMMENTLINE);
-				}
-				if (visibleChars == 0) {
-					lineStateLineType = RustLineStateMaskLineComment;
-				}
+			} else if (sc.ch == '/' && (sc.chNext == '/' || sc.chNext == '*')) {
 				visibleCharsBefore = visibleChars;
-			} else if (sc.Match('/', '*')) {
-				const int chNext = sc.GetRelative(2);
-				if (chNext == '!' || (chNext == '*' && sc.GetRelative(3) != '*')) {
-					sc.SetState(SCE_RUST_COMMENTBLOCKDOC);
-				} else {
-					sc.SetState(SCE_RUST_COMMENTBLOCK);
+				const int chNext = sc.chNext;
+				sc.SetState((chNext == '/') ? SCE_RUST_COMMENTLINE : SCE_RUST_COMMENTBLOCK);
+				sc.Forward(2);
+				if (sc.ch == '!' || (sc.ch == chNext && sc.chNext != chNext)) {
+					sc.ChangeState((chNext == '/') ? SCE_RUST_COMMENTLINEDOC : SCE_RUST_COMMENTBLOCKDOC);
 				}
-				sc.Forward();
-				commentLevel = 1;
-				visibleCharsBefore = visibleChars;
+				if (chNext == '/') {
+					if (visibleChars == 0) {
+						lineStateLineType = RustLineStateMaskLineComment;
+					}
+				} else {
+					commentLevel = 1;
+				}
+				continue;
 			} else if (sc.ch == '\"') {
 				sc.SetState(SCE_RUST_STRING);
 			} else if (sc.ch == '\'') {
-				if (IsIdentifierStart(sc.chNext) && sc.GetRelative(2) != '\'') {
+				if (IsIdentifierStartEx(sc.chNext) && sc.GetRelative(2) != '\'') {
 					sc.SetState(SCE_RUST_LIFETIME);
 				} else {
 					charStartPos = sc.currentPos;
@@ -340,6 +321,9 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					sc.SetState(SCE_RUST_RAW_STRING);
 					sc.Forward(hashCount + 1);
 				} else {
+					if (sc.chPrev != '.') {
+						chBeforeIdentifier = sc.chPrev;
+					}
 					sc.SetState(SCE_RUST_IDENTIFIER);
 					const int chNext = sc.GetRelative(2);
 					if (IsIdentifierStart(chNext)) {
@@ -363,13 +347,19 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					sc.SetState(SCE_RUST_RAW_BYTESTRING);
 					sc.Forward(hashCount + 2);
 				} else {
+					if (sc.chPrev != '.') {
+						chBeforeIdentifier = sc.chPrev;
+					}
 					sc.SetState(SCE_RUST_IDENTIFIER);
 				}
-			} else if (sc.ch == '$' && IsIdentifierStart(sc.chNext)) {
+			} else if (sc.ch == '$' && IsIdentifierStartEx(sc.chNext)) {
 				sc.SetState(SCE_RUST_VARIABLE);
 			} else if (IsADigit(sc.ch)) {
 				sc.SetState(SCE_RUST_NUMBER);
-			} else if (IsIdentifierStart(sc.ch)) {
+			} else if (IsIdentifierStartEx(sc.ch)) {
+				if (sc.chPrev != '.') {
+					chBeforeIdentifier = sc.chPrev;
+				}
 				sc.SetState(SCE_RUST_IDENTIFIER);
 			} else if (isoperator(sc.ch) || sc.ch == '$' || sc.ch == '@') {
 				sc.SetState(SCE_RUST_OPERATOR);
@@ -404,7 +394,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 }
 
 constexpr bool IsStringInnerStyle(int style) noexcept {
-	return style == SCE_RUST_ESCAPECHAR || style == SCE_RUST_LINE_CONTINUE;
+	return style == SCE_RUST_ESCAPECHAR || style == SCE_RUST_LINE_CONTINUATION;
 }
 
 struct FoldLineState {
@@ -424,6 +414,10 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 	if (lineCurrent > 0) {
 		levelCurrent = styler.LevelAt(lineCurrent - 1) >> 16;
 		foldPrev = FoldLineState(styler.GetLineState(lineCurrent - 1));
+		const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent - 1, SCE_RUST_OPERATOR, SCE_RUST_TASKMARKER);
+		if (bracePos) {
+			startPos = bracePos + 1; // skip the brace
+		}
 	}
 
 	int levelNext = levelCurrent;
@@ -434,6 +428,7 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
 	int style = initStyle;
+	int visibleChars = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
 		const char ch = chNext;
@@ -475,12 +470,22 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 			break;
 		}
 
+		if (visibleChars == 0 && !IsSpaceEquiv(style)) {
+			++visibleChars;
+		}
 		if (i == lineEndPos) {
 			const FoldLineState foldNext(styler.GetLineState(lineCurrent + 1));
 			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
 			} else if (foldCurrent.pubUse) {
 				levelNext += foldNext.pubUse - foldPrev.pubUse;
+			} else if (visibleChars) {
+				const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent, SCE_RUST_OPERATOR, SCE_RUST_TASKMARKER);
+				if (bracePos) {
+					levelNext++;
+					i = bracePos; // skip the brace
+					chNext = '\0';
+				}
 			}
 
 			const int levelUse = levelCurrent;
@@ -498,6 +503,7 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 			levelCurrent = levelNext;
 			foldPrev = foldCurrent;
 			foldCurrent = foldNext;
+			visibleChars = 0;
 		}
 	}
 }

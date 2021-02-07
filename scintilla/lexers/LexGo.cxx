@@ -14,6 +14,7 @@
 #include "Accessor.h"
 #include "StyleContext.h"
 #include "CharacterSet.h"
+#include "StringUtils.h"
 #include "LexerModule.h"
 
 using namespace Scintilla;
@@ -23,7 +24,7 @@ namespace {
 struct EscapeSequence {
 	int outerState = SCE_GO_DEFAULT;
 	int digitsLeft = 0;
-	int numBase = 16;
+	int numBase = 0;
 
 	// highlight any character as escape sequence.
 	void resetEscapeState(int state, int chNext) noexcept {
@@ -55,6 +56,10 @@ enum {
 	GoFunction_Param,
 	GoFunction_Return,
 };
+
+constexpr bool IsSpaceEquiv(int state) noexcept {
+	return state <= SCE_GO_TASKMARKER;
+}
 
 constexpr bool IsFormatSpecifier(uint8_t ch) noexcept {
 	return ch == 'v'
@@ -181,7 +186,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 
 	StyleContext sc(startPos, lengthDoc, initStyle, styler);
 
-	Sci_Position identifierStart = 0;
+	Sci_Position identifierStartPos = 0;
 	Sci_Position lineStartCurrent = styler.LineStart(sc.currentLine);
 
 	while (sc.More()) {
@@ -203,20 +208,28 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 				const int kwPrev = kwType;
 				if (keywordLists[0]->InList(s)) {
 					sc.ChangeState(SCE_GO_WORD);
-					if (strcmp(s, "func") == 0) {
+					if (StrEqual(s, "func")) {
 						funcState = (visibleChars == 4)? GoFunction_Define : GoFunction_Param;
-					} else if (strcmp(s, "type") == 0) {
+					} else if (StrEqual(s, "type")) {
 						kwType = SCE_GO_TYPE;
-					} else if (strcmp(s, "const") == 0) {
+					} else if (StrEqual(s, "const")) {
 						kwType = SCE_GO_CONSTANT;
-					} else if (strcmp(s, "map") == 0 || strcmp(s, "chan") == 0) {
+					} else if (StrEqualsAny(s, "map", "chan")) {
 						kwType = SCE_GO_IDENTIFIER;
+					} else if (StrEqualsAny(s, "goto", "break", "continue")) {
+						kwType = SCE_GO_LABEL;
+					}
+					if (kwType == SCE_GO_TYPE || kwType == SCE_GO_LABEL) {
+						const int chNext = sc.GetLineNextChar();
+						if (!IsIdentifierStartEx(chNext)) {
+							kwType = SCE_GO_DEFAULT;
+						}
 					}
 				} else if (keywordLists[1]->InList(s)) {
 					sc.ChangeState(SCE_GO_WORD2);
 				} else if (keywordLists[2]->InListPrefixed(s, '(')) {
 					sc.ChangeState(SCE_GO_BUILTIN_FUNC);
-					if (sc.ch == '(' && strcmp(s, "new") == 0) {
+					if (sc.ch == '(' && StrEqual(s, "new")) {
 						kwType = SCE_GO_IDENTIFIER;
 					}
 				} else if (keywordLists[3]->InList(s)) {
@@ -228,8 +241,13 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 				} else if (keywordLists[6]->InList(s)) {
 					sc.ChangeState(SCE_GO_CONSTANT);
 				} else {
-					const int chNext = sc.GetLineNextChar();
-					if (chNext == '(') {
+					const bool ignoreCurrent = sc.ch == ':' && visibleChars == sc.LengthCurrent();
+					const int chNext = sc.GetLineNextChar(ignoreCurrent);
+					if (ignoreCurrent) {
+						if (IsJumpLabelNextChar(chNext)) {
+							sc.ChangeState(SCE_GO_LABEL);
+						}
+					} else if (chNext == '(') {
 						if (funcState != GoFunction_None) {
 							funcState = GoFunction_Name;
 							sc.ChangeState(SCE_GO_FUNCTION_DEFINE);
@@ -258,7 +276,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 							kwType = SCE_GO_DEFAULT;
 						}
 					} else if (!(chNext == '.' || chNext == '*')) {
-						const int state = DetectIdentifierType(styler, funcState, chNext, identifierStart, lineStartCurrent);
+						const int state = DetectIdentifierType(styler, funcState, chNext, identifierStartPos, lineStartCurrent);
 						if (state != SCE_GO_DEFAULT) {
 							sc.ChangeState(state);
 						}
@@ -266,7 +284,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 				}
 
 				if (sc.state == SCE_GO_WORD || sc.state == SCE_GO_WORD2) {
-					identifierStart = lineStartCurrent = sc.currentPos;
+					identifierStartPos = lineStartCurrent = sc.currentPos;
 				}
 				if (kwType != SCE_GO_DEFAULT && kwPrev == kwType && sc.ch != '.') {
 					kwType = SCE_GO_DEFAULT;
@@ -349,11 +367,11 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 
 		if (sc.state == SCE_GO_DEFAULT) {
 			if (sc.Match('/', '/')) {
+				visibleCharsBefore = visibleChars;
 				sc.SetState(SCE_GO_COMMENTLINE);
 				if (visibleChars == 0) {
 					lineStateLineComment = SimpleLineStateMaskLineComment;
 				}
-				visibleCharsBefore = visibleChars;
 			} else if (sc.Match('/', '*')) {
 				visibleCharsBefore = visibleChars;
 				sc.SetState(SCE_GO_COMMENTBLOCK);
@@ -370,7 +388,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 				sc.SetState(SCE_GO_NUMBER);
 			} else if (IsIdentifierStartEx(sc.ch)) {
 				if (sc.chPrev != '.') {
-					identifierStart = sc.currentPos;
+					identifierStartPos = sc.currentPos;
 				}
 				sc.SetState(SCE_GO_IDENTIFIER);
 			} else if (isoperator(sc.ch)) {
@@ -419,7 +437,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 			visibleCharsBefore = 0;
 			funcState = GoFunction_None;
 			lineStartCurrent = sc.lineStartNext;
-			identifierStart = 0;
+			identifierStartPos = 0;
 		}
 		sc.Forward();
 	}
@@ -428,7 +446,8 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 }
 
 constexpr bool IsInnerStyle(int style) noexcept {
-	return style == SCE_GO_TASKMARKER || style == SCE_GO_FORMAT_SPECIFIER;
+	return style == SCE_GO_ESCAPECHAR || style == SCE_GO_FORMAT_SPECIFIER
+		|| style == SCE_GO_TASKMARKER;
 }
 
 constexpr int GetLineCommentState(int lineState) noexcept {
@@ -443,6 +462,10 @@ void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 	if (lineCurrent > 0) {
 		levelCurrent = styler.LevelAt(lineCurrent - 1) >> 16;
 		lineCommentPrev = GetLineCommentState(styler.GetLineState(lineCurrent - 1));
+		const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent - 1, SCE_GO_OPERATOR, SCE_GO_TASKMARKER);
+		if (bracePos) {
+			startPos = bracePos + 1; // skip the brace
+		}
 	}
 
 	int levelNext = levelCurrent;
@@ -452,6 +475,7 @@ void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 
 	int styleNext = styler.StyleAt(startPos);
 	int style = initStyle;
+	int visibleChars = 0;
 
 	for (Sci_PositionU i = startPos; i < endPos; i++) {
 		const int stylePrev = style;
@@ -478,10 +502,19 @@ void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 		} break;
 		}
 
+		if (visibleChars == 0 && !IsSpaceEquiv(style)) {
+			++visibleChars;
+		}
 		if (i == lineEndPos) {
 			const int lineCommentNext = GetLineCommentState(styler.GetLineState(lineCurrent + 1));
 			if (lineCommentCurrent) {
 				levelNext += lineCommentNext - lineCommentPrev;
+			} else if (visibleChars) {
+				const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent, SCE_GO_OPERATOR, SCE_GO_TASKMARKER);
+				if (bracePos) {
+					levelNext++;
+					i = bracePos; // skip the brace
+				}
 			}
 
 			const int levelUse = levelCurrent;
@@ -499,6 +532,7 @@ void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 			levelCurrent = levelNext;
 			lineCommentPrev = lineCommentCurrent;
 			lineCommentCurrent = lineCommentNext;
+			visibleChars = 0;
 		}
 	}
 }
