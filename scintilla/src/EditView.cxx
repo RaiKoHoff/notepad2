@@ -90,7 +90,7 @@ int WidthStyledText(Surface *surface, const ViewStyle &vs, int styleOffset,
 		while ((endSegment + 1 < len) && (styles[endSegment + 1] == style)) {
 			endSegment++;
 		}
-		FontAlias fontText = vs.styles[style + styleOffset].font;
+		const FontAlias fontText = vs.styles[style + styleOffset].font;
 		const std::string_view sv(text + start, endSegment - start + 1);
 		width += surface->WidthText(fontText, sv);
 		start = endSegment + 1;
@@ -107,7 +107,7 @@ int WidestLineWidth(Surface *surface, const ViewStyle &vs, int styleOffset, cons
 		if (st.multipleStyles) {
 			widthSubLine = WidthStyledText(surface, vs, styleOffset, st.text + start, st.styles + start, lenLine);
 		} else {
-			FontAlias fontText = vs.styles[styleOffset + st.style].font;
+			const FontAlias fontText = vs.styles[styleOffset + st.style].font;
 			const std::string_view text(st.text + start, lenLine);
 			widthSubLine = static_cast<int>(std::lround(surface->WidthText(fontText, text)));
 		}
@@ -119,7 +119,7 @@ int WidestLineWidth(Surface *surface, const ViewStyle &vs, int styleOffset, cons
 
 void DrawTextNoClipPhase(Surface *surface, PRectangle rc, const Style &style, XYPOSITION ybase,
 	std::string_view text, DrawPhase phase) {
-	FontAlias fontText = style.font;
+	const FontAlias fontText = style.font;
 	if (phase & drawBack) {
 		if (phase & drawText) {
 			// Drawing both
@@ -146,7 +146,7 @@ void DrawStyledText(Surface *surface, const ViewStyle &vs, int styleOffset, PRec
 				end++;
 			}
 			style += styleOffset;
-			FontAlias fontText = vs.styles[style].font;
+			const FontAlias fontText = vs.styles[style].font;
 			const std::string_view text(st.text + start + i, end - i + 1);
 			const XYPOSITION width = surface->WidthText(fontText, text);
 			PRectangle rcSegment = rcText;
@@ -1008,7 +1008,7 @@ static void DrawTextBlob(Surface *surface, const ViewStyle &vsDraw, PRectangle r
 	if (fillBackground) {
 		surface->FillRectangle(rcSegment, textBack);
 	}
-	FontAlias ctrlCharsFont = vsDraw.styles[STYLE_CONTROLCHAR].font;
+	const FontAlias ctrlCharsFont = vsDraw.styles[STYLE_CONTROLCHAR].font;
 	const XYPOSITION normalCharHeight = std::ceil(vsDraw.styles[STYLE_CONTROLCHAR].capitalHeight);
 	PRectangle rcCChar = rcSegment;
 	rcCChar.left = rcCChar.left + 1;
@@ -2013,7 +2013,7 @@ void EditView::DrawForeground(Surface *surface, const EditModel &model, const Vi
 		if (rcSegment.Intersects(rcLine)) {
 			const int styleMain = ll->styles[i];
 			ColourDesired textFore = vsDraw.styles[styleMain].fore;
-			FontAlias textFont = vsDraw.styles[styleMain].font;
+			const FontAlias textFont = vsDraw.styles[styleMain].font;
 			//hotspot foreground
 			const bool inHotspot = (ll->hotspot.Valid()) && ll->hotspot.ContainsCharacter(iDoc);
 			if (inHotspot) {
@@ -2091,7 +2091,7 @@ void EditView::DrawForeground(Surface *surface, const EditModel &model, const Vi
 						// Using one font for all control characters so it can be controlled independently to ensure
 						// the box goes around the characters tightly. Seems to be no way to work out what height
 						// is taken by an individual character - internal leading gives varying results.
-						FontAlias ctrlCharsFont = vsDraw.styles[STYLE_CONTROLCHAR].font;
+						const FontAlias ctrlCharsFont = vsDraw.styles[STYLE_CONTROLCHAR].font;
 						const char cc[2] = { static_cast<char>(vsDraw.controlCharSymbol), '\0' };
 						surface->DrawTextNoClip(rcSegment, ctrlCharsFont,
 							rcSegment.top + vsDraw.maxAscent,

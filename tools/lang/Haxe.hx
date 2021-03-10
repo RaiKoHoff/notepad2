@@ -25,7 +25,7 @@ while
 from to
 
 // http://old.haxe.org/ref/keywords
-callback never trace
+callback here never super trace
 
 //! preprocessor
 // Conditional Compilation
@@ -69,11 +69,11 @@ package std {
 	class StringBuf
 	extern class Sys
 	extern class Type
-	enum abstract ValueType
+	enum ValueType
 	abstract UInt to Int from Int
 	abstract UnicodeString(String) from String to String
 	class Xml
-	enum XmlType
+	enum abstract XmlType(Int)
 }
 
 package std.haxe {

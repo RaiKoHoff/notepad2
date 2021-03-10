@@ -89,10 +89,10 @@ typedef const EDITLEXER *LPCEDITLEXER;
 //#define NP2LEX_OBJC		63010	// SCLEX_CPP		Objective C/C++
 #define NP2LEX_ACTIONSCRIPT	63011	// SCLEX_JAVASCRIPT	ActionScript
 #define NP2LEX_HAXE			63012	// SCLEX_HAXE		Haxe Script
-#define NP2LEX_GROOVY		63013	// SCLEX_CPP		Groovy Script
+#define NP2LEX_GROOVY		63013	// SCLEX_GROOVY		Groovy Script
 #define NP2LEX_SCALA		63014	// SCLEX_CPP		Scala Script
 #define NP2LEX_GO			63015	// SCLEX_GO			Go Source
-#define NP2LEX_GRADLE		63016	// SCLEX_CPP		Gradle Build Script
+#define NP2LEX_GRADLE		63016	// SCLEX_GROOVY		Gradle Build Script
 
 #define NP2LEX_VB			63021	// SCLEX_VB			Visual Basic
 #define NP2LEX_FSHARP		63022	// SCLEX_FSHARP		F# Source
@@ -124,8 +124,8 @@ typedef const EDITLEXER *LPCEDITLEXER;
 #define NP2LEX_INI			63048	// SCLEX_PROPERTIES	Ini Config File
 #define NP2LEX_CONF			63049	// SCLEX_CONF		Config File
 #define NP2LEX_DIFF			63050	// SCLEX_DIFF		Diff/Patch
-#define NP2LEX_AWK			63051	// SCLEX_CPP		Awk Script
-#define NP2LEX_JAM			63052	// SCLEX_CPP		Jamfile
+#define NP2LEX_AWK			63051	// SCLEX_AWK		Awk Script
+#define NP2LEX_JAM			63052	// SCLEX_JAM		Jamfile
 #define NP2LEX_DOT			63053	// SCLEX_GRAPHVIZ	GraphViz Dot
 #define NP2LEX_JSON			63054	// SCLEX_JSON		JSON Document
 #define NP2LEX_SMALI		63055	// SCLEX_SMALI		Android Smali

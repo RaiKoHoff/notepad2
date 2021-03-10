@@ -10,9 +10,9 @@ namespace Scintilla {
 
 //[[deprecated]]
 class CharacterSet final {
-	const bool valueAfter;
 	// ASCII character only, not useful for UTF-8 or DBCS multi byte character
 	bool bset[128]{};
+	const bool valueAfter;
 public:
 	enum setBase {
 		setNone = 0,
@@ -69,10 +69,10 @@ public:
 	CharacterSet &operator=(const CharacterSet &other) = delete;
 #else
 	CharacterSet &operator=(const CharacterSet &other) noexcept {
-		valueAfter = other.other;
 		for (size_t i = 0; i < sizeof(bset); i++) {
 			bset[i] = other.bset[i];
 		}
+		valueAfter = other.valueAfter;
 	}
 #endif
 	CharacterSet &operator=(CharacterSet &&other) = delete;
@@ -106,6 +106,8 @@ constexpr bool AnyOf(T t, Args... args) noexcept {
 }
 
 // prevent pointer without <type_traits>
+template <typename T, typename... Args>
+constexpr void AnyOf([[maybe_unused]] T *t, [[maybe_unused]] Args... args) noexcept {}
 template <typename T, typename... Args>
 constexpr void AnyOf([[maybe_unused]] const T *t, [[maybe_unused]] Args... args) noexcept {}
 
@@ -178,9 +180,10 @@ constexpr bool IsFloatExponent(int base, int ch, int chNext) noexcept {
 		&& (chNext == '+' || chNext == '-' || IsADigit(chNext));
 }
 
-constexpr bool IsASCII(int ch) noexcept {
-	return ch >= 0 && ch < 0x80;
-}
+//[[deprecated]]
+//constexpr bool IsASCII(int ch) noexcept {
+//	return ch >= 0 && ch < 0x80;
+//}
 
 constexpr bool IsLowerCase(int ch) noexcept {
 	return ch >= 'a' && ch <= 'z';

@@ -522,12 +522,9 @@ static unsigned int KeyFromString(const char *charBytes, size_t len) noexcept {
 	return k;
 }
 
-SpecialRepresentations::SpecialRepresentations() noexcept : startByteHasReprs{} {
-}
-
 void SpecialRepresentations::SetRepresentation(const char *charBytes, const char *value) {
 	const unsigned int key = KeyFromString(charBytes, UTF8MaxBytes);
-	auto it = mapReprs.find(key);
+	const auto it = mapReprs.find(key);
 	if (it == mapReprs.end()) {
 		// New entry so increment for first byte
 		const unsigned char ucStart = charBytes[0];
@@ -568,7 +565,7 @@ bool SpecialRepresentations::Contains(const char *charBytes, size_t len) const {
 	return it != mapReprs.end();
 }
 
-void SpecialRepresentations::Clear() {
+void SpecialRepresentations::Clear() noexcept {
 	mapReprs.clear();
 	constexpr unsigned char none = 0;
 	std::fill(startByteHasReprs, std::end(startByteHasReprs), none);

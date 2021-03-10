@@ -65,8 +65,98 @@ constexpr bool IsSpaceEquiv(int state) noexcept {
 	return state <= SCE_JAVA_TASKMARKER;
 }
 
+// for java.util.Formatter
+// https://docs.oracle.com/en/java/javase/15/docs/api/java.base/java/util/Formatter.html
+
+constexpr bool IsFormatFlag(int ch) noexcept {
+	return AnyOf(ch, ' ', '+', '-', '#', '.', '0', '<', '(', ',');
+}
+
+constexpr bool IsFormatSpecifier(int ch) noexcept {
+	return AnyOf(ch, 'a', 'A',
+					'b', 'B',
+					'c', 'C',
+					'd',
+					'e', 'E',
+					'f',
+					'g', 'G',
+					'h', 'H',
+					'n',
+					'o',
+					's', 'S',
+					'x', 'X');
+}
+
+constexpr bool IsDateTimeFormatSpecifier(int ch) noexcept {
+	return AnyOf(ch, 'H', 'I', 'k', 'l', 'M', 'S', 'L', 'N', 'p', 'z', 'Z', 's', 'Q', // time
+		'B', 'b', 'h', 'A', 'a', 'C', 'Y', 'y', 'j', 'm', 'd', 'e', // date
+		'R', 'T', 'r', 'D', 'F', 'c'); // date/time
+}
+
+inline Sci_Position CheckFormatSpecifier(const StyleContext &sc, bool insideUrl) noexcept {
+	if (sc.chNext == '%') {
+		return 2;
+	}
+	if (insideUrl && IsHexDigit(sc.chNext)) {
+		// percent encoded URL string
+		return 0;
+	}
+	if (IsASpaceOrTab(sc.chNext) && IsADigit(sc.chPrev)) {
+		// ignore word after percent: "5% x"
+		return 0;
+	}
+
+	Sci_PositionU pos = sc.currentPos + 1;
+	if (IsFormatFlag(sc.chNext)) {
+		++pos;
+	}
+	while (pos < sc.lineStartNext) {
+		const uint8_t ch = sc.styler[pos];
+		if (IsFormatSpecifier(ch)) {
+			return pos - sc.currentPos + 1;
+		}
+		if (ch == 't' || ch == 'T') {
+			const uint8_t chNext = sc.styler.SafeGetCharAt(pos + 1);
+			if (IsDateTimeFormatSpecifier(chNext)) {
+				return pos - sc.currentPos + 2;
+			}
+			break;
+		}
+		if (ch == '$') {
+			const uint8_t chNext = sc.styler.SafeGetCharAt(pos + 1);
+			if (IsFormatFlag(chNext)) {
+				++pos;
+			}
+		} else if (!(IsADigit(ch) || ch == '*' || ch == '.' || ch == ',')) {
+			break;
+		}
+		++pos;
+	}
+	return 0;
+}
+
+inline Sci_Position CheckPlaceholder(const StyleContext &sc) noexcept {
+	if (IsADigit(sc.chNext)) {
+		// for java.text.MessageFormat, only simplest form: {num}
+		// https://docs.oracle.com/en/java/javase/15/docs/api/java.base/java/text/MessageFormat.html
+		Sci_PositionU pos = sc.currentPos + 2;
+		while (pos < sc.lineStartNext) {
+			const uint8_t ch = sc.styler[pos];
+			if (ch == '}') {
+				return pos - sc.currentPos + 1;
+			}
+			if (!IsADigit(ch)) {
+				break;
+			}
+			++pos;
+		}
+	}
+	return 0;
+}
+
 void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	int lineStateLineType = 0;
+	bool insideUrl = false;
 
 	int kwType = SCE_JAVA_DEFAULT;
 	int chBeforeIdentifier = 0;
@@ -294,13 +384,33 @@ void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					sc.SetState(SCE_JAVA_ESCAPECHAR);
 					sc.Forward();
 				}
-			//} else if (sc.ch == '%') {
-			//} else if (sc.ch == '{' && IsADigit(sc.chNext)) {
-			} else if (sc.ch == '"' && (sc.state == SCE_JAVA_STRING || sc.Match('"', '"', '"'))) {
+			} else if (sc.ch == '%') {
+				const Sci_Position length = CheckFormatSpecifier(sc, insideUrl);
+				if (length != 0) {
+					const int state = sc.state;
+					sc.SetState(SCE_JAVA_FORMAT_SPECIFIER);
+					sc.Forward(length);
+					sc.SetState(state);
+					continue;
+				}
+			} else if (sc.ch == '{') {
+				const Sci_Position length = CheckPlaceholder(sc);
+				if (length != 0) {
+					const int state = sc.state;
+					sc.SetState(SCE_JAVA_PLACEHOLDER);
+					sc.Forward(length);
+					sc.SetState(state);
+					continue;
+				}
+			} else if (sc.ch == '"' && (sc.state == SCE_JAVA_STRING || sc.MatchNext('"', '"'))) {
 				if (sc.state == SCE_JAVA_TRIPLE_STRING) {
 					sc.Forward(2);
 				}
 				sc.ForwardSetState(SCE_JAVA_DEFAULT);
+			} else if (sc.Match(':', '/', '/') && IsLowerCase(sc.chPrev)) {
+				insideUrl = true;
+			} else if (insideUrl && IsInvalidUrlChar(sc.ch)) {
+				insideUrl = false;
 			}
 			break;
 
@@ -328,11 +438,14 @@ void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					sc.ChangeState(SCE_JAVA_COMMENTBLOCKDOC);
 				}
 				continue;
-			} else if (sc.Match('"', '"', '"')) {
-				sc.SetState(SCE_JAVA_TRIPLE_STRING);
-				sc.Forward(2);
 			} else if (sc.ch == '\"') {
-				sc.SetState(SCE_JAVA_STRING);
+				insideUrl = false;
+				if (sc.MatchNext('"', '"')) {
+					sc.SetState(SCE_JAVA_TRIPLE_STRING);
+					sc.Forward(2);
+				} else {
+					sc.SetState(SCE_JAVA_STRING);
+				}
 			} else if (sc.ch == '\'') {
 				sc.SetState(SCE_JAVA_CHARACTER);
 			} else if (IsNumberStart(sc.ch, sc.chNext)) {
@@ -376,8 +489,8 @@ struct FoldLineState {
 };
 
 constexpr bool IsInnerStyle(int style) noexcept {
-	return style == SCE_JAVA_ESCAPECHAR// || style == SCE_JAVA_FORMAT_SPECIFIER || style == SCE_JAVA_PLACEHOLDER
-		|| style == SCE_JAVA_COMMENTTAGAT || style == SCE_JAVA_COMMENTTAGHTML || style == SCE_JAVA_TASKMARKER;
+	return AnyOf(style, SCE_JAVA_ESCAPECHAR, SCE_JAVA_FORMAT_SPECIFIER, SCE_JAVA_PLACEHOLDER,
+				SCE_JAVA_COMMENTTAGAT, SCE_JAVA_COMMENTTAGHTML, SCE_JAVA_TASKMARKER);
 }
 
 void FoldJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {

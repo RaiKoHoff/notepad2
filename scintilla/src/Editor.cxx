@@ -714,7 +714,7 @@ void Editor::SetSelection(SelectionPosition currentPos_) {
 	QueueIdleWork(WorkNeeded::workUpdateUI);
 }
 
-void Editor::SetSelection(int currentPos_) {
+void Editor::SetSelection(Sci::Position currentPos_) {
 	SetSelection(SelectionPosition(currentPos_));
 }
 
@@ -2416,15 +2416,6 @@ void Editor::DelCharBack(bool allowLineStartDeletion) {
 	ContainerNeedsUpdate(SC_UPDATE_SELECTION);
 	// Avoid blinking during rapid typing:
 	ShowCaretAtCurrentPosition();
-}
-
-int Editor::ModifierFlags(bool shift, bool ctrl, bool alt, bool meta, bool super) noexcept {
-	return
-		(shift ? SCI_SHIFT : 0) |
-		(ctrl ? SCI_CTRL : 0) |
-		(alt ? SCI_ALT : 0) |
-		(meta ? SCI_META : 0) |
-		(super ? SCI_SUPER : 0);
 }
 
 void Editor::NotifyFocus(bool focus) {

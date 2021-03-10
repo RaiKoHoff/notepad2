@@ -32,7 +32,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* javap
 		* Jasmin
 	* ANSI Art
-	* [ANSYS](../master/tools/lang/APDL.apdl) Parametric Design Language
+	* [ANSYS](../master/tools/lang/APDL.cdb) Parametric Design Language
 	* Assembler, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#assembler)
 		* MASM
 		* GNU Assembler
@@ -40,7 +40,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* Asymptote Vector Graphics Language
 	* AutoIt Script
 	* [AviSynth Script](../master/tools/lang/AviSynth.avs), up to AviSynth 2.6, AviSynth+ 3.6, GScript 1.1.
-	* AWK, GNU AWK
+	* [AWK](../master/tools/lang/Awk.awk), up to GNU AWK 5.1.
 	* Batch Script, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#batch)
 	* C#, Vala, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#c)
 	* C/C++, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#cc)
@@ -64,10 +64,10 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* [GN Build](../master/tools/lang/GN.gn), up to GN 2019-03-13.
 	* [Go](../master/tools/lang/Go.go), up to Go 1.14.
 		* Go+ (GoPlus) and the Q language
-	* Gradle, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#gradle)
+	* [Gradle](../master/tools/lang/Gradle.gradle), up to Gradle 6.8, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#gradle)
 	* GraphViz Dot, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#graphviz)
 		* blockdiag, seqdiag, actdiag and nwdiag
-	* Groovy
+	* [Groovy](../master/tools/lang/Groovy.groovy), up to Groovy 4.0.
 	* [Haxe](../master/tools/lang/Haxe.hx), up to Haxe 4.1
 	* [HTML](../master/tools/lang/html.html), up to [WHATWG](https://html.spec.whatwg.org/multipage/) 2020-02-12. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#html)
 		* ASP
@@ -76,10 +76,10 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* PHP
 	* INI Configuration File
 	* Inno Setup
-	* Boost Jam
+	* [Boost Jam](../master/tools/lang/Jamfile.jam), up to Jam 4.4.1.
 	* [Java](../master/tools/lang/Java.java), up to Java 16. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#java)
 		* [BeanShell](https://github.com/beanshell/beanshell)
-	* [JavaScript](../master/tools/lang/JavaScript.js), up to ECMAScript 2020 (11th edition) with [JSX](https://facebook.github.io/jsx/) and [Web APIs](https://developer.mozilla.org/en-US/docs/Web/API).
+	* [JavaScript](../master/tools/lang/JavaScript.js), up to ECMAScript 2021 (12th edition) with [JSX](https://facebook.github.io/jsx/) and [Web APIs](https://developer.mozilla.org/en-US/docs/Web/API).
 	* JSON and JSON5 Document
 	* [Julia Script](../master/tools/lang/Julia.jl), up to Julia 1.2. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#julia)
 	* [Kotlin](../master/tools/lang/Kotlin.kt), up to Kotlin 1.3.

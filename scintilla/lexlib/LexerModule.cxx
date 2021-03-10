@@ -28,6 +28,7 @@ extern LexerModule lmAPDL;
 extern LexerModule lmAsm;
 extern LexerModule lmAU3;
 extern LexerModule lmAVS;
+extern LexerModule lmAwk;
 extern LexerModule lmBash;
 extern LexerModule lmBatch;
 extern LexerModule lmCIL;
@@ -42,9 +43,11 @@ extern LexerModule lmFSharp;
 extern LexerModule lmGN;
 extern LexerModule lmGo;
 extern LexerModule lmGraphViz;
+extern LexerModule lmGroovy;
 extern LexerModule lmHaxe;
 extern LexerModule lmHTML;
 extern LexerModule lmInno;
+extern LexerModule lmJam;
 extern LexerModule lmJava;
 extern LexerModule lmJavaScript;
 extern LexerModule lmJSON;
@@ -93,6 +96,7 @@ const LexerModule * const lexerCatalogue[] = {
 	&lmAsm,
 	&lmAU3,
 	&lmAVS,
+	&lmAwk,
 	&lmBash,
 	&lmBatch,
 	&lmCIL,
@@ -107,9 +111,11 @@ const LexerModule * const lexerCatalogue[] = {
 	&lmGN,
 	&lmGo,
 	&lmGraphViz,
+	&lmGroovy,
 	&lmHaxe,
 	&lmHTML,
 	&lmInno,
+	&lmJam,
 	&lmJava,
 	&lmJavaScript,
 	&lmJSON,

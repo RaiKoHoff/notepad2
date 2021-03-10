@@ -60,7 +60,8 @@ static_assert(DefaultNestedStateBaseStyle + 1 == SCE_JS_STRING_BT);
 static_assert(DefaultNestedStateBaseStyle + 2 == SCE_JSX_TEXT);
 
 constexpr bool IsJsIdentifierStart(int ch) noexcept {
-	return IsIdentifierStartEx(ch) || ch == '$';
+	return IsIdentifierStartEx(ch) || ch == '$'
+		|| ch == '#'; // ECMAScript 2021 private field and method
 }
 
 constexpr bool IsJsIdentifierChar(int ch) noexcept {
@@ -145,17 +146,8 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 			lineStateLineType = JsLineStateMaskLineComment;
 		}
 	} else if (IsSpaceEquiv(initStyle)) {
-		// look back to set chPrevNonWhite properly for better regex colouring
-		Sci_PositionU back = startPos - 1;
-		while (back) {
-			const int style = styler.StyleAt(back);
-			if (!IsSpaceEquiv(style)) {
-				chPrevNonWhite = static_cast<unsigned char>(styler.SafeGetCharAt(back));
-				stylePrevNonWhite = style;
-				break;
-			}
-			--back;
-		}
+		// look back for better regex colouring
+		LookbackNonWhite(styler, startPos, SCE_JS_TASKMARKER, chPrevNonWhite, stylePrevNonWhite);
 	}
 
 	while (sc.More()) {
@@ -177,7 +169,8 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 		case SCE_JSX_ATTRIBUTE:
 		case SCE_JSX_ATTRIBUTE_AT:
 		case SCE_JS_DECORATOR:
-			if ((sc.state != SCE_JS_IDENTIFIER && sc.ch == '.') || (sc.ch == ':' && (sc.state == SCE_JSX_TAG || sc.state == SCE_JSX_ATTRIBUTE))) {
+			if ((sc.ch == '.' && !(sc.state == SCE_JS_IDENTIFIER || sc.state == SCE_JSX_ATTRIBUTE_AT))
+				|| (sc.ch == ':' && (sc.state == SCE_JSX_TAG || sc.state == SCE_JSX_ATTRIBUTE))) {
 				const int state = sc.state;
 				sc.SetState(SCE_JS_OPERATOR2);
 				sc.ForwardSetState(state);
@@ -463,7 +456,8 @@ void ColouriseJsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 						}
 					}
 					continue;
-				} else if (!IsEOLChar(sc.chNext) && IsRegexStart(chPrevNonWhite, stylePrevNonWhite)) {
+				}
+				if (!IsEOLChar(sc.chNext) && IsRegexStart(chPrevNonWhite, stylePrevNonWhite)) {
 					insideRegexRange = false;
 					sc.SetState(SCE_JS_REGEX);
 				} else {
