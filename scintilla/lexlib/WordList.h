@@ -11,16 +11,14 @@ namespace Scintilla {
 /**
  */
 class WordList final {
+public:
+	using range_t = unsigned int;
+private:
 	// Each word contains at least one character - a empty word acts as sentinel at the end.
 	char **words;
 	char *list;
-	int len;
-	// words in [start, end) starts with same character.
-	struct Range {
-		int start;
-		int end;
-	};
-	Range ranges[128];	// only ASCII, most word starts with character in '_a-zA-Z'
+	range_t len;
+	range_t ranges[128];	// only ASCII, most word starts with character in '_a-zA-Z'
 public:
 	explicit WordList() noexcept;
 	~WordList();
@@ -29,14 +27,14 @@ public:
 	bool operator==(const WordList &other) const noexcept {
 		return !(*this != other);
 	}
-	int Length() const noexcept;
+	range_t Length() const noexcept;
 	void Clear() noexcept;
 	bool Set(const char *s, bool toLower);
 	bool InList(const char *s) const noexcept;
 	bool InListPrefixed(const char *s, char marker) const noexcept;
 	bool InListAbbreviated(const char *s, char marker) const noexcept;
 	bool InListAbridged(const char *s, char marker) const noexcept;
-	const char *WordAt(int n) const noexcept;
+	const char *WordAt(range_t n) const noexcept;
 };
 
 }

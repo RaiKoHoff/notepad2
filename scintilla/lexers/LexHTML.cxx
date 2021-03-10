@@ -396,8 +396,8 @@ constexpr int defaultStateForSGML(script_type scriptLanguage) noexcept {
 	return (scriptLanguage == eScriptSGMLblock)? SCE_H_SGML_BLOCK_DEFAULT : SCE_H_SGML_DEFAULT;
 }
 
-bool issgmlwordchar(int ch) noexcept {
-	return !IsASCII(ch) ||
+constexpr bool issgmlwordchar(int ch) noexcept {
+	return ch >= 0x80 ||
 		(IsAlphaNumeric(ch) || ch == '.' || ch == '_' || ch == ':' || ch == '!' || ch == '#' || ch == '[');
 }
 
@@ -1338,7 +1338,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			}
 			if (ch != '#' && !IsAlphaNumeric(ch)	// Should check that '#' follows '&', but it is unlikely anyway...
 				&& ch != '.' && ch != '-' && ch != '_' && ch != ':') { // valid in XML
-				if (!IsASCII(ch))	// Possibly start of a multibyte character so don't allow this byte to be in entity style
+				if (ch >= 0x80)	// Possibly start of a multibyte character so don't allow this byte to be in entity style
 					styler.ColourTo(i-1, SCE_H_TAGUNKNOWN);
 				else
 					styler.ColourTo(i, SCE_H_TAGUNKNOWN);

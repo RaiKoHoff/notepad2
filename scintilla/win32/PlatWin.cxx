@@ -157,18 +157,15 @@ D2D1_DRAW_TEXT_OPTIONS d2dDrawTextOptions = D2D1_DRAW_TEXT_OPTIONS_NONE;
 static HMODULE hDLLD2D {};
 static HMODULE hDLLDWrite {};
 
+extern "C" const GUID __declspec(selectany) IID_IDWriteFactory2 = // 0439fc60-ca44-4994-8dee-3a9af7b732ec
+{ 0x0439fc60, 0xca44, 0x4994, { 0x8d, 0xee, 0x3a, 0x9a, 0xf7, 0xb7, 0x32, 0xec } };
+
 #if USE_WIN32_INIT_ONCE
-static BOOL CALLBACK LoadD2DOnce(PINIT_ONCE initOnce, PVOID parameter, PVOID *lpContext) noexcept
+static BOOL CALLBACK LoadD2DOnce([[maybe_unused]] PINIT_ONCE initOnce, [[maybe_unused]] PVOID parameter, [[maybe_unused]] PVOID *lpContext) noexcept
 #else
 static void LoadD2DOnce() noexcept
 #endif
 {
-#if USE_WIN32_INIT_ONCE
-	UNREFERENCED_PARAMETER(initOnce);
-	UNREFERENCED_PARAMETER(parameter);
-	UNREFERENCED_PARAMETER(lpContext);
-#endif
-
 	// Availability of SetDefaultDllDirectories implies Windows 8+ or
 	// that KB2533623 has been installed so LoadLibraryEx can be called
 	// with LOAD_LIBRARY_SEARCH_SYSTEM32.
@@ -203,9 +200,6 @@ static void LoadD2DOnce() noexcept
 	if (hDLLDWrite) {
 		DWriteCreateFactorySig fnDWCF = DLLFunction<DWriteCreateFactorySig>(hDLLDWrite, "DWriteCreateFactory");
 		if (fnDWCF) {
-			const GUID IID_IDWriteFactory2 = // 0439fc60-ca44-4994-8dee-3a9af7b732ec
-			{ 0x0439fc60, 0xca44, 0x4994, { 0x8d, 0xee, 0x3a, 0x9a, 0xf7, 0xb7, 0x32, 0xec } };
-
 			const HRESULT hr = fnDWCF(DWRITE_FACTORY_TYPE_SHARED,
 				IID_IDWriteFactory2,
 				reinterpret_cast<IUnknown**>(&pIDWriteFactory));
@@ -1116,8 +1110,9 @@ void SurfaceGDI::MeasureWidths(const Font &font_, std::string_view text, XYPOSIT
 			if (byteCount == 4) {	// Non-BMP
 				ui++;
 			}
+			const XYPOSITION pos = static_cast<XYPOSITION>(poses.buffer[ui]);
 			for (unsigned int bytePos = 0; (bytePos < byteCount) && (i < len); bytePos++) {
-				positions[i++] = static_cast<XYPOSITION>(poses.buffer[ui]);
+				positions[i++] = pos;
 			}
 		}
 	} else {
@@ -2270,9 +2265,10 @@ XYPOSITION SurfaceD2D::AverageCharWidth(const Font &font_) {
 	if (pIDWriteFactory && pTextFormat) {
 		// Create a layout
 		IDWriteTextLayout *pTextLayout = nullptr;
-		const WCHAR wszAllAlpha[] = L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-		constexpr size_t lenAllAlpha = (sizeof(wszAllAlpha) / sizeof(WCHAR)) - 1;
-		const HRESULT hr = pIDWriteFactory->CreateTextLayout(wszAllAlpha, static_cast<UINT32>(lenAllAlpha),
+		constexpr const WCHAR *wszAllAlpha = L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+		constexpr int lenAllAlpha = 52;
+		//static_assert(lenAllAlpha == __builtin_wcslen(wszAllAlpha));
+		const HRESULT hr = pIDWriteFactory->CreateTextLayout(wszAllAlpha, lenAllAlpha,
 			pTextFormat, 1000.0, 1000.0, &pTextLayout);
 		if (SUCCEEDED(hr) && pTextLayout) {
 			DWRITE_TEXT_METRICS textMetrics;
@@ -3504,7 +3500,7 @@ bool ListBoxX_Register() noexcept {
 	// truncated items in the list and the appearance/disappearance of the vertical scroll bar.
 	// The list repaint is double-buffered to avoid the flicker this would otherwise cause.
 	wndclassc.style = CS_GLOBALCLASS | CS_HREDRAW | CS_VREDRAW;
-	wndclassc.cbWndExtra = sizeof(ListBoxX *);
+	wndclassc.cbWndExtra = sizeof(LONG_PTR);
 	wndclassc.hInstance = hinstPlatformRes;
 	wndclassc.lpfnWndProc = ListBoxX::StaticWndProc;
 	wndclassc.hCursor = ::LoadCursor({}, IDC_ARROW);

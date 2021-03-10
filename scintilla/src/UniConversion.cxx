@@ -25,8 +25,7 @@ size_t UTF8Length(std::wstring_view wsv) noexcept {
 			len++;
 		} else if (uch < 0x800) {
 			len += 2;
-		} else if ((uch >= SURROGATE_LEAD_FIRST) &&
-			(uch <= SURROGATE_TRAIL_LAST)) {
+		} else if ((uch >= SURROGATE_LEAD_FIRST) && (uch <= SURROGATE_TRAIL_LAST)) {
 			len += 4;
 			i++;
 		} else {
@@ -58,11 +57,10 @@ void UTF8FromUTF16(std::wstring_view wsv, char *putf, size_t len) noexcept {
 		} else if (uch < 0x800) {
 			putf[k++] = static_cast<char>(0xC0 | (uch >> 6));
 			putf[k++] = static_cast<char>(0x80 | (uch & 0x3f));
-		} else if ((uch >= SURROGATE_LEAD_FIRST) &&
-			(uch <= SURROGATE_TRAIL_LAST)) {
+		} else if ((uch >= SURROGATE_LEAD_FIRST) && (uch <= SURROGATE_TRAIL_LAST)) {
 			// Half a surrogate pair
 			i++;
-			const unsigned int xch = 0x10000 + ((uch & 0x3ff) << 10) + (wsv[i] & 0x3ff);
+			const unsigned int xch = 0x10000 | ((uch & 0x3ff) << 10) | (wsv[i] & 0x3ff);
 			putf[k++] = static_cast<char>(0xF0 | (xch >> 18));
 			putf[k++] = static_cast<char>(0x80 | ((xch >> 12) & 0x3f));
 			putf[k++] = static_cast<char>(0x80 | ((xch >> 6) & 0x3f));
@@ -74,8 +72,9 @@ void UTF8FromUTF16(std::wstring_view wsv, char *putf, size_t len) noexcept {
 		}
 		i++;
 	}
-	if (k < len)
+	if (k < len) {
 		putf[k] = '\0';
+	}
 }
 
 void UTF8FromUTF32Character(int uch, char *putf) noexcept {
@@ -145,27 +144,27 @@ size_t UTF16FromUTF8(std::string_view svu8, wchar_t *tbuf, size_t tlen) {
 		case 2:
 			value = (ch & 0x1F) << 6;
 			ch = svu8[i++];
-			value += ch & 0x3F;
+			value |= ch & 0x3F;
 			tbuf[ui] = static_cast<wchar_t>(value);
 			break;
 		case 3:
 			value = (ch & 0xF) << 12;
 			ch = svu8[i++];
-			value += (ch & 0x3F) << 6;
+			value |= (ch & 0x3F) << 6;
 			ch = svu8[i++];
-			value += ch & 0x3F;
+			value |= ch & 0x3F;
 			tbuf[ui] = static_cast<wchar_t>(value);
 			break;
 		default:
 			// Outside the BMP so need two surrogates
 			value = (ch & 0x7) << 18;
 			ch = svu8[i++];
-			value += (ch & 0x3F) << 12;
+			value |= (ch & 0x3F) << 12;
 			ch = svu8[i++];
-			value += (ch & 0x3F) << 6;
+			value |= (ch & 0x3F) << 6;
 			ch = svu8[i++];
-			value += ch & 0x3F;
-			tbuf[ui] = static_cast<wchar_t>(((value - 0x10000) >> 10) + SURROGATE_LEAD_FIRST);
+			value |= ch & 0x3F;
+			tbuf[ui] = static_cast<wchar_t>(((value - SUPPLEMENTAL_PLANE_FIRST) >> 10) + SURROGATE_LEAD_FIRST);
 			ui++;
 			tbuf[ui] = static_cast<wchar_t>((value & 0x3ff) + SURROGATE_TRAIL_FIRST);
 			break;
@@ -214,23 +213,23 @@ size_t UTF32FromUTF8(std::string_view svu8, unsigned int *tbuf, size_t tlen) {
 		case 2:
 			value = (ch & 0x1F) << 6;
 			ch = svu8[i++];
-			value += ch & 0x3F;
+			value |= ch & 0x3F;
 			break;
 		case 3:
 			value = (ch & 0xF) << 12;
 			ch = svu8[i++];
-			value += (ch & 0x3F) << 6;
+			value |= (ch & 0x3F) << 6;
 			ch = svu8[i++];
-			value += ch & 0x3F;
+			value |= ch & 0x3F;
 			break;
 		default:
 			value = (ch & 0x7) << 18;
 			ch = svu8[i++];
-			value += (ch & 0x3F) << 12;
+			value |= (ch & 0x3F) << 12;
 			ch = svu8[i++];
-			value += (ch & 0x3F) << 6;
+			value |= (ch & 0x3F) << 6;
 			ch = svu8[i++];
-			value += ch & 0x3F;
+			value |= ch & 0x3F;
 			break;
 		}
 		tbuf[ui] = value;
@@ -250,17 +249,6 @@ std::wstring WStringFromUTF8(std::string_view svu8) {
 		std::wstring ws(len32, 0);
 		UTF32FromUTF8(svu8, reinterpret_cast<unsigned int *>(&ws[0]), len32);
 		return ws;
-	}
-}
-
-unsigned int UTF16FromUTF32Character(unsigned int val, wchar_t *tbuf) noexcept {
-	if (val < SUPPLEMENTAL_PLANE_FIRST) {
-		tbuf[0] = static_cast<wchar_t>(val);
-		return 1;
-	} else {
-		tbuf[0] = static_cast<wchar_t>(((val - SUPPLEMENTAL_PLANE_FIRST) >> 10) + SURROGATE_LEAD_FIRST);
-		tbuf[1] = static_cast<wchar_t>((val & 0x3ff) + SURROGATE_TRAIL_FIRST);
-		return 2;
 	}
 }
 

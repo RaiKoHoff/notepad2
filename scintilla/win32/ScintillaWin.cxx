@@ -87,6 +87,7 @@ Used by VSCode, Atom etc.
 
 #include "PlatWin.h"
 #include "HanjaDic.h"
+#include "LaTeXInput.h"
 
 #ifndef WM_DPICHANGED
 #define WM_DPICHANGED				0x02E0
@@ -122,7 +123,7 @@ using namespace Scintilla;
 
 namespace {
 
-const TCHAR *callClassName = L"CallTip";
+constexpr const TCHAR *callClassName = L"CallTip";
 
 inline void SetWindowID(HWND hWnd, int identifier) noexcept {
 	::SetWindowLongPtr(hWnd, GWLP_ID, identifier);
@@ -426,7 +427,7 @@ class ScintillaWin final :
 	bool renderTargetValid;
 #endif
 
-	explicit ScintillaWin(HWND hwnd);
+	explicit ScintillaWin(HWND hwnd) noexcept;
 	// ~ScintillaWin() in public section
 
 	void Init() noexcept;
@@ -485,6 +486,7 @@ class ScintillaWin final :
 	void EscapeHanja();
 	void ToggleHanja();
 	void AddWString(std::wstring_view wsv, CharacterSource charSource);
+	bool HandleLaTeXTabCompletion();
 
 	UINT CodePageOfDocument() const noexcept;
 	bool ValidCodePage(int codePage) const noexcept override;
@@ -616,7 +618,7 @@ HINSTANCE ScintillaWin::hInstance {};
 ATOM ScintillaWin::scintillaClassAtom = 0;
 ATOM ScintillaWin::callClassAtom = 0;
 
-ScintillaWin::ScintillaWin(HWND hwnd) {
+ScintillaWin::ScintillaWin(HWND hwnd) noexcept {
 
 	lastKeyDownConsumed = false;
 	lastHighSurrogateChar = 0;
@@ -1321,6 +1323,57 @@ void ScintillaWin::AddWString(std::wstring_view wsv, CharacterSource charSource)
 	}
 }
 
+bool ScintillaWin::HandleLaTeXTabCompletion() {
+	if (ac.Active() || sel.Count() > 1 || !sel.Empty() || pdoc->IsReadOnly()) {
+		return false;
+	}
+
+	char buffer[MaxLaTeXInputBufferLength];
+	const Sci::Position main = sel.MainCaret();
+	Sci::Position pos = main - 1;
+	char *ptr = buffer + sizeof(buffer) - 1;
+	*ptr = '\0';
+	char ch;
+	do {
+		ch = pdoc->CharAt(pos);
+		if (!IsLaTeXInputSequenceChar(ch)) {
+			break;
+		}
+		--pos;
+		--ptr;
+		*ptr = ch;
+	} while (pos >= 0 && ptr != buffer);
+	if (ch != '\\') {
+		return false;
+	}
+	if (pdoc->dbcsCodePage && pdoc->dbcsCodePage != SC_CP_UTF8) {
+		ch = pdoc->CharAt(pos - 1);
+		if (!UTF8IsAscii(ch) && pdoc->IsDBCSLeadByteNoExcept(ch)) {
+			return false;
+		}
+	}
+
+	ptrdiff_t wclen = buffer + sizeof(buffer) - 1 - ptr;
+	const uint32_t wch = GetLaTeXInputUnicodeCharacter(ptr, wclen);
+	if (wch == 0) {
+		return false;
+	}
+
+	const wchar_t wcs[3] = { static_cast<wchar_t>(wch & 0xffff), static_cast<wchar_t>(wch >> 16), 0 };
+	wclen = 1 + (wcs[1] != 0);
+
+	const UINT codePage = CodePageOfDocument();
+	const int len = MultiByteFromWideChar(codePage, std::wstring_view(wcs, wclen), buffer, sizeof(buffer) - 1);
+	buffer[len] = '\0';
+
+	targetRange.start.SetPosition(pos);
+	targetRange.end.SetPosition(main);
+	ReplaceTarget(false, buffer, len);
+	// move caret after character
+	SetEmptySelection(pos + len);
+	return true;
+}
+
 sptr_t ScintillaWin::HandleCompositionInline(uptr_t, sptr_t lParam) {
 	// Copy & paste by johnsonj with a lot of helps of Neil.
 	// Great thanks for my foreruners, jiniya and BLUEnLIVE.
@@ -1496,7 +1549,8 @@ UINT CodePageFromCharSet(DWORD characterSet, UINT documentCodePage) noexcept {
 }
 
 UINT ScintillaWin::CodePageOfDocument() const noexcept {
-	return CodePageFromCharSet(vs.styles[STYLE_DEFAULT].characterSet, pdoc->dbcsCodePage);
+	return pdoc->dbcsCodePage; // see SCI_GETCODEPAGE in Editor.cxx
+	//return CodePageFromCharSet(vs.styles[STYLE_DEFAULT].characterSet, pdoc->dbcsCodePage);
 }
 
 std::string ScintillaWin::EncodeWString(std::wstring_view wsv) {
@@ -1759,9 +1813,8 @@ sptr_t ScintillaWin::KeyMessage(unsigned int iMessage, uptr_t wParam, sptr_t lPa
 			// Don't interpret these as they may be characters entered by number.
 			return ::DefWindowProc(MainHWND(), iMessage, wParam, lParam);
 		}
-		const int ret = KeyDownWithModifiers(KeyTranslate(static_cast<int>(wParam)),
-							ModifierFlags(KeyboardIsKeyDown(VK_SHIFT), KeyboardIsKeyDown(VK_CONTROL), altDown),
-							&lastKeyDownConsumed);
+		const int modifiers = ModifierFlags(KeyboardIsKeyDown(VK_SHIFT), KeyboardIsKeyDown(VK_CONTROL), altDown);
+		const int ret = KeyDownWithModifiers(KeyTranslate(static_cast<int>(wParam)), modifiers, &lastKeyDownConsumed);
 		if (!ret && !lastKeyDownConsumed) {
 			return ::DefWindowProc(MainHWND(), iMessage, wParam, lParam);
 		}
@@ -1774,14 +1827,16 @@ sptr_t ScintillaWin::KeyMessage(unsigned int iMessage, uptr_t wParam, sptr_t lPa
 
 	case WM_CHAR:
 		if (!lastKeyDownConsumed) {
-			wchar_t wcs[3] = { static_cast<wchar_t>(wParam), 0 };
+			const wchar_t ch = static_cast<wchar_t>(wParam);
+			wchar_t wcs[3] = { ch, 0 };
 			unsigned int wclen = 1;
-			if (IS_HIGH_SURROGATE(wcs[0])) {
+			if (IS_HIGH_SURROGATE(ch)) {
 				// If this is a high surrogate character, we need a second one
-				lastHighSurrogateChar = wcs[0];
+				lastHighSurrogateChar = ch;
 				return 0;
-			} else if (IS_LOW_SURROGATE(wcs[0])) {
-				wcs[1] = wcs[0];
+			}
+			if (IS_LOW_SURROGATE(ch)) {
+				wcs[1] = ch;
 				wcs[0] = lastHighSurrogateChar;
 				lastHighSurrogateChar = 0;
 				wclen = 2;
@@ -2326,6 +2381,17 @@ sptr_t ScintillaWin::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam
 		case SCI_TARGETASUTF8:
 		case SCI_ENCODEDFROMUTF8:
 			return SciMessage(iMessage, wParam, lParam);
+
+		case SCI_TAB:
+			if (wParam & TAB_COMPLETION_LATEX) {
+				if (HandleLaTeXTabCompletion()) {
+					break;
+				}
+				if (!(wParam & TAB_COMPLETION_DEFAULT)) {
+					break;
+				}
+			}
+			[[fallthrough]];
 
 		default:
 			return ScintillaBase::WndProc(iMessage, wParam, lParam);
@@ -3751,17 +3817,11 @@ STDMETHODIMP ScintillaWin::GetData(const FORMATETC *pFEIn, STGMEDIUM *pSTM) {
 }
 
 #if USE_WIN32_INIT_ONCE
-BOOL CALLBACK ScintillaWin::PrepareOnce(PINIT_ONCE initOnce, PVOID parameter, PVOID *lpContext) noexcept
+BOOL CALLBACK ScintillaWin::PrepareOnce([[maybe_unused]] PINIT_ONCE initOnce, [[maybe_unused]] PVOID parameter, [[maybe_unused]] PVOID *lpContext) noexcept
 #else
 void ScintillaWin::PrepareOnce() noexcept
 #endif
 {
-#if USE_WIN32_INIT_ONCE
-	UNREFERENCED_PARAMETER(initOnce);
-	UNREFERENCED_PARAMETER(parameter);
-	UNREFERENCED_PARAMETER(lpContext);
-#endif
-
 	Platform_Initialise(hInstance);
 	CharClassify::InitUnicodeData();
 
@@ -3769,7 +3829,7 @@ void ScintillaWin::PrepareOnce() noexcept
 	WNDCLASSEX wndclassc {};
 	wndclassc.cbSize = sizeof(wndclassc);
 	wndclassc.style = CS_GLOBALCLASS | CS_HREDRAW | CS_VREDRAW;
-	wndclassc.cbWndExtra = sizeof(ScintillaWin *);
+	wndclassc.cbWndExtra = sizeof(LONG_PTR);
 	wndclassc.hInstance = hInstance;
 	wndclassc.lpfnWndProc = ScintillaWin::CTWndProc;
 	wndclassc.hCursor = ::LoadCursor({}, IDC_ARROW);
@@ -3790,7 +3850,7 @@ bool ScintillaWin::Register(HINSTANCE hInstance_) noexcept {
 	wndclass.cbSize = sizeof(wndclass);
 	wndclass.style = CS_GLOBALCLASS | CS_HREDRAW | CS_VREDRAW;
 	wndclass.lpfnWndProc = ScintillaWin::SWndProc;
-	wndclass.cbWndExtra = sizeof(ScintillaWin *);
+	wndclass.cbWndExtra = sizeof(LONG_PTR);
 	wndclass.hInstance = hInstance;
 	wndclass.lpszClassName = L"Scintilla";
 	scintillaClassAtom = ::RegisterClassExW(&wndclass);

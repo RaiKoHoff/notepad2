@@ -9,6 +9,7 @@ from FileGenerator import Regenerate
 
 AllKeywordAttrList = {}
 JavaKeywordMap = {}
+GroovyKeyword = []
 JavaScriptKeywordMap = {}
 
 # see EditLexer.h
@@ -30,7 +31,7 @@ class KeywordAttr(IntFlag):
 		return ' | '.join(comb)
 
 def MakeKeywordGroups(items, maxLineLength=120, prefixLen=1):
-	items = list(sorted(items))
+	items = sorted(items)
 	groups = {}
 	for item in items:
 		if item.endswith('()'):
@@ -206,7 +207,7 @@ def parse_actionscript_api_file(path):
 
 def parse_apdl_api_file(path):
 	ext = os.path.splitext(path)[1].lower()
-	comment = '!' if ext == '.apdl' else '**'
+	comment = '!' if ext == '.cdb' else '**'
 	sections = read_api_file(path, comment, 1)
 	keywordMap = {}
 	for key, doc in sections:
@@ -280,6 +281,31 @@ def parse_avisynth_api_file(path):
 		('external filters', keywordMap['plugins'], KeywordAttr.MakeLower),
 		('properties', keywordMap['properties'], KeywordAttr.MakeLower),
 		('options', keywordMap['options'], KeywordAttr.NoLexer),
+	]
+
+def parse_awk_api_file(path):
+	sections = read_api_file(path, '#')
+	keywordMap = {}
+	for key, doc in sections:
+		if key in ('keywords', 'predefined variables', 'misc'):
+			keywordMap[key] = doc.split()
+		elif key in ('built-in functions', 'library functions'):
+			items = re.findall(r'(\w+)\s*\(', doc)
+			keywordMap[key] = [item + '(' for item in items]
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'predefined variables',
+		'built-in functions',
+		'library functions',
+		'misc',
+	])
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('predefined variable', keywordMap['predefined variables'], KeywordAttr.Default),
+		('built-in function', keywordMap['built-in functions'], KeywordAttr.Default),
+		('library function', keywordMap['library functions'], KeywordAttr.NoLexer),
+		('misc', keywordMap['misc'], KeywordAttr.NoLexer),
 	]
 
 def parse_cmake_api_file(path):
@@ -536,6 +562,56 @@ def parse_go_api_file(path):
 		('package', keywordMap['package'], KeywordAttr.NoLexer),
 	]
 
+def parse_gradle_api_file(path):
+	sections = read_api_file(path, '//')
+	functions = []
+	for key, doc in sections:
+		if key == 'api':
+			# properties
+			items = re.findall(r'([a-z]\w+)$', doc, re.MULTILINE)
+			functions.extend(items)
+			# methods
+			items = re.findall(r'([a-z]\w+)\s*\(', doc)
+			functions.extend(items)
+			# script block
+			items = re.findall(r'^\s*([a-z]\w+)\s*\{', doc, re.MULTILINE)
+			functions.extend([item + '^{}' for item in items])
+
+	return [
+		('keywords', GroovyKeyword, KeywordAttr.Default),
+		('types', JavaKeywordMap['types'], KeywordAttr.Default),
+		('unused', [], KeywordAttr.Default),
+		('class', JavaKeywordMap['class'], KeywordAttr.Default),
+		('interface', JavaKeywordMap['interface'], KeywordAttr.Default),
+		('enumeration', JavaKeywordMap['enumeration'], KeywordAttr.Default),
+		('constant', [], KeywordAttr.Default),
+		('annotation', JavaKeywordMap['annotation'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
+		('function', functions, KeywordAttr.NoLexer),
+		('GroovyDoc', JavaKeywordMap['javadoc'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
+	]
+
+def parse_groovy_api_file(path):
+	sections = read_api_file(path, '//')
+	keywords = []
+	for key, doc in sections:
+		if key == 'keywords':
+			keywords = doc.split()
+
+	keywords.extend(JavaKeywordMap['keywords'])
+	GroovyKeyword.extend(keywords)
+	return [
+		('keywords', keywords, KeywordAttr.Default),
+		('types', JavaKeywordMap['types'], KeywordAttr.Default),
+		('unused', [], KeywordAttr.Default),
+		('class', JavaKeywordMap['class'], KeywordAttr.Default),
+		('interface', JavaKeywordMap['interface'], KeywordAttr.Default),
+		('enumeration', JavaKeywordMap['enumeration'], KeywordAttr.Default),
+		('constant', [], KeywordAttr.Default),
+		('annotation', JavaKeywordMap['annotation'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
+		('function', [], KeywordAttr.Default),
+		('GroovyDoc', JavaKeywordMap['javadoc'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
+	]
+
 def parse_haxe_api_file(path):
 	sections = read_api_file(path, '//')
 	keywordMap = {}
@@ -573,6 +649,43 @@ def parse_haxe_api_file(path):
 		('metadata', [], KeywordAttr.Default),
 		('function', [], KeywordAttr.Default),
 		('comment', keywordMap['comment'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
+	]
+
+def parse_jam_api_file(path):
+	sections = read_api_file(path, '#')
+	keywordMap = {}
+	for key, doc in sections:
+		if key in ('keywords', 'constants', 'features'):
+			keywordMap[key] = doc.split()
+		elif key in ('rules', 'modules', 'classes'):
+			rules = re.findall(r'rule\s+([\w\-]+)', doc)
+			if key == 'rules':
+				keywordMap['builtin rules'] = rules
+			else:
+				keywordMap.setdefault('rules', []).extend(rules)
+				modules = re.findall(r'module\s+([\w\-]+)', doc)
+				if modules:
+					keywordMap['modules'] = modules
+				classes = re.findall(r'class\s+([\w-]+)', doc)
+				if classes:
+					keywordMap['classes'] = classes
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'modules',
+		'classes',
+		'builtin rules',
+		'rules',
+		'features',
+	])
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('module', keywordMap['modules'], KeywordAttr.Default),
+		('class', keywordMap['classes'], KeywordAttr.Default),
+		('builtin rule', keywordMap['builtin rules'], KeywordAttr.Default),
+		('constant', keywordMap['constants'], KeywordAttr.Default),
+		('rule', keywordMap['rules'], KeywordAttr.NoLexer),
+		('feature', keywordMap['features'], KeywordAttr.NoLexer),
 	]
 
 def parse_java_api_file(path):

@@ -61,24 +61,30 @@ constexpr bool IsSpaceEquiv(int state) noexcept {
 	return state <= SCE_GO_TASKMARKER;
 }
 
-constexpr bool IsFormatSpecifier(uint8_t ch) noexcept {
-	return ch == 'v'
-		|| ch == 'b'
-		|| ch == 'c'
-		|| ch == 'd'
-		|| ch == 'e' || ch == 'E'
-		|| ch == 'f' || ch == 'F'
-		|| ch == 'g' || ch == 'G'
-		|| ch == 'o' || ch == 'O'
-		|| ch == 'p'
-		|| ch == 'q'
-		|| ch == 's'
-		|| ch == 't' || ch == 'T'
-		|| ch == 'x' || ch == 'X'
-		|| ch == 'U';
+// https://pkg.go.dev/fmt
+
+constexpr bool IsFormatFlag(int ch) noexcept {
+	return AnyOf(ch, ' ', '+', '-', '#', '.', '0');
 }
 
-Sci_Position CheckFormatSpecifier(const StyleContext &sc, bool insideUrl) noexcept {
+constexpr bool IsFormatSpecifier(int ch) noexcept {
+	return AnyOf(ch, 'v',
+					'b',
+					'c',
+					'd',
+					'e', 'E',
+					'f', 'F',
+					'g', 'G',
+					'o', 'O',
+					'p',
+					'q',
+					's',
+					't', 'T',
+					'U',
+					'x', 'X');
+}
+
+inline Sci_Position CheckFormatSpecifier(const StyleContext &sc, bool insideUrl) noexcept {
 	if (sc.chNext == '%') {
 		return 2;
 	}
@@ -92,7 +98,7 @@ Sci_Position CheckFormatSpecifier(const StyleContext &sc, bool insideUrl) noexce
 	}
 
 	Sci_PositionU pos = sc.currentPos + 1;
-	if (sc.chNext == '+' || sc.chNext == '-' || sc.chNext == '#' || sc.chNext == ' ') {
+	if (IsFormatFlag(sc.chNext)) {
 		++pos;
 	}
 	while (pos < sc.lineStartNext) {
@@ -108,7 +114,7 @@ Sci_Position CheckFormatSpecifier(const StyleContext &sc, bool insideUrl) noexce
 	return 0;
 }
 
-int DetectIdentifierType(LexAccessor &styler, int funcState, int chNext, Sci_Position startPos, Sci_Position lineStartCurrent) noexcept {
+inline int DetectIdentifierType(LexAccessor &styler, int funcState, int chNext, Sci_Position startPos, Sci_Position lineStartCurrent) noexcept {
 	if (((funcState == GoFunction_Caller || funcState == GoFunction_Return) && (chNext == ')' || chNext == ','))
 		|| (funcState > GoFunction_Name && chNext == '{')) {
 		// func (identifier *Type) (Type, error)

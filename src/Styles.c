@@ -89,7 +89,7 @@ extern EDITLEXER lexHaxe;
 extern EDITLEXER lexINI;
 extern EDITLEXER lexINNO;
 
-extern EDITLEXER lexJAM;
+extern EDITLEXER lexJam;
 extern EDITLEXER lexJulia;
 
 extern EDITLEXER lexKotlin;
@@ -188,7 +188,7 @@ static PEDITLEXER pLexArray[] = {
 	&lexINI,
 	&lexINNO,
 
-	&lexJAM,
+	&lexJam,
 	&lexJulia,
 
 	&lexKotlin,
@@ -1237,6 +1237,10 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[4] = KeywordAttr_MakeLower;	// properties
 		attr[5] = KeywordAttr_NoLexer;		// options
 		break;
+	case NP2LEX_AWK:
+		attr[3] = KeywordAttr_NoLexer;		// library function
+		attr[4] = KeywordAttr_NoLexer;		// misc
+		break;
 	case NP2LEX_CMAKE:
 		attr[6] = KeywordAttr_NoLexer;		// long properties
 		attr[7] = KeywordAttr_NoLexer;		// long variables
@@ -1254,9 +1258,22 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[8] = KeywordAttr_NoLexer;		// function
 		attr[9] = KeywordAttr_NoLexer;		// package
 		break;
+	case NP2LEX_GRADLE:
+		attr[7] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// annotation
+		attr[8] = KeywordAttr_NoLexer;		// function
+		attr[9] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// GroovyDoc
+		break;
+	case NP2LEX_GROOVY:
+		attr[7] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// annotation
+		attr[9] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// GroovyDoc
+		break;
 	case NP2LEX_HAXE:
 		attr[1] = KeywordAttr_NoAutoComp;	// preprocessor
 		attr[8] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// comment
+		break;
+	case NP2LEX_JAM:
+		attr[5] = KeywordAttr_NoLexer;		// rule
+		attr[6] = KeywordAttr_NoLexer;		// feature
 		break;
 	case NP2LEX_JAVA:
 		attr[7] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// annotation
@@ -1775,10 +1792,6 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 			}
 		}
 		switch (iLexer) {
-		case SCLEX_DART:
-			SciCall_CopyStyles(SCE_DART_TRIPLE_STRING_DQ, MULTI_STYLE(SCE_DART_TRIPLE_STRING_DQSTART, SCE_DART_TRIPLE_STRING_DQEND, 0, 0));
-			break;
-
 		case SCLEX_PERL:
 #if defined(_WIN64)
 			SciCall_CopyStyles(SCE_PL_SCALAR, MULTI_STYLE8(SCE_PL_REGEX_VAR, SCE_PL_REGSUBST_VAR, SCE_PL_BACKTICKS_VAR, SCE_PL_HERE_QQ_VAR,
@@ -1850,7 +1863,7 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 		// Save current lexer
 		pLexCurrent = pLexNew;
 		bCurrentLexerHasLineComment = DidLexerHasLineComment(iLexer);
-		bCurrentLexerHasBlockComment = DidLexerHasBlockComment(iLexer, rid);
+		bCurrentLexerHasBlockComment = DidLexerHasBlockComment(iLexer);
 		UpdateStatusBarCache(STATUS_LEXER);
 		UpdateStatusbar();
 	}
@@ -2638,7 +2651,7 @@ static PEDITLEXER Style_GetLexerFromFile(LPCWSTR lpszFile, BOOL bCGIGuess, LPCWS
 		}
 		// Boost build
 		if (!bFound && (StrCaseEqual(lpszName, L"Jamroot") || StrHasPrefixCase(lpszName, L"Jamfile"))) {
-			pLexNew = &lexJAM;
+			pLexNew = &lexJam;
 			bFound = TRUE;
 		}
 		if (!bFound && (StrHasPrefixCase(lpszName, L"Kconfig") || StrHasPrefixCase(lpszName, L"Doxyfile"))) {

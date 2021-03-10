@@ -658,6 +658,9 @@ typedef sptr_t (*SciFnDirect)(sptr_t ptr, unsigned int iMessage, uptr_t wParam, 
 #define SCI_EDITTOGGLEOVERTYPE 2324
 #define SCI_CANCEL 2325
 #define SCI_DELETEBACK 2326
+#define TAB_COMPLETION_NONE 2
+#define TAB_COMPLETION_DEFAULT 1
+#define TAB_COMPLETION_LATEX 2
 #define SCI_TAB 2327
 #define SCI_BACKTAB 2328
 #define SCI_NEWLINE 2329
@@ -1043,8 +1046,6 @@ typedef sptr_t (*SciFnDirect)(sptr_t ptr, unsigned int iMessage, uptr_t wParam, 
 #define KEYWORDSET_INDEXMASK 31
 #define KEYWORDSET_TOLOWER 32
 #define SCI_SETKEYWORDS 4005
-#define SCI_SETLEXERLANGUAGE 4006
-#define SCI_LOADLEXERLIBRARY 4007
 #define SCI_GETPROPERTY 4008
 #define SCI_GETPROPERTYEXPANDED 4009
 #define SCI_GETPROPERTYINT 4010

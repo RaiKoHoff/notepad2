@@ -635,7 +635,7 @@ NP2_inline void SciCall_StyleClearAll(void) {
 }
 
 NP2_inline void SciCall_CopyStyles(size_t sourceIndex, LPARAM destStyles) {
-	SciCall(SCI_COPYSTYLES, sourceIndex, destStyles);	
+	SciCall(SCI_COPYSTYLES, sourceIndex, destStyles);
 }
 
 NP2_inline void SciCall_StyleSetFont(int style, const char *fontName) {
@@ -841,6 +841,7 @@ NP2_inline void SciCall_SetFontLocale(const char *localeName) {
 NP2_inline void SciCall_SetIMEInteraction(int imeInteraction) {
 	SciCall(SCI_SETIMEINTERACTION, imeInteraction, 0);
 }
+
 
 // Brace highlighting
 
@@ -1169,7 +1170,11 @@ NP2_inline void SciCall_NewLine(void) {
 }
 
 NP2_inline void SciCall_Tab(void) {
-	SciCall(SCI_TAB, 0, 0);
+	SciCall(SCI_TAB, TAB_COMPLETION_DEFAULT, 0);
+}
+
+NP2_inline void SciCall_TabCompletion(int what) {
+	SciCall(SCI_TAB, what, 0);
 }
 
 NP2_inline void SciCall_BackTab(void) {
@@ -1356,7 +1361,7 @@ NP2_inline void SciCall_SetEdgeColour(COLORREF edgeColour) {
 
 // Lexer
 
-NP2_inline void SciCall_SetLexer(int lexer) {
+NP2_inline void SciCall_SetLexer(int lexer) { //! removed in Scintilla 5
 	SciCall(SCI_SETLEXER, lexer, 0);
 }
 

@@ -6,6 +6,7 @@
 #include <commdlg.h>
 #include <limits.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include "SciCall.h"
 #include "Helpers.h"
@@ -13,6 +14,7 @@
 #include "Styles.h"
 #include "resource.h"
 #include "EditAutoC_Data0.h"
+#include "LaTeXInput.h"
 
 #define NP2_AUTOC_USE_STRING_ORDER	1
 // scintilla/src/AutoComplete.h AutoComplete::maxItemLen
@@ -344,6 +346,8 @@ static inline BOOL WordList_StartsWith(const struct WordList *pWList, LPCSTR pWo
 }
 
 void WordList_AddListEx(struct WordList *pWList, LPCSTR pList) {
+	//StopWatch watch;
+	//StopWatch_Start(watch);
 	char *word = pWList->wordBuf;
 	const int iStartLen = pWList->iStartLen;
 	int len = 0;
@@ -393,6 +397,10 @@ void WordList_AddListEx(struct WordList *pWList, LPCSTR pList) {
 			break;
 		}
 	} while (*pList);
+
+	//StopWatch_Stop(watch);
+	//const double duration = StopWatch_Get(&watch);
+	//printf("%s duration=%.6f\n", __func__, duration);
 }
 
 static inline void WordList_AddList(struct WordList *pWList, LPCSTR pList) {
@@ -474,6 +482,8 @@ static inline BOOL IsSpecialStartChar(int ch, int chPrev) {
 		// ObjC Keyword, Java Annotation, Python Decorator, Cobra Directive
 		|| (ch == '<') // HTML/XML Tag, C# Doc Tag
 		|| (ch == '\\')// Doxygen Doc Tag, LaTeX Command
+		|| (chPrev == '\\' && (ch == '^' || ch == ':'))// LaTeX input, Emoji input
+		// TODO: show emoji list after typing ':'.
 		|| (chPrev == '<' && ch == '/')	// HTML/XML Close Tag
 		|| (chPrev == '-' && ch == '>')	// member(C/C++/PHP)
 		|| (chPrev == ':' && ch == ':');// namespace(C++), static member(C++/Java8/PHP)
@@ -521,29 +531,36 @@ BOOL IsDocWordChar(int ch) {
 		return (ch == '-' || ch == '$');
 
 	case NP2LEX_CIL:
-	case NP2LEX_JAVASCRIPT:
 	case NP2LEX_TYPESCRIPT:
 	case NP2LEX_VERILOG:
 		return (ch == '$');
 
 	case NP2LEX_CPP:
 		return (ch == '#' || ch == '@' || ch == ':');
+
 	case NP2LEX_CSHARP:
+	case NP2LEX_HAXE:
+	case NP2LEX_SWIFT:
 		return (ch == '#' || ch == '@');
 
 	case NP2LEX_D:
 	case NP2LEX_FSHARP:
-	case NP2LEX_HAXE:
 	case NP2LEX_INNO:
 	case NP2LEX_VB:
 		return (ch == '#');
 
+	case NP2LEX_AWK:
 	case NP2LEX_JAVA:
 	case NP2LEX_JULIA:
 	case NP2LEX_KOTLIN:
 	case NP2LEX_RUST:
 		return (ch == '$' || ch == '@' || ch == ':');
 
+	case NP2LEX_JAVASCRIPT:
+		return ch == '$' || ch == '#' || ch == '@';
+
+	case NP2LEX_DART:
+	case NP2LEX_GRADLE:
 	case NP2LEX_GROOVY:
 	case NP2LEX_SCALA:
 	case NP2LEX_PYTHON:
@@ -988,6 +1005,20 @@ void AutoC_AddKeyword(struct WordList *pWList, int iCurrentStyle) {
 #define AutoC_AddSpecWord_Finish	1
 #define AutoC_AddSpecWord_Keyword	2
 INT AutoC_AddSpecWord(struct WordList *pWList, int iCurrentStyle, int ch, int chPrev) {
+#if EnableLaTeXLikeEmojiInput
+	if ((ch == '\\' || (chPrev == '\\' && (ch == '^' || ch == ':'))) && autoCompletionConfig.bLaTeXInputMethod) {
+		if (ch != ':') {
+			WordList_AddListEx(pWList, LaTeXInputSequenceString);
+		} else {
+			WordList_AddListEx(pWList, EmojiInputSequenceString);
+		}
+	}
+#else
+	if ((ch == '\\' || (chPrev == '\\' && ch == '^')) && autoCompletionConfig.bLaTeXInputMethod) {
+		WordList_AddListEx(pWList, LaTeXInputSequenceString);
+	}
+#endif
+
 	switch (pLexCurrent->iLexer) {
 	case SCLEX_APDL:
 		if (iCurrentStyle == 0 && (ch == '*' || ch == '/')) {
@@ -1068,6 +1099,7 @@ INT AutoC_AddSpecWord(struct WordList *pWList, int iCurrentStyle, int ch, int ch
 		}
 		break;
 
+	case SCLEX_GROOVY:
 	case SCLEX_JAVA:
 		if (ch == '@') {
 			if (iCurrentStyle == SCE_JAVA_DEFAULT) {
@@ -1113,6 +1145,14 @@ INT AutoC_AddSpecWord(struct WordList *pWList, int iCurrentStyle, int ch, int ch
 				WordList_AddList(pWList, pLexCurrent->pKeyWords->pszKeyWords[6]); // KDoc
 				return AutoC_AddSpecWord_Finish;
 			}
+		}
+		break;
+
+	case SCLEX_LATEX:
+	case SCLEX_TEXINFO:
+		if ((ch == '\\' || (chPrev == '\\' && ch == '^')) && !autoCompletionConfig.bLaTeXInputMethod) {
+			WordList_AddListEx(pWList, LaTeXInputSequenceString);
+			return AutoC_AddSpecWord_Keyword;
 		}
 		break;
 
@@ -1756,15 +1796,19 @@ BOOL IsIndentKeywordStyle(int style) {
 }
 
 const char *EditKeywordIndent(const char *head, int *indent) {
-	char word[64] = "";
-	char word_low[64] = "";
+	char word[16] = "";
+	char word_low[16] = "";
 	int length = 0;
 	const char *endPart = NULL;
 	*indent = 0;
 
-	while (*head && length < 63 && IsAlpha(*head)) {
+	while (*head && length < 15) {
+		const char lower = *head | 0x20;
+		if (lower < 'a' || lower > 'z') {
+			break;
+		}
 		word[length] = *head;
-		word_low[length] = (char)((*head) | 0x20);
+		word_low[length] = lower;
 		++length;
 		++head;
 	}
@@ -2142,11 +2186,13 @@ void EditToggleCommentLine(void) {
 		break;
 
 	case SCLEX_CIL:
+	case SCLEX_CPP:
 	case SCLEX_CSS: // for SCSS, LESS, HSS
 	case SCLEX_DART:
 	case SCLEX_FSHARP:
 	case SCLEX_GO:
 	case SCLEX_GRAPHVIZ:
+	case SCLEX_GROOVY:
 	case SCLEX_HAXE:
 	case SCLEX_JAVA:
 	case SCLEX_JAVASCRIPT:
@@ -2160,9 +2206,11 @@ void EditToggleCommentLine(void) {
 		break;
 
 	case SCLEX_AVS:
+	case SCLEX_AWK:
 	case SCLEX_CMAKE:
 	case SCLEX_CONF:
 	case SCLEX_GN:
+	case SCLEX_JAM:
 	case SCLEX_JULIA:
 	case SCLEX_MAKEFILE:
 	case SCLEX_NSIS:
@@ -2176,18 +2224,6 @@ void EditToggleCommentLine(void) {
 	case SCLEX_TOML:
 	case SCLEX_YAML:
 		EditToggleLineComments(L"#", FALSE);
-		break;
-
-	case SCLEX_CPP:
-		switch (pLexCurrent->rid) {
-		case NP2LEX_AWK:
-		case NP2LEX_JAM:
-			EditToggleLineComments(L"#", FALSE);
-			break;
-		default:
-			EditToggleLineComments(L"//", FALSE);
-			break;
-		}
 		break;
 
 	case SCLEX_FORTRAN:
@@ -2284,10 +2320,12 @@ void EditToggleCommentBlock(void) {
 	case SCLEX_ASM:
 	case SCLEX_AVS:
 	case SCLEX_CIL:
+	case SCLEX_CPP:
 	case SCLEX_CSS:
 	case SCLEX_DART:
 	case SCLEX_GO:
 	case SCLEX_GRAPHVIZ:
+	case SCLEX_GROOVY:
 	case SCLEX_HAXE:
 	case SCLEX_JAVA:
 	case SCLEX_JAVASCRIPT:
@@ -2308,18 +2346,6 @@ void EditToggleCommentBlock(void) {
 
 	case SCLEX_CMAKE:
 		EditEncloseSelection(L"#[[", L"]]");
-		break;
-
-	case SCLEX_CPP:
-		switch (pLexCurrent->rid) {
-		case NP2LEX_AWK:
-		case NP2LEX_JAM:
-			break;
-
-		default:
-			EditEncloseSelection(L"/*", L"*/");
-			break;
-		}
 		break;
 
 	case SCLEX_FORTRAN:
@@ -2359,16 +2385,17 @@ void EditToggleCommentBlock(void) {
 		EditEncloseSelection(L"{", L"}");
 		break;
 
+	case SCLEX_JAM:
+	case SCLEX_LISP:
+		EditEncloseSelection(L"#|", L"|#");
+		break;
+
 	case SCLEX_JULIA:
 		EditEncloseSelection(L"#=", L"=#");
 		break;
 
 	case SCLEX_LATEX:
 		EditEncloseSelectionNewLine(L"\\begin{comment}", L"\\end{comment}");
-		break;
-
-	case SCLEX_LISP:
-		EditEncloseSelection(L"#|", L"|#");
 		break;
 
 	case SCLEX_LUA:

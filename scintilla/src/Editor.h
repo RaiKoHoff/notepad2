@@ -334,7 +334,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	void SetSelection(SelectionPosition currentPos_, SelectionPosition anchor_);
 	void SetSelection(Sci::Position currentPos_, Sci::Position anchor_);
 	void SetSelection(SelectionPosition currentPos_);
-	void SetSelection(int currentPos_);
+	void SetSelection(Sci::Position currentPos_);
 	void SetEmptySelection(SelectionPosition currentPos_);
 	void SetEmptySelection(Sci::Position currentPos_);
 	enum class AddNumber {
@@ -440,7 +440,15 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	void DelCharBack(bool allowLineStartDeletion);
 	virtual void ClaimSelection() noexcept = 0;
 
-	static int ModifierFlags(bool shift, bool ctrl, bool alt, bool meta = false, bool super = false) noexcept;
+	static constexpr int ModifierFlags(bool shift, bool ctrl, bool alt, bool meta = false, bool super = false) noexcept {
+		return
+			(shift ? SCI_SHIFT : 0) |
+			(ctrl ? SCI_CTRL : 0) |
+			(alt ? SCI_ALT : 0) |
+			(meta ? SCI_META : 0) |
+			(super ? SCI_SUPER : 0);
+	}
+
 	virtual void NotifyChange() noexcept = 0;
 	virtual void NotifyFocus(bool focus);
 	virtual void SetCtrlID(int identifier) noexcept;
