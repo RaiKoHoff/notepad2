@@ -7,6 +7,17 @@
 
 #define	NUMKEYWORD				(KEYWORDSET_MAX + 1)
 
+#define TAB_WIDTH_4		4
+#define TAB_WIDTH_2		2
+#define TAB_WIDTH_MIN	1
+#define TAB_WIDTH_MAX	256
+#define INDENT_WIDTH_4		4
+#define INDENT_WIDTH_2		2
+#define INDENT_WIDTH_MIN	0
+#define INDENT_WIDTH_MAX	256
+#define TAB_AS_TAB			0
+#define TAB_AS_SPACES		1
+
 #define MAX_EDITSTYLE_VALUE_SIZE	256
 #define MAX_EDITLEXER_EXT_SIZE		512
 #define MAX_LEXER_STYLE_EDIT_SIZE	512
@@ -19,24 +30,18 @@ enum {
 	StyleTheme_Max = StyleTheme_Dark,
 };
 
-#ifndef _INC_WINDOWS
-typedef wchar_t * LPWSTR;
-typedef const wchar_t * LPCWSTR;
-typedef int BOOL;
-#endif
-
 typedef struct EDITSTYLE {
 	const int iStyle;
 	struct {
 		const int rid;
 		const int iNameLen;
-		LPCWSTR const pszName;
-		LPWSTR szValue;
+		const wchar_t * const pszName;
+		wchar_t *szValue;
 	};
-	LPCWSTR const pszDefault;
+	const wchar_t * const pszDefault;
 } EDITSTYLE, *PEDITSTYLE;
 
-#define EDITSTYLE_BufferSize(iStyleCount)	((iStyleCount) * MAX_EDITSTYLE_VALUE_SIZE * sizeof(WCHAR))
+#define EDITSTYLE_BufferSize(iStyleCount)	((iStyleCount) * MAX_EDITSTYLE_VALUE_SIZE * sizeof(wchar_t))
 #define	MULTI_STYLE(a, b, c, d)			((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
 #define	MULTI_STYLE8(a, b, c, d, e, f, g, h) \
 	(MULTI_STYLE(a, b, c, d) | ((int64_t)MULTI_STYLE(e, f, g, h) << 32))
@@ -55,18 +60,25 @@ typedef struct KEYWORDLIST {
 typedef struct EDITLEXER {
 	const int iLexer;
 	const int rid;
+	// default Tab settings for this scheme.
+	struct {
+		const unsigned char tabWidth;
+		const unsigned char indentWidth;
+		const unsigned char tabsAsSpaces;
+		const unsigned char useGlobalTabSettings;
+	};
 	struct {
 		int iStyleTheme;
-		BOOL bStyleChanged;
-		BOOL bUseDefaultCodeStyle;
+		int bStyleChanged;
+		int bUseDefaultCodeStyle;
 		int iFavoriteOrder;
 		const unsigned int iStyleCount;
 		const int iNameLen;
-		LPCWSTR const pszName;
-		LPWSTR szExtensions;
-		LPWSTR szStyleBuf;
+		const wchar_t * const pszName;
+		wchar_t *szExtensions;
+		wchar_t *szStyleBuf;
 	};
-	LPCWSTR const pszDefExt;
+	const wchar_t * const pszDefExt;
 	const KEYWORDLIST * const pKeyWords;
 	EDITSTYLE * const Styles;
 } EDITLEXER, *PEDITLEXER;
@@ -75,7 +87,7 @@ typedef const EDITLEXER *LPCEDITLEXER;
 
 #endif  // !RC_INVOKED
 
-// NP2LEX_, rid for EDITLEXER
+// NP2LEX_, resource id for EDITLEXER.
 #define NP2LEX_TEXTFILE		63000	// SCLEX_NULL		Text File
 #define NP2LEX_CPP			63001	// SCLEX_CPP		C/C++ Source
 #define NP2LEX_JAVA			63002	// SCLEX_JAVA		Java Source
