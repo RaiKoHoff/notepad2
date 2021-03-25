@@ -16,7 +16,7 @@ static EDITSTYLE Styles_Global[] = {
 	{ STYLE_CONTROLCHAR, NP2StyleX_ControlCharacter, L"size:-1" },
 	{ STYLE_INDENTGUIDE, NP2StyleX_IndentationGuide, L"fore:#FF8000" },
 	{ SCI_SETSELFORE + SCI_SETSELBACK, NP2StyleX_SelectedText, L"eolfilled; alpha:95; outline:50" },
-	{ SCI_SETWHITESPACEFORE + SCI_SETWHITESPACEBACK + SCI_SETWHITESPACESIZE, NP2StyleX_Whitespace, L"size:1; fore:#FF4000" },
+	{ SCI_SETWHITESPACEFORE + SCI_SETWHITESPACEBACK + SCI_SETWHITESPACESIZE, NP2StyleX_Whitespace, L"size:2; fore:#FF4000; alpha:65" },
 	{ SCI_SETCARETLINEBACK, NP2StyleX_CurrentLine, L"size:2; fore:#C2C0C3; back:#FFFF00; alpha:90; outline:90" },
 	{ SCI_SETCARETFORE + SCI_SETCARETWIDTH, NP2StyleX_Caret, L"back:#FF0000" },
 	{ 0, NP2StyleX_IMEIndicator, L"fore:#108010" },
@@ -39,7 +39,7 @@ static EDITSTYLE Styles_2ndGlobal[] = {
 	{ STYLE_CONTROLCHAR, NP2StyleX_ControlCharacter, L"size:-1" },
 	{ STYLE_INDENTGUIDE, NP2StyleX_IndentationGuide, L"fore:#605F63" },
 	{ SCI_SETSELFORE + SCI_SETSELBACK, NP2StyleX_SelectedText, L"eolfilled; alpha:95; outline:50" },
-	{ SCI_SETWHITESPACEFORE + SCI_SETWHITESPACEBACK + SCI_SETWHITESPACESIZE, NP2StyleX_Whitespace, L"size:1; fore:#FF4000" },
+	{ SCI_SETWHITESPACEFORE + SCI_SETWHITESPACEBACK + SCI_SETWHITESPACESIZE, NP2StyleX_Whitespace, L"size:2; fore:#FF4000; alpha:65" },
 	{ SCI_SETCARETLINEBACK, NP2StyleX_CurrentLine, L"size:2; fore:#C2C0C3; back:#FFFF00; alpha:25; outline:25" },
 	{ SCI_SETCARETFORE + SCI_SETCARETWIDTH, NP2StyleX_Caret, L"fore:#FFFFFF; back:#00FF00" },
 	{ 0, NP2StyleX_IMEIndicator, L"fore:#108010" },
@@ -55,6 +55,7 @@ static EDITSTYLE Styles_2ndGlobal[] = {
 
 EDITLEXER lexGlobal = {
 	SCLEX_NULL, NP2LEX_GLOBAL,
+	SCHEME_SETTINGS_DEFAULT,
 	EDITLEXER_HOLE(L"Global Styles", Styles_Global),
 	NULL,
 	NULL,
@@ -63,6 +64,7 @@ EDITLEXER lexGlobal = {
 
 EDITLEXER lex2ndGlobal = {
 	SCLEX_NULL, NP2LEX_2NDGLOBAL,
+	SCHEME_SETTINGS_DEFAULT,
 	EDITLEXER_HOLE(L"2nd Global Styles", Styles_2ndGlobal),
 	NULL,
 	NULL,
@@ -79,6 +81,7 @@ static EDITSTYLE Styles_2ndText[] = {
 
 EDITLEXER lexTextFile = {
 	SCLEX_NULL, NP2LEX_TEXTFILE,
+	SCHEME_SETTINGS_DEFAULT,
 	EDITLEXER_TEXT(L"Text File", Styles_Text),
 	L"txt; text; wtx; doc",
 	&Keywords_NULL,
@@ -87,6 +90,7 @@ EDITLEXER lexTextFile = {
 
 EDITLEXER lex2ndTextFile = {
 	SCLEX_NULL, NP2LEX_2NDTEXTFILE,
+	SCHEME_SETTINGS_DEFAULT,
 	EDITLEXER_HOLE(L"2nd Text File", Styles_2ndText),
 	L"log; asc; map; bnf",
 	&Keywords_NULL,
@@ -104,6 +108,7 @@ static EDITSTYLE Styles_ANSI[] = {
 
 EDITLEXER lexANSI = {
 	SCLEX_NULL, NP2LEX_ANSI,
+	SCHEME_SETTINGS_DEFAULT,
 	EDITLEXER_HOLE(L"ANSI Art", Styles_ANSI),
 	L"nfo; diz",
 	&Keywords_NULL,
@@ -126,6 +131,7 @@ static EDITSTYLE Styles_CONF[] = {
 
 EDITLEXER lexCONF = {
 	SCLEX_CONF, NP2LEX_CONF,
+	SCHEME_SETTINGS_DEFAULT,
 	EDITLEXER_HOLE(L"Config File", Styles_CONF),
 	L"conf; cfg; cnf; htaccess; properties; prefs; iface; prop; po; te",
 	&Keywords_NULL,
@@ -145,6 +151,7 @@ static EDITSTYLE Styles_DIFF[] = {
 
 EDITLEXER lexDIFF = {
 	SCLEX_DIFF, NP2LEX_DIFF,
+	SCHEME_SETTINGS_DEFAULT,
 	EDITLEXER_HOLE(L"Diff File", Styles_DIFF),
 	L"diff; patch",
 	&Keywords_NULL,
@@ -162,6 +169,7 @@ static EDITSTYLE Styles_INI[] = {
 
 EDITLEXER lexINI = {
 	SCLEX_PROPERTIES, NP2LEX_INI,
+	SCHEME_SETTINGS_DEFAULT,
 	EDITLEXER_HOLE(L"Ini Config File", Styles_INI),
 	L"ini; inf; reg; oem; sif; url; sed; theme; clw; abnf",
 	&Keywords_NULL,
