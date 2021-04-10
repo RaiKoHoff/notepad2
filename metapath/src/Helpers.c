@@ -457,12 +457,15 @@ BOOL BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest) {
 		if (bmp.bmBitsPixel == 32) {
 			RGBQUAD *prgba = (RGBQUAD *)bmp.bmBits;
 
+			const BYTE red = GetRValue(crDest);
+			const BYTE green = GetGValue(crDest);
+			const BYTE blue = GetBValue(crDest);
 			for (int y = 0; y < bmp.bmHeight; y++) {
 				for (int x = 0; x < bmp.bmWidth; x++) {
 					const BYTE alpha = prgba[x].rgbReserved;
-					prgba[x].rgbRed = ((prgba[x].rgbRed * alpha) + (GetRValue(crDest) * (255 - alpha))) >> 8;
-					prgba[x].rgbGreen = ((prgba[x].rgbGreen * alpha) + (GetGValue(crDest) * (255 - alpha))) >> 8;
-					prgba[x].rgbBlue = ((prgba[x].rgbBlue * alpha) + (GetBValue(crDest) * (255 - alpha))) >> 8;
+					prgba[x].rgbRed = ((prgba[x].rgbRed * alpha) + (red * (255 - alpha))) >> 8;
+					prgba[x].rgbGreen = ((prgba[x].rgbGreen * alpha) + (green * (255 - alpha))) >> 8;
+					prgba[x].rgbBlue = ((prgba[x].rgbBlue * alpha) + (blue * (255 - alpha))) >> 8;
 					prgba[x].rgbReserved = 0xFF;
 				}
 				prgba = (RGBQUAD *)((LPBYTE)prgba + bmp.bmWidthBytes);
@@ -484,11 +487,14 @@ BOOL BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha) {
 		if (bmp.bmBitsPixel == 32) {
 			RGBQUAD *prgba = (RGBQUAD *)bmp.bmBits;
 
+			const WORD red = GetRValue(crDest) * (255 - alpha);
+			const WORD green = GetGValue(crDest) * (255 - alpha);
+			const WORD blue = GetBValue(crDest) * (255 - alpha);
 			for (int y = 0; y < bmp.bmHeight; y++) {
 				for (int x = 0; x < bmp.bmWidth; x++) {
-					prgba[x].rgbRed = ((prgba[x].rgbRed * alpha) + (GetRValue(crDest) * (255 - alpha))) >> 8;
-					prgba[x].rgbGreen = ((prgba[x].rgbGreen * alpha) + (GetGValue(crDest) * (255 - alpha))) >> 8;
-					prgba[x].rgbBlue = ((prgba[x].rgbBlue * alpha) + (GetBValue(crDest) * (255 - alpha))) >> 8;
+					prgba[x].rgbRed = ((prgba[x].rgbRed * alpha) + red) >> 8;
+					prgba[x].rgbGreen = ((prgba[x].rgbGreen * alpha) + green) >> 8;
+					prgba[x].rgbBlue = ((prgba[x].rgbBlue * alpha) + blue) >> 8;
 				}
 				prgba = (RGBQUAD *)((LPBYTE)prgba + bmp.bmWidthBytes);
 			}
@@ -965,22 +971,24 @@ void GetLocaleDefaultUIFont(LANGID lang, LPWSTR lpFaceName, WORD *wSize) {
 	switch (PRIMARYLANGID(lang)) {
 	default:
 	case LANG_ENGLISH:
+		// https://docs.microsoft.com/en-us/typography/font-list/segoe-ui
 		font = L"Segoe UI";
-		*wSize = 9;
 		break;
 	case LANG_CHINESE:
+		// https://docs.microsoft.com/en-us/typography/font-list/microsoft-yahei
+		// https://docs.microsoft.com/en-us/typography/font-list/microsoft-jhenghei
 		font = IsChineseTraditionalSubLang(subLang) ? L"Microsoft JhengHei UI" : L"Microsoft YaHei UI";
-		*wSize = 9;
 		break;
 	case LANG_JAPANESE:
+		// https://docs.microsoft.com/en-us/typography/font-list/meiryo
 		font = L"Meiryo UI";
-		*wSize = 9;
 		break;
 	case LANG_KOREAN:
+		// https://docs.microsoft.com/en-us/typography/font-list/malgun-gothic
 		font = L"Malgun Gothic";
-		*wSize = 9;
 		break;
 	}
+	*wSize = 9;
 	lstrcpy(lpFaceName, font);
 }
 #endif
