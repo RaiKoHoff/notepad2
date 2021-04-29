@@ -703,7 +703,12 @@ ScintillaWin::ScintillaWin(HWND hwnd) noexcept {
 	Init();
 }
 
-ScintillaWin::~ScintillaWin() = default;
+ScintillaWin::~ScintillaWin() {
+	if (sysCaretBitmap) {
+		::DeleteObject(sysCaretBitmap);
+		sysCaretBitmap = {};
+	}
+}
 
 void ScintillaWin::Init() noexcept {
 	// Initialize COM.  If the app has already done this it will have
@@ -716,10 +721,10 @@ void ScintillaWin::Init() noexcept {
 	SetCoalescableTimerFn = DLLFunctionEx<SetCoalescableTimerSig>(L"user32.dll", "SetCoalescableTimer");
 #endif
 
-	vs.indicators[SC_INDICATOR_UNKNOWN] = Indicator(INDIC_HIDDEN, ColourDesired(0, 0, 0xff));
-	vs.indicators[SC_INDICATOR_INPUT] = Indicator(INDIC_DOTS, ColourDesired(0, 0, 0xff));
-	vs.indicators[SC_INDICATOR_CONVERTED] = Indicator(INDIC_COMPOSITIONTHICK, ColourDesired(0, 0, 0xff));
-	vs.indicators[SC_INDICATOR_TARGET] = Indicator(INDIC_STRAIGHTBOX, ColourDesired(0, 0, 0xff));
+	vs.indicators[SC_INDICATOR_UNKNOWN] = Indicator(INDIC_HIDDEN, ColourAlpha(0, 0, 0xff));
+	vs.indicators[SC_INDICATOR_INPUT] = Indicator(INDIC_DOTS, ColourAlpha(0, 0, 0xff));
+	vs.indicators[SC_INDICATOR_CONVERTED] = Indicator(INDIC_COMPOSITIONTHICK, ColourAlpha(0, 0, 0xff));
+	vs.indicators[SC_INDICATOR_TARGET] = Indicator(INDIC_STRAIGHTBOX, ColourAlpha(0, 0, 0xff));
 }
 
 void ScintillaWin::Finalise() noexcept {
@@ -1707,7 +1712,7 @@ sptr_t ScintillaWin::MouseMessage(unsigned int iMessage, uptr_t wParam, sptr_t l
 		// i.e. if datazoomed out only class structures are visible, when datazooming in the control
 		// structures appear, then eventually the individual statements...)
 		if (wParam & MK_SHIFT) {
-			if (vs.wrapState != WrapMode::none || charsPerScroll == 0) {
+			if (vs.wrap.state != WrapMode::none || charsPerScroll == 0) {
 				return ::DefWindowProc(MainHWND(), iMessage, wParam, lParam);
 			}
 		}
@@ -3873,7 +3878,7 @@ bool ScintillaWin::Unregister() noexcept {
 
 bool ScintillaWin::HasCaretSizeChanged() const noexcept {
 	if (
-		((0 != vs.caretWidth) && (sysCaretWidth != vs.caretWidth))
+		((0 != vs.caret.width) && (sysCaretWidth != vs.caret.width))
 		|| ((0 != vs.lineHeight) && (sysCaretHeight != vs.lineHeight))
 		) {
 		return true;
@@ -3882,7 +3887,7 @@ bool ScintillaWin::HasCaretSizeChanged() const noexcept {
 }
 
 BOOL ScintillaWin::CreateSystemCaret() {
-	sysCaretWidth = vs.caretWidth;
+	sysCaretWidth = vs.caret.width;
 	if (0 == sysCaretWidth) {
 		sysCaretWidth = 1;
 	}
