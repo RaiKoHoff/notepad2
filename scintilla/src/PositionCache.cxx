@@ -22,14 +22,15 @@
 #include <iterator>
 #include <memory>
 
+#include "ScintillaTypes.h"
+#include "ScintillaMessages.h"
+#include "ILoader.h"
+#include "ILexer.h"
+
 #include "Debugging.h"
 #include "Geometry.h"
 #include "Platform.h"
 #include "VectorISA.h"
-
-#include "ILoader.h"
-#include "ILexer.h"
-#include "Scintilla.h"
 
 //#include "CharacterCategory.h"
 #include "Position.h"
@@ -53,16 +54,16 @@
 #include "PositionCache.h"
 
 using namespace Scintilla;
+using namespace Scintilla::Internal;
 
 void BidiData::Resize(size_t maxLineLength_) {
 	stylesFonts.resize(maxLineLength_ + 1);
 	widthReprs.resize(maxLineLength_ + 1);
 }
 
-LineLayout::LineLayout(int maxLineLength_) :
+LineLayout::LineLayout(Sci::Line lineNumber_, int maxLineLength_) :
 	lenLineStarts(0),
-	lineNumber(-1),
-	inCache(false),
+	lineNumber(lineNumber_),
 	maxLineLength(-1),
 	numCharsInLine(0),
 	numCharsBeforeEOL(0),
@@ -119,6 +120,14 @@ void LineLayout::Invalidate(ValidLevel validity_) noexcept {
 		validity = validity_;
 }
 
+Sci::Line LineLayout::LineNumber() const noexcept {
+	return lineNumber;
+}
+
+bool LineLayout::CanHold(Sci::Line lineDoc, int lineLength_) const noexcept {
+	return (lineNumber == lineDoc) && (lineLength_ <= maxLineLength);
+}
+
 int LineLayout::LineStart(int line) const noexcept {
 	if (line <= 0) {
 		return 0;
@@ -129,7 +138,7 @@ int LineLayout::LineStart(int line) const noexcept {
 	}
 }
 
-int Scintilla::LineLayout::LineLength(int line) const noexcept {
+int LineLayout::LineLength(int line) const noexcept {
 	if (!lineStarts) {
 		return numCharsInLine;
 	} if (line >= lines - 1) {
@@ -181,8 +190,8 @@ void LineLayout::SetLineStart(int line, int start) {
 	if ((line >= lenLineStarts) && (line != 0)) {
 		const int newMaxLines = line + 20;
 		std::unique_ptr<int[]> newLineStarts = std::make_unique<int[]>(newMaxLines);
-		for (int i = 0; i < lenLineStarts; i++) {
-			newLineStarts[i] = lineStarts[i];
+		if (lenLineStarts) {
+			std::copy(lineStarts.get(), lineStarts.get() + lenLineStarts, newLineStarts.get());
 		}
 		lineStarts = std::move(newLineStarts);
 		lenLineStarts = newMaxLines;
@@ -354,14 +363,11 @@ XYPOSITION ScreenLine::TabPositionAfter(XYPOSITION xPosition) const noexcept {
 
 LineLayoutCache::LineLayoutCache() :
 	lastCaretSlot(SIZE_MAX),
-	level(Cache::none),
+	level(LineCache::None),
 	allInvalidated(false), styleClock(-1) {
-	Allocate(0);
 }
 
-LineLayoutCache::~LineLayoutCache() {
-	Deallocate();
-}
+LineLayoutCache::~LineLayoutCache() = default;
 
 namespace {
 
@@ -397,27 +403,23 @@ constexpr size_t AlignUp(size_t value, size_t alignment) noexcept {
 
 }
 
-void LineLayoutCache::Allocate(size_t length_) {
-	allInvalidated = false;
-	cache.resize(length_);
-	//printf("%s level=%d, size=%zu/%zu, LineLayout=%zu/%zu, BidiData=%zu, XYPOSITION=%zu\n",
-	//	__func__, level, cache.size(), cache.capacity(), sizeof(LineLayout),
-	//	sizeof(std::unique_ptr<LineLayout>), sizeof(BidiData), sizeof(XYPOSITION));
-}
-
 void LineLayoutCache::AllocateForLevel(Sci::Line linesOnScreen, Sci::Line linesInDoc) {
 	// round up cache size to avoid rapidly resizing when linesOnScreen or linesInDoc changed.
 	size_t lengthForLevel = 0;
-	if (level == Cache::caret) {
-		lengthForLevel = 1;
-	} else if (level == Cache::page) {
+	if (level == LineCache::Page) {
 		// see comment in Retrieve() method.
 		lengthForLevel = 1 + AlignUp(4*linesOnScreen, 64);
-	} else if (level == Cache::document) {
+	} else if (level == LineCache::Caret) {
+		lengthForLevel = 2;
+	} else if (level == LineCache::Document) {
 		lengthForLevel = AlignUp(linesInDoc, 64);
 	}
 	if (lengthForLevel != cache.size()) {
-		Allocate(lengthForLevel);
+		allInvalidated = false;
+		cache.resize(lengthForLevel);
+		//printf("%s level=%d, size=%zu/%zu, LineLayout=%zu/%zu, BidiData=%zu, XYPOSITION=%zu\n",
+		//	__func__, level, cache.size(), cache.capacity(), sizeof(LineLayout),
+		//	sizeof(std::unique_ptr<LineLayout>), sizeof(BidiData), sizeof(XYPOSITION));
 	}
 	PLATFORM_ASSERT(cache.size() >= lengthForLevel);
 }
@@ -440,11 +442,12 @@ void LineLayoutCache::Invalidate(LineLayout::ValidLevel validity_) noexcept {
 	}
 }
 
-void LineLayoutCache::SetLevel(Cache level_) noexcept {
-	allInvalidated = false;
-	if ((static_cast<int>(level_) != -1) && (level != level_)) {
+void LineLayoutCache::SetLevel(LineCache level_) noexcept {
+	if (level != level_) {
 		level = level_;
-		Deallocate();
+		allInvalidated = false;
+		cache.clear();
+		lastCaretSlot = SIZE_MAX;
 	}
 }
 
@@ -458,7 +461,7 @@ LineLayout *LineLayoutCache::Retrieve(Sci::Line lineNumber, Sci::Line lineCaret,
 	allInvalidated = false;
 
 	size_t pos = 0;
-	if (level == Cache::page) {
+	if (level == LineCache::Page) {
 		// two arenas, each with two pages to ensure cache efficiency on scrolling.
 		// first arena for lines near top visible line.
 		// second arena for other lines, e.g. folded lines near top visible line.
@@ -478,17 +481,19 @@ LineLayout *LineLayoutCache::Retrieve(Sci::Line lineNumber, Sci::Line lineCaret,
 			lastCaretSlot = 0;
 			std::swap(cache[0], cache[pos]);
 		}
-	} else if (level == Cache::document) {
+	} else if (level == LineCache::Caret) {
+		pos = lineNumber != lineCaret;
+	} else if (level == LineCache::Document) {
 		pos = lineNumber;
 	}
 
 	LineLayout *ret = cache[pos].get();
 	if (ret) {
-		if ((ret->lineNumber != lineNumber) || (ret->maxLineLength < maxChars)) {
+		if (!ret->CanHold(lineNumber, maxChars)) {
 			//printf("USE line=%zd/%zd, caret=%zd/%zd top=%zd, pos=%zu, clock=%d\n",
 			//	lineNumber, ret->lineNumber, lineCaret, lastCaretSlot, topLine, pos, styleClock_);
 			ret->~LineLayout();
-			ret = new (ret) LineLayout(maxChars);
+			ret = new (ret) LineLayout(lineNumber, maxChars);
 		} else {
 			//printf("HIT line=%zd, caret=%zd/%zd top=%zd, pos=%zu, clock=%d, validity=%d\n",
 			//	lineNumber, lineCaret, lastCaretSlot, topLine, pos, styleClock_, ret->validity);
@@ -496,76 +501,93 @@ LineLayout *LineLayoutCache::Retrieve(Sci::Line lineNumber, Sci::Line lineCaret,
 	} else {
 		//printf("NEW line=%zd, caret=%zd/%zd top=%zd, pos=%zu, clock=%d\n",
 		//	lineNumber, lineCaret, lastCaretSlot, topLine, pos, styleClock_);
-		cache[pos] = std::make_unique<LineLayout>(maxChars);
+		cache[pos] = std::make_unique<LineLayout>(lineNumber, maxChars);
 		ret = cache[pos].get();
 	}
-	ret->lineNumber = lineNumber;
-	ret->inCache = true;
 
+	// LineLineCache::None is not supported, we only use LineCache::Page.
 	return ret;
 }
 
-void LineLayoutCache::Dispose(LineLayout *ll) noexcept {
-	allInvalidated = false;
-	if (ll) {
-		if (!ll->inCache) {
-			delete ll;
-		}
-	}
-}
-
 // Simply pack the (maximum 4) character bytes into an int
-static unsigned int KeyFromString(const char *charBytes, size_t len) noexcept {
-	PLATFORM_ASSERT(len <= 4);
+static constexpr unsigned int KeyFromString(std::string_view charBytes) noexcept {
+	PLATFORM_ASSERT(charBytes.length() <= 4);
 	unsigned int k = 0;
-	while (len && *charBytes) {
-		const unsigned char uc = *charBytes++;
+	for (const unsigned char uc : charBytes) {
 		k = (k << 8) | uc;
-		--len;
 	}
 	return k;
 }
 
-void SpecialRepresentations::SetRepresentation(const char *charBytes, const char *value) {
-	const unsigned int key = KeyFromString(charBytes, UTF8MaxBytes);
-	const auto it = mapReprs.find(key);
-	if (it == mapReprs.end()) {
-		// New entry so increment for first byte
-		const unsigned char ucStart = charBytes[0];
-		startByteHasReprs[ucStart]++;
-		mapReprs.emplace(key, value);
-	} else {
-		it->second = Representation(value);
+void SpecialRepresentations::SetRepresentation(std::string_view charBytes, std::string_view value) {
+	if ((charBytes.length() <= 4) && (value.length() <= Representation::maxLength)) {
+		const unsigned int key = KeyFromString(charBytes);
+		const auto [it, inserted] = mapReprs.try_emplace(key, value);
+		if (inserted) {
+			// New entry so increment for first byte
+			const unsigned char ucStart = charBytes.empty() ? 0 : charBytes[0];
+			startByteHasReprs[ucStart]++;
+		} else {
+			it->second = Representation(value);
+		}
 	}
 }
 
-void SpecialRepresentations::ClearRepresentation(const char *charBytes) {
-	const auto it = mapReprs.find(KeyFromString(charBytes, UTF8MaxBytes));
-	if (it != mapReprs.end()) {
-		mapReprs.erase(it);
-		const unsigned char ucStart = charBytes[0];
-		startByteHasReprs[ucStart]--;
+void SpecialRepresentations::SetRepresentationAppearance(std::string_view charBytes, RepresentationAppearance appearance) {
+	if (charBytes.length() <= 4) {
+		const unsigned int key = KeyFromString(charBytes);
+		const auto it = mapReprs.find(key);
+		if (it == mapReprs.end()) {
+			// Not present so fail
+			return;
+		}
+		it->second.appearance = appearance;
 	}
 }
 
-const Representation *SpecialRepresentations::RepresentationFromCharacter(const char *charBytes, size_t len) const {
-	PLATFORM_ASSERT(len <= 4);
-	const unsigned char ucStart = charBytes[0];
-	if (!startByteHasReprs[ucStart])
-		return nullptr;
-	const auto it = mapReprs.find(KeyFromString(charBytes, len));
-	if (it != mapReprs.end()) {
-		return &(it->second);
+void SpecialRepresentations::SetRepresentationColour(std::string_view charBytes, ColourRGBA colour) {
+	if (charBytes.length() <= 4) {
+		const unsigned int key = KeyFromString(charBytes);
+		const auto it = mapReprs.find(key);
+		if (it == mapReprs.end()) {
+			// Not present so fail
+			return;
+		}
+		it->second.appearance = mapReprs[key].appearance | RepresentationAppearance::Colour;
+		it->second.colour = colour;
+	}
+}
+
+void SpecialRepresentations::ClearRepresentation(std::string_view charBytes) {
+	if (charBytes.length() <= 4) {
+		const auto it = mapReprs.find(KeyFromString(charBytes));
+		if (it != mapReprs.end()) {
+			mapReprs.erase(it);
+			const unsigned char ucStart = charBytes.empty() ? 0 : charBytes[0];
+			startByteHasReprs[ucStart]--;
+		}
+	}
+}
+
+const Representation *SpecialRepresentations::RepresentationFromCharacter(std::string_view charBytes) const {
+	if (charBytes.length() <= 4) {
+		const unsigned char ucStart = charBytes.empty() ? 0 : charBytes[0];
+		if (!startByteHasReprs[ucStart])
+			return nullptr;
+		const auto it = mapReprs.find(KeyFromString(charBytes));
+		if (it != mapReprs.end()) {
+			return &(it->second);
+		}
 	}
 	return nullptr;
 }
 
-bool SpecialRepresentations::Contains(const char *charBytes, size_t len) const {
-	PLATFORM_ASSERT(len <= 4);
-	const unsigned char ucStart = charBytes[0];
+bool SpecialRepresentations::Contains(std::string_view charBytes) const {
+	PLATFORM_ASSERT(charBytes.length() <= 4);
+	const unsigned char ucStart = charBytes.empty() ? 0 : charBytes[0];
 	if (!startByteHasReprs[ucStart])
 		return false;
-	const auto it = mapReprs.find(KeyFromString(charBytes, len));
+	const auto it = mapReprs.find(KeyFromString(charBytes));
 	return it != mapReprs.end();
 }
 
@@ -652,7 +674,10 @@ TextSegment BreakFinder::Next() {
 			else if (encodingFamily == EncodingFamily::dbcs)
 				charWidth = pdoc->DBCSDrawBytes(
 					std::string_view(&ll->chars[nextBreak], lineRange.end - nextBreak));
-			const Representation *repr = preprs->RepresentationFromCharacter(&ll->chars[nextBreak], charWidth);
+			// Special case \r\n line ends if there is a representation
+			if (preprs->Contains("\r\n") && ll->chars[nextBreak] == '\r' && ll->chars[nextBreak + 1] == '\n')
+				charWidth = 2;
+			const Representation *repr = preprs->RepresentationFromCharacter(std::string_view(&ll->chars[nextBreak], charWidth));
 			if (((nextBreak > 0) && (ll->styles[nextBreak] != ll->styles[nextBreak - 1])) ||
 				repr ||
 				(nextBreak == saeNext)) {
@@ -703,12 +728,12 @@ bool BreakFinder::More() const noexcept {
 }
 
 PositionCacheEntry::PositionCacheEntry() noexcept :
-	styleNumber(0), len(0), clock(0), positions(nullptr) {
+	styleNumber(0), len(0), clock(0) {
 }
 
 // Copy constructor not currently used, but needed for being element in std::vector.
 PositionCacheEntry::PositionCacheEntry(const PositionCacheEntry &other) :
-	styleNumber(other.styleNumber), len(other.styleNumber), clock(other.styleNumber), positions(nullptr) {
+	styleNumber(other.styleNumber), len(other.styleNumber), clock(other.styleNumber) {
 	if (other.positions) {
 		const size_t lenData = len + (len / sizeof(XYPOSITION)) + 1;
 		positions = std::make_unique<XYPOSITION[]>(lenData);
@@ -716,17 +741,17 @@ PositionCacheEntry::PositionCacheEntry(const PositionCacheEntry &other) :
 	}
 }
 
-void PositionCacheEntry::Set(unsigned int styleNumber_, const char *s_,
-	unsigned int len_, const XYPOSITION *positions_, unsigned int clock_) {
+void PositionCacheEntry::Set(unsigned int styleNumber_, std::string_view sv,
+	const XYPOSITION *positions_, unsigned int clock_) {
 	styleNumber = styleNumber_;
-	len = len_;
+	len = static_cast<unsigned int>(sv.length());
 	clock = clock_;
-	if (s_ && positions_) {
+	if (sv.data() && positions_) {
 		positions = std::make_unique<XYPOSITION[]>(len + (len / sizeof(XYPOSITION)) + 1);
 		for (unsigned int i = 0; i < len; i++) {
 			positions[i] = positions_[i];
 		}
-		memcpy(&positions[len], s_, len);
+		memcpy(&positions[len], sv.data(), sv.length());
 	} else {
 		positions.reset();
 	}
@@ -743,10 +768,9 @@ void PositionCacheEntry::Clear() noexcept {
 	clock = 0;
 }
 
-bool PositionCacheEntry::Retrieve(unsigned int styleNumber_, const char *s_,
-	unsigned int len_, XYPOSITION *positions_) const noexcept {
-	if ((styleNumber == styleNumber_) && (len == len_) &&
-		(memcmp(&positions[len], s_, len) == 0)) {
+bool PositionCacheEntry::Retrieve(unsigned int styleNumber_, std::string_view sv, XYPOSITION *positions_) const noexcept {
+	if ((styleNumber == styleNumber_) && (len == sv.length()) &&
+		(memcmp(&positions[len], sv.data(), sv.length()) == 0)) {
 		for (unsigned int i = 0; i < len; i++) {
 			positions_[i] = positions[i];
 		}
@@ -756,19 +780,10 @@ bool PositionCacheEntry::Retrieve(unsigned int styleNumber_, const char *s_,
 	}
 }
 
-// FNV-1 http://www.isthe.com/chongo/tech/comp/fnv/
-unsigned int PositionCacheEntry::Hash(unsigned int styleNumber_, const char *s, unsigned int len_) noexcept {
-	const unsigned char *us = reinterpret_cast<const unsigned char *>(s);
-	unsigned int ret = us[0] << 7;
-	for (unsigned int i = 0; i < len_; i++) {
-		ret *= 1000003;
-		ret ^= us[i];
-	}
-	ret *= 1000003;
-	ret ^= len_;
-	ret *= 1000003;
-	ret ^= styleNumber_;
-	return ret;
+size_t PositionCacheEntry::Hash(unsigned int styleNumber_, std::string_view sv) noexcept {
+	const size_t h1 = std::hash<std::string_view>{}(sv);
+	const size_t h2 = std::hash<unsigned int>{}(styleNumber_);
+	return h1 ^ (h2 << 1);
 }
 
 bool PositionCacheEntry::NewerThan(const PositionCacheEntry &other) const noexcept {
@@ -790,10 +805,6 @@ PositionCache::PositionCache() {
 	pces.resize(2039);
 #endif
 	allClear = true;
-}
-
-PositionCache::~PositionCache() {
-	Clear();
 }
 
 void PositionCache::Clear() noexcept {
@@ -818,12 +829,16 @@ void PositionCache::SetSize(size_t size_) {
 	}
 }
 
+size_t PositionCache::GetSize() const noexcept {
+	return pces.size();
+}
+
 void PositionCache::MeasureWidths(Surface *surface, const ViewStyle &vstyle, unsigned int styleNumber,
-	const char *s, unsigned int len, XYPOSITION *positions, const Document *pdoc) {
+	std::string_view sv, XYPOSITION *positions) {
 
 	allClear = false;
 	size_t probe = pces.size();	// Out of bounds
-	if ((len < 64)) {
+	if ((sv.length() < 64)) {
 		// Only store short strings in the cache so it doesn't churn with
 		// long comments with only a single comment.
 #if PositionCacheHashSizeUsePowerOfTwo
@@ -832,21 +847,21 @@ void PositionCache::MeasureWidths(Surface *surface, const ViewStyle &vstyle, uns
 		const size_t modulo = probe;
 #endif
 		// Two way associative: try two probe positions.
-		const unsigned int hashValue = PositionCacheEntry::Hash(styleNumber, s, len);
+		const size_t hashValue = PositionCacheEntry::Hash(styleNumber, sv);
 #if PositionCacheHashSizeUsePowerOfTwo
 		probe = hashValue & mask;
 #else
 		probe = hashValue % modulo;
 #endif
-		if (pces[probe].Retrieve(styleNumber, s, len, positions)) {
+		if (pces[probe].Retrieve(styleNumber, sv, positions)) {
 			return;
 		}
 #if PositionCacheHashSizeUsePowerOfTwo
-		const unsigned int probe2 = (hashValue * 37) & mask;
+		const size_t probe2 = (hashValue * 37) & mask;
 #else
-		const unsigned int probe2 = (hashValue * 37) % modulo;
+		const size_t probe2 = (hashValue * 37) % modulo;
 #endif
-		if (pces[probe2].Retrieve(styleNumber, s, len, positions)) {
+		if (pces[probe2].Retrieve(styleNumber, sv, positions)) {
 			return;
 		}
 		// Not found. Choose the oldest of the two slots to replace
@@ -855,22 +870,7 @@ void PositionCache::MeasureWidths(Surface *surface, const ViewStyle &vstyle, uns
 		}
 	}
 	const Font *fontStyle = vstyle.styles[styleNumber].font.get();
-	if (len > BreakFinder::lengthStartSubdivision) {
-		// Break up into segments
-		unsigned int startSegment = 0;
-		XYPOSITION xStartSegment = 0;
-		while (startSegment < len) {
-			const unsigned int lenSegment = pdoc->SafeSegment(s + startSegment, len - startSegment, BreakFinder::lengthEachSubdivision);
-			surface->MeasureWidths(fontStyle, std::string_view(s + startSegment, lenSegment), positions + startSegment);
-			for (unsigned int inSeg = 0; inSeg < lenSegment; inSeg++) {
-				positions[startSegment + inSeg] += xStartSegment;
-			}
-			xStartSegment = positions[startSegment + lenSegment - 1];
-			startSegment += lenSegment;
-		}
-	} else {
-		surface->MeasureWidths(fontStyle, std::string_view(s, len), positions);
-	}
+	surface->MeasureWidths(fontStyle, sv, positions);
 	if (probe < pces.size()) {
 		// Store into cache
 		clock++;
@@ -882,6 +882,6 @@ void PositionCache::MeasureWidths(Surface *surface, const ViewStyle &vstyle, uns
 			}
 			clock = 2;
 		}
-		pces[probe].Set(styleNumber, s, len, positions, clock);
+		pces[probe].Set(styleNumber, sv, positions, clock);
 	}
 }

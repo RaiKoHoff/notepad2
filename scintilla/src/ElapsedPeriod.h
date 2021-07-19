@@ -6,7 +6,7 @@
 // The License.txt file describes the conditions under which this software may be distributed.
 #pragma once
 
-namespace Scintilla {
+namespace Scintilla::Internal {
 
 // Simplified access to high precision timing.
 class ElapsedPeriod {
@@ -16,14 +16,19 @@ public:
 	/// Capture the moment
 	ElapsedPeriod() noexcept : tp(ElapsedClock::now()) {}
 	/// Return duration as floating point seconds
-	double Duration(bool reset=false) noexcept {
+	double Duration(bool reset) noexcept {
 		const auto tpNow = ElapsedClock::now();
-		const auto stylingDuration =
-			std::chrono::duration_cast<std::chrono::duration<double>>(tpNow - tp);
+		const auto duration = std::chrono::duration_cast<std::chrono::duration<double>>(tpNow - tp);
 		if (reset) {
 			tp = tpNow;
 		}
-		return stylingDuration.count();
+		return duration.count();
+	}
+
+	double Duration() const noexcept {
+		const auto tpNow = ElapsedClock::now();
+		const auto duration = std::chrono::duration_cast<std::chrono::duration<double>>(tpNow - tp);
+		return duration.count();
 	}
 };
 

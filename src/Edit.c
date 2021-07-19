@@ -21,6 +21,7 @@
 #include <windows.h>
 #include <windowsx.h>
 #include <shlwapi.h>
+#include <shellapi.h>
 #include <commctrl.h>
 #include <commdlg.h>
 #if 0
@@ -459,32 +460,32 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 
 	const uint8_t *ptr = (const uint8_t *)lpData;
 	// No NULL-terminated requirement for *ptr == '\n'
+#if NP2_USE_SSE2 || NP2_USE_AVX2
+	const uint8_t * const end = ptr + cbData;
+#else
 	const uint8_t * const end = ptr + cbData - 1;
+#endif
 
 #if NP2_USE_AVX2
-	const uint64_t LAST_CR_MASK = (UINT64_C(1) << (2*sizeof(__m256i) - 1));
 	const __m256i vectCR = _mm256_set1_epi8('\r');
 	const __m256i vectLF = _mm256_set1_epi8('\n');
-	while (ptr + 2*sizeof(__m256i) <= end) {
+	while (ptr + 2*sizeof(__m256i) < end) {
 		// unaligned loading: line starts at random position.
 		const __m256i chunk1 = _mm256_loadu_si256((__m256i *)ptr);
 		const __m256i chunk2 = _mm256_loadu_si256((__m256i *)(ptr + sizeof(__m256i)));
+		ptr += 2*sizeof(__m256i);
 		uint64_t maskCR = (uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk1, vectCR));
 		uint64_t maskLF = (uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk1, vectLF));
-		maskCR |= ((uint64_t)(uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m256i);
 		maskLF |= ((uint64_t)(uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m256i);
+		maskCR |= ((uint64_t)(uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m256i);
 
-		ptr += 2*sizeof(__m256i);
 		if (maskCR) {
-			if (maskCR & LAST_CR_MASK) {
-				maskCR &= LAST_CR_MASK - 1;
+			if (_addcarry_u64(0, maskCR, maskCR, &maskCR)) {
 				if (*ptr == '\n') {
 					// CR+LF across boundary
 					++ptr;
 					++lineCountCRLF;
 				} else {
-					// clear highest bit (last CR) to avoid using following code:
-					// maskCR = (maskCR_LF ^ maskLF) | (maskCR & LAST_CR_MASK);
 					++lineCountCR;
 				}
 			}
@@ -492,8 +493,8 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 			// maskCR and maskLF never have some bit set. after shifting maskCR by 1 bit,
 			// the bits both set in maskCR and maskLF represents CR+LF;
 			// the bits only set in maskCR or maskLF represents individual CR or LF.
-			const uint64_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
-			const uint64_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
+			const uint64_t maskCRLF = maskCR & maskLF; // CR+LF
+			const uint64_t maskCR_LF = maskCR ^ maskLF;// CR alone or LF alone
 			maskLF = maskCR_LF & maskLF; // LF alone
 			maskCR = maskCR_LF ^ maskLF; // CR alone (with one position offset)
 			if (maskCRLF) {
@@ -511,27 +512,20 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	if (ptr < end) {
 		NP2_alignas(32) uint8_t buffer[2*sizeof(__m256i)];
 		ZeroMemory_32x2(buffer);
-		__movsb(buffer, ptr, end - ptr + 1);
-		ptr = end + 1;
+		__movsb(buffer, ptr, end - ptr);
 
 		const __m256i chunk1 = _mm256_load_si256((__m256i *)buffer);
 		const __m256i chunk2 = _mm256_load_si256((__m256i *)(buffer + sizeof(__m256i)));
 		uint64_t maskCR = (uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk1, vectCR));
 		uint64_t maskLF = (uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk1, vectLF));
-		maskCR |= ((uint64_t)(uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m256i);
 		maskLF |= ((uint64_t)(uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m256i);
+		maskCR |= ((uint64_t)(uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m256i);
 
 		if (maskCR) {
-			if (maskCR & LAST_CR_MASK) {
-				maskCR &= LAST_CR_MASK - 1;
-				++lineCountCR;
-			}
-
-			// maskCR and maskLF never have some bit set. after shifting maskCR by 1 bit,
-			// the bits both set in maskCR and maskLF represents CR+LF;
-			// the bits only set in maskCR or maskLF represents individual CR or LF.
-			const uint64_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
-			const uint64_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
+			const uint8_t lastCR = _addcarry_u64(0, maskCR, maskCR, &maskCR);
+			_addcarry_u64(lastCR, lineCountCR, 0, &lineCountCR);
+			const uint64_t maskCRLF = maskCR & maskLF; // CR+LF
+			const uint64_t maskCR_LF = maskCR ^ maskLF;// CR alone or LF alone
 			maskLF = maskCR_LF & maskLF; // LF alone
 			maskCR = maskCR_LF ^ maskLF; // CR alone (with one position offset)
 			if (maskCRLF) {
@@ -548,35 +542,31 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	// end NP2_USE_AVX2
 #elif NP2_USE_SSE2
 #if defined(_WIN64)
-	const uint64_t LAST_CR_MASK = (UINT64_C(1) << (4*sizeof(__m128i) - 1));
 	const __m128i vectCR = _mm_set1_epi8('\r');
 	const __m128i vectLF = _mm_set1_epi8('\n');
-	while (ptr + 4*sizeof(__m128i) <= end) {
+	while (ptr + 4*sizeof(__m128i) < end) {
 		// unaligned loading: line starts at random position.
 		const __m128i chunk1 = _mm_loadu_si128((__m128i *)ptr);
 		const __m128i chunk2 = _mm_loadu_si128((__m128i *)(ptr + sizeof(__m128i)));
 		const __m128i chunk3 = _mm_loadu_si128((__m128i *)(ptr + 2*sizeof(__m128i)));
 		const __m128i chunk4 = _mm_loadu_si128((__m128i *)(ptr + 3*sizeof(__m128i)));
-		uint64_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
-		uint64_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
-		maskCR |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
-		maskLF |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m128i);
-		maskCR |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectCR))) << 2*sizeof(__m128i);
-		maskLF |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectLF))) << 2*sizeof(__m128i);
-		maskCR |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectCR))) << 3*sizeof(__m128i);
-		maskLF |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectLF))) << 3*sizeof(__m128i);
-
 		ptr += 4*sizeof(__m128i);
+		uint64_t maskCR = (uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
+		uint64_t maskLF = (uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
+		maskCR |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
+		maskLF |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m128i);
+		maskCR |= ((uint64_t)(uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectCR))) << 2*sizeof(__m128i);
+		maskLF |= ((uint64_t)(uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectLF))) << 2*sizeof(__m128i);
+		maskLF |= ((uint64_t)(uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectLF))) << 3*sizeof(__m128i);
+		maskCR |= ((uint64_t)(uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectCR))) << 3*sizeof(__m128i);
+
 		if (maskCR) {
-			if (maskCR & LAST_CR_MASK) {
-				maskCR &= LAST_CR_MASK - 1;
+			if (_addcarry_u64(0, maskCR, maskCR, &maskCR)) {
 				if (*ptr == '\n') {
 					// CR+LF across boundary
 					++ptr;
 					++lineCountCRLF;
 				} else {
-					// clear highest bit (last CR) to avoid using following code:
-					// maskCR = (maskCR_LF ^ maskLF) | (maskCR & LAST_CR_MASK);
 					++lineCountCR;
 				}
 			}
@@ -584,8 +574,8 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 			// maskCR and maskLF never have some bit set. after shifting maskCR by 1 bit,
 			// the bits both set in maskCR and maskLF represents CR+LF;
 			// the bits only set in maskCR or maskLF represents individual CR or LF.
-			const uint64_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
-			const uint64_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
+			const uint64_t maskCRLF = maskCR & maskLF; // CR+LF
+			const uint64_t maskCR_LF = maskCR ^ maskLF;// CR alone or LF alone
 			maskLF = maskCR_LF & maskLF; // LF alone
 			maskCR = maskCR_LF ^ maskLF; // CR alone (with one position offset)
 			if (maskCRLF) {
@@ -603,33 +593,26 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	if (ptr < end) {
 		NP2_alignas(16) uint8_t buffer[4*sizeof(__m128i)];
 		ZeroMemory_16x4(buffer);
-		__movsb(buffer, ptr, end - ptr + 1);
-		ptr = end + 1;
+		__movsb(buffer, ptr, end - ptr);
 
 		const __m128i chunk1 = _mm_load_si128((__m128i *)buffer);
 		const __m128i chunk2 = _mm_load_si128((__m128i *)(buffer + sizeof(__m128i)));
 		const __m128i chunk3 = _mm_load_si128((__m128i *)(buffer + 2*sizeof(__m128i)));
 		const __m128i chunk4 = _mm_load_si128((__m128i *)(buffer + 3*sizeof(__m128i)));
-		uint64_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
-		uint64_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
-		maskCR |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
-		maskLF |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m128i);
-		maskCR |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectCR))) << 2*sizeof(__m128i);
-		maskLF |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectLF))) << 2*sizeof(__m128i);
-		maskCR |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectCR))) << 3*sizeof(__m128i);
-		maskLF |= ((uint64_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectLF))) << 3*sizeof(__m128i);
+		uint64_t maskCR = (uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
+		uint64_t maskLF = (uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
+		maskCR |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
+		maskLF |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m128i);
+		maskCR |= ((uint64_t)(uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectCR))) << 2*sizeof(__m128i);
+		maskLF |= ((uint64_t)(uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectLF))) << 2*sizeof(__m128i);
+		maskLF |= ((uint64_t)(uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectLF))) << 3*sizeof(__m128i);
+		maskCR |= ((uint64_t)(uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectCR))) << 3*sizeof(__m128i);
 
 		if (maskCR) {
-			if (maskCR & LAST_CR_MASK) {
-				maskCR &= LAST_CR_MASK - 1;
-				++lineCountCR;
-			}
-
-			// maskCR and maskLF never have some bit set. after shifting maskCR by 1 bit,
-			// the bits both set in maskCR and maskLF represents CR+LF;
-			// the bits only set in maskCR or maskLF represents individual CR or LF.
-			const uint64_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
-			const uint64_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
+			const uint8_t lastCR = _addcarry_u64(0, maskCR, maskCR, &maskCR);
+			_addcarry_u64(lastCR, lineCountCR, 0, &lineCountCR);
+			const uint64_t maskCRLF = maskCR & maskLF; // CR+LF
+			const uint64_t maskCR_LF = maskCR ^ maskLF;// CR alone or LF alone
 			maskLF = maskCR_LF & maskLF; // LF alone
 			maskCR = maskCR_LF ^ maskLF; // CR alone (with one position offset)
 			if (maskCRLF) {
@@ -645,29 +628,25 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	}
 	// end _WIN64 NP2_USE_SSE2
 #else
-	const uint32_t LAST_CR_MASK = (1U << (2*sizeof(__m128i) - 1));
 	const __m128i vectCR = _mm_set1_epi8('\r');
 	const __m128i vectLF = _mm_set1_epi8('\n');
-	while (ptr + 2*sizeof(__m128i) <= end) {
+	while (ptr + 2*sizeof(__m128i) < end) {
 		// unaligned loading: line starts at random position.
 		const __m128i chunk1 = _mm_loadu_si128((__m128i *)ptr);
 		const __m128i chunk2 = _mm_loadu_si128((__m128i *)(ptr + sizeof(__m128i)));
+		ptr += 2*sizeof(__m128i);
 		uint32_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
 		uint32_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
-		maskCR |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
 		maskLF |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m128i);
+		maskCR |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
 
-		ptr += 2*sizeof(__m128i);
 		if (maskCR) {
-			if (maskCR & LAST_CR_MASK) {
-				maskCR &= LAST_CR_MASK - 1;
+			if (_addcarry_u32(0, maskCR, maskCR, &maskCR)) {
 				if (*ptr == '\n') {
 					// CR+LF across boundary
 					++ptr;
 					++lineCountCRLF;
 				} else {
-					// clear highest bit (last CR) to avoid using following code:
-					// maskCR = (maskCR_LF ^ maskLF) | (maskCR & LAST_CR_MASK);
 					++lineCountCR;
 				}
 			}
@@ -675,8 +654,8 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 			// maskCR and maskLF never have some bit set. after shifting maskCR by 1 bit,
 			// the bits both set in maskCR and maskLF represents CR+LF;
 			// the bits only set in maskCR or maskLF represents individual CR or LF.
-			const uint32_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
-			const uint32_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
+			const uint32_t maskCRLF = maskCR & maskLF; // CR+LF
+			const uint32_t maskCR_LF = maskCR ^ maskLF;// CR alone or LF alone
 			maskLF = maskCR_LF & maskLF; // LF alone
 			maskCR = maskCR_LF ^ maskLF; // CR alone (with one position offset)
 			if (maskCRLF) {
@@ -694,27 +673,20 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 	if (ptr < end) {
 		NP2_alignas(16) uint8_t buffer[2*sizeof(__m128i)];
 		ZeroMemory_16x2(buffer);
-		__movsb(buffer, ptr, end - ptr + 1);
-		ptr = end + 1;
+		__movsb(buffer, ptr, end - ptr);
 
 		const __m128i chunk1 = _mm_load_si128((__m128i *)buffer);
 		const __m128i chunk2 = _mm_load_si128((__m128i *)(buffer + sizeof(__m128i)));
 		uint32_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
 		uint32_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
-		maskCR |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
 		maskLF |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m128i);
+		maskCR |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
 
 		if (maskCR) {
-			if (maskCR & LAST_CR_MASK) {
-				maskCR &= LAST_CR_MASK - 1;
-				++lineCountCR;
-			}
-
-			// maskCR and maskLF never have some bit set. after shifting maskCR by 1 bit,
-			// the bits both set in maskCR and maskLF represents CR+LF;
-			// the bits only set in maskCR or maskLF represents individual CR or LF.
-			const uint32_t maskCRLF = (maskCR << 1) & maskLF; // CR+LF
-			const uint32_t maskCR_LF = (maskCR << 1) ^ maskLF;// CR alone or LF alone
+			const uint8_t lastCR = _addcarry_u32(0, maskCR, maskCR, &maskCR);
+			_addcarry_u32(lastCR, lineCountCR, 0, &lineCountCR);
+			const uint32_t maskCRLF = maskCR & maskLF; // CR+LF
+			const uint32_t maskCR_LF = maskCR ^ maskLF;// CR alone or LF alone
 			maskLF = maskCR_LF & maskLF; // LF alone
 			maskCR = maskCR_LF ^ maskLF; // CR alone (with one position offset)
 			if (maskCRLF) {
@@ -753,7 +725,6 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 			break;
 		}
 	} while (ptr < end);
-#endif
 
 	if (ptr == end) {
 		switch (*ptr) {
@@ -765,6 +736,7 @@ void EditDetectEOLMode(LPCSTR lpData, DWORD cbData, EditFileIOStatus *status) {
 			break;
 		}
 	}
+#endif
 
 	const size_t linesMax = max_z(max_z(lineCountCRLF, lineCountCR), lineCountLF);
 	// values must kept in same order as SC_EOL_CRLF, SC_EOL_CR, SC_EOL_LF
@@ -802,8 +774,10 @@ void EditDetectIndentation(LPCSTR lpData, DWORD cbData, LPFILEVARS lpfv) {
 		return;
 	}
 
-	//StopWatch watch;
-	//StopWatch_Start(watch);
+#if 0
+	StopWatch watch;
+	StopWatch_Start(watch);
+#endif
 
 	// code based on SciTEBase::DiscoverIndentSetting().
 	cbData = min_u(cbData, 1*1024*1024);
@@ -811,7 +785,7 @@ void EditDetectIndentation(LPCSTR lpData, DWORD cbData, LPFILEVARS lpfv) {
 	const uint8_t * const end = ptr + cbData;
 	#define MAX_DETECTED_TAB_WIDTH	8
 	// line count for ambiguous lines, line indented by 1 to 8 spaces, line starts with tab.
-	int indentLineCount[1 + MAX_DETECTED_TAB_WIDTH + 1] = { 0 };
+	uint32_t indentLineCount[1 + MAX_DETECTED_TAB_WIDTH + 1] = { 0 };
 	int prevIndentCount = 0;
 	int prevTabWidth = 0;
 
@@ -896,12 +870,26 @@ labelStart:
 		}
 	}
 
+#if NP2_USE_AVX2
+	const __m128i chunk1 = _mm_loadu_si128((__m128i *)indentLineCount);
+	const __m128i chunk2 = _mm_loadu_si128((__m128i *)(indentLineCount + 4));
+	const __m128i chunk3 = _mm_loadl_epi64((__m128i *)(indentLineCount + 8));
+	__m128i maxAll = _mm_max_epu32(_mm_max_epu32(chunk1, chunk2), chunk3);
+	maxAll = _mm_max_epu32(maxAll, _mm_shuffle_epi32(maxAll, _MM_SHUFFLE(0, 1, 2, 3)));
+	maxAll = _mm_max_epu32(maxAll, _mm_shuffle_epi32(maxAll, _MM_SHUFFLE(1, 0, 3, 2)));
+	uint32_t mask = _mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(maxAll, chunk1)));
+	mask |= ((uint32_t)_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(maxAll, chunk2)))) << 4;
+	mask |= ((uint32_t)_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(maxAll, chunk3)))) << 8;
+	prevTabWidth = np2_ctz(mask);
+
+#else
 	prevTabWidth = 0;
 	for (int i = 1; i < MAX_DETECTED_TAB_WIDTH + 2; i++) {
 		if (indentLineCount[i] > indentLineCount[prevTabWidth]) {
 			prevTabWidth = i;
 		}
 	}
+#endif
 	if (prevTabWidth != 0) {
 		const BOOL bTabsAsSpaces = prevTabWidth <= MAX_DETECTED_TAB_WIDTH;
 		lpfv->mask |= FV_TABSASSPACES;
@@ -913,12 +901,14 @@ labelStart:
 		}
 	}
 
-	//StopWatch_Stop(watch);
-	//const double duration = StopWatch_Get(&watch);
-	//printf("indentation %u, duration=%.06f, tab width=%d\n", (UINT)cbData, duration, prevTabWidth);
-	//for (int i = 0; i < MAX_DETECTED_TAB_WIDTH + 2; i++) {
-	//	printf("\tindentLineCount[%d] = %d\n", i, indentLineCount[i]);
-	//}
+#if 0
+	StopWatch_Stop(watch);
+	const double duration = StopWatch_Get(&watch);
+	printf("indentation %u, duration=%.06f, tab width=%d\n", (UINT)cbData, duration, prevTabWidth);
+	for (int i = 0; i < MAX_DETECTED_TAB_WIDTH + 2; i++) {
+		printf("\tindentLineCount[%d] = %u\n", i, indentLineCount[i]);
+	}
+#endif
 }
 
 int EditDetermineEncoding(LPCWSTR pszFile, char *lpData, DWORD cbData, BOOL bSkipEncodingDetection, LPBOOL lpbBOM) {
@@ -2548,7 +2538,7 @@ void EditTabsToSpaces(int nTabWidth, BOOL bOnlyIndentingWS) {
 	for (int iTextW = 0; iTextW < cchTextW; iTextW++) {
 		const WCHAR w = pszTextW[iTextW];
 		if (w == L'\t' && (!bOnlyIndentingWS || bIsLineStart)) {
-			for (int j = 0; j < nTabWidth - i % nTabWidth; j++) {
+			for (int j = 0; j < nTabWidth - (i % nTabWidth); j++) {
 				pszConvW[cchConvW++] = L' ';
 			}
 			i = 0;
@@ -2621,7 +2611,7 @@ void EditSpacesToTabs(int nTabWidth, BOOL bOnlyIndentingWS) {
 		const WCHAR w = pszTextW[iTextW];
 		if ((w == L' ' || w == L'\t') && (!bOnlyIndentingWS || bIsLineStart)) {
 			space[j++] = w;
-			if (j == nTabWidth - i % nTabWidth || w == L'\t') {
+			if (j == nTabWidth - (i % nTabWidth) || w == L'\t') {
 				if (j > 1 || pszTextW[iTextW + 1] == L' ' || pszTextW[iTextW + 1] == L'\t') {
 					pszConvW[cchConvW++] = L'\t';
 				} else {
@@ -3709,7 +3699,7 @@ void EditPadWithSpaces(BOOL bSkipEmpty, BOOL bNoUndoGroup) {
 
 		for (Sci_Line iLine = iLineStart; iLine <= iLineEnd; iLine++) {
 			const Sci_Position iPos = SciCall_GetLineSelEndPosition(iLine);
-			if (iPos != INVALID_POSITION) {
+			if (iPos >= 0) {
 				iMaxColumn = max_pos(iMaxColumn, SciCall_GetColumn(iPos));
 			}
 		}
@@ -3725,7 +3715,7 @@ void EditPadWithSpaces(BOOL bSkipEmpty, BOOL bNoUndoGroup) {
 
 		for (Sci_Line iLine = iLineStart; iLine <= iLineEnd; iLine++) {
 			const Sci_Position iLineSelEndPos = SciCall_GetLineSelEndPosition(iLine);
-			if (bIsRectangular && INVALID_POSITION == iLineSelEndPos) {
+			if (bIsRectangular && iLineSelEndPos < 0) {
 				continue;
 			}
 
@@ -4620,7 +4610,7 @@ void EditJumpTo(Sci_Line iNewLine, Sci_Position iNewCol) {
 	iNewCol = min_pos(iNewCol, iLineEndPos);
 	const Sci_Position iNewPos = SciCall_FindColumn(iNewLine - 1, iNewCol - 1);
 	// SciCall_GotoPos(pos) is equivalent to SciCall_SetSel(-1, pos)
-	EditSelectEx(-1, iNewPos);
+	EditSelectEx(INVALID_POSITION, iNewPos);
 	SciCall_ChooseCaretX();
 }
 
@@ -5588,7 +5578,7 @@ void EditFindNext(LPCEDITFINDREPLACE lpefr, BOOL fExtendSelection) {
 	Sci_Position iPos = SciCall_FindText(searchFlags, &ttf);
 	BOOL bSuppressNotFound = FALSE;
 
-	if (iPos == -1 && ttf.chrg.cpMin > 0 && !lpefr->bNoFindWrap && !fExtendSelection) {
+	if (iPos < 0 && ttf.chrg.cpMin > 0 && !lpefr->bNoFindWrap && !fExtendSelection) {
 		if (IDOK == InfoBoxInfo(MB_OKCANCEL, L"MsgFindWrap1", IDS_FIND_WRAPFW)) {
 			ttf.chrg.cpMin = 0;
 			iPos = SciCall_FindText(searchFlags, &ttf);
@@ -5597,7 +5587,7 @@ void EditFindNext(LPCEDITFINDREPLACE lpefr, BOOL fExtendSelection) {
 		}
 	}
 
-	if (iPos == -1) {
+	if (iPos < 0) {
 		// not found
 		if (!bSuppressNotFound) {
 			InfoBoxWarn(MB_OK, L"MsgNotFound", IDS_NOTFOUND);
@@ -5631,7 +5621,7 @@ void EditFindPrev(LPCEDITFINDREPLACE lpefr, BOOL fExtendSelection) {
 	const Sci_Position iLength = SciCall_GetLength();
 	BOOL bSuppressNotFound = FALSE;
 
-	if (iPos == -1 && ttf.chrg.cpMin < iLength && !lpefr->bNoFindWrap && !fExtendSelection) {
+	if (iPos < 0 && ttf.chrg.cpMin < iLength && !lpefr->bNoFindWrap && !fExtendSelection) {
 		if (IDOK == InfoBoxInfo(MB_OKCANCEL, L"MsgFindWrap2", IDS_FIND_WRAPRE)) {
 			ttf.chrg.cpMin = iLength;
 			iPos = SciCall_FindText(searchFlags, &ttf);
@@ -5640,7 +5630,7 @@ void EditFindPrev(LPCEDITFINDREPLACE lpefr, BOOL fExtendSelection) {
 		}
 	}
 
-	if (iPos == -1) {
+	if (iPos < 0) {
 		// not found
 		if (!bSuppressNotFound) {
 			InfoBoxWarn(MB_OK, L"MsgNotFound", IDS_NOTFOUND);
@@ -5674,7 +5664,7 @@ BOOL EditReplace(HWND hwnd, LPCEDITFINDREPLACE lpefr) {
 	Sci_Position iPos = SciCall_FindText(searchFlags, &ttf);
 	BOOL bSuppressNotFound = FALSE;
 
-	if (iPos == -1 && ttf.chrg.cpMin > 0 && !lpefr->bNoFindWrap) {
+	if (iPos < 0 && ttf.chrg.cpMin > 0 && !lpefr->bNoFindWrap) {
 		if (IDOK == InfoBoxInfo(MB_OKCANCEL, L"MsgFindWrap1", IDS_FIND_WRAPFW)) {
 			ttf.chrg.cpMin = 0;
 			iPos = SciCall_FindText(searchFlags, &ttf);
@@ -5683,7 +5673,7 @@ BOOL EditReplace(HWND hwnd, LPCEDITFINDREPLACE lpefr) {
 		}
 	}
 
-	if (iPos == -1) {
+	if (iPos < 0) {
 		// not found
 		LocalFree(pszReplace2);
 		if (!bSuppressNotFound) {
@@ -5707,7 +5697,7 @@ BOOL EditReplace(HWND hwnd, LPCEDITFINDREPLACE lpefr) {
 	iPos = SciCall_FindText(searchFlags, &ttf);
 	bSuppressNotFound = FALSE;
 
-	if (iPos == -1 && ttf.chrg.cpMin > 0 && !lpefr->bNoFindWrap) {
+	if (iPos < 0 && ttf.chrg.cpMin > 0 && !lpefr->bNoFindWrap) {
 		if (IDOK == InfoBoxInfo(MB_OKCANCEL, L"MsgFindWrap1", IDS_FIND_WRAPFW)) {
 			ttf.chrg.cpMin = 0;
 			iPos = SciCall_FindText(searchFlags, &ttf);
@@ -5716,7 +5706,7 @@ BOOL EditReplace(HWND hwnd, LPCEDITFINDREPLACE lpefr) {
 		}
 	}
 
-	if (iPos != -1) {
+	if (iPos >= 0) {
 		EditSelectEx(ttf.chrgText.cpMin, ttf.chrgText.cpMax);
 	} else {
 		iPos = SciCall_GetTargetEnd();
@@ -5752,8 +5742,12 @@ void EditMarkAll_ClearEx(int findFlag, Sci_Position iSelCount, LPSTR pszText) {
 		// clear existing indicator
 		SciCall_SetIndicatorCurrent(IndicatorNumber_MarkOccurrence);
 		SciCall_IndicatorClearRange(0, SciCall_GetLength());
+	}
+	if (editMarkAllStatus.bookmarkLine >= 0 || editMarkAllStatus.bookmarkForFindAll) {
 		if ((findFlag | editMarkAllStatus.findFlag) & NP2_MarkAllBookmark) {
-			SciCall_MarkerDeleteAll(MarkerNumber_Bookmark);
+			if ((findFlag & (NP2_MarkAllBookmark | NP2_FromFindAll)) != 0 || !editMarkAllStatus.bookmarkForFindAll) {
+				SciCall_MarkerDeleteAll(MarkerNumber_Bookmark);
+			}
 		}
 	}
 	if (editMarkAllStatus.pszText) {
@@ -5796,6 +5790,7 @@ BOOL EditMarkAll_Start(BOOL bChanged, int findFlag, Sci_Position iSelCount, LPST
 
 	//EditMarkAll_Runs = 0;
 	if (findFlag & NP2_MarkAllBookmark) {
+		editMarkAllStatus.bookmarkForFindAll = findFlag & NP2_FromFindAll;
 		Style_SetBookmark();
 	}
 	return EditMarkAll_Continue(&editMarkAllStatus, idleTaskTimer);
@@ -5995,7 +5990,8 @@ void EditFindAll(LPCEDITFINDREPLACE lpefr, BOOL selectAll) {
 	}
 
 	searchFlags |= (bFindReplaceFindAllBookmark * NP2_MarkAllBookmark)
-		| (selectAll * NP2_MarkAllSelectAll);
+		| (selectAll * NP2_MarkAllSelectAll)
+		| NP2_FromFindAll;
 	// rewind start position when transform backslash is checked,
 	// all other searching doesn't across lines.
 	// NOTE: complex fix is needed when multiline regex is supported.
@@ -6073,7 +6069,7 @@ BOOL EditReplaceAll(HWND hwnd, LPCEDITFINDREPLACE lpefr, BOOL bShowInfo) {
 	const BOOL bRegexStartOfLine = bReplaceRE && (szFind2[0] == '^');
 	struct Sci_TextToFind ttf = { { 0, SciCall_GetLength() }, szFind2, { 0, 0 } };
 	Sci_Position iCount = 0;
-	while (SciCall_FindText(searchFlags, &ttf) != -1) {
+	while (SciCall_FindText(searchFlags, &ttf) >= 0) {
 		if (++iCount == 1) {
 			SciCall_BeginUndoAction();
 		}
@@ -6146,7 +6142,7 @@ BOOL EditReplaceAllInSelection(HWND hwnd, LPCEDITFINDREPLACE lpefr, BOOL bShowIn
 	struct Sci_TextToFind ttf = { { SciCall_GetSelectionStart(), SciCall_GetLength() }, szFind2, { 0, 0 } };
 	Sci_Position iCount = 0;
 	BOOL fCancel = FALSE;
-	while (!fCancel && SciCall_FindText(searchFlags, &ttf) != -1) {
+	while (!fCancel && SciCall_FindText(searchFlags, &ttf) >= 0) {
 		if (ttf.chrgText.cpMin >= SciCall_GetSelectionStart() && ttf.chrgText.cpMax <= SciCall_GetSelectionEnd()) {
 			if (++iCount == 1) {
 				SciCall_BeginUndoAction();
@@ -7238,13 +7234,13 @@ char* EditGetStringAroundCaret(LPCSTR delimiters) {
 	while (iStartPos < iEndPos) {
 		ft.chrg.cpMin = iStartPos;
 		Sci_Position iPos = SciCall_FindText(findFlag, &ft);
-		if (iPos == -1) {
+		if (iPos < 0) {
 			break;
 		}
 
 		iStartPos = iPos + 1;
 		iPos = SciCall_BraceMatchNext(iPos, ft.chrgText.cpMax);
-		iEndPos = (iPos == -1) ? iLineEnd : iPos;
+		iEndPos = (iPos < 0) ? iLineEnd : iPos;
 		if (iCurrentPos >= iStartPos && iCurrentPos <= iEndPos) {
 			iLineStart = iStartPos;
 			iLineEnd = iEndPos;
@@ -7479,11 +7475,11 @@ void FileVars_Init(LPCSTR lpData, DWORD cbData, LPFILEVARS lpfv) {
 		return;
 	}
 
-	char tch[512];
-	strncpy(tch, lpData, min_u(cbData, sizeof(tch)));
-	tch[sizeof(tch) - 1] = '\0';
-	const BOOL utf8Sig = IsUTF8Signature(lpData);
-	BOOL bDisableFileVariables = FALSE;
+	char tch[512 + 1];
+	const DWORD len = min_u(cbData, sizeof(tch) - 1);
+	memcpy(tch, lpData, len);
+	tch[len] = '\0';
+	const BOOL utf8Sig = IsUTF8Signature(tch);
 
 	// parse file variables at the beginning or end of the file.
 	BOOL beginning = TRUE;
@@ -7493,43 +7489,46 @@ void FileVars_Init(LPCSTR lpData, DWORD cbData, LPFILEVARS lpfv) {
 			// Emacs file variables
 			int i;
 			if (FileVars_ParseInt(tch, "enable-local-variables", &i) && (!i)) {
-				bDisableFileVariables = TRUE;
+				break;
 			}
 
-			if (!bDisableFileVariables) {
-				if (FileVars_ParseInt(tch, "tab-width", &i)) {
-					lpfv->iTabWidth = clamp_i(i, TAB_WIDTH_MIN, TAB_WIDTH_MAX);
-					mask |= FV_TABWIDTH;
-				}
+			if (FileVars_ParseInt(tch, "tab-width", &i)) {
+				lpfv->iTabWidth = clamp_i(i, TAB_WIDTH_MIN, TAB_WIDTH_MAX);
+				mask |= FV_TABWIDTH;
+			}
 
-				if (FileVars_ParseInt(tch, "*basic-indent", &i)) {
-					lpfv->iIndentWidth = clamp_i(i, INDENT_WIDTH_MIN, INDENT_WIDTH_MAX);
-					mask |= FV_INDENTWIDTH;
-				}
+			if (FileVars_ParseInt(tch, "*basic-indent", &i) ||
+				FileVars_ParseInt(tch, "*basic-offset", &i)) {
+				lpfv->iIndentWidth = clamp_i(i, INDENT_WIDTH_MIN, INDENT_WIDTH_MAX);
+				mask |= FV_INDENTWIDTH;
+			}
 
-				if (FileVars_ParseInt(tch, "indent-tabs-mode", &i)) {
-					lpfv->bTabsAsSpaces = i == 0;
-					mask |= FV_TABSASSPACES;
-				}
+			if (FileVars_ParseInt(tch, "indent-tabs-mode", &i)) {
+				lpfv->bTabsAsSpaces = i == 0;
+				mask |= FV_TABSASSPACES;
+			}
 
-				if (FileVars_ParseInt(tch, "*tab-always-indent", &i)) {
-					lpfv->bTabIndents = i != 0;
-					mask |= FV_TABINDENTS;
-				}
+			if (FileVars_ParseInt(tch, "*tab-always-indent", &i)) {
+				lpfv->bTabIndents = i != 0;
+				mask |= FV_TABINDENTS;
+			}
 
-				if (FileVars_ParseInt(tch, "truncate-lines", &i)) {
-					lpfv->fWordWrap = i == 0;
-					mask |= FV_WORDWRAP;
-				}
+			if (FileVars_ParseInt(tch, "truncate-lines", &i)) {
+				lpfv->fWordWrap = i == 0;
+				mask |= FV_WORDWRAP;
+			}
 
-				if (FileVars_ParseInt(tch, "fill-column", &i)) {
-					lpfv->iLongLinesLimit = clamp_i(i, 0, NP2_LONG_LINE_LIMIT);
-					mask |= FV_LONGLINESLIMIT;
-				}
+			if (FileVars_ParseInt(tch, "fill-column", &i)) {
+				lpfv->iLongLinesLimit = clamp_i(i, 0, NP2_LONG_LINE_LIMIT);
+				mask |= FV_LONGLINESLIMIT;
+			}
+
+			if (FileVars_ParseStr(tch, "mode", lpfv->tchMode, COUNTOF(lpfv->tchMode))) {
+				mask |= FV_MODE;
 			}
 		}
 
-		if (!utf8Sig && !bNoEncodingTags && !bDisableFileVariables) {
+		if (!utf8Sig && !bNoEncodingTags) {
 			if (FileVars_ParseStr(tch, "encoding", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding)) || // XML
 				FileVars_ParseStr(tch, "charset", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding)) || // HTML
 				FileVars_ParseStr(tch, "coding", lpfv->tchEncoding, COUNTOF(lpfv->tchEncoding)) || // Emacs
@@ -7541,14 +7540,9 @@ void FileVars_Init(LPCSTR lpData, DWORD cbData, LPFILEVARS lpfv) {
 			}
 		}
 
-		if (!fNoFileVariables && !bDisableFileVariables) {
-			if (FileVars_ParseStr(tch, "mode", lpfv->tchMode, COUNTOF(lpfv->tchMode))) { // Emacs
-				mask |= FV_MODE;
-			}
-		}
-
-		if (beginning && mask == 0 && cbData > COUNTOF(tch)) {
-			strncpy(tch, lpData + cbData - COUNTOF(tch) + 1, COUNTOF(tch) - 1);
+		if (beginning && mask == 0 && cbData > sizeof(tch) - 1) {
+			memcpy(tch, lpData + cbData - sizeof(tch) + 1, sizeof(tch) - 1);
+			tch[sizeof(tch) - 1] = '\0';
 			beginning = FALSE;
 		} else {
 			break;
@@ -7693,14 +7687,14 @@ BOOL FileVars_ParseInt(LPCSTR pszData, LPCSTR pszName, int *piValue) {
 		}
 
 		switch (*pvStart) {
-		case 't':
-		case 'y':
+		case 't': // true
+		case 'y': // yes
 			*piValue = 1;
 			return TRUE;
-		case 'f':
-		case 'n':
+		case 'f': // false
+		case 'n': // no
 			*piValue = 0;
-			return FALSE;
+			return TRUE;
 		}
 	}
 
@@ -7854,7 +7848,7 @@ LRESULT CALLBACK SciThemedWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lP
 #define FOLD_CHILDREN SCMOD_CTRL
 #define FOLD_SIBLINGS SCMOD_SHIFT
 
-// max level for Toggle Folds for Current Level for indentation based lexers.
+// max level for Toggle Folds -> Current Level for indentation based lexers.
 #define MAX_EDIT_TOGGLE_FOLD_LEVEL		63
 struct FoldLevelStack {
 	int levelCount; // 1-based level number at current header line
@@ -7964,7 +7958,7 @@ void FoldToggleLevel(int lev, FOLD_ACTION action) {
 				FoldLevelStack_Push(&levelStack, level);
 				if (lev == levelStack.levelCount) {
 					FoldToggleNode(line, &action, &fToggled);
-					line = SciCall_GetLastChild(line);
+					line = SciCall_GetLastChildEx(line, level);
 				}
 			}
 			++line;
@@ -7977,7 +7971,7 @@ void FoldToggleLevel(int lev, FOLD_ACTION action) {
 				level &= SC_FOLDLEVELNUMBERMASK;
 				if (lev == level) {
 					FoldToggleNode(line, &action, &fToggled);
-					line = SciCall_GetLastChild(line);
+					line = SciCall_GetLastChildEx(line, level);
 				}
 			}
 			++line;
@@ -8059,11 +8053,11 @@ void FoldToggleDefault(FOLD_ACTION action) {
 			if (level & SC_FOLDLEVELHEADERFLAG) {
 				level &= SC_FOLDLEVELNUMBERMASK;
 				FoldLevelStack_Push(&levelStack, level);
-				level = levelStack.levelCount;
-				if ((state >> level) & 1) {
+				const int lev = levelStack.levelCount;
+				if ((state >> lev) & 1) {
 					FoldToggleNode(line, &action, &fToggled);
-					if (level == maxLevel) {
-						line = SciCall_GetLastChild(line);
+					if (lev == maxLevel) {
+						line = SciCall_GetLastChildEx(line, level);
 					}
 				}
 			}
@@ -8074,11 +8068,11 @@ void FoldToggleDefault(FOLD_ACTION action) {
 			int level = SciCall_GetFoldLevel(line);
 			if (level & SC_FOLDLEVELHEADERFLAG) {
 				level &= SC_FOLDLEVELNUMBERMASK;
-				level -= SC_FOLDLEVELBASE;
-				if ((state >> level) & 1) {
+				const int lev = level - SC_FOLDLEVELBASE;
+				if ((state >> lev) & 1) {
 					FoldToggleNode(line, &action, &fToggled);
-					if (level == maxLevel) {
-						line = SciCall_GetLastChild(line);
+					if (lev == maxLevel) {
+						line = SciCall_GetLastChildEx(line, level);
 					}
 				}
 			}
@@ -8279,7 +8273,7 @@ void EditGotoBlock(int menu) {
 						sibling = FALSE;
 						break;
 					}
-					line = SciCall_GetLastChild(line);
+					line = SciCall_GetLastChildEx(line, lev);
 				} else {
 					iLine = line;
 					break;

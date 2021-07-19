@@ -4,6 +4,9 @@
 
 #include <cassert>
 
+#include <string>
+#include <string_view>
+
 #include "ILexer.h"
 #include "Scintilla.h"
 #include "SciLexer.h"
@@ -134,7 +137,7 @@ static void ColouriseFSharpDoc(Sci_PositionU startPos, Sci_Position length, int 
 				sc.SetState(SCE_FSHARP_COMMENTLINE);
 			} else if (sc.ch == '@' && sc.chNext == '\"') {
 				sc.SetState(SCE_FSHARP_VERBATIM);
-				sc.Forward(2);
+				sc.Advance(2);
 			} else if (sc.ch == '\"') {
 				sc.SetState(SCE_FSHARP_STRING);
 			} else if (sc.ch == '\'' && (sc.chNext == '\\' || (sc.chNext != '\'' && sc.GetRelative(2) == '\''))) {

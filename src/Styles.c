@@ -22,6 +22,7 @@
 #include <windowsx.h>
 #include <shlwapi.h>
 #include <shlobj.h>
+#include <shellapi.h>
 #include <commctrl.h>
 #include <commdlg.h>
 #include <uxtheme.h>
@@ -30,6 +31,8 @@
 #include "SciCall.h"
 #include "config.h"
 #include "Helpers.h"
+#include "VectorISA.h"
+#include "GraphicUtils.h"
 #include "Notepad2.h"
 #include "Edit.h"
 #include "Styles.h"
@@ -335,6 +338,8 @@ extern int	iZoomLevel;
 extern FILEVARS fvCurFile;
 extern EditTabSettings tabSettings;
 
+extern BOOL bUseXPFileDialog;
+
 #define STYLE_MASK_FONT_FACE	(1 << 0)
 #define STYLE_MASK_FONT_SIZE	(1 << 1)
 #define STYLE_MASK_FORE_COLOR	(1 << 2)
@@ -364,7 +369,7 @@ struct DetailStyle {
 
 /*
 style in other lexers is inherited from it's lexer default (first) style and global default style.
-	This also means other "Default" styles in lexHTML don't work as expected (bug by b7e7585f869897276e27a3b83b5b91a7196ca4da).
+	This also means other "Default" styles in lexHTML don't work as expected.
 	Maybe it's better to remove them instead of confusing users.
 
 font quality, caret style, caret width, caret blink period are moved to "Settings" section,
@@ -417,6 +422,8 @@ enum ANSIArtStyleIndex {
 
 #define IMEIndicatorDefaultColor	RGB(0x10, 0x80, 0x10)
 #define MarkOccurrencesDefaultAlpha	100
+#define SelectionDefaultAlpha		95
+#define CaretLineDefaultAlpha		90
 
 #define	BookmarkImageDefaultColor	RGB(0x40, 0x80, 0x40)
 #define	BookmarkLineDefaultColor	RGB(0, 0xff, 0)
@@ -838,7 +845,7 @@ static void Style_LoadAll(BOOL bReload) {
 			if (n < MAX_CUSTOM_COLOR_COUNT && *wch == L'#') {
 				int irgb;
 				if (HexStrToInt(wch + 1, &irgb)) {
-					customColor[n] = RGB((irgb & 0xFF0000) >> 16, (irgb & 0xFF00) >> 8, irgb & 0xFF);
+					customColor[n] = ColorFromRGBHex(irgb);
 				}
 			}
 		}
@@ -917,7 +924,7 @@ void Style_Save(void) {
 				WCHAR tch[4];
 				WCHAR wch[16];
 				wsprintf(tch, L"%02u", i + 1);
-				wsprintf(wch, L"#%02X%02X%02X", GetRValue(color), GetGValue(color), GetBValue(color));
+				wsprintf(wch, L"#%06X", ColorToRGBHex(color));
 				IniSectionSetString(pIniSection, tch, wch);
 			}
 		}
@@ -971,7 +978,11 @@ BOOL Style_Import(HWND hwnd) {
 	ofn.lpstrDefExt	= L"ini";
 	ofn.nMaxFile	= COUNTOF(szFile);
 	ofn.Flags		= OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR | OFN_DONTADDTORECENT
-					  | OFN_PATHMUSTEXIST | OFN_SHAREAWARE /*| OFN_NODEREFERENCELINKS*/ | OFN_NOVALIDATE;
+					  | OFN_PATHMUSTEXIST | OFN_SHAREAWARE /*| OFN_NODEREFERENCELINKS*/;
+	if (bUseXPFileDialog) {
+		ofn.Flags |= OFN_EXPLORER | OFN_ENABLESIZING | OFN_ENABLEHOOK;
+		ofn.lpfnHook = OpenSaveFileDlgHookProc;
+	}
 
 	if (GetOpenFileName(&ofn)) {
 		IniSection section;
@@ -1043,7 +1054,11 @@ BOOL Style_Export(HWND hwnd) {
 	ofn.lpstrDefExt = L"ini";
 	ofn.nMaxFile	= COUNTOF(szFile);
 	ofn.Flags		= /*OFN_FILEMUSTEXIST |*/ OFN_HIDEREADONLY | OFN_NOCHANGEDIR | OFN_DONTADDTORECENT
-			| OFN_PATHMUSTEXIST | OFN_SHAREAWARE /*| OFN_NODEREFERENCELINKS*/ | OFN_OVERWRITEPROMPT;
+					  | OFN_PATHMUSTEXIST | OFN_SHAREAWARE /*| OFN_NODEREFERENCELINKS*/ | OFN_OVERWRITEPROMPT;
+	if (bUseXPFileDialog) {
+		ofn.Flags |= OFN_EXPLORER | OFN_ENABLESIZING | OFN_ENABLEHOOK;
+		ofn.lpfnHook = OpenSaveFileDlgHookProc;
+	}
 
 	if (GetSaveFileName(&ofn)) {
 		DWORD dwError = ERROR_SUCCESS;
@@ -1215,9 +1230,6 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 	attr[KEYWORDSET_MAX] = KeywordAttr_NoLexer;
 
 	switch (pLexNew->rid) {
-	case NP2LEX_BATCH:
-		attr[6] = KeywordAttr_NoLexer;		// Upper Case Keyword
-		break;
 	case NP2LEX_CPP:
 		attr[2] = KeywordAttr_NoAutoComp;	// Preprocessor
 		attr[3] = KeywordAttr_NoAutoComp;	// Directive
@@ -1261,13 +1273,6 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[12] = KeywordAttr_NoLexer;		// Tag
 		attr[13] = KeywordAttr_NoLexer;		// String Constant
 		break;
-	case NP2LEX_PYTHON:
-		attr[3] = KeywordAttr_NoAutoComp;	// Decorator
-		attr[9] = KeywordAttr_NoLexer;		// Module
-		attr[10] = KeywordAttr_NoLexer;		// Method
-		attr[11] = KeywordAttr_NoLexer;		// Constant
-		attr[12] = KeywordAttr_NoLexer;		// Attribute
-		break;
 	case NP2LEX_XML:
 		attr[6] = KeywordAttr_NoLexer;		// Attribute
 		attr[7] = KeywordAttr_NoLexer;		// Value
@@ -1286,6 +1291,12 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 	case NP2LEX_AWK:
 		attr[3] = KeywordAttr_NoLexer;		// library function
 		attr[4] = KeywordAttr_NoLexer;		// misc
+		break;
+	case NP2LEX_BATCH:
+		attr[2] = KeywordAttr_NoLexer;		// system commands
+		attr[3] = KeywordAttr_NoLexer;		// upper case keywords / commands
+		attr[4] = KeywordAttr_NoLexer;		// environment variables
+		attr[5] = KeywordAttr_NoLexer;		// command options
 		break;
 	case NP2LEX_CMAKE:
 		attr[6] = KeywordAttr_NoLexer;		// long properties
@@ -1351,6 +1362,14 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[3] = KeywordAttr_NoLexer;		// attribute
 		attr[4] = KeywordAttr_NoLexer;		// function
 		attr[5] = KeywordAttr_NoLexer;		// predefined variables
+		break;
+	case NP2LEX_PYTHON:
+		attr[7] = KeywordAttr_NoLexer;		// decorator
+		attr[8] = KeywordAttr_NoLexer;		// module
+		attr[9] = KeywordAttr_NoLexer;		// function
+		attr[10] = KeywordAttr_NoLexer;		// field
+		attr[11] = KeywordAttr_NoLexer;		// misc
+		attr[12] = KeywordAttr_NoLexer;		// comment tag
 		break;
 	case NP2LEX_R:
 		attr[1] = KeywordAttr_NoLexer;		// package
@@ -1665,25 +1684,27 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	//! begin Selection
 	szValue = pLexGlobal->Styles[GlobalStyleIndex_Selection].szValue;
 	// never change text color on selecting.
-	SciCall_SetSelFore(FALSE, 0);
-
+	//SciCall_ResetElementColor(SC_ELEMENT_SELECTION_TEXT);
+	//SciCall_ResetElementColor(SC_ELEMENT_SELECTION_ADDITIONAL_TEXT);
+	//SciCall_ResetElementColor(SC_ELEMENT_SELECTION_SECONDARY_TEXT);
+	//SciCall_ResetElementColor(SC_ELEMENT_SELECTION_INACTIVE_TEXT);
 	// always set background color
 	if (!Style_StrGetBackColor(szValue, &rgb)) {
 		rgb = GetSysColor(COLOR_HIGHLIGHT);
 	}
-	SciCall_SetSelBack(TRUE, rgb);
-	SciCall_SetElementColor(SC_ELEMENT_LIST_SELECTED_BACK, rgb);
-	if (Style_StrGetForeColor(szValue, &rgb)) {
-		SciCall_SetAdditionalSelBack(rgb);
-	}
-
 	if (!Style_StrGetAlpha(szValue, &iValue)) {
-		iValue = SC_ALPHA_NOALPHA;
+		iValue = SelectionDefaultAlpha;
 	}
-	SciCall_SetSelAlpha(iValue);
-	if (Style_StrGetOutlineAlpha(szValue, &iValue)) {
-		SciCall_SetAdditionalSelAlpha(iValue);
-	}
+	SciCall_SetSelectionLayer(SC_LAYER_OVER_TEXT);
+	SciCall_SetElementColor(SC_ELEMENT_LIST_SELECTED_BACK, rgb);
+	SciCall_SetElementColor(SC_ELEMENT_SELECTION_BACK, ColorAlpha(rgb, iValue));
+	// additional selection
+	Style_StrGetForeColor(szValue, &rgb);
+	Style_StrGetOutlineAlpha(szValue, &iValue);
+	rgb = ColorAlpha(rgb, iValue);
+	SciCall_SetElementColor(SC_ELEMENT_SELECTION_ADDITIONAL_BACK, rgb);
+	SciCall_SetElementColor(SC_ELEMENT_SELECTION_SECONDARY_BACK, rgb);
+	SciCall_SetElementColor(SC_ELEMENT_SELECTION_INACTIVE_BACK, rgb);
 
 	SciCall_SetSelEOLFilled(Style_StrGetEOLFilled(szValue));
 	if (!Style_StrGetSize(szValue, &iValue)) {
@@ -1695,23 +1716,22 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	//! begin Whitespace
 	szValue = pLexGlobal->Styles[GlobalStyleIndex_Whitespace].szValue;
 	if (Style_StrGetForeColor(szValue, &rgb)) {
-		SciCall_SetWhitespaceFore(TRUE, rgb);
+		if (!Style_StrGetAlpha(szValue, &iValue)) {
+			iValue = SC_ALPHA_OPAQUE;
+		}
+		SciCall_SetElementColor(SC_ELEMENT_WHITE_SPACE, ColorAlpha(rgb, iValue));
 	} else {
-		SciCall_SetWhitespaceFore(FALSE, 0);
+		SciCall_ResetElementColor(SC_ELEMENT_WHITE_SPACE);
 	}
 	if (Style_StrGetBackColor(szValue, &rgb)) {
-		SciCall_SetWhitespaceBack(TRUE, rgb);
+		SciCall_SetElementColor(SC_ELEMENT_WHITE_SPACE_BACK, ColorAlpha(rgb, SC_ALPHA_OPAQUE));
 	} else {
-		SciCall_SetWhitespaceBack(FALSE, 0);
+		SciCall_ResetElementColor(SC_ELEMENT_WHITE_SPACE_BACK);
 	}
-	if (!Style_StrGetAlpha(szValue, &iValue)) {
-		iValue = SC_ALPHA_NOALPHA;
-	}
-	SciCall_SetWhitespaceForeAlpha(iValue);
 	//! end Whitespace
 
 	//! begin Caret
-	const COLORREF backColor = SciCall_StyleGetBack(STYLE_DEFAULT);
+	COLORREF backColor = SciCall_StyleGetBack(STYLE_DEFAULT);
 	COLORREF foreColor = SciCall_StyleGetFore(STYLE_DEFAULT);
 	SciCall_SetElementColor(SC_ELEMENT_LIST, foreColor);
 	SciCall_SetElementColor(SC_ELEMENT_LIST_BACK, backColor);
@@ -1723,11 +1743,13 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	if (!VerifyContrast(rgb, backColor)) {
 		rgb = foreColor;
 	}
-	SciCall_SetCaretFore(rgb);
+	rgb = ColorAlpha(rgb, SC_ALPHA_OPAQUE);
+	SciCall_SetElementColor(SC_ELEMENT_CARET, rgb);
 	// additional caret fore
 	if (Style_StrGetBackColor(szValue, &rgb) && VerifyContrast(rgb, backColor)) {
-		SciCall_SetAdditionalCaretFore(rgb);
+		rgb = ColorAlpha(rgb, SC_ALPHA_OPAQUE);
 	}
+	SciCall_SetElementColor(SC_ELEMENT_CARET_ADDITIONAL, rgb);
 	//! end Caret
 
 	// IME indicator
@@ -1785,16 +1807,20 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 #endif
 
 		uint64_t iMarkerIDs = CodeFoldingMarkerList;
+		highlightColor = ColorAlpha(highlightColor, SC_ALPHA_OPAQUE);
+		foreColor = ColorAlpha(foreColor, SC_ALPHA_OPAQUE);
+		backColor = ColorAlpha(backColor, SC_ALPHA_OPAQUE);
 		do {
 			const int marker = (int)(iMarkerIDs & 0xff);
-			SciCall_MarkerSetBack(marker, foreColor);
-			SciCall_MarkerSetFore(marker, backColor);
-			SciCall_MarkerSetBackSelected(marker, highlightColor);
+			SciCall_MarkerSetBackTranslucent(marker, foreColor);
+			SciCall_MarkerSetForeTranslucent(marker, backColor);
+			SciCall_MarkerSetBackSelectedTranslucent(marker, highlightColor);
 			iMarkerIDs >>= 8;
 		} while (iMarkerIDs);
 
-		SciCall_MarkerSetFore(SC_MARKNUM_FOLDER, fillColor);
-		SciCall_MarkerSetFore(SC_MARKNUM_FOLDEREND, fillColor);
+		fillColor = ColorAlpha(fillColor, SC_ALPHA_OPAQUE);
+		SciCall_MarkerSetForeTranslucent(SC_MARKNUM_FOLDER, fillColor);
+		SciCall_MarkerSetForeTranslucent(SC_MARKNUM_FOLDEREND, fillColor);
 
 		Style_SetDefaultStyle(GlobalStyleIndex_FoldDispalyText);
 	} // end set folding style
@@ -1867,37 +1893,6 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	if (bLexerChanged) {
 		// cache layout for visible lines.
 		// SC_CACHE_PAGE depends on line height (i.e. styles in current lexer) and edit window height.
-		/* estimated memory usage when using SC_CACHE_DOCUMENT:
-		CellBuffer:
-			docLength*2
-		Document:
-			lineCount*(4 + 4)
-		ContractionState:
-			lineCount*(1 + 1 + 4 + 4)
-
-		base => docLength*2 + lineCount*18
-
-		LineLayoutCache:
-			lineCount*(8 + 136 + 4*ChunkHeaderSize)
-			+ (lineCount + docLength)*(1 + 1 + 4) + lineCount*4
-
-			lineStarts:
-				wrappedLineCount*(ChunkHeaderSize + 20*4) + sum(subLineCount)*4
-			bidiData:
-				lineCount*(ChunkHeaderSize + 48) + (lineCount + docLength)*(8 + 4)
-				=> docLength*12 + lineCount*68
-
-			with memory chunk header size=8, ignore lineStarts and PositionCache
-			cache without bidiData => docLength*6 + lineCount*186
-			cache with bidiData => docLength*18 + lineCount*254
-
-		total without bidiData => docLength*8 + lineCount*204
-		total with bidiData => docLength*20 + lineCount*272
-
-		python command to make a 4 MiB file with new line only:
-		f = open('4mb.txt', 'wb'); f.write(('\n'*1024*1024*4).encode('utf-8')); f.close()
-		*/
-		//const int cache = (SciCall_GetLength() < 4*1024*1024)? SC_CACHE_DOCUMENT : SC_CACHE_PAGE;
 		SciCall_SetLayoutCache(SC_CACHE_PAGE);
 
 #if 0
@@ -3141,7 +3136,6 @@ void Style_SetLongLineColors(void) {
 // Style_HighlightCurrentLine()
 //
 void Style_HighlightCurrentLine(void) {
-	SciCall_SetCaretLineVisible(FALSE);
 	if (iHighlightCurrentLine != 0) {
 		LPCWSTR szValue = pLexGlobal->Styles[GlobalStyleIndex_CurrentLine].szValue;
 		// 1: background color, 2: outline frame
@@ -3155,16 +3149,17 @@ void Style_HighlightCurrentLine(void) {
 			}
 
 			SciCall_SetCaretLineFrame(size);
-			SciCall_SetCaretLineBack(rgb);
+			SciCall_SetCaretLineLayer(SC_LAYER_OVER_TEXT);
 
 			int alpha;
 			if (!Style_StrGetAlphaEx(outline, szValue, &alpha)) {
-				alpha = SC_ALPHA_NOALPHA;
+				alpha = CaretLineDefaultAlpha;
 			}
-			SciCall_SetCaretLineBackAlpha(alpha);
-			SciCall_SetCaretLineVisible(TRUE);
+			SciCall_SetElementColor(SC_ELEMENT_CARET_LINE_BACK, ColorAlpha(rgb, alpha));
+			return;
 		}
 	}
+	SciCall_ResetElementColor(SC_ELEMENT_CARET_LINE_BACK);
 }
 
 //=============================================================================
@@ -3212,9 +3207,10 @@ void Style_SetBookmark(void) {
 		sprintf(bookmark_pixmap_color, bookmark_pixmap_color_fmt, iBookmarkImageColor);
 		SciCall_MarkerDefinePixmap(MarkerNumber_Bookmark, bookmark_pixmap);
 #else
-		SciCall_MarkerSetBack(MarkerNumber_Bookmark, iBookmarkImageColor);
+		iBookmarkImageColor = ColorAlpha(iBookmarkImageColor, SC_ALPHA_OPAQUE);
+		SciCall_MarkerSetBackTranslucent(MarkerNumber_Bookmark, iBookmarkImageColor);
 		// set same color to avoid showing edge.
-		SciCall_MarkerSetFore(MarkerNumber_Bookmark, iBookmarkImageColor);
+		SciCall_MarkerSetForeTranslucent(MarkerNumber_Bookmark, iBookmarkImageColor);
 		SciCall_MarkerDefine(MarkerNumber_Bookmark, SC_MARK_VERTICALBOOKMARK);
 #endif
 	} else {
@@ -3226,8 +3222,9 @@ void Style_SetBookmark(void) {
 		if (!Style_StrGetAlpha(szValue, &iBookmarkLineAlpha)) {
 			iBookmarkLineAlpha = BookmarkLineDefaultAlpha;
 		}
-		SciCall_MarkerSetBack(MarkerNumber_Bookmark, iBookmarkLineColor);
-		SciCall_MarkerSetAlpha(MarkerNumber_Bookmark, iBookmarkLineAlpha);
+		iBookmarkLineColor = ColorAlpha(iBookmarkLineColor, iBookmarkLineAlpha);
+		SciCall_MarkerSetBackTranslucent(MarkerNumber_Bookmark, iBookmarkLineColor);
+		SciCall_MarkerSetLayer(MarkerNumber_Bookmark, SC_LAYER_OVER_TEXT);
 		SciCall_MarkerDefine(MarkerNumber_Bookmark, SC_MARK_BACKGROUND);
 	}
 	bBookmarkColorUpdated = FALSE;
@@ -3538,7 +3535,7 @@ BOOL Style_StrGetColor(BOOL bFore, LPCWSTR lpszStyle, COLORREF *rgb) {
 		if (*p == L'#') {
 			int iValue;
 			if (HexStrToInt(p + 1, &iValue)) {
-				*rgb = RGB((iValue & 0xFF0000) >> 16, (iValue & 0xFF00) >> 8, iValue & 0xFF);
+				*rgb = ColorFromRGBHex(iValue);
 				return TRUE;
 			}
 		}
@@ -3589,8 +3586,9 @@ BOOL Style_StrGetAlphaEx(BOOL outline, LPCWSTR lpszStyle, int *alpha) {
 
 	if (p != NULL) {
 		p += outline ? CSTRLEN(L"outline:") : CSTRLEN(L"alpha:");
-		if (CRTStrToInt(p, alpha)) {
-			*alpha = clamp_i(*alpha, SC_ALPHA_TRANSPARENT, SC_ALPHA_OPAQUE);
+		int iValue;
+		if (CRTStrToInt(p, &iValue)) {
+			*alpha = clamp_i(iValue, SC_ALPHA_TRANSPARENT, SC_ALPHA_OPAQUE);
 			return TRUE;
 		}
 	}
@@ -3761,7 +3759,7 @@ BOOL Style_SelectColor(HWND hwnd, BOOL bFore, LPWSTR lpszStyle, int cchStyle) {
 		if (StrNotEmpty(szNewStyle)) {
 			lstrcat(szNewStyle, L"; ");
 		}
-		wsprintf(tch, L"fore:#%02X%02X%02X", GetRValue(iRGBResult), GetGValue(iRGBResult), GetBValue(iRGBResult));
+		wsprintf(tch, L"fore:#%06X", ColorToRGBHex(iRGBResult));
 		lstrcat(szNewStyle, tch);
 		Style_StrCopyBack(szNewStyle, lpszStyle, tch);
 	} else {
@@ -3769,7 +3767,7 @@ BOOL Style_SelectColor(HWND hwnd, BOOL bFore, LPWSTR lpszStyle, int cchStyle) {
 		if (StrNotEmpty(szNewStyle)) {
 			lstrcat(szNewStyle, L"; ");
 		}
-		wsprintf(tch, L"back:#%02X%02X%02X", GetRValue(iRGBResult), GetGValue(iRGBResult), GetBValue(iRGBResult));
+		wsprintf(tch, L"back:#%06X", ColorToRGBHex(iRGBResult));
 		lstrcat(szNewStyle, tch);
 	}
 

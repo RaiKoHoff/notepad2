@@ -37,15 +37,16 @@ private:
 	Sci_Position startPosStyling;
 
 	void Fill(Sci_Position position) noexcept {
-		const Sci_Position m = lenDoc - bufferSize;
+		Sci_Position m = lenDoc - bufferSize;
 		startPos = position - slopSize;
 		startPos = sci::min(startPos, m);
 		startPos = sci::max<Sci_Position>(startPos, 0);
 		endPos = startPos + bufferSize;
 		endPos = sci::min(endPos, lenDoc);
 
-		pAccess->GetCharRange(buf, startPos, endPos - startPos);
-		buf[endPos - startPos] = '\0';
+		m = endPos - startPos;
+		pAccess->GetCharRange(buf, startPos, m);
+		buf[m] = '\0';
 	}
 
 public:
@@ -99,7 +100,7 @@ public:
 	}
 #endif
 	bool IsLeadByte(unsigned char ch) const noexcept {
-		return encodingType == EncodingType::dbcs && ch > 0x80 && pAccess->IsDBCSLeadByte(ch);
+		return encodingType == EncodingType::dbcs && (ch & 0x80) != 0 && pAccess->IsDBCSLeadByte(ch);
 	}
 	constexpr EncodingType Encoding() const noexcept {
 		return encodingType;
@@ -123,6 +124,9 @@ public:
 	// Get first len - 1 characters in range [startPos_, endPos_).
 	void GetRange(Sci_PositionU startPos_, Sci_PositionU endPos_, char *s, Sci_PositionU len) noexcept;
 	void GetRangeLowered(Sci_PositionU startPos_, Sci_PositionU endPos_, char *s, Sci_PositionU len) noexcept;
+	// Get all characters in range [startPos_, endPos_).
+	std::string GetRange(Sci_PositionU startPos_, Sci_PositionU endPos_);
+	std::string GetRangeLowered(Sci_PositionU startPos_, Sci_PositionU endPos_);
 
 	// Flush() must be called first when used in Colourise() or Lex() function.
 	unsigned char StyleAt(Sci_Position position) const noexcept {
@@ -304,7 +308,7 @@ inline unsigned char LexGetNextChar(Sci_Position startPos, Sci_Position endPos, 
 }
 
 void BacktrackToStart(const LexAccessor &styler, int stateMask, Sci_PositionU &startPos, Sci_Position &lengthDoc, int &initStyle) noexcept;
-void LookbackNonWhite(LexAccessor &styler, Sci_PositionU startPos, int maxSpaceStyle, int &chPrevNonWhite, int &stylePrevNonWhite);
+void LookbackNonWhite(LexAccessor &styler, Sci_PositionU startPos, int maxSpaceStyle, int &chPrevNonWhite, int &stylePrevNonWhite) noexcept;
 Sci_PositionU CheckBraceOnNextLine(LexAccessor &styler, Sci_Line line, int operatorStyle, int maxSpaceStyle, int ignoreStyle = 0) noexcept;
 
 }

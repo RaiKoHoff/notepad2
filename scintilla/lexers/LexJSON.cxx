@@ -5,6 +5,9 @@
 #include <cassert>
 #include <cstring>
 
+#include <string>
+#include <string_view>
+
 #include "ILexer.h"
 #include "Scintilla.h"
 #include "SciLexer.h"
@@ -216,6 +219,8 @@ void ColouriseJSONDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 						i++;
 						chNext = styler.SafeGetCharAt(i + 1);
 					}
+					break;
+				default:
 					break;
 				}
 			}

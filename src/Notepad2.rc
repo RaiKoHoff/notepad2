@@ -92,14 +92,13 @@ BEGIN
 			MENUITEM "As UTF-&8\tShift+F8",			CMD_RELOADUTF8
 			MENUITEM "As &ANSI\tCtrl+Shift+A",		CMD_RELOADANSI
 			MENUITEM "As &OEM\tCtrl+Shift+O",		CMD_RELOADOEM
+			MENUITEM "&With Encoding...\tF8",		IDM_RECODE_SELECT
 			MENUITEM SEPARATOR
 			MENUITEM "&No File Variables\tAlt+F8",	CMD_RELOADNOFILEVARS
 			MENUITEM "&Default\tCtrl+Alt+F",		CMD_RECODEDEFAULT
 #if defined(_WIN64)
 			MENUITEM "&Large File Mode",			IDM_FILE_LARGE_FILE_MODE_RELOAD
 #endif
-			MENUITEM SEPARATOR
-			MENUITEM "&With Encoding...\tF8",		IDM_RECODE_SELECT
 		END
 		POPUP "&Launch"
 		BEGIN
@@ -650,6 +649,8 @@ BEGIN
 			MENUITEM "Remember Recent &Files",		IDM_VIEW_NOSAVERECENT
 			MENUITEM "Remember &Search Options",	IDM_VIEW_NOSAVEFINDREPL
 			MENUITEM "Sa&ve Before Running Tools",	IDM_VIEW_SAVEBEFORERUNNINGTOOLS
+			MENUITEM SEPARATOR
+			MENUITEM "&Use XP Style Open/Save Dialog",	IDM_SET_USE_XP_FILE_DIALOG
 			MENUITEM "Use &metapath to Open Folder",IDM_SET_OPEN_FOLDER_METAPATH
 		END
 		MENUITEM SEPARATOR
@@ -2134,7 +2135,7 @@ BEGIN
 Style format:\r\n\
 \tfont:Name; size:[+|-]nn.mm; weight:nnn; bold; italic; underline; strike;\r\n\
 \tcharset:dd; locale:Name; case:[Upper|Lower|Camel];\r\n\
-\tfore:#ffffff; back:#bbbbbb; alpha:aa; outline:aa; eolfilled;\r\n\
+\tfore:#RRGGBB; back:#RRGGBB; alpha:aa; outline:aa; eolfilled;\r\n\
 \r\n\
 Style properties can be copied using copy and paste or drag and drop.\r\n\
 \r\n\

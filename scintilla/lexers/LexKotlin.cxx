@@ -5,6 +5,8 @@
 #include <cassert>
 #include <cstring>
 
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include "ILexer.h"
@@ -237,7 +239,7 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 			} else if (sc.ch == '\"' && (sc.state == SCE_KOTLIN_STRING || sc.MatchNext('"', '"'))) {
 				if (sc.state == SCE_KOTLIN_RAWSTRING) {
 					sc.SetState(SCE_KOTLIN_RAWSTRINGEND);
-					sc.Forward(2);
+					sc.Advance(2);
 				}
 				sc.ForwardSetState(SCE_KOTLIN_DEFAULT);
 			}
@@ -300,7 +302,7 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 			if (sc.ch == '\"') {
 				if (sc.MatchNext('"', '"')) {
 					sc.SetState(SCE_KOTLIN_RAWSTRINGSTART);
-					sc.Forward(2);
+					sc.Advance(2);
 					sc.ForwardSetState(SCE_KOTLIN_RAWSTRING);
 					continue;
 				}
