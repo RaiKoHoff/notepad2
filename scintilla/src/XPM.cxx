@@ -17,6 +17,8 @@
 #include <iterator>
 #include <memory>
 
+#include "ScintillaTypes.h"
+
 #include "Debugging.h"
 #include "Geometry.h"
 #include "Platform.h"
@@ -26,6 +28,7 @@
 #include "XPM.h"
 
 using namespace Scintilla;
+using namespace Scintilla::Internal;
 
 namespace {
 
@@ -68,17 +71,17 @@ constexpr unsigned int GetHexValue(unsigned char ch1, unsigned char ch2) noexcep
 	return (GetHexDigit(ch1) << 4) | GetHexDigit(ch2);
 }
 
-constexpr ColourAlpha ColourFromHex(const char *val) noexcept {
+constexpr ColourRGBA ColourFromHex(const char *val) noexcept {
 	const unsigned int r = GetHexValue(val[0], val[1]);
 	const unsigned int g = GetHexValue(val[2], val[3]);
 	const unsigned int b = GetHexValue(val[4], val[5]);
-	return ColourAlpha(r, g, b);
+	return ColourRGBA(r, g, b);
 }
 
 }
 
 
-ColourAlpha XPM::ColourFromCode(int ch) const noexcept {
+ColourRGBA XPM::ColourFromCode(int ch) const noexcept {
 	return colourCodeTable[ch];
 }
 
@@ -123,7 +126,7 @@ void XPM::Init(const char *const *linesForm) {
 	if (!linesForm)
 		return;
 
-	std::fill(colourCodeTable, std::end(colourCodeTable), ColourAlpha(0, 0, 0, 0));
+	std::fill(colourCodeTable, std::end(colourCodeTable), ColourRGBA(0, 0, 0, 0));
 	const char *line0 = linesForm[0];
 	width = atoi(line0);
 	line0 = NextField(line0);
@@ -141,7 +144,7 @@ void XPM::Init(const char *const *linesForm) {
 		const char *colourDef = linesForm[c + 1];
 		const char code = colourDef[0];
 		colourDef += 4;
-		ColourAlpha colour(0, 0, 0);
+		ColourRGBA colour(0, 0, 0);
 		if (*colourDef == '#') {
 			colour = ColourFromHex(colourDef + 1);
 		} else {
@@ -181,10 +184,10 @@ void XPM::Draw(Surface *surface, PRectangle rc) {
 	}
 }
 
-ColourAlpha XPM::PixelAt(int x, int y) const noexcept {
+ColourRGBA XPM::PixelAt(int x, int y) const noexcept {
 	if (pixels.empty() || (x < 0) || (x >= width) || (y < 0) || (y >= height)) {
 		// Out of bounds -> transparent black
-		return ColourAlpha(0, 0, 0, 0);
+		return ColourRGBA(0, 0, 0, 0);
 	}
 	const int code = pixels[y * width + x];
 	return ColourFromCode(code);
@@ -256,7 +259,7 @@ const unsigned char *RGBAImage::Pixels() const noexcept {
 	return pixelBytes.data();
 }
 
-void RGBAImage::SetPixel(int x, int y, ColourAlpha colour) noexcept {
+void RGBAImage::SetPixel(int x, int y, ColourRGBA colour) noexcept {
 	unsigned char *pixel = pixelBytes.data() + (y*width + x) * 4;
 	// RGBA
 	pixel[0] = colour.GetRed();
@@ -274,7 +277,7 @@ void RGBAImage::BGRAFromRGBA(unsigned char *pixelsBGRA, const unsigned char *pix
 	const uint64_t *prgba = reinterpret_cast<const uint64_t *>(pixelsRGBA);
 	for (size_t i = 0; i < count; i++, pbgra++) {
 		__m128i i16x8Color = unpack_color_epi16_sse4_ptr64(prgba++);
-		i16x8Color = _mm_shufflehi_epi16(_mm_shufflelo_epi16(i16x8Color, 0xc6), 0xc6);
+		i16x8Color = _mm_shufflehi_epi16(_mm_shufflelo_epi16(i16x8Color, _MM_SHUFFLE(3, 0, 1, 2)), _MM_SHUFFLE(3, 0, 1, 2));
 		__m128i i16x8Alpha = _mm_shufflehi_epi16(_mm_shufflelo_epi16(i16x8Color, 0xff), 0xff);
 
 		i16x8Color = _mm_mullo_epi16(i16x8Color, i16x8Alpha);
@@ -345,7 +348,7 @@ RGBAImage *RGBAImageSet::Get(int ident) const {
 }
 
 /// Give the largest height of the set.
-int RGBAImageSet::GetHeight() const {
+int RGBAImageSet::GetHeight() const noexcept {
 	int h = height;
 	if (h < 0) {
 		for (const auto &image : images) {
@@ -357,7 +360,7 @@ int RGBAImageSet::GetHeight() const {
 }
 
 /// Give the largest width of the set.
-int RGBAImageSet::GetWidth() const {
+int RGBAImageSet::GetWidth() const noexcept {
 	int w = width;
 	if (w < 0) {
 		for (const auto &image : images) {

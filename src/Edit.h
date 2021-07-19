@@ -29,6 +29,7 @@
 #define NP2_MarkAllMultiline	0x00001000
 #define NP2_MarkAllBookmark		0x00002000
 #define NP2_MarkAllSelectAll	0x00004000
+#define NP2_FromFindAll			0x00008000
 
 typedef struct EDITFINDREPLACE {
 	char	szFind[512];
@@ -218,6 +219,7 @@ enum {
 typedef struct EditMarkAllStatus {
 	BOOL pending;
 	BOOL ignoreSelectionUpdate;
+	BOOL bookmarkForFindAll;
 	int findFlag;
 	int incrementSize;			// increment search size
 	Sci_Position iSelCount;		// length for pszText
@@ -406,7 +408,8 @@ BOOL	IsUTF7(const char *pTest, DWORD nLength);
 //INT		UTF8_mbslen_bytes(LPCSTR utf8_string);
 
 static inline BOOL IsUTF8Signature(const char *p) {
-	return p[0] == '\xEF' && p[1] == '\xBB' && p[2] == '\xBF';
+	//return p[0] == '\xEF' && p[1] == '\xBB' && p[2] == '\xBF';
+	return (*((const UINT *)p) & 0xFFFFFF) == 0xBFBBEF;
 }
 
 BOOL IsStringCaseSensitiveW(LPCWSTR pszTextW);

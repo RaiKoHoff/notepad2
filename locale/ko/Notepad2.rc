@@ -92,14 +92,13 @@ BEGIN
 			MENUITEM "UTF-8로(&8)\tShift+F8",			CMD_RELOADUTF8
 			MENUITEM "ANSI로(&A)\tCtrl+Shift+A",		CMD_RELOADANSI
 			MENUITEM "OEM으로(&O)\tCtrl+Shift+O",		CMD_RELOADOEM
+			MENUITEM "인코딩으로(&W)...\tF8",		IDM_RECODE_SELECT
 			MENUITEM SEPARATOR
 			MENUITEM "파일 변수 없음(&N)\tAlt+F8",	CMD_RELOADNOFILEVARS
 			MENUITEM "기본값(&D)\tCtrl+Alt+F",		CMD_RECODEDEFAULT
 #if defined(_WIN64)
 			MENUITEM "큰 파일 모드(&L)",			IDM_FILE_LARGE_FILE_MODE_RELOAD
 #endif
-			MENUITEM SEPARATOR
-			MENUITEM "인코딩으로(&W)...\tF8",		IDM_RECODE_SELECT
 		END
 		POPUP "실행(&L)"
 		BEGIN
@@ -650,6 +649,8 @@ BEGIN
 			MENUITEM "최근 파일들 기억(&F)",		IDM_VIEW_NOSAVERECENT
 			MENUITEM "검색 옵션 기억(&S)",	IDM_VIEW_NOSAVEFINDREPL
 			MENUITEM "도구 실행 전에 저장(&V)",	IDM_VIEW_SAVEBEFORERUNNINGTOOLS
+			MENUITEM SEPARATOR
+			MENUITEM "XP 스타일 열기/저장 대화 상자 사용(&U)",	IDM_SET_USE_XP_FILE_DIALOG
 			MENUITEM "metapath를 사용하여 폴더 열기(&M)",IDM_SET_OPEN_FOLDER_METAPATH
 		END
 		MENUITEM SEPARATOR
@@ -2134,7 +2135,7 @@ BEGIN
 스타일 형식:\r\n\
 \tfont:Name; size:[+|-]nn.mm; weight:nnn; bold; italic; underline; strike;\r\n\
 \tcharset:dd; locale:Name; case:[Upper|Lower|Camel];\r\n\
-\tfore:#ffffff; back:#bbbbbb; alpha:aa; outline:aa; eolfilled;\r\n\
+\tfore:#RRGGBB; back:#RRGGBB; alpha:aa; outline:aa; eolfilled;\r\n\
 \r\n\
 스타일 속성은 복사/붙여넣기, 또는 끌어서 놓기로 복사할 수 있습니다.\r\n\
 \r\n\

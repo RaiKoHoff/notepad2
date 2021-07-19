@@ -92,14 +92,13 @@ BEGIN
 			MENUITEM "作为 UTF-&8\tShift+F8",		CMD_RELOADUTF8
 			MENUITEM "作为 &ANSI\tCtrl+Shift+A",	CMD_RELOADANSI
 			MENUITEM "作为 &OEM\tCtrl+Shift+O",		CMD_RELOADOEM
+			MENUITEM "指定编码(&W)...\tF8",			IDM_RECODE_SELECT
 			MENUITEM SEPARATOR
 			MENUITEM "无文件变量(&N)\tAlt+F8",		CMD_RELOADNOFILEVARS
 			MENUITEM "默认(&D)\tCtrl+Alt+F",		CMD_RECODEDEFAULT
 #if defined(_WIN64)
 			MENUITEM "大文件模式(&L)",				IDM_FILE_LARGE_FILE_MODE_RELOAD
 #endif
-			MENUITEM SEPARATOR
-			MENUITEM "指定编码(&W)...\tF8",			IDM_RECODE_SELECT
 		END
 		POPUP "启动(&L)"
 		BEGIN
@@ -650,6 +649,8 @@ BEGIN
 			MENUITEM "记住最近的文件(&F)",			IDM_VIEW_NOSAVERECENT
 			MENUITEM "记住搜索选项(&S)",			IDM_VIEW_NOSAVEFINDREPL
 			MENUITEM "运行工具前保存(&V)",			IDM_VIEW_SAVEBEFORERUNNINGTOOLS
+			MENUITEM SEPARATOR
+			MENUITEM "使用 XP 样式打开/保存对话框(&U)",	IDM_SET_USE_XP_FILE_DIALOG
 			MENUITEM "使用 metapath 打开文件夹(&M)",IDM_SET_OPEN_FOLDER_METAPATH
 		END
 		MENUITEM SEPARATOR
@@ -2134,7 +2135,7 @@ BEGIN
 样式格式:\r\n\
 \tfont:Name; size:[+|-]nn.mm; weight:nnn; bold; italic; underline; strike;\r\n\
 \tcharset:dd; locale:Name; case:[Upper|Lower|Camel];\r\n\
-\tfore:#ffffff; back:#bbbbbb; alpha:aa; outline:aa; eolfilled;\r\n\
+\tfore:#RRGGBB; back:#RRGGBB; alpha:aa; outline:aa; eolfilled;\r\n\
 \r\n\
 样式属性可以用复制并粘贴或者拖放来复制。\r\n\
 \r\n\

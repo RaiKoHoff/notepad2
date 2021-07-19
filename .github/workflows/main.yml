@@ -13,6 +13,10 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    - name: Update Version Hash
+      run: |
+        "c:/Program Files/Git/usr/bin/sed" -i "s/^\(.\+\)[0-9a-f]\{8\}\(.\+\)$/\1%GITHUB_SHA:~0,8%\2/gm" ./src/VersionRev.h ./metapath/src/VersionRev.h
+
     - name: MSVC x64 Release
       run: |
         CALL "build\VS2017\build.bat" Build x64 Release 1
@@ -72,6 +76,10 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2
+
+    - name: Update Version Hash
+      run: |
+        "c:/Program Files/Git/usr/bin/sed" -i "s/^\(.\+\)[0-9a-f]\{8\}\(.\+\)$/\1%GITHUB_SHA:~0,8%\2/gm" ./src/VersionRev.h ./metapath/src/VersionRev.h
 
     - name: Install LLVM
       run: |
@@ -133,6 +141,10 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    - name: Update Version Hash
+      run: |
+        "c:/Program Files/Git/usr/bin/sed" -i "s/^\(.\+\)[0-9a-f]\{8\}\(.\+\)$/\1%GITHUB_SHA:~0,8%\2/gm" ./src/VersionRev.h ./metapath/src/VersionRev.h
+
     - name: Install llvm-mingw
       run: |
         CALL "build\install_mingw.bat" llvm
@@ -187,11 +199,69 @@ jobs:
           name: Notepad2_llvm_mingw_en_ARM
           path: 'build\Notepad2_Clang_ARM_*.zip'
 
+  gcc_ucrt:
+    name: Build with ucrt GCC and Clang
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Update Version Hash
+      run: |
+        "c:/Program Files/Git/usr/bin/sed" -i "s/^\(.\+\)[0-9a-f]\{8\}\(.\+\)$/\1%GITHUB_SHA:~0,8%\2/gm" ./src/VersionRev.h ./metapath/src/VersionRev.h
+
+    - name: Install GCC and Clang
+      run: |
+        CALL "build\install_mingw.bat" ucrt
+
+    - name: GCC x64 Release
+      run: |
+        CALL "build\mingw\build.bat" ucrt
+        CALL "build\make_zip.bat" GCC x64 Release 1
+
+    - name: GCC AVX2 Release
+      run: |
+        CALL "build\mingw\build.bat" ucrt AVX2
+        CALL "build\make_zip.bat" GCC AVX2 Release 1
+
+    - name: Clang x64 Release
+      run: |
+        CALL "build\mingw\build.bat" ucrt Clang
+        CALL "build\make_zip.bat" Clang x64 Release 1
+
+    - name: Clang AVX2 Release
+      run: |
+        CALL "build\mingw\build.bat" ucrt AVX2 Clang
+        CALL "build\make_zip.bat" Clang AVX2 Release 1
+
+    - uses: actions/upload-artifact@v2
+      with:
+          name: Notepad2_GCC_en_x64_ucrt
+          path: 'build\Notepad2_GCC_x64_*.zip'
+
+    - uses: actions/upload-artifact@v2
+      with:
+          name: Notepad2_GCC_en_AVX2_ucrt
+          path: 'build\Notepad2_GCC_AVX2_*.zip'
+
+    - uses: actions/upload-artifact@v2
+      with:
+          name: Notepad2_Clang_GCC_en_x64_ucrt
+          path: 'build\Notepad2_Clang_x64_*.zip'
+
+    - uses: actions/upload-artifact@v2
+      with:
+          name: Notepad2_Clang_GCC_en_AVX2_ucrt
+          path: 'build\Notepad2_Clang_AVX2_*.zip'
+
   gcc_x86_64:
     name: Build with 64-bit GCC and Clang
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2
+
+    - name: Update Version Hash
+      run: |
+        "c:/Program Files/Git/usr/bin/sed" -i "s/^\(.\+\)[0-9a-f]\{8\}\(.\+\)$/\1%GITHUB_SHA:~0,8%\2/gm" ./src/VersionRev.h ./metapath/src/VersionRev.h
 
     - name: Install GCC and Clang
       run: |
@@ -242,6 +312,10 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2
+
+    - name: Update Version Hash
+      run: |
+        "c:/Program Files/Git/usr/bin/sed" -i "s/^\(.\+\)[0-9a-f]\{8\}\(.\+\)$/\1%GITHUB_SHA:~0,8%\2/gm" ./src/VersionRev.h ./metapath/src/VersionRev.h
 
     - name: Install GCC and Clang
       run: |

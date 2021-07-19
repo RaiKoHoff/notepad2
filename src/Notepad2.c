@@ -30,6 +30,7 @@
 #include <time.h>
 #include <inttypes.h>
 #include "SciCall.h"
+#include "VectorISA.h"
 #include "config.h"
 #include "Helpers.h"
 #include "Notepad2.h"
@@ -171,6 +172,7 @@ BOOL	bFileWatchingKeepAtEnd;
 BOOL	bResetFileWatching;
 static DWORD dwFileCheckInterval;
 static DWORD dwAutoReloadTimeout;
+BOOL bUseXPFileDialog;
 static int iEscFunction;
 static BOOL bAlwaysOnTop;
 static BOOL bMinimizeToTray;
@@ -1151,14 +1153,14 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 
 	case WM_SETTINGCHANGE:
 		// TODO: detect system theme and high contrast mode changes
-		Style_UpdateCaret();
 		SendMessage(hwndEdit, WM_SETTINGCHANGE, wParam, lParam);
+		Style_SetLexer(pLexCurrent, FALSE);
 		break;
 
 	case WM_SYSCOLORCHANGE:
 		// update Scintilla colors
-		Style_SetLexer(pLexCurrent, FALSE);
 		SendMessage(hwndEdit, WM_SYSCOLORCHANGE, wParam, lParam);
+		Style_SetLexer(pLexCurrent, FALSE);
 		break;
 
 	//case WM_TIMER:
@@ -1691,7 +1693,7 @@ HWND EditCreate(HWND hwndParent) {
 	SciCall_SetFoldFlags(SC_FOLDFLAG_LEVELNUMBERS);
 #else
 	// Don't draw folding line below when collapsed.
-	SciCall_SetFoldFlags(0);
+	SciCall_SetFoldFlags(SC_FOLDFLAG_NONE);
 #endif
 	SciCall_FoldDisplayTextSetStyle(SC_FOLDDISPLAYTEXT_BOXED);
 	const char *text = GetFoldDisplayEllipsis(SC_CP_UTF8, 0); // internal default encoding
@@ -2591,6 +2593,9 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	CheckCmd(hmenu, IDM_VIEW_CHANGENOTIFY, iFileWatchingMode);
 
+	EnableCmd(hmenu, IDM_SET_USE_XP_FILE_DIALOG, IsVistaAndAbove());
+	CheckCmd(hmenu, IDM_SET_USE_XP_FILE_DIALOG, bUseXPFileDialog);
+
 	if (StrNotEmpty(szTitleExcerpt)) {
 		i = IDM_VIEW_SHOWEXCERPT;
 	} else if (iPathNameFormat == 0) {
@@ -2638,7 +2643,7 @@ static void ConvertLineEndings(int iNewEOLMode) {
 	UpdateWindowTitle();
 }
 
-static inline BOOL IsBraceMatchChar(int ch) {
+static inline uint8_t IsBraceMatchChar(uint32_t ch) {
 #if 0
 	return ch == '(' || ch == ')'
 		|| ch == '[' || ch == ']'
@@ -2647,7 +2652,7 @@ static inline BOOL IsBraceMatchChar(int ch) {
 #else
 	// tools/GenerateTable.py
 	static const uint32_t table[8] = { 0, 0x50000300, 0x28000000, 0x28000000 };
-	return (table[ch >> 5] >> (ch & 31)) & 1;
+	return bittest(table + (ch >> 5), ch & 31);
 #endif
 }
 
@@ -3683,7 +3688,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_EDIT_FINDMATCHINGBRACE: {
-		Sci_Position iBrace2 = -1;
+		Sci_Position iBrace2 = INVALID_POSITION;
 		Sci_Position iPos = SciCall_GetCurrentPos();
 		int ch = SciCall_GetCharAt(iPos);
 		if (IsBraceMatchChar(ch)) {
@@ -3695,14 +3700,14 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				iBrace2 = SciCall_BraceMatch(iPos);
 			}
 		}
-		if (iBrace2 != -1) {
+		if (iBrace2 >= 0) {
 			SciCall_GotoPos(iBrace2);
 		}
 	}
 	break;
 
 	case IDM_EDIT_SELTOMATCHINGBRACE: {
-		Sci_Position iBrace2 = -1;
+		Sci_Position iBrace2 = INVALID_POSITION;
 		Sci_Position iPos = SciCall_GetCurrentPos();
 		int ch = SciCall_GetCharAt(iPos);
 		if (IsBraceMatchChar(ch)) {
@@ -3714,7 +3719,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				iBrace2 = SciCall_BraceMatch(iPos);
 			}
 		}
-		if (iBrace2 != -1) {
+		if (iBrace2 >= 0) {
 			if (iBrace2 > iPos) {
 				SciCall_SetSel(iPos, iBrace2 + 1);
 			} else {
@@ -3730,11 +3735,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		const Sci_Line iLine = SciCall_LineFromPosition(iPos);
 
 		Sci_Line iNextLine = SciCall_MarkerNext(iLine + 1, MarkerBitmask_Bookmark);
-		if (iNextLine == -1) {
+		if (iNextLine < 0) {
 			iNextLine = SciCall_MarkerNext(0, MarkerBitmask_Bookmark);
 		}
 
-		if (iNextLine != -1) {
+		if (iNextLine >= 0) {
 			editMarkAllStatus.ignoreSelectionUpdate = TRUE;
 			SciCall_EnsureVisible(iNextLine);
 			SciCall_GotoLine(iNextLine);
@@ -3750,12 +3755,12 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		const Sci_Line iLine = SciCall_LineFromPosition(iPos);
 
 		Sci_Line iNextLine = SciCall_MarkerPrevious(iLine - 1, MarkerBitmask_Bookmark);
-		if (iNextLine == -1) {
+		if (iNextLine < 0) {
 			const Sci_Line nLines = SciCall_GetLineCount();
 			iNextLine = SciCall_MarkerPrevious(nLines, MarkerBitmask_Bookmark);
 		}
 
-		if (iNextLine != -1) {
+		if (iNextLine >= 0) {
 			editMarkAllStatus.ignoreSelectionUpdate = TRUE;
 			SciCall_EnsureVisible(iNextLine);
 			SciCall_GotoLine(iNextLine);
@@ -4120,10 +4125,10 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			scn.nmhdr.hwndFrom = hwndEdit;
 			scn.nmhdr.idFrom = IDC_EDIT;
 			scn.nmhdr.code = SCN_UPDATEUI;
-			scn.updated = NP2_CUSTOM_UPDATE;
+			scn.updated = SC_UPDATE_APP_CUSTOM;
 			SendMessage(hwnd, WM_NOTIFY, IDC_EDIT, (LPARAM)&scn);
 		} else {
-			SciCall_BraceHighlight(-1, -1);
+			SciCall_BraceHighlight(INVALID_POSITION, INVALID_POSITION);
 		}
 		break;
 
@@ -4212,6 +4217,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_VIEW_SINGLEFILEINSTANCE:
 		bSingleFileInstance = !bSingleFileInstance;
 		IniSetBoolEx(INI_SECTION_NAME_FLAGS, L"SingleFileInstance", bSingleFileInstance, 1);
+		break;
+
+	case IDM_SET_USE_XP_FILE_DIALOG:
+		bUseXPFileDialog = !bUseXPFileDialog;
+		IniSetBoolEx(INI_SECTION_NAME_FLAGS, L"UseXPFileDialog", bUseXPFileDialog, 0);
 		break;
 
 	case IDM_VIEW_ALWAYSONTOP:
@@ -4925,7 +4935,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 					int ch = SciCall_GetCharAt(iPos);
 					if (IsBraceMatchChar(ch)) {
 						const Sci_Position iBrace2 = SciCall_BraceMatch(iPos);
-						if (iBrace2 != -1) {
+						if (iBrace2 >= 0) {
 							const Sci_Position col1 = SciCall_GetColumn(iPos);
 							const Sci_Position col2 = SciCall_GetColumn(iBrace2);
 							SciCall_BraceHighlight(iPos, iBrace2);
@@ -4939,7 +4949,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 						ch = SciCall_GetCharAt(iPos);
 						if (IsBraceMatchChar(ch)) {
 							const Sci_Position iBrace2 = SciCall_BraceMatch(iPos);
-							if (iBrace2 != -1) {
+							if (iBrace2 >= 0) {
 								const Sci_Position col1 = SciCall_GetColumn(iPos);
 								const Sci_Position col2 = SciCall_GetColumn(iBrace2);
 								SciCall_BraceHighlight(iPos, iBrace2);
@@ -4949,7 +4959,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 								SciCall_SetHighlightGuide(0);
 							}
 						} else {
-							SciCall_BraceHighlight(-1, -1);
+							SciCall_BraceHighlight(INVALID_POSITION, INVALID_POSITION);
 							SciCall_SetHighlightGuide(0);
 						}
 					}
@@ -5038,7 +5048,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				} else {
 					const int chNext = (brace == '(') ? ')' : brace + 2;
 					if (ch == chNext) {
-						if (SciCall_BraceMatchNext(iPos, SciCall_PositionBefore(iCurPos)) == -1) {
+						if (SciCall_BraceMatchNext(iPos, SciCall_PositionBefore(iCurPos)) < 0) {
 							*(braces + 1) = L'\0'; // delete close brace
 						}
 					} else {
@@ -6593,6 +6603,12 @@ void LoadFlags(void) {
 	dwFileCheckInterval = IniSectionGetInt(pIniSection, L"FileCheckInterval", 1000);
 	dwAutoReloadTimeout = IniSectionGetInt(pIniSection, L"AutoReloadTimeout", 1000);
 
+	if (IsVistaAndAbove()) {
+		bUseXPFileDialog = IniSectionGetBool(pIniSection, L"UseXPFileDialog", 0);
+	} else {
+		bUseXPFileDialog = TRUE;
+	}
+
 	flagNoFadeHidden = IniSectionGetBool(pIniSection, L"NoFadeHidden", 0);
 
 	int iValue = IniSectionGetInt(pIniSection, L"OpacityLevel", 75);
@@ -7608,7 +7624,11 @@ BOOL OpenFileDlg(HWND hwnd, LPWSTR lpstrFile, int cchFile, LPCWSTR lpstrInitialD
 	ofn.nMaxFile = COUNTOF(szFile);
 	ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | /* OFN_NOCHANGEDIR |*/
 				OFN_DONTADDTORECENT | OFN_PATHMUSTEXIST |
-				OFN_SHAREAWARE /*| OFN_NODEREFERENCELINKS*/ | OFN_NOVALIDATE;
+				OFN_SHAREAWARE /*| OFN_NODEREFERENCELINKS*/;
+	if (bUseXPFileDialog) {
+		ofn.Flags |= OFN_EXPLORER | OFN_ENABLESIZING | OFN_ENABLEHOOK;
+		ofn.lpfnHook = OpenSaveFileDlgHookProc;
+	}
 
 	const BOOL success = GetOpenFileName(&ofn);
 	if (success) {
@@ -7663,6 +7683,10 @@ BOOL SaveFileDlg(HWND hwnd, BOOL Untitled, LPWSTR lpstrFile, int cchFile, LPCWST
 	ofn.Flags = OFN_HIDEREADONLY /*| OFN_NOCHANGEDIR*/ |
 				/*OFN_NODEREFERENCELINKS |*/ OFN_OVERWRITEPROMPT |
 				OFN_DONTADDTORECENT | OFN_PATHMUSTEXIST;
+	if (bUseXPFileDialog) {
+		ofn.Flags |= OFN_EXPLORER | OFN_ENABLESIZING | OFN_ENABLEHOOK;
+		ofn.lpfnHook = OpenSaveFileDlgHookProc;
+	}
 
 	const BOOL success = GetSaveFileName(&ofn);
 	if (success) {

@@ -3,7 +3,7 @@
 #pragma once
 
 // color byte order from high to lower:
-// [a][b][g][r]		COLORREF/RGB(), ColourAlpha, D2D_COLOR_F
+// [a][b][g][r]		COLORREF/RGB(), ColourRGBA, D2D_COLOR_F
 // bswap:		[r][g][b][a]
 //      rotr8:	[a][r][g][b]
 // rotl8:		[b][g][r][a]
@@ -13,16 +13,44 @@
 // bswap:		[b][g][r][a]
 //      rotr8:	[a][b][g][r]
 
-// see https://docs.microsoft.com/en-us/windows/win32/uxguide/vis-icons#size-requirements
-// we can process 4 pixels at a time for all our bitmap (even after DPI scaling).
-
-static inline uint32_t RGBQuadFromColor(uint32_t color) NP2_noexcept {
-	return rotr8(bswap32(color));
-}
+// color RGB hex: #RRGGBB => 0x00RRGGBB
+// RGBA hex: #RRGGBBAA
+// ARGB hex: #AARRGGBB
 
 static inline uint32_t ColorFromRGBQuad(uint32_t quad) NP2_noexcept {
 	return rotr8(bswap32(quad));
 }
+
+static inline uint32_t ColorFromRGBHex(uint32_t hex) NP2_noexcept {
+	return bswap32(hex) >> 8;
+}
+
+static inline uint32_t ColorFromRGBAHex(uint32_t hex) NP2_noexcept {
+	return bswap32(hex);
+}
+
+static inline uint32_t ColorFromARGBHex(uint32_t hex) NP2_noexcept {
+	return rotr8(bswap32(hex));
+}
+
+static inline uint32_t ColorToRGBQuad(uint32_t color) NP2_noexcept {
+	return rotr8(bswap32(color));
+}
+
+static inline uint32_t ColorToRGBHex(uint32_t color) NP2_noexcept {
+	return bswap32(color) >> 8;
+}
+
+static inline uint32_t ColorToRGBAHex(uint32_t color) NP2_noexcept {
+	return bswap32(color);
+}
+
+static inline uint32_t ColorToARGBHex(uint32_t color) NP2_noexcept {
+	return rotr8(bswap32(color));
+}
+
+// see https://docs.microsoft.com/en-us/windows/win32/uxguide/vis-icons#size-requirements
+// we can process 4 pixels at a time for all our bitmap (even after DPI scaling).
 
 #if NP2_USE_SSE2
 static inline __m128i mm_setlo_epi32(uint32_t value) NP2_noexcept {
@@ -171,12 +199,12 @@ static inline uint32_t bgr_from_abgr_epi32_sse2_si32(__m128i i32x4) NP2_noexcept
 
 static inline __m128i rgba_to_bgra_epi16_sse2_si32(uint32_t color) NP2_noexcept {
 	__m128i i32x4 = unpack_color_epi16_sse2_si32(color);
-	return _mm_shufflelo_epi16(i32x4, 0xc6); // 0b11_00_01_10
+	return _mm_shufflelo_epi16(i32x4, _MM_SHUFFLE(3, 0, 1, 2));
 }
 
 static inline __m128i rgba_to_bgra_epi32_sse2_si32(uint32_t color) NP2_noexcept {
 	__m128i i32x4 = unpack_color_epi32_sse2_si32(color);
-	return _mm_shuffle_epi32(i32x4, 0xc6); // 0b11_00_01_10
+	return _mm_shuffle_epi32(i32x4, _MM_SHUFFLE(3, 0, 1, 2));
 }
 
 static inline uint32_t bgr_from_bgra_epi16_sse2_si32(__m128i i16x4) NP2_noexcept {
@@ -230,7 +258,7 @@ static inline __m128i rgba_to_abgr_epi32_sse4_si32(uint32_t color) NP2_noexcept 
 static inline __m128i rgba_to_bgra_epi16_sse4_si32(uint32_t color) NP2_noexcept {
 #if 1
 	__m128i i16x4 = unpack_color_epi16_sse4_si32(color);
-	return _mm_shufflelo_epi16(i16x4, 0xc6); // 0b11_00_01_10
+	return _mm_shufflelo_epi16(i16x4, _MM_SHUFFLE(3, 0, 1, 2));
 #else
 	__m128i i16x4 = mm_setlo_epi32(color);
 	return _mm_shuffle_epi8(i16x4, _mm_setr_epi16(pshufb_1to2(2), pshufb_1to2(1), pshufb_1to2(0), pshufb_1to2(3), pshufb_1to2(2), pshufb_1to2(1), pshufb_1to2(0), pshufb_1to2(3)));
@@ -240,8 +268,8 @@ static inline __m128i rgba_to_bgra_epi16_sse4_si32(uint32_t color) NP2_noexcept 
 static inline __m128i rgba_to_bgra_epi16x8_sse4_si32(uint32_t color) NP2_noexcept {
 #if 1
 	__m128i i16x4 = unpack_color_epi16_sse4_si32(color);
-	//return _mm_shuffle_epi32(_mm_shufflelo_epi16(i16x4, 0xc6), 0x44);
-	return _mm_broadcastq_epi64(_mm_shufflelo_epi16(i16x4, 0xc6));
+	//return _mm_shuffle_epi32(_mm_shufflelo_epi16(i16x4, _MM_SHUFFLE(3, 0, 1, 2)), 0x44);
+	return _mm_broadcastq_epi64(_mm_shufflelo_epi16(i16x4, _MM_SHUFFLE(3, 0, 1, 2)));
 #else
 	__m128i i16x4 = mm_setlo_epi32(color);
 	return _mm_shuffle_epi8(i16x4, _mm_setr_epi16(pshufb_1to2(2), pshufb_1to2(1), pshufb_1to2(0), pshufb_1to2(3), pshufb_1to2(2), pshufb_1to2(1), pshufb_1to2(0), pshufb_1to2(3)));
@@ -251,7 +279,7 @@ static inline __m128i rgba_to_bgra_epi16x8_sse4_si32(uint32_t color) NP2_noexcep
 static inline __m128i rgba_to_bgra_epi32_sse4_si32(uint32_t color) NP2_noexcept {
 #if 1
 	__m128i i32x4 = unpack_color_epi32_sse4_si32(color);
-	return _mm_shuffle_epi32(i32x4, 0xc6); // 0b11_00_01_10
+	return _mm_shuffle_epi32(i32x4, _MM_SHUFFLE(3, 0, 1, 2));
 #else
 	__m128i i32x4 = mm_setlo_epi32(color);
 	return _mm_shuffle_epi8(i32x4, _mm_setr_epi32(pshufb_1to4(2), pshufb_1to4(1), pshufb_1to4(0), pshufb_1to4(3)));

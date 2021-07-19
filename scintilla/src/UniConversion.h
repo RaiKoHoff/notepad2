@@ -6,7 +6,7 @@
 // The License.txt file describes the conditions under which this software may be distributed.
 #pragma once
 
-namespace Scintilla {
+namespace Scintilla::Internal {
 
 constexpr int UTF8MaxBytes = 4;
 
@@ -58,16 +58,12 @@ constexpr bool IsASCIICharacter(unsigned int ch) noexcept {
 	return ch < 0x80;
 }
 
-constexpr bool UTF8IsAscii(unsigned int ch) noexcept {
-	return ch < 0x80;
-}
-
 constexpr bool UTF8IsAscii(unsigned char ch) noexcept {
-	return ch < 0x80;
+	return static_cast<signed char>(ch) >= 0;
 }
 
 constexpr bool UTF8IsAscii(char ch) noexcept {
-	return static_cast<unsigned char>(ch) < 0x80;
+	return static_cast<signed char>(ch) >= 0;
 }
 
 enum {

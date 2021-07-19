@@ -29,7 +29,7 @@
 #include "ContractionState.h"
 //#include "ElapsedPeriod.h"
 
-using namespace Scintilla;
+using namespace Scintilla::Internal;
 
 #define ContractionState_InsertLines_OneByOne	0
 #define ContractionState_DeleteLines_OneByOne	0
@@ -245,7 +245,7 @@ void ContractionState<LINE>::InsertLines(Sci::Line lineDoc, Sci::Line lineCount)
 	if (OneToOne()) {
 		linesInDocument += static_cast<LINE>(lineCount);
 	} else {
-		//ElapsedPeriod period;
+		//const ElapsedPeriod period;
 #if ContractionState_InsertLines_OneByOne
 		for (Sci::Line l = 0; l < lineCount; l++) {
 			InsertLine(lineDoc + l);
@@ -286,7 +286,7 @@ void ContractionState<LINE>::DeleteLines(Sci::Line lineDoc, Sci::Line lineCount)
 	if (OneToOne()) {
 		linesInDocument -= static_cast<LINE>(lineCount);
 	} else {
-		//ElapsedPeriod period;
+		//const ElapsedPeriod period;
 #if ContractionState_DeleteLines_OneByOne
 		for (Sci::Line l = 0; l < lineCount; l++) {
 			DeleteLine(lineDoc);
@@ -497,7 +497,7 @@ void ContractionState<LINE>::Check() const noexcept {
 
 }
 
-namespace Scintilla {
+namespace Scintilla::Internal {
 
 std::unique_ptr<IContractionState> ContractionStateCreate(bool largeDocument) {
 	if (largeDocument)

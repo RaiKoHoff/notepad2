@@ -10,6 +10,9 @@
 #include <cassert>
 #include <cstring>
 
+#include <string>
+#include <string_view>
+
 #include "ILexer.h"
 #include "Scintilla.h"
 #include "SciLexer.h"
@@ -191,7 +194,7 @@ void ColourisePascalDoc(Sci_PositionU startPos, Sci_Position length, int initSty
 				sc.SetState(SCE_PAS_NUMBER);
 				if (sc.ch == '0' && (sc.chNext =='x' || sc.chNext == 'X')) {
 					sc.SetState(SCE_PAS_HEXNUMBER);
-					sc.Forward(2);
+					sc.Advance(2);
 					while (IsHexDigit(sc.ch))
 						sc.Forward();
 				}
@@ -202,7 +205,7 @@ void ColourisePascalDoc(Sci_PositionU startPos, Sci_Position length, int initSty
 				sc.SetState(SCE_PAS_HEXNUMBER);
 				if (curLineState & stateInAsm) {
 					if (sc.chNext == '0' && styler.MatchAny(sc.currentPos + 2, 'x', 'X'))
-						sc.Forward(2);
+						sc.Advance(2);
 				}
 			} else if (sc.Match('{', '$')) {
 				sc.SetState(SCE_PAS_PREPROCESSOR);
@@ -221,7 +224,7 @@ void ColourisePascalDoc(Sci_PositionU startPos, Sci_Position length, int initSty
 				if (curLineState & stateInAsm) {
 					sc.SetState(SCE_PAS_HEXNUMBER);
 					if (sc.chNext == '0' && styler.MatchAny(sc.currentPos + 2, 'x', 'X'))
-						sc.Forward(2);
+						sc.Advance(2);
 				} else
 					sc.SetState(SCE_PAS_CHARACTER);
 			} else if (IsPascalOperator(sc.ch) && !(curLineState & stateInAsm)) {

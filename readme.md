@@ -41,7 +41,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* AutoIt Script
 	* [AviSynth Script](../master/tools/lang/AviSynth.avs), up to AviSynth 2.6, AviSynth+ 3.6, GScript 1.1.
 	* [AWK](../master/tools/lang/Awk.awk), up to GNU AWK 5.1.
-	* Batch Script, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#batch)
+	* [Batch Script](../master/tools/lang/Batch.bat), [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#batch)
 	* C#, Vala, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#c)
 	* C/C++, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#cc)
 		* Objective-C/C++, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#objective-cc)
@@ -51,7 +51,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* Sassy CSS
 		* Less CSS
 		* HSS
-	* [CMake](../master/tools/lang/CMake.cmake), up to CMake 3.18. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#cmake)
+	* [CMake](../master/tools/lang/CMake.cmake), up to CMake 3.20. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#cmake)
 	* Common Intermediate Language
 	* Configuration / Properties File
 		* Apache Configuration File
@@ -82,10 +82,10 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* [JavaScript](../master/tools/lang/JavaScript.js), up to ECMAScript 2021 (12th edition) with [JSX](https://facebook.github.io/jsx/) and [Web APIs](https://developer.mozilla.org/en-US/docs/Web/API).
 	* JSON and JSON5 Document
 	* [Julia Script](../master/tools/lang/Julia.jl), up to Julia 1.2. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#julia)
-	* [Kotlin](../master/tools/lang/Kotlin.kt), up to Kotlin 1.3.
+	* [Kotlin](../master/tools/lang/Kotlin.kt), up to Kotlin 1.5.
 	* LaTeX
 	* Lisp Script (Common Lisp, Clojure, Scheme, etc.)
-	* [LLVM IR](../master/tools/lang/LLVM.ll), up to LLVM 10.
+	* [LLVM IR](../master/tools/lang/LLVM.ll), up to LLVM 12.
 	* [Lua Script](../master/tools/lang/Lua.lua), up to Lua 5.4.
 	* Makefile, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#makefile)
 		* nmake
@@ -101,11 +101,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* Pascal, Delphi
 	* Perl, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#perl)
 	* PowerShell
-	* Python, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#python)
-		* IronPython
-		* Cobra
-		* Jython
-		* Boo
+	* [Python](../master/tools/lang/Python.py), up to Python 3.10. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#python)
 	* PHP Script, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#php)
 	* Windows Rescouce Script
 	* [R](../master/tools/lang/R.r), up to R 4.0.3.
@@ -124,11 +120,11 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* [PostgreSQL](../master/tools/lang/PostgreSQL.sql), PostgreSQL 13.
 		* [Transact-SQL](../master/tools/lang/Transact-SQL.sql), SQL Server 2019.
 		* [Oracle](../master/tools/lang/Oracle.sql), Oracle 20, incomplete.
-	* [Swift](../master/tools/lang/Swift.swift), Swift 5.3.
+	* [Swift](../master/tools/lang/Swift.swift), Swift 5.5.
 	* TCL, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#tcl)
 	* Texinfo
 	* TOML File
-	* [TypeScript](../master/tools/lang/TypeScript.ts), TypeScript 4.2.
+	* [TypeScript](../master/tools/lang/TypeScript.ts), TypeScript 4.3.
 	* Visual Basic, VB6, VB.NET
 	* VBScript
 	* VHDL

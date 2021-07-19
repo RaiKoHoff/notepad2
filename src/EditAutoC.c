@@ -2,6 +2,7 @@
 
 #include <windows.h>
 #include <shlwapi.h>
+#include <shellapi.h>
 #include <commctrl.h>
 #include <commdlg.h>
 #include <limits.h>
@@ -625,10 +626,10 @@ static inline BOOL IsWordStyleToIgnore(int style) {
 	case SCLEX_PYTHON:
 		return style == SCE_PY_WORD
 			|| style == SCE_PY_WORD2
-			|| style == SCE_PY_BUILTIN_CONST
-			|| style == SCE_PY_BUILTIN_FUNC
-			|| style == SCE_PY_ATTR
-			|| style == SCE_PY_OBJ_FUNC;
+			|| style == SCE_PY_BUILTIN_CONSTANT
+			|| style == SCE_PY_BUILTIN_FUNCTION
+			|| style == SCE_PY_ATTRIBUTE
+			|| style == SCE_PY_OBJECT_FUNCTION;
 
 	case SCLEX_SMALI:
 		return style == SCE_SMALI_WORD
@@ -697,9 +698,8 @@ static inline BOOL IsEscapeCharEx(int ch, int style) {
 			|| style == SCE_C_COMMENTDOC_TAG);
 
 	case SCLEX_PYTHON:
-		return !(style == SCE_PY_RAW_STRING1 || style == SCE_PY_RAW_STRING2
-			|| style == SCE_PY_RAW_BYTES1 || style == SCE_PY_RAW_BYTES2
-			|| style == SCE_PY_FMT_STRING1 || style == SCE_PY_FMT_STRING2);
+		// not in raw string
+		return !(style >= SCE_PY_STRING_SQ && (style & 7) > 3);
 	}
 	return TRUE;
 }
@@ -1172,7 +1172,7 @@ INT AutoC_AddSpecWord(struct WordList *pWList, int iCurrentStyle, int ch, int ch
 
 	case SCLEX_PYTHON:
 		if (ch == '@' && iCurrentStyle == SCE_PY_DEFAULT) {
-			const char *pKeywords = pLexCurrent->pKeyWords->pszKeyWords[3]; // @decorator
+			const char *pKeywords = pLexCurrent->pKeyWords->pszKeyWords[7]; // @decorator
 			if (StrNotEmptyA(pKeywords)) {
 				WordList_AddListEx(pWList, pKeywords);
 				return AutoC_AddSpecWord_Keyword;
@@ -1549,7 +1549,7 @@ BOOL EditIsOpenBraceMatched(Sci_Position pos, Sci_Position startPos) {
 #endif
 	// find next close brace
 	const Sci_Position iPos = SciCall_BraceMatchNext(pos, startPos);
-	if (iPos != -1) {
+	if (iPos >= 0) {
 		// style may not matched when iPos > SciCall_GetEndStyled() (e.g. iPos on next line), see Document::BraceMatch()
 #if 0
 		SciCall_EnsureStyledTo(iPos + 1);
@@ -1557,7 +1557,7 @@ BOOL EditIsOpenBraceMatched(Sci_Position pos, Sci_Position startPos) {
 		// TODO: retry when style not matched
 		if (SciCall_GetStyleAt(pos) == SciCall_GetStyleAt(iPos)) {
 			// check whether next close brace already matched
-			return pos == 0 || SciCall_BraceMatchNext(iPos, SciCall_PositionBefore(pos)) == -1;
+			return pos == 0 || SciCall_BraceMatchNext(iPos, SciCall_PositionBefore(pos)) < 0;
 		}
 	}
 	return FALSE;

@@ -22,9 +22,12 @@
 
 #include <windows.h>
 #include <windowsx.h>
+#include <dlgs.h>
 #include <shlwapi.h>
 #include <shlobj.h>
+#include <shellapi.h>
 #include <commctrl.h>
+#include <commdlg.h>
 #include <uxtheme.h>
 #include <vssym32.h>
 #include <stdio.h>
@@ -243,11 +246,9 @@ int IniSectionGetIntImpl(IniSection *section, LPCWSTR key, int keyLen, int iDefa
 BOOL IniSectionGetBoolImpl(IniSection *section, LPCWSTR key, int keyLen, BOOL bDefault) {
 	LPCWSTR value = IniSectionGetValueImpl(section, key, keyLen);
 	if (value) {
-		switch (*value) {
-		case L'1':
-			return TRUE;
-		case L'0':
-			return FALSE;
+		const UINT t = *value - L'0';
+		if (t <= 1U) {
+			return t;
 		}
 	}
 	return bDefault;
@@ -296,6 +297,11 @@ LSTATUS Registry_SetString(HKEY hKey, LPCWSTR valueName, LPCWSTR lpszText) {
 	DWORD len = lstrlen(lpszText);
 	len = len ? ((len + 1)*sizeof(WCHAR)) : 0;
 	LSTATUS status = RegSetValueEx(hKey, valueName, 0, REG_SZ, (const BYTE *)lpszText, len);
+	return status;
+}
+
+LSTATUS Registry_SetInt(HKEY hKey, LPCWSTR valueName, DWORD value) {
+	LSTATUS status = RegSetValueEx(hKey, valueName, 0, REG_DWORD, (const BYTE *)(&value), sizeof(DWORD));
 	return status;
 }
 
@@ -574,7 +580,7 @@ BOOL BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest) {
 			}
 
 #else
-			#define BitmapMergeAlpha_Tag	"scale"
+			#define BitmapMergeAlpha_Tag	"scalar"
 			const ULONG count = bmp.bmHeight * bmp.bmWidth;
 			RGBQUAD *prgba = (RGBQUAD *)bmp.bmBits;
 
@@ -682,7 +688,7 @@ BOOL BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha) {
 			}
 
 #else
-			#define BitmapAlphaBlend_Tag	"scale"
+			#define BitmapAlphaBlend_Tag	"scalar"
 			const ULONG count = bmp.bmHeight * bmp.bmWidth;
 			RGBQUAD *prgba = (RGBQUAD *)bmp.bmBits;
 
@@ -902,23 +908,25 @@ BOOL SetWindowTitle(HWND hwnd, UINT uIDAppName, BOOL bIsElevated, UINT uIDUntitl
 // SetWindowTransparentMode()
 //
 void SetWindowTransparentMode(HWND hwnd, BOOL bTransparentMode, int iOpacityLevel) {
-	const DWORD exStyle = GetWindowExStyle(hwnd);
+	// https://docs.microsoft.com/en-us/windows/win32/winmsg/using-windows#using-layered-windows
+	DWORD exStyle = GetWindowExStyle(hwnd);
+	exStyle = bTransparentMode ? (exStyle | WS_EX_LAYERED) : (exStyle & ~WS_EX_LAYERED);
+	SetWindowExStyle(hwnd, exStyle);
 	if (bTransparentMode) {
-		SetWindowExStyle(hwnd, exStyle | WS_EX_LAYERED);
 		const BYTE bAlpha = (BYTE)(iOpacityLevel * 255 / 100);
 		SetLayeredWindowAttributes(hwnd, 0, bAlpha, LWA_ALPHA);
-	} else {
-		SetWindowExStyle(hwnd, exStyle & ~WS_EX_LAYERED);
 	}
+	// Ask the window and its children to repaint
+	RedrawWindow(hwnd, NULL, NULL, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
 }
 
 void SetWindowLayoutRTL(HWND hwnd, BOOL bRTL) {
-	const DWORD exStyle = GetWindowExStyle(hwnd);
-	if (bRTL) {
-		SetWindowExStyle(hwnd, exStyle | WS_EX_LAYOUTRTL);
-	} else {
-		SetWindowExStyle(hwnd, exStyle & ~WS_EX_LAYOUTRTL);
-	}
+	// https://docs.microsoft.com/en-us/windows/win32/winmsg/window-features#window-layout-and-mirroring
+	DWORD exStyle = GetWindowExStyle(hwnd);
+	exStyle = bRTL ? (exStyle | WS_EX_LAYOUTRTL) : (exStyle & ~WS_EX_LAYOUTRTL);
+	SetWindowExStyle(hwnd, exStyle);
+	// update layout in the client area
+	InvalidateRect(hwnd, NULL, TRUE);
 }
 
 //=============================================================================
@@ -2147,15 +2155,18 @@ void StrTab2Space(LPWSTR lpsz) {
 //
 // PathFixBackslashes() - in place conversion
 //
-void PathFixBackslashes(LPWSTR lpsz) {
+BOOL PathFixBackslashes(LPWSTR lpsz) {
 	WCHAR *c = lpsz;
+	BOOL bFixed = FALSE;
 	while ((c = StrChr(c, L'/')) != NULL) {
 		if (*CharPrev(lpsz, c) == L':' && *CharNext(c) == L'/') {
 			c += 2;
 		} else {
 			*c++ = L'\\';
+			bFixed = TRUE;
 		}
 	}
+	return bFixed;
 }
 
 //=============================================================================
@@ -2779,6 +2790,53 @@ HWND CreateThemedDialogParam(HINSTANCE hInstance, LPCWSTR lpTemplate, HWND hWndP
 	return hwnd;
 }
 
+//=============================================================================
+//
+// File Dialog Hook for GetOpenFileName/GetSaveFileName
+// https://docs.microsoft.com/en-us/windows/win32/dlgbox/open-and-save-as-dialog-boxes
+//
+static LRESULT CALLBACK OpenSaveFileDlgSubProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+	UNREFERENCED_PARAMETER(dwRefData);
+
+	switch (umsg) {
+	case WM_COMMAND:
+		switch (wParam) {
+		case IDOK: {
+			TCHAR szPath[MAX_PATH];
+			HWND hCmbPath = GetDlgItem(hwnd, cmb13); // cmb13: dlgs.h
+			GetWindowText(hCmbPath, szPath, MAX_PATH);
+			if (PathFixBackslashes(szPath)) {
+				SetWindowText(hCmbPath, szPath);
+			}
+		} break;
+	} break;
+
+	case WM_NCDESTROY:
+		RemoveWindowSubclass(hwnd, OpenSaveFileDlgSubProc, uIdSubclass);
+		break;
+	}
+
+	return DefSubclassProc(hwnd, umsg, wParam, lParam);
+}
+
+UINT_PTR CALLBACK OpenSaveFileDlgHookProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) {
+	UNREFERENCED_PARAMETER(wParam);
+
+	switch (umsg) {
+	case WM_NOTIFY: {
+		LPOFNOTIFY pOFNOTIFY = (LPOFNOTIFY)lParam;
+		switch (pOFNOTIFY->hdr.code) {
+		case CDN_INITDONE:
+			// OFN_OVERWRITEPROMPT is tested before OFNHookProc making "D:\d" like folder path trigger a prompt.
+			// Hook the default (parent) dialog box procedure.
+			SetWindowSubclass(GetParent(hwnd), OpenSaveFileDlgSubProc, 0, 0);
+			break;
+		}
+	} break;
+	}
+	return FALSE;
+}
+
 /******************************************************************************
 *
 * UnSlash functions
@@ -2824,6 +2882,9 @@ unsigned int UnSlash(char *s, UINT cpEdit) {
 		case 'v':
 			*o = '\v';
 			break;
+		case '\\':
+			*o = '\\';
+			break;
 		case 'x':
 		case 'u': {
 			const int digitCount = (*s == 'x') ? 2 : 4;
@@ -2854,6 +2915,7 @@ unsigned int UnSlash(char *s, UINT cpEdit) {
 			}
 		} break;
 		default:
+			// unknown escape sequence
 			*o++ = '\\';
 			*o = *s;
 			break;

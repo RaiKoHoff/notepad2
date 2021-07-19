@@ -9,6 +9,9 @@
 #include <cassert>
 #include <cstring>
 
+#include <string>
+#include <string_view>
+
 #include "ILexer.h"
 #include "Scintilla.h"
 #include "SciLexer.h"
@@ -703,10 +706,10 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 						}
 					} else if (sc.Match('#', '#', '^') && IsUpperCase(sc.GetRelative(3))) {	// ##^A
 						sc.SetState(SCE_SH_IDENTIFIER);
-						sc.Forward(3);
+						sc.Advance(3);
 					} else if (sc.chNext == '#' && !IsASpace(sc.GetRelative(2))) {	// ##a
 						sc.SetState(SCE_SH_IDENTIFIER);
-						sc.Forward(2);
+						sc.Advance(2);
 					} else if (IsIdentifierStart(sc.chNext)) {	// #name
 						sc.SetState(SCE_SH_IDENTIFIER);
 					}

@@ -22,6 +22,8 @@
 
 // https://docs.microsoft.com/en-us/cpp/intrinsics/compiler-intrinsics
 // https://software.intel.com/sites/landingpage/IntrinsicsGuide/
+// https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html
+// https://clang.llvm.org/docs/LanguageExtensions.html
 #include <intrin.h>
 
 #if defined(__aarch64__) || defined(_ARM64_) || defined(_M_ARM64)
@@ -183,7 +185,10 @@
 #define bswap32(x)				_byteswap_ulong(x)
 #endif
 
-#if defined(_MSC_VER)
+#if defined(__clang__)
+#define rotr8(x)				__builtin_rotateright32((x), 8)
+#define rotl8(x)				__builtin_rotateleft32((x), 8)
+#elif defined(_MSC_VER)
 #define rotr8(x)				_rotr((x), 8)
 #define rotl8(x)				_rotl((x), 8)
 #else
@@ -212,6 +217,15 @@ static inline uint32_t bit_zero_high_u32(uint32_t x, uint32_t index) NP2_noexcep
 }
 #endif
 
+#if NP2_TARGET_ARM
+static inline uint8_t bittest(const uint32_t *addr, uint32_t index) NP2_noexcept {
+	return (*addr >> index) & 1;
+}
+#else
+static inline uint8_t bittest(const uint32_t *addr, uint32_t index) NP2_noexcept {
+	return _bittest((const long *)addr, index);
+}
+#endif
 
 #if defined(__cplusplus)
 namespace np2 {

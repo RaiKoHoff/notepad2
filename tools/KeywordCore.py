@@ -308,6 +308,55 @@ def parse_awk_api_file(path):
 		('misc', keywordMap['misc'], KeywordAttr.NoLexer),
 	]
 
+def parse_batch_api_file(path):
+	sections = read_api_file(path, '::')
+	keywordMap = {
+		'upper case keywords': [],
+		'options': [],
+	}
+	for key, doc in sections:
+		if key in ('keywords', 'internal command'):
+			items = doc.split()
+			keywordMap['upper case keywords'].extend(items)
+			keywordMap[key] = [item.lower() for item in items]
+		elif key == 'external command':
+			uppercase = keywordMap['upper case keywords']
+			options = keywordMap['options']
+			commands = []
+			for line in doc.splitlines():
+				items = line.strip().split()
+				if not items:
+					continue
+				command = items[0]
+				if command[0].isupper():
+					uppercase.append(command)
+				elif command[0].islower():
+					commands.append(command)
+				if len(items) > 1:
+					options.extend(item for item in items[1:] if item[0].isalpha())
+			keywordMap['system commands'] = commands
+		elif key == 'environment variables':
+			keywordMap[key] = doc.split()
+		elif key == 'options':
+			keywordMap[key].extend(doc.split())
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'internal command',
+		'system commands',
+		'upper case keywords',
+		'environment variables',
+		'options',
+	])
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('internal commands', keywordMap['internal command'], KeywordAttr.Default),
+		('system commands', keywordMap['system commands'], KeywordAttr.NoLexer),
+		('upper case keywords / commands', keywordMap['upper case keywords'], KeywordAttr.NoLexer),
+		('environment variables', keywordMap['environment variables'], KeywordAttr.NoLexer),
+		('command options', keywordMap['options'], KeywordAttr.NoLexer),
+	]
+
 def parse_cmake_api_file(path):
 	# languages from https://gitlab.kitware.com/cmake/cmake/blob/master/Auxiliary/vim/extract-upper-case.pl
 	cmakeLang = "ASM C CSharp CUDA CXX Fortran Java RC Swift".split()
@@ -1017,6 +1066,110 @@ def parse_nsis_api_file(path):
 		('function', keywordMap['functions'], KeywordAttr.NoLexer),
 		('predefined variables', keywordMap['predefined variables'], KeywordAttr.NoLexer),
 	]
+
+def parse_python_api_file(path):
+	keywordMap = {
+		'modules': [],
+		'attributes': [],
+		'classes': [],
+		'decorators': [],
+		'special method': [],
+		'functions': [],
+		'fields': [],
+		'misc': ['utf-8'],
+	}
+	sections = read_api_file(path, '#')
+	for key, doc in sections:
+		if key in ('keywords', 'built-in constants', 'exceptions'):
+			items = doc.split()
+			if key == 'exceptions':
+				keywordMap['classes'].extend(items)
+			else:
+				keywordMap[key] = items
+		elif key in ('built-in functions', 'api'):
+			items = re.findall(r'@(\w+)', doc)
+			keywordMap['decorators'].extend(items)
+			items = re.findall(r'class\s+(\w+)', doc)
+			if key == 'api':
+				keywordMap['classes'].extend(items)
+			else:
+				keywordMap['types'] =  items
+			items = re.findall(r'exception\s+(\w+)', doc)
+			keywordMap['classes'].extend(items)
+			items = re.findall(r'(\w+)\(', doc)
+			items = set(items) - set(keywordMap['classes'])
+			if key == 'api':
+				for item in items:
+					if item.startswith('__') and item.endswith('__'):
+						keywordMap['special method'].append(item + '()')
+					else:
+						keywordMap['functions'].append(item + '()')
+			else:
+				keywordMap[key] = [item + '()' for item in items]
+			items = re.findall(r'(\w+)=', doc)
+			keywordMap['misc'].extend(item for item in items if len(item) > 2)
+			items = re.findall(r'^([\w\.]+)', doc, re.MULTILINE)
+			keywordMap['modules'].extend(items)
+			items = re.findall(r'^[ \t]+(\w+\(?)', doc, re.MULTILINE)
+			for item in items:
+				if not item.endswith('('):
+					if item.startswith('__') and item.endswith('__'):
+						keywordMap['attributes'].append(item)
+					else:
+						keywordMap['fields'].append(item)
+			items = re.findall(r"""['"](.*?)['"]""", doc)
+			items = ' '.join(items).replace('|', ' ').split()
+			items = [item for item in items if len(item) > 2 and all(ch.isalpha() for ch in item)]
+			keywordMap['misc'].extend(items)
+		elif key == 'attributes':
+			items = set(doc.split())
+			for item in items:
+				if item.endswith(')'):
+					keywordMap['built-in functions'].append(item)
+				else:
+					keywordMap['attributes'].append(item)
+		elif key == 'special method':
+			items = re.findall(r'(__\w+__\(?)', doc)
+			for item in items:
+				if item.endswith('('):
+					keywordMap[key].append(item + ')')
+				else:
+					keywordMap['attributes'].append(item)
+			items = re.findall(r'(\w+)=', doc)
+			keywordMap['misc'].extend(items)
+		elif key == 'comment':
+			items = re.findall(r':(\w+)', doc)
+			keywordMap[key] = items
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'types',
+		'built-in constants',
+		'built-in functions',
+		'attributes',
+		'special method',
+		'classes',
+		'modules',
+		'functions',
+		'fields',
+		'misc',
+	])
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('type', keywordMap['types'], KeywordAttr.Default),
+		('built-in constant', keywordMap['built-in constants'], KeywordAttr.Default),
+		('built-in function', keywordMap['built-in functions'], KeywordAttr.Default),
+		('attribute', keywordMap['attributes'], KeywordAttr.Default),
+		('special method', keywordMap['special method'], KeywordAttr.Default),
+		('class', keywordMap['classes'], KeywordAttr.Default),
+		('decorator', keywordMap['decorators'], KeywordAttr.NoLexer),
+		('module', keywordMap['modules'], KeywordAttr.NoLexer),
+		('function', keywordMap['functions'], KeywordAttr.NoLexer),
+		('field', keywordMap['fields'], KeywordAttr.NoLexer),
+		('misc', keywordMap['misc'], KeywordAttr.NoLexer),
+		('comment tag', keywordMap['comment'], KeywordAttr.NoLexer),
+	]
+
 
 def parse_r_api_file(path):
 	sections = read_api_file(path, '#')

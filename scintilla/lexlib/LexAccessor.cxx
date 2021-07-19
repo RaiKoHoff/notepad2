@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <cassert>
 
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include "ILexer.h"
@@ -25,35 +27,42 @@ bool LexAccessor::MatchIgnoreCase(Sci_Position pos, const char *s) noexcept {
 }
 
 void LexAccessor::GetRange(Sci_PositionU startPos_, Sci_PositionU endPos_, char *s, Sci_PositionU len) noexcept {
+	assert(startPos_ <= endPos_ && len != 0 && s != nullptr);
 	endPos_ = sci::min(endPos_, startPos_ + len - 1);
+	len = endPos_ - startPos_;
 	if (startPos_ >= static_cast<Sci_PositionU>(startPos) && endPos_ <= static_cast<Sci_PositionU>(endPos)) {
-		const char *p = buf + (startPos_ - startPos);
-		const char * const t = buf + (endPos_ - startPos);
-		while (p < t) {
-			*s++ = *p++;
-		}
+		const char * const p = buf + (startPos_ - startPos);
+		memcpy(s, p, len);
 	} else {
-		for (; startPos_ < endPos_; startPos_++) {
-			*s++ = (*this)[startPos_];
-		}
+		pAccess->GetCharRange(s, startPos_, len);
 	}
-	*s = '\0';
+	s[len] = '\0';
 }
 
 void LexAccessor::GetRangeLowered(Sci_PositionU startPos_, Sci_PositionU endPos_, char *s, Sci_PositionU len) noexcept {
-	endPos_ = sci::min(endPos_, startPos_ + len - 1);
-	if (startPos_ >= static_cast<Sci_PositionU>(startPos) && endPos_ <= static_cast<Sci_PositionU>(endPos)) {
-		const char *p = buf + (startPos_ - startPos);
-		const char * const t = buf + (endPos_ - startPos);
-		while (p < t) {
-			*s++ = MakeLowerCase(*p++);
+	GetRange(startPos_, endPos_, s, len);
+	while (*s) {
+		if (*s >= 'A' && *s <= 'Z') {
+			*s += 'a' - 'A';
 		}
-	} else {
-		for (; startPos_ < endPos_; startPos_++) {
-			*s++ = MakeLowerCase((*this)[startPos_]);
-		}
+		++s;
 	}
-	*s = '\0';
+}
+
+std::string LexAccessor::GetRange(Sci_PositionU startPos_, Sci_PositionU endPos_) {
+	assert(startPos_ < endPos_);
+	const Sci_PositionU len = endPos_ - startPos_;
+	std::string s(len, '\0');
+	GetRange(startPos_, endPos_, s.data(), len);
+	return s;
+}
+
+std::string LexAccessor::GetRangeLowered(Sci_PositionU startPos_, Sci_PositionU endPos_) {
+	assert(startPos_ < endPos_);
+	const Sci_PositionU len = endPos_ - startPos_;
+	std::string s(len, '\0');
+	GetRangeLowered(startPos_, endPos_, s.data(), len);
+	return s;
 }
 
 Sci_Position LexLineSkipSpaceTab(Sci_Line line, LexAccessor &styler) noexcept {
@@ -228,7 +237,7 @@ void BacktrackToStart(const LexAccessor &styler, int stateMask, Sci_PositionU &s
 	}
 }
 
-void LookbackNonWhite(LexAccessor &styler, Sci_PositionU startPos, int maxSpaceStyle, int &chPrevNonWhite, int &stylePrevNonWhite) {
+void LookbackNonWhite(LexAccessor &styler, Sci_PositionU startPos, int maxSpaceStyle, int &chPrevNonWhite, int &stylePrevNonWhite) noexcept {
 	Sci_PositionU back = startPos - 1;
 	while (back) {
 		const int style = styler.StyleAt(back);

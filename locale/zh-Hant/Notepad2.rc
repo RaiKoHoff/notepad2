@@ -92,14 +92,13 @@ BEGIN
 			MENUITEM "作為 UTF-&8\tShift+F8",	CMD_RELOADUTF8
 			MENUITEM "作為 &ANSI\tCtrl+Shift+A",	CMD_RELOADANSI
 			MENUITEM "作為 &OEM\tCtrl+Shift+O",	CMD_RELOADOEM
+			MENUITEM "使用編碼(&W)...\tF8",		IDM_RECODE_SELECT
 			MENUITEM SEPARATOR
 			MENUITEM "無檔案變數(&N)\tAlt+F8",	CMD_RELOADNOFILEVARS
 			MENUITEM "預設(&D)\tCtrl+Alt+F",		CMD_RECODEDEFAULT
 #if defined(_WIN64)
 			MENUITEM "大檔案模式(&L)",			IDM_FILE_LARGE_FILE_MODE_RELOAD
 #endif
-			MENUITEM SEPARATOR
-			MENUITEM "使用編碼(&W)...\tF8",		IDM_RECODE_SELECT
 		END
 		POPUP "啟動(&L)"
 		BEGIN
@@ -650,6 +649,8 @@ BEGIN
 			MENUITEM "記住最近檔案(&F)",				IDM_VIEW_NOSAVERECENT
 			MENUITEM "記住搜尋選項(&S)",				IDM_VIEW_NOSAVEFINDREPL
 			MENUITEM "執行工具前儲存(&V)",				IDM_VIEW_SAVEBEFORERUNNINGTOOLS
+			MENUITEM SEPARATOR
+			MENUITEM "使用 XP 樣式開啟/儲存對話方塊(&U)",	IDM_SET_USE_XP_FILE_DIALOG
 			MENUITEM "使用 &metapath 開啟資料夾",		IDM_SET_OPEN_FOLDER_METAPATH
 		END
 		MENUITEM SEPARATOR
@@ -1430,7 +1431,7 @@ END
 
 IDD_ENCLOSESELECTION DIALOGEX 0, 0, 248, 98
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "圍住選取的文字(&E)"
+CAPTION "圍住選取的文字"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     LTEXT           "選取的部份之前插入(&B): ",IDC_STATIC,7,7,114,8
@@ -2134,7 +2135,7 @@ BEGIN
 樣式格式:\r\n\
 \tfont:Name; size:[+|-]nn.mm; weight:nnn; bold; italic; underline; strike;\r\n\
 \tcharset:dd; locale:Name; case:[Upper|Lower|Camel];\r\n\
-\tfore:#ffffff; back:#bbbbbb; alpha:aa; outline:aa; eolfilled;\r\n\
+\tfore:#RRGGBB; back:#RRGGBB; alpha:aa; outline:aa; eolfilled;\r\n\
 \r\n\
 樣式屬性可以用複製並貼上或拖放來複製。\r\n\
 \r\n\

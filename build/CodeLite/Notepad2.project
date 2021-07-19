@@ -11,6 +11,9 @@
       <File Name="../../scintilla/include/Sci_Position.h"/>
       <File Name="../../scintilla/include/SciLexer.h"/>
       <File Name="../../scintilla/include/Scintilla.h"/>
+      <File Name="../../scintilla/include/ScintillaMessages.h"/>
+      <File Name="../../scintilla/include/ScintillaStructures.h"/>
+      <File Name="../../scintilla/include/ScintillaTypes.h"/>
       <File Name="../../scintilla/include/VectorISA.h"/>
     </VirtualDirectory>
     <VirtualDirectory Name="lexers">
@@ -128,7 +131,6 @@
       <File Name="../../scintilla/src/EditView.cxx"/>
       <File Name="../../scintilla/src/EditView.h"/>
       <File Name="../../scintilla/src/ElapsedPeriod.h"/>
-      <File Name="../../scintilla/src/FontQuality.h"/>
       <File Name="../../scintilla/src/Geometry.cxx"/>
       <File Name="../../scintilla/src/Geometry.h"/>
       <File Name="../../scintilla/src/Indicator.cxx"/>
@@ -295,6 +297,8 @@
         <IncludePath Value="../../scintilla/src"/>
         <Preprocessor Value="_WINDOWS"/>
         <Preprocessor Value="NOMINMAX"/>
+        <Preprocessor Value="WIN32_LEAN_AND_MEAN"/>
+        <Preprocessor Value="STRICT_TYPED_ITEMIDS"/>
         <Preprocessor Value="UNICODE"/>
         <Preprocessor Value="_UNICODE"/>
         <Preprocessor Value="NO_CXX11_REGEX"/>
