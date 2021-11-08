@@ -227,11 +227,10 @@ BEGIN
     ICON            IDR_MAINWND,IDC_STATIC,7,7,20,20
     LTEXT           "",IDC_VERSION,45,7,200,8
     LTEXT           "",IDC_BUILD_INFO,45,18,200,8
-    LTEXT           "",IDC_COPYRIGHT,45,30,200,8
-    LTEXT           "",IDC_AUTHORNAME,130,30,200,8
+    LTEXT           "Copyright © 1996-2012 Florian Balmer.",IDC_STATIC,45,30,200,8
     LTEXT           "",IDC_WEBPAGE_TEXT,45,40,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_WEBPAGE_LINK,"SysLink",WS_TABSTOP,45,40,200,10
-    LTEXT           "Visit our metapath's website:",IDC_STATIC,45,52,140,8
+    LTEXT           "Copyright © 2011-2021 Zufu Liu and all contributors.",IDC_STATIC,45,52,200,8
     LTEXT           "",IDC_NEW_PAGE_TEXT,45,60,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_NEW_PAGE_LINK,"SysLink",WS_TABSTOP,45,60,200,10
     LTEXT           "Contact Florian Balmer:",IDC_STATIC,45,72,140,8
@@ -639,7 +638,7 @@ BEGIN
     IDS_ERR_DROP1           "No access to dropped file or directory."
     //IDS_ERR_DROP2           "Only a single file or directory can be dropped at a time."
     IDS_ERR_FAVORITES       "No access to ""Favorites"" folder.\nSpecify a valid directory in the ""Options"" dialog box."
-    IDS_ERR_LNK_GETPATH     "No valid filesystem-path available for linked object.\nProbably the link doesn't refer to a file or directory."
+    //IDS_ERR_LNK_GETPATH     "No valid filesystem-path available for linked object.\nProbably the link doesn't refer to a file or directory."
     IDS_ERR_LNK_NOACCESS    "No access to filesystem-path of linked object.\nCheck the disk or the network connection."
     IDS_ERR_CREATELINK      "Error creating the specified link.\nProbably the destination directory is write-protected."
     IDS_ERR_FILTER          "No additional filters specified.\nPlease refer to the metapath readme file for more information."

@@ -191,7 +191,7 @@ static int	iOpacityLevel		= 75;
 static int	flagPosParam		= 0;
 
 static inline BOOL HasFilter(void) {
-	return !StrEqual(tchFilter, L"*.*") || bNegFilter;
+	return !StrEqualExW(tchFilter, L"*.*") || bNegFilter;
 }
 
 //=============================================================================
@@ -809,7 +809,7 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	ComboBox_SetExtendedUI(hwndDriveBox, TRUE);
 	// DirList
 	LVCOLUMN lvc = { LVCF_FMT | LVCF_TEXT, LVCFMT_LEFT, 0, NULL, -1, 0, 0, 0
-#if (NTDDI_VERSION >= NTDDI_VISTA)
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 			, 0, 0, 0
 #endif
 	};
@@ -1217,31 +1217,23 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			}
 			break;
 
-		case DLE_FILE:
-			BeginWaitCursor();
+		case DLE_FILE: {
 			const BOOL bOpenNew = LOWORD(wParam) == IDM_FILE_OPENNEW;
-			if (!PathIsLnkFile(dli.szFileName)) {
-				LaunchTarget(dli.szFileName, bOpenNew);
-			} else {
-				// PathIsLinkFile()
-				WCHAR tch[MAX_PATH];
-
-				if (PathGetLnkPath(dli.szFileName, tch, COUNTOF(tch))) {
-					ExpandEnvironmentStringsEx(tch, COUNTOF(tch));
-					const DWORD dwAttr = GetFileAttributes(tch);
-					if ((dwAttr & FILE_ATTRIBUTE_DIRECTORY)) {
-						DisplayLnkFile(dli.szFileName);
-					} else {
-						// Made sure link points to a file
-						LaunchTarget(tch, bOpenNew);
-					}
+			WCHAR tch[MAX_PATH];
+			BeginWaitCursor();
+			if (PathGetLnkPath(dli.szFileName, tch)) {
+				const DWORD dwAttr = GetFileAttributes(tch);
+				if ((dwAttr & FILE_ATTRIBUTE_DIRECTORY)) {
+					DisplayLnkFile(dli.szFileName, tch);
 				} else {
-					DisplayLnkFile(dli.szFileName);
+					// Made sure link points to a file
+					LaunchTarget(tch, bOpenNew);
 				}
+			} else {
+				LaunchTarget(dli.szFileName, bOpenNew);
 			}
-
 			EndWaitCursor();
-			break;
+		} break;
 		}
 	}
 	break;
@@ -1290,7 +1282,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		}
 
 		WCHAR szTmp[MAX_PATH];
-		if (PathIsLnkFile(dli.szFileName) && PathGetLnkPath(dli.szFileName, szTmp, COUNTOF(szTmp))) {
+		if (PathGetLnkPath(dli.szFileName, szTmp)) {
 			GetShortPathName(szTmp, szTmp, COUNTOF(szTmp));
 		} else {
 			GetShortPathName(dli.szFileName, szTmp, COUNTOF(szTmp));
@@ -1343,7 +1335,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		WCHAR szFilter[128];
 		WCHAR szTitle[32];
 
-		lstrcpy(szNewFile, L"");
+		StrCpyExW(szNewFile, L"");
 		GetString(IDS_FILTER_ALL, szFilter, COUNTOF(szFilter));
 		PrepareFilterStr(szFilter);
 		GetString(IDS_NEWFILE, szTitle, COUNTOF(szTitle));
@@ -1656,7 +1648,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_VIEW_FILTERALL:
 		if (HasFilter()) {
-			lstrcpy(tchFilter, L"*.*");
+			StrCpyExW(tchFilter, L"*.*");
 			bNegFilter = FALSE;
 
 			// Store information about currently selected item
@@ -1857,26 +1849,24 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		DirList_GetItem(hwndDirList, -1, &dli);
 
 		if (dli.ntype == DLE_FILE) {
-			if (PathIsLnkFile(dli.szFileName)) {
-				WCHAR szFullPath[MAX_PATH];
+			WCHAR szFullPath[MAX_PATH];
 
-				//SetFocus(hwndDirList);
-				if (PathGetLnkPath(dli.szFileName, szFullPath, COUNTOF(szFullPath))) {
-					if (GetFileAttributes(szFullPath) != INVALID_FILE_ATTRIBUTES) {
-						WCHAR szDir[MAX_PATH];
-						WCHAR *p;
-						lstrcpy(szDir, szFullPath);
-						if ((p = StrRChr(szDir, NULL, L'\\')) != NULL) {
-							*(p + 1) = 0;
-							if (!PathIsRoot(szDir)) {
-								*p = 0;
-							}
+			//SetFocus(hwndDirList);
+			if (PathGetLnkPath(dli.szFileName, szFullPath)) {
+				if (GetFileAttributes(szFullPath) != INVALID_FILE_ATTRIBUTES) {
+					WCHAR szDir[MAX_PATH];
+					WCHAR *p;
+					lstrcpy(szDir, szFullPath);
+					if ((p = StrRChr(szDir, NULL, L'\\')) != NULL) {
+						*(p + 1) = 0;
+						if (!PathIsRoot(szDir)) {
+							*p = 0;
+						}
 
-							SetCurrentDirectory(szDir);
-							SendWMCommand(hwndMain, IDM_VIEW_UPDATE);
-							if (!DirList_SelectItem(hwndDirList, NULL, szFullPath)) {
-								ListView_EnsureVisible(hwndDirList, 0, FALSE);
-							}
+						SetCurrentDirectory(szDir);
+						SendWMCommand(hwndMain, IDM_VIEW_UPDATE);
+						if (!DirList_SelectItem(hwndDirList, NULL, szFullPath)) {
+							ListView_EnsureVisible(hwndDirList, 0, FALSE);
 						}
 					}
 				}
@@ -1971,7 +1961,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		int i;
 		WCHAR tch[MAX_PATH];
 		for (i = iItem + d; DirList_GetItem(hwndDirList, i, &dli) != (-1); i++) {
-			if (dli.ntype == DLE_FILE && !PathIsLnkToDirectory(dli.szFileName, tch, COUNTOF(tch))) {
+			if (dli.ntype == DLE_FILE && !(PathGetLnkPath(dli.szFileName, tch) && PathIsDirectory(tch))) {
 				break;
 			}
 		}
@@ -1979,7 +1969,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		if (dli.ntype != DLE_FILE) {
 			for (i = 0; i <= iItem; i++) {
 				DirList_GetItem(hwndDirList, i, &dli);
-				if (dli.ntype == DLE_FILE && !PathIsLnkToDirectory(dli.szFileName, tch, COUNTOF(tch))) {
+				if (dli.ntype == DLE_FILE && !(PathGetLnkPath(dli.szFileName, tch) && PathIsDirectory(tch))) {
 					break;
 				}
 			}
@@ -2008,7 +1998,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		WCHAR tch[MAX_PATH];
 		for (i = iItem - d; i > (-1); i--) {
 			DirList_GetItem(hwndDirList, i, &dli);
-			if (dli.ntype == DLE_FILE && !PathIsLnkToDirectory(dli.szFileName, tch, COUNTOF(tch))) {
+			if (dli.ntype == DLE_FILE && !(PathGetLnkPath(dli.szFileName, tch) && PathIsDirectory(tch))) {
 				break;
 			}
 		}
@@ -2016,7 +2006,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		if (dli.ntype != DLE_FILE) {
 			for (i = ListView_GetItemCount(hwndDirList) - 1; i >= iItem; i--) {
 				DirList_GetItem(hwndDirList, i, &dli);
-				if (dli.ntype == DLE_FILE && !PathIsLnkToDirectory(dli.szFileName, tch, COUNTOF(tch))) {
+				if (dli.ntype == DLE_FILE && !(PathGetLnkPath(dli.szFileName, tch) && PathIsDirectory(tch))) {
 					break;
 				}
 			}
@@ -2481,32 +2471,32 @@ void LoadSettings(void) {
 
 	LPCWSTR strValue = IniSectionGetValue(pIniSection, L"OpenWithDir");
 	if (StrIsEmpty(strValue)) {
-#if _WIN32_WINNT < _WIN32_WINNT_VISTA
-		SHGetFolderPath(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, tchOpenWithDir);
-#else
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 		LPWSTR pszPath = NULL;
 		if (S_OK == SHGetKnownFolderPath(&FOLDERID_Desktop, KF_FLAG_DEFAULT, NULL, &pszPath)) {
 			lstrcpy(tchOpenWithDir, pszPath);
 			CoTaskMemFree(pszPath);
 		}
+#else
+		SHGetFolderPath(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, tchOpenWithDir);
 #endif
 	} else {
-		PathAbsoluteFromApp(strValue, tchOpenWithDir, COUNTOF(tchOpenWithDir), TRUE);
+		PathAbsoluteFromApp(strValue, tchOpenWithDir, TRUE);
 	}
 
 	strValue = IniSectionGetValue(pIniSection, L"Favorites");
 	if (StrIsEmpty(strValue)) {
-#if _WIN32_WINNT < _WIN32_WINNT_VISTA
-		SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, tchFavoritesDir);
-#else
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 		LPWSTR pszPath = NULL;
 		if (S_OK == SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &pszPath)) {
 			lstrcpy(tchFavoritesDir, pszPath);
 			CoTaskMemFree(pszPath);
 		}
+#else
+		SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, tchFavoritesDir);
 #endif
 	} else {
-		PathAbsoluteFromApp(strValue, tchFavoritesDir, COUNTOF(tchFavoritesDir), TRUE);
+		PathAbsoluteFromApp(strValue, tchFavoritesDir, TRUE);
 	}
 
 	strValue = IniSectionGetValue(pIniSection, L"Quikview.exe");
@@ -2515,7 +2505,7 @@ void LoadSettings(void) {
 		PathAddBackslash(szQuickview);
 		lstrcat(szQuickview, L"Viewers\\Quikview.exe");
 	} else {
-		PathAbsoluteFromApp(strValue, szQuickview, COUNTOF(szQuickview), TRUE);
+		PathAbsoluteFromApp(strValue, szQuickview, TRUE);
 	}
 
 	bHasQuickview = PathIsFile(szQuickview);
@@ -2535,7 +2525,7 @@ void LoadSettings(void) {
 	if (!lpFilterArg) {
 		strValue = IniSectionGetValue(pIniSection, L"FileFilter");
 		if (StrIsEmpty(strValue)) {
-			lstrcpy(tchFilter, L"*.*");
+			StrCpyExW(tchFilter, L"*.*");
 		} else {
 			lstrcpyn(tchFilter, strValue, COUNTOF(tchFilter));
 		}
@@ -2642,7 +2632,7 @@ void SaveSettingsNow(void) {
 		if (StrNotEmpty(szIniFile2)) {
 			if (CreateIniFile(szIniFile2)) {
 				lstrcpy(szIniFile, szIniFile2);
-				lstrcpy(szIniFile2, L"");
+				StrCpyExW(szIniFile2, L"");
 			} else {
 				bCreateFailure = TRUE;
 			}
@@ -2720,12 +2710,12 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	if (iStartupDir == 1) {
 		IniSectionSetString(pIniSection, L"MRUDirectory", szCurDir);
 	}
-	PathRelativeToApp(tchFavoritesDir, wchTmp, COUNTOF(wchTmp), FALSE, TRUE, flagPortableMyDocs);
+	PathRelativeToApp(tchFavoritesDir, wchTmp, FALSE, TRUE, flagPortableMyDocs);
 	IniSectionSetString(pIniSection, L"Favorites", wchTmp);
-	PathRelativeToApp(szQuickview, wchTmp, COUNTOF(wchTmp), FALSE, TRUE, flagPortableMyDocs);
+	PathRelativeToApp(szQuickview, wchTmp, FALSE, TRUE, flagPortableMyDocs);
 	IniSectionSetString(pIniSection, L"Quikview.exe", wchTmp);
 	IniSectionSetStringEx(pIniSection, L"QuikviewParams", szQuickviewParams, L"");
-	PathRelativeToApp(tchOpenWithDir, wchTmp, COUNTOF(wchTmp), FALSE, TRUE, flagPortableMyDocs);
+	PathRelativeToApp(tchOpenWithDir, wchTmp, FALSE, TRUE, flagPortableMyDocs);
 	IniSectionSetString(pIniSection, L"OpenWithDir", wchTmp);
 	IniSectionSetIntEx(pIniSection, L"FillMask", dwFillMask, DL_ALLOBJECTS);
 	IniSectionSetIntEx(pIniSection, L"SortOptions", nSortFlags, DS_NAME);
@@ -2894,7 +2884,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2) {
 		switch (ch) {
 		case L'F':
 			if (chNext == L'0' || chNext == L'O') {
-				lstrcpy(szIniFile, L"*?");
+				StrCpyExW(szIniFile, L"*?");
 				state = 1;
 			}
 			break;
@@ -3043,7 +3033,26 @@ BOOL CheckIniFile(LPWSTR lpszFile, LPCWSTR lpszModule) {
 			return TRUE;
 		}
 
-#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+		REFKNOWNFOLDERID rfidList[] = {
+			&FOLDERID_LocalAppData,
+			&FOLDERID_RoamingAppData,
+			&FOLDERID_Profile,
+		};
+		for (UINT i = 0; i < COUNTOF(rfidList); i++) {
+			LPWSTR pszPath = NULL;
+			if (S_OK == SHGetKnownFolderPath(rfidList[i], KF_FLAG_DEFAULT, NULL, &pszPath)) {
+				lstrcpy(tchBuild, pszPath);
+				CoTaskMemFree(pszPath);
+				PathAppend(tchBuild, WC_NOTEPAD2);
+				PathAppend(tchBuild, tchFileExpanded);
+				if (PathIsFile(tchBuild)) {
+					lstrcpy(lpszFile, tchBuild);
+					return TRUE;
+				}
+			}
+		}
+#else
 		const int csidlList[] = {
 			// %LOCALAPPDATA%
 			// C:\Users\<username>\AppData\Local
@@ -3059,25 +3068,6 @@ BOOL CheckIniFile(LPWSTR lpszFile, LPCWSTR lpszModule) {
 		};
 		for (UINT i = 0; i < COUNTOF(csidlList); i++) {
 			if (S_OK == SHGetFolderPath(NULL, csidlList[i], NULL, SHGFP_TYPE_CURRENT, tchBuild)) {
-				PathAppend(tchBuild, WC_NOTEPAD2);
-				PathAppend(tchBuild, tchFileExpanded);
-				if (PathIsFile(tchBuild)) {
-					lstrcpy(lpszFile, tchBuild);
-					return TRUE;
-				}
-			}
-		}
-#else
-		REFKNOWNFOLDERID rfidList[] = {
-			&FOLDERID_LocalAppData,
-			&FOLDERID_RoamingAppData,
-			&FOLDERID_Profile,
-		};
-		for (UINT i = 0; i < COUNTOF(rfidList); i++) {
-			LPWSTR pszPath = NULL;
-			if (S_OK == SHGetKnownFolderPath(rfidList[i], KF_FLAG_DEFAULT, NULL, &pszPath)) {
-				lstrcpy(tchBuild, pszPath);
-				CoTaskMemFree(pszPath);
 				PathAppend(tchBuild, WC_NOTEPAD2);
 				PathAppend(tchBuild, tchFileExpanded);
 				if (PathIsFile(tchBuild)) {
@@ -3116,14 +3106,15 @@ BOOL CheckIniFileRedirect(LPWSTR lpszFile, LPCWSTR lpszModule) {
 }
 
 BOOL FindIniFile(void) {
+	if (StrEqualExW(szIniFile, L"*?")) {
+		return FALSE;
+	}
+
 	WCHAR tchTest[MAX_PATH];
 	WCHAR tchModule[MAX_PATH];
-	GetModuleFileName(NULL, tchModule, COUNTOF(tchModule));
+	GetProgramRealPath(tchModule, COUNTOF(tchModule));
 
 	if (StrNotEmpty(szIniFile)) {
-		if (StrEqual(szIniFile, L"*?")) {
-			return 0;
-		}
 		if (!CheckIniFile(szIniFile, tchModule)) {
 			ExpandEnvironmentStringsEx(szIniFile, COUNTOF(szIniFile));
 			if (PathIsRelative(szIniFile)) {
@@ -3160,9 +3151,9 @@ BOOL FindIniFile(void) {
 }
 
 BOOL TestIniFile(void) {
-	if (StrEqual(szIniFile, L"*?")) {
-		lstrcpy(szIniFile2, L"");
-		lstrcpy(szIniFile, L"");
+	if (StrEqualExW(szIniFile, L"*?")) {
+		StrCpyExW(szIniFile2, L"");
+		StrCpyExW(szIniFile, L"");
 		return 0;
 	}
 
@@ -3171,9 +3162,9 @@ BOOL TestIniFile(void) {
 		return TRUE;
 	}
 
-	if ((dwFileAttributes != INVALID_FILE_ATTRIBUTES) || *CharPrev(szIniFile, StrEnd(szIniFile)) == L'\\') {
+	if ((dwFileAttributes != INVALID_FILE_ATTRIBUTES) || (StrNotEmpty(szIniFile) && szIniFile[lstrlen(szIniFile) - 1] == L'\\')) {
 		WCHAR wchModule[MAX_PATH];
-		GetModuleFileName(NULL, wchModule, COUNTOF(wchModule));
+		GetProgramRealPath(wchModule, COUNTOF(wchModule));
 		PathAppend(szIniFile, PathFindFileName(wchModule));
 		PathRenameExtension(szIniFile, L".ini");
 		dwFileAttributes = GetFileAttributes(szIniFile);
@@ -3190,7 +3181,7 @@ BOOL TestIniFile(void) {
 
 	if ((dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
 		lstrcpy(szIniFile2, szIniFile);
-		lstrcpy(szIniFile, L"");
+		StrCpyExW(szIniFile, L"");
 		return FALSE;
 	}
 	return TRUE;
@@ -3242,9 +3233,10 @@ BOOL DisplayPath(LPCWSTR lpPath, UINT uIdError) {
 	if (!SearchPathEx(szTmp, COUNTOF(szPath), szPath)) {
 		lstrcpy(szPath, szTmp);
 	}
+	PathGetRealPath(NULL, szPath, szPath);
 
-	if (PathIsLnkFile(szPath)) {
-		return DisplayLnkFile(szPath);
+	if (PathGetLnkPath(szPath, szTmp)) {
+		return DisplayLnkFile(szPath, szTmp);
 	}
 
 	const DWORD dwAttr = GetFileAttributes(szPath);
@@ -3293,34 +3285,12 @@ BOOL DisplayPath(LPCWSTR lpPath, UINT uIdError) {
 //  DisplayLnkFile()
 //
 //
-BOOL DisplayLnkFile(LPCWSTR pszLnkFile) {
-	WCHAR szTmp[MAX_PATH];
-	if (!PathGetLnkPath(pszLnkFile, szTmp, COUNTOF(szTmp))) {
-		// Select lnk-file if target is not available
-		if (PathIsFile(pszLnkFile)) {
-			lstrcpy(szTmp, pszLnkFile);
-			PathRemoveFileSpec(szTmp);
-			SetCurrentDirectory(szTmp);
-
-			// Select new file
-			SendWMCommand(hwndMain, IDM_VIEW_UPDATE);
-			SHFILEINFO shfi;
-			SHGetFileInfo(pszLnkFile, 0, &shfi, sizeof(SHFILEINFO), SHGFI_DISPLAYNAME);
-			if (!DirList_SelectItem(hwndDirList, shfi.szDisplayName, pszLnkFile)) {
-				ListView_EnsureVisible(hwndDirList, 0, FALSE);
-			}
-		}
-
-		MsgBoxWarn(MB_OK, IDS_ERR_LNK_GETPATH);
-		return FALSE;
-	}
-
-	ExpandEnvironmentStringsEx(szTmp, COUNTOF(szTmp));
-
+BOOL DisplayLnkFile(LPCWSTR pszLnkFile, LPCWSTR pszResPath) {
 	WCHAR szPath[MAX_PATH];
-	if (!SearchPathEx(szTmp, COUNTOF(szPath), szPath)) {
-		lstrcpy(szPath, szTmp);
+	if (!SearchPathEx(pszResPath, COUNTOF(szPath), szPath)) {
+		lstrcpy(szPath, pszResPath);
 	}
+	PathGetRealPath(NULL, szPath, szPath);
 
 	const DWORD dwAttr = GetFileAttributes(szPath);
 	if (dwAttr != INVALID_FILE_ATTRIBUTES) {
@@ -3371,9 +3341,9 @@ BOOL DisplayLnkFile(LPCWSTR pszLnkFile) {
 	// GetFileAttributes() failed
 	// Select lnk-file if target is not available
 	if (PathIsFile(pszLnkFile)) {
-		lstrcpy(szTmp, pszLnkFile);
-		PathRemoveFileSpec(szTmp);
-		SetCurrentDirectory(szTmp);
+		lstrcpy(szPath, pszLnkFile);
+		PathRemoveFileSpec(szPath);
+		SetCurrentDirectory(szPath);
 
 		// Select new file
 		SendWMCommand(hwndMain, IDM_VIEW_UPDATE);
@@ -3396,7 +3366,7 @@ BOOL DisplayLnkFile(LPCWSTR pszLnkFile) {
 *
 *
 ******************************************************************************/
-static BOOL CALLBACK EnumWndProc(HWND hwnd, LPARAM lParam) {
+static BOOL CALLBACK EnumWindProcReuseWindow(HWND hwnd, LPARAM lParam) {
 	BOOL bContinue = TRUE;
 	WCHAR szClassName[64];
 
@@ -3418,7 +3388,7 @@ BOOL ActivatePrevInst(void) {
 	}
 
 	HWND hwnd = NULL;
-	EnumWindows(EnumWndProc, (LPARAM)&hwnd);
+	EnumWindows(EnumWindProcReuseWindow, (LPARAM)&hwnd);
 
 	// Found a window
 	if (hwnd != NULL) {
@@ -3468,7 +3438,7 @@ BOOL ActivatePrevInst(void) {
 }
 
 void GetRelaunchParameters(LPWSTR szParameters) {
-	lstrcpy(szParameters, L" -f");
+	StrCpyExW(szParameters, L" -f");
 	if (StrNotEmpty(szIniFile)) {
 		lstrcat(szParameters, L" \"");
 		lstrcat(szParameters, szIniFile);
@@ -3552,7 +3522,7 @@ void ShowNotifyIcon(HWND hwnd, BOOL bAdd) {
 WCHAR szGlobalWndClass[256] = L"";
 BOOL bLoadLaunchSetingsLoaded = FALSE;
 
-static BOOL CALLBACK EnumWndProc2(HWND hwnd, LPARAM lParam) {
+static BOOL CALLBACK EnumWindProcTargetApplication(HWND hwnd, LPARAM lParam) {
 	BOOL bContinue = TRUE;
 	WCHAR szClassName[64];
 
@@ -3591,11 +3561,11 @@ void LoadLaunchSetings(void) {
 		iUseTargetApplication = 1;
 		iTargetApplicationMode = 1;
 		lstrcpy(szTargetApplication, L"Notepad2.exe");
-		lstrcpy(szTargetApplicationParams, L"");
+		StrCpyExW(szTargetApplicationParams, L"");
 		lstrcpy(szTargetApplicationWndClass, L"Notepad2");
-		lstrcpy(szDDEMsg, L"");
-		lstrcpy(szDDEApp, L"");
-		lstrcpy(szDDETopic, L"");
+		StrCpyExW(szDDEMsg, L"");
+		StrCpyExW(szDDEApp, L"");
+		StrCpyExW(szDDETopic, L"");
 	}
 
 	lstrcpy(szGlobalWndClass, szTargetApplicationWndClass);
@@ -3616,7 +3586,7 @@ void LaunchTarget(LPCWSTR lpFileName, BOOL bOpenNew) {
 	if (iUseTargetApplication && iTargetApplicationMode == 1) {
 		HWND hwnd = NULL;
 		if (!bOpenNew) { // hwnd == NULL
-			EnumWindows(EnumWndProc2, (LPARAM)&hwnd);
+			EnumWindows(EnumWindProcTargetApplication, (LPARAM)&hwnd);
 		}
 
 		// Found a window
@@ -3641,7 +3611,7 @@ void LaunchTarget(LPCWSTR lpFileName, BOOL bOpenNew) {
 
 			LPWSTR lpParam;
 			WCHAR szTmp[MAX_PATH];
-			if (PathIsLnkFile(lpFileName) && PathGetLnkPath(lpFileName, szTmp, COUNTOF(szTmp))) {
+			if (PathGetLnkPath(lpFileName, szTmp)) {
 				lpParam = szTmp;
 			} else {
 				lpParam = (LPWSTR)lpFileName;
@@ -3661,7 +3631,7 @@ void LaunchTarget(LPCWSTR lpFileName, BOOL bOpenNew) {
 
 			lstrcpy(szTmp, szTargetApplication);
 			WCHAR szFile[MAX_PATH];
-			PathAbsoluteFromApp(szTmp, szFile, COUNTOF(szFile), TRUE);
+			PathAbsoluteFromApp(szTmp, szFile, TRUE);
 
 			SHELLEXECUTEINFO sei;
 			ZeroMemory(&sei, sizeof(SHELLEXECUTEINFO));
@@ -3689,7 +3659,7 @@ void LaunchTarget(LPCWSTR lpFileName, BOOL bOpenNew) {
 
 		LPWSTR lpParam;
 		WCHAR szTmp[MAX_PATH];
-		if (PathIsLnkFile(lpFileName) && PathGetLnkPath(lpFileName, szTmp, COUNTOF(szTmp))) {
+		if (PathGetLnkPath(lpFileName, szTmp)) {
 			lpParam = szTmp;
 		} else {
 			lpParam = (LPWSTR)lpFileName;
@@ -3711,7 +3681,7 @@ void LaunchTarget(LPCWSTR lpFileName, BOOL bOpenNew) {
 		ExpandEnvironmentStringsEx(szTmp, COUNTOF(szTmp));
 
 		WCHAR szFile[MAX_PATH];
-		PathAbsoluteFromApp(szTmp, szFile, COUNTOF(szFile), TRUE);
+		PathAbsoluteFromApp(szTmp, szFile, TRUE);
 
 		SHELLEXECUTEINFO sei;
 		ZeroMemory(&sei, sizeof(SHELLEXECUTEINFO));
@@ -3746,7 +3716,7 @@ void SnapToTarget(HWND hwnd) {
 	}
 
 	HWND hwnd2 = NULL;
-	EnumWindows(EnumWndProc2, (LPARAM)&hwnd2);
+	EnumWindows(EnumWindProcTargetApplication, (LPARAM)&hwnd2);
 
 	// Found a window
 	if (hwnd2 != NULL) {

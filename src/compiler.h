@@ -54,7 +54,7 @@
 #define NP2_IGNORE_WARNING_DEPRECATED_DECLARATIONS	__pragma(warning(disable: 4996))
 #endif
 
-// suppress -Wimplicit-fallthrough in C source
+// suppress [-Wimplicit-fallthrough] warning in C source
 #if defined(__cplusplus)
 #define FALLTHROUGH_ATTR		[[fallthrough]]
 #elif (defined(__GNUC__) && __GNUC__ >= 7) || (defined(__clang__) && __clang_major__ >= 10)
@@ -63,19 +63,16 @@
 #define FALLTHROUGH_ATTR
 #endif
 
-#if defined(__GNUC__) && !defined(__cplusplus)
-#if defined(__NO_INLINE__) // O0
-#define NP2_inline	static inline
+#if defined(__cplusplus) || defined(_MSC_VER)
+	#define NP2_inline	inline
 #else
-#define NP2_inline	extern inline __attribute__((__gnu_inline__, __artificial__))
-#endif
-#else
-#define NP2_inline	inline
+	#define NP2_inline	static inline
 #endif
 
 // force compile C as CPP: /TP for MSVC and clang-cl, -x c++ for GCC and clang
 #define NP2_FORCE_COMPILE_C_AS_CPP	0
 
+// use C99 designated initializer to avoid [-Wmissing-field-initializers] warning
 #if defined(__cplusplus) && !defined(__clang__)
 #define NP2_USE_DESIGNATED_INITIALIZER	0
 #else

@@ -40,7 +40,7 @@ struct CountWidths {
 	// from the Base Multilingual Plane and those from other planes.
 	Sci::Position countBasePlane;
 	Sci::Position countOtherPlanes;
-	CountWidths(Sci::Position countBasePlane_ = 0, Sci::Position countOtherPlanes_ = 0) noexcept :
+	explicit CountWidths(Sci::Position countBasePlane_ = 0, Sci::Position countOtherPlanes_ = 0) noexcept :
 		countBasePlane(countBasePlane_),
 		countOtherPlanes(countOtherPlanes_) {
 	}
@@ -587,6 +587,17 @@ void UndoHistory::CompletedRedoStep() noexcept {
 	currentAction++;
 }
 
+SplitView::SplitView(const SplitVector<char> &instance) noexcept {
+	length = instance.Length();
+	length1 = instance.GapPosition();
+	if (length1 == 0) {
+		// Assign segment2 to segment1 / length1 to avoid useless test against 0 length1
+		length1 = length;
+	}
+	segment1  = instance.ElementPointer(0);
+	segment2 = instance.ElementPointer(length1) - length1;
+}
+
 CellBuffer::CellBuffer(bool hasStyles_, bool largeDocument_) :
 	hasStyles(hasStyles_), largeDocument(largeDocument_) {
 	readOnly = false;
@@ -661,6 +672,10 @@ const char *CellBuffer::StyleRangePointer(Sci::Position position, Sci::Position 
 
 Sci::Position CellBuffer::GapPosition() const noexcept {
 	return substance.GapPosition();
+}
+
+SplitView CellBuffer::AllView() const noexcept {
+	return SplitView(substance);
 }
 
 // The char* returned is to an allocation owned by the undo history
@@ -1255,14 +1270,42 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 	// end NP2_USE_SSE2
 
 #else
+#if defined(__clang__) || defined(__GNUC__) || defined(__ICL) || !defined(_MSC_VER)
+	if (utf8LineEnds == LineEndType::Default) {
+		while (ptr < end) {
+			// skip to line end
+			const uint8_t ch = *ptr++;
+			constexpr uint32_t mask = ((1 << '\r') - 1) ^ (1 << '\n');
+			if (ch > '\r' || ((mask >> ch) & 1) != 0) {
+				continue;
+			}
+			if (ch == '\r' && *ptr == '\n') {
+				++ptr;
+			}
+			if (nPositions == PositionBlockSize) {
+				plv->InsertLines(lineInsert, positions, nPositions, atLineStart);
+				lineInsert += nPositions;
+				nPositions = 0;
+			}
+			positions[nPositions++] = position + ptr - s;
+		}
+	}
+
+#else
 	if (utf8LineEnds == LineEndType::Default && ptr < end) {
-		constexpr uint32_t mask = (1 << '\r') | (1 << '\n');
 		do {
 			// skip to line end
 			uint8_t ch = 0;
-			while (ptr < end && ((ch = *ptr++) > '\r' || ((mask >> ch) & 1) == 0)) {
+#if 1
+			constexpr uint32_t mask = ((1 << '\r') - 1) ^ (1 << '\n');
+			while (ptr < end && ((ch = *ptr++) > '\r' || ((mask >> ch) & 1) != 0)) {
 				// nop
 			}
+#else
+			while (ptr < end && ((ch = *ptr++) > '\r' || ch < '\n')) {
+				// nop
+			}
+#endif
 			switch (ch) {
 			case '\r':
 				if (*ptr == '\n') {
@@ -1280,6 +1323,7 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 			}
 		} while (ptr < end);
 	}
+#endif
 #endif
 
 	if (ptr < end) {
@@ -1512,7 +1556,7 @@ void CellBuffer::EndUndoAction() {
 }
 
 void CellBuffer::AddUndoAction(Sci::Position token, bool mayCoalesce) {
-	bool startSequence;
+	bool startSequence = false;
 	uh.AppendAction(ActionType::container, token, nullptr, 0, startSequence, mayCoalesce);
 }
 

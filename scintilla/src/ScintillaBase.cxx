@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <cstdint>
 #include <cassert>
 #include <cstring>
 #include <cmath>
@@ -274,16 +275,17 @@ void ScintillaBase::AutoCompleteStart(Sci::Position lenEntered, const char *list
 			return;
 		}
 	}
-	ac.Start(wMain, idAutoComplete, sel.MainCaret(), PointMainCaret(),
-		lenEntered, vs.lineHeight, IsUnicodeMode(), technology);
 
 	const ListOptions options {
 		vs.ElementColour(Element::List),
 		vs.ElementColour(Element::ListBack),
 		vs.ElementColour(Element::ListSelected),
-		vs.ElementColour(Element::ListSelectedBack)
+		vs.ElementColour(Element::ListSelectedBack),
+		ac.options,
 	};
-	ac.lb->SetOptions(options);
+
+	ac.Start(wMain, idAutoComplete, sel.MainCaret(), PointMainCaret(),
+		lenEntered, vs.lineHeight, IsUnicodeMode(), technology, options);
 
 	const PRectangle rcClient = GetClientRectangle();
 	Point pt = LocationFromPosition(sel.MainCaret() - lenEntered);
@@ -476,8 +478,9 @@ void ScintillaBase::CallTipShow(Point pt, NotificationPosition notifyPos, const 
 	// StyleDefault for the face name, size and character set. Also use it
 	// for the foreground and background colour.
 	const int ctStyle = ct.UseStyleCallTip() ? StyleCallTip : StyleDefault;
+	const Style &style = vs.styles[ctStyle];
 	if (ct.UseStyleCallTip()) {
-		ct.SetForeBack(vs.styles[StyleCallTip].fore, vs.styles[StyleCallTip].back);
+		ct.SetForeBack(style.fore, style.back);
 	}
 	if (notifyPos == NotificationPosition::None) {
 		ct.innerMarginX = 12;
@@ -492,10 +495,10 @@ void ScintillaBase::CallTipShow(Point pt, NotificationPosition notifyPos, const 
 	PRectangle rc = ct.CallTipStart(sel.MainCaret(), pt,
 		vs.lineHeight,
 		defn,
-		vs.styles[ctStyle].fontName,
-		vs.styles[ctStyle].sizeZoomed,
+		style.fontName,
+		style.sizeZoomed,
 		CodePage(),
-		vs.styles[ctStyle].characterSet,
+		style.characterSet,
 		vs.technology,
 		vs.localeName.c_str(),
 		wMain);
@@ -594,12 +597,7 @@ class LexState : public LexInterface {
 public:
 	explicit LexState(Document *pdoc_) noexcept;
 	void SetInstance(ILexer5 *instance_);
-	// Deleted so LexState objects can not be copied.
-	LexState(const LexState &) = delete;
-	LexState(LexState &&) = delete;
-	LexState &operator=(const LexState &) = delete;
-	LexState &operator=(LexState &&) = delete;
-	~LexState() noexcept override;
+	// LexInterface deleted the standard operators and defined the virtual destructor so don't need to here.
 	void SetLexer(int language); //! removed in Scintilla 5
 
 	const char *DescribeWordListSets() const noexcept;
@@ -637,19 +635,8 @@ public:
 LexState::LexState(Document *pdoc_) noexcept : LexInterface(pdoc_) {
 }
 
-LexState::~LexState() noexcept {
-	if (instance) {
-		instance->Release();
-		instance = nullptr;
-	}
-}
-
 void LexState::SetInstance(ILexer5 *instance_) {
-	if (instance) {
-		instance->Release();
-		instance = nullptr;
-	}
-	instance = instance_;
+	instance.reset(instance_);
 	pdoc->LexerChanged(GetIdentifier() != SCLEX_NULL);
 }
 
@@ -661,15 +648,13 @@ LexState *ScintillaBase::DocumentLexState() {
 }
 
 void LexState::SetLexer(int language) { //! removed in Scintilla 5
-	if (instance) {
-		instance->Release();
-		instance = nullptr;
-	}
+	ILexer5 *instance_ = nullptr;
 	if (language != SCLEX_CONTAINER) {
 		const LexerModule *lex = LexerModule::Find(language);
 		language = lex->GetLanguage();
-		instance = lex->Create();
+		instance_ = lex->Create();
 	}
+	instance.reset(instance_);
 	pdoc->LexerChanged(language != SCLEX_NULL);
 }
 
@@ -992,6 +977,13 @@ sptr_t ScintillaBase::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 
 	case Message::AutoCGetAutoHide:
 		return ac.autoHide;
+
+	case Message::AutoCSetOptions:
+		ac.options = static_cast<AutoCompleteOption>(wParam);
+		break;
+
+	case Message::AutoCGetOptions:
+		return static_cast<sptr_t>(ac.options);
 
 	case Message::AutoCSetDropRestOfWord:
 		ac.dropRestOfWord = wParam != 0;

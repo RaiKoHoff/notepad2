@@ -125,12 +125,41 @@ constexpr bool IsEOLChar(int ch) noexcept {
 	return ch == '\r' || ch == '\n';
 }
 
+/**
+ * Check if a character is a space.
+ * This is ASCII specific but is safe with chars >= 0x80.
+ */
 constexpr bool IsASpace(int ch) noexcept {
 	return ch == ' ' || (ch >= 0x09 && ch <= 0x0d);
 }
 
 constexpr bool IsASpaceOrTab(int ch) noexcept {
 	return ch == ' ' || ch == '\t';
+}
+
+constexpr bool IsSpaceOrTab(int ch) noexcept {
+	return ch == ' ' || ch == '\t';
+}
+
+constexpr bool IsControlCharacter(unsigned char ch) noexcept {
+	// iscntrl() returns true for lots of characters > 127 which are displayable,
+	// currently only check C0 control characters.
+	return ch < 32 || ch == 127;
+}
+
+constexpr bool IsControl(int ch) noexcept {
+	return ((ch >= 0) && (ch <= 0x1F)) || (ch == 0x7F);
+}
+
+constexpr bool IsEOLCharacter(int ch) noexcept {
+	return ch == '\r' || ch == '\n';
+}
+
+constexpr bool IsBreakSpace(unsigned char ch) noexcept {
+	// used for text breaking, treat C0 control character as space.
+	// by default C0 control character is handled as special representation,
+	// so not appears in normal text. 0x7F DEL is omitted to simplify the code.
+	return ch <= ' ';
 }
 
 constexpr bool IsADigit(int ch) noexcept {
@@ -305,6 +334,10 @@ constexpr bool IsJumpLabelNextChar(int chNext) noexcept {
 	// own line, comment, for, foreach, while, do, if, switch, repeat
 	// TODO: match each word exactly like HighlightTaskMarker().
 	return AnyOf(chNext, '\0', '/', 'f', 'w', 'd', 'i', 's', 'r');
+}
+
+constexpr bool IsInterfaceName(char ch, char chNext) noexcept {
+	return ch == 'I' && IsUpperCase(chNext);
 }
 
 // Simple case functions for ASCII supersets.

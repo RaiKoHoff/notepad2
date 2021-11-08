@@ -10,25 +10,43 @@ import FileGenerator
 
 def printLexHFile(f):
 	# StylesCommon in Scintilla.iface
-	STYLE_DEFAULT = 32
+	STYLE_FIRSTPREDEFINED = 32
 	STYLE_LASTPREDEFINED = 39
 
 	out = []
 	lex = set()
+	autoValue = 0
+	valueMap = {}
 	for name in f.order:
 		v = f.features[name]
-		if v["FeatureType"] in ["val"]:
+		featureType = v["FeatureType"]
+		if featureType == "lex":
+			autoValue = 0
+			valueMap.clear()
+		elif featureType == "val":
 			if "SCE_" in name or "SCLEX_" in name:
-				val = int(v["Value"].strip('()'))
+				value = v["Value"]
 				if "SCLEX_" in name:
+					val = int(value)
 					if val in lex:
 						raise Exception("Duplicate Lexer Value: %s = %d" % (name, val))
 					else:
 						lex.add(val)
 				else:
-					if val >= STYLE_DEFAULT and val <= STYLE_LASTPREDEFINED:
+					if value == 'auto':
+						val = autoValue
+						value = str(val)
+					else:
+						val = int(value)
+					autoValue = val + 1
+					if autoValue == STYLE_FIRSTPREDEFINED:
+						autoValue = STYLE_LASTPREDEFINED + 1
+					if val in valueMap:
+						raise Exception("Duplicate Style Value: %s = %d, %s" % (name, val, valueMap[val]))
+					valueMap[val] = name
+					if val >= STYLE_FIRSTPREDEFINED and val <= STYLE_LASTPREDEFINED:
 						raise Exception("Invalid Style Value: %s = %d" % (name, val))
-				out.append("#define " + name + " " + v["Value"])
+				out.append("#define " + name + " " + value)
 	return out
 
 def RegenerateAll(root):

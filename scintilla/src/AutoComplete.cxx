@@ -39,6 +39,7 @@ AutoComplete::AutoComplete() :
 	typesep('?'),
 	ignoreCase(false),
 	chooseSingle(false),
+	options(AutoCompleteOption::Normal),
 	posStart(0),
 	startLen(0),
 	cancelAtStartPos(true),
@@ -57,16 +58,13 @@ AutoComplete::~AutoComplete() {
 	}
 }
 
-bool AutoComplete::Active() const noexcept {
-	return active;
-}
-
 void AutoComplete::Start(Window &parent, int ctrlID,
 	Sci::Position position, Point location, Sci::Position startLen_,
-	int lineHeight, bool unicodeMode, Technology technology) noexcept {
+	int lineHeight, bool unicodeMode, Technology technology, ListOptions listOptions) noexcept {
 	if (active) {
 		Cancel();
 	}
+	lb->SetOptions(listOptions);
 	lb->Create(parent, ctrlID, location, lineHeight, unicodeMode, technology);
 	lb->Clear();
 	active = true;
@@ -276,7 +274,7 @@ void AutoComplete::Select(const char *word) {
 			}
 		} else if (cond < 0) {
 			end = pivot - 1;
-		} else if (cond > 0) {
+		} else {
 			start = pivot + 1;
 		}
 	}

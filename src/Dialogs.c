@@ -92,7 +92,7 @@ int MsgBox(UINT uType, UINT uIdMsg, ...) {
 		StrCatBuff(szText, L"\n", COUNTOF(szText));
 		StrCatBuff(szText, lpMsgBuf, COUNTOF(szText));
 		LocalFree(lpMsgBuf);
-		const WCHAR wcht = *CharPrev(szText, StrEnd(szText));
+		const WCHAR wcht = szText[lstrlen(szText) - 1];
 		if (IsCharAlphaNumeric(wcht) || wcht == L'"' || wcht == L'\'') {
 			StrCatBuff(szText, L".", COUNTOF(szText));
 		}
@@ -212,7 +212,7 @@ static int CALLBACK BFFCallBack(HWND hwnd, UINT umsg, LPARAM lParam, LPARAM lpDa
 //
 BOOL GetDirectory(HWND hwndParent, int iTitle, LPWSTR pszFolder, LPCWSTR pszBase) {
 	WCHAR szTitle[256];
-	lstrcpy(szTitle, L"");
+	StrCpyExW(szTitle, L"");
 	GetString(iTitle, szTitle, COUNTOF(szTitle));
 
 	WCHAR szBase[MAX_PATH];
@@ -260,8 +260,6 @@ INT_PTR CALLBACK AboutDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam
 
 		SetDlgItemText(hwnd, IDC_VERSION, VERSION_FILEVERSION_LONG);
 		SetDlgItemText(hwnd, IDC_BUILD_INFO, wch);
-		SetDlgItemText(hwnd, IDC_COPYRIGHT, VERSION_LEGALCOPYRIGHT_SHORT);
-		SetDlgItemText(hwnd, IDC_AUTHORNAME, VERSION_AUTHORNAME);
 
 		HFONT hFontTitle = (HFONT)SendDlgItemMessage(hwnd, IDC_VERSION, WM_GETFONT, 0, 0);
 		if (hFontTitle == NULL) {
@@ -538,7 +536,7 @@ static INT_PTR CALLBACK OpenWithDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPA
 		ListView_SetExtendedListViewStyle(hwndLV, /*LVS_EX_FULLROWSELECT|*/LVS_EX_DOUBLEBUFFER | LVS_EX_LABELTIP);
 
 		LVCOLUMN lvc = { LVCF_FMT | LVCF_TEXT, LVCFMT_LEFT, 0, NULL, -1, 0, 0, 0
-#if (NTDDI_VERSION >= NTDDI_VISTA)
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 			, 0, 0, 0
 #endif
 		};
@@ -681,10 +679,9 @@ BOOL OpenWithDlg(HWND hwnd, LPCWSTR lpstrFile) {
 		sei.nShow = SW_SHOWNORMAL;
 
 		// resolve links and get short path name
-		if (!(PathIsLnkFile(lpstrFile) && PathGetLnkPath(lpstrFile, szParam, COUNTOF(szParam)))) {
+		if (!PathGetLnkPath(lpstrFile, szParam)) {
 			lstrcpy(szParam, lpstrFile);
 		}
-		//GetShortPathName(szParam, szParam, sizeof(WCHAR)*COUNTOF(szParam));
 		PathQuoteSpaces(szParam);
 
 		ShellExecuteEx(&sei);
@@ -716,7 +713,7 @@ static INT_PTR CALLBACK FavoritesDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LP
 		//SetExplorerTheme(hwndLV);
 		ListView_SetExtendedListViewStyle(hwndLV, /*LVS_EX_FULLROWSELECT|*/LVS_EX_DOUBLEBUFFER | LVS_EX_LABELTIP);
 		LVCOLUMN lvc = { LVCF_FMT | LVCF_TEXT, LVCFMT_LEFT, 0, NULL, -1, 0, 0, 0
-#if (NTDDI_VERSION >= NTDDI_VISTA)
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 			, 0, 0, 0
 #endif
 		};
@@ -1040,7 +1037,7 @@ static INT_PTR CALLBACK FileMRUDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 		//SetExplorerTheme(hwndLV);
 		ListView_SetExtendedListViewStyle(hwndLV, /*LVS_EX_FULLROWSELECT|*/LVS_EX_DOUBLEBUFFER | LVS_EX_LABELTIP);
 		LVCOLUMN lvc = { LVCF_FMT | LVCF_TEXT, LVCFMT_LEFT, 0, NULL, -1, 0, 0, 0
-#if (NTDDI_VERSION >= NTDDI_VISTA)
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 			, 0, 0, 0
 #endif
 		};
@@ -1198,7 +1195,7 @@ static INT_PTR CALLBACK FileMRUDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 			WCHAR tch[MAX_PATH];
 			for (int i = 0; i < MRU_GetCount(pFileMRU); i++) {
 				MRU_Enum(pFileMRU, i, tch, COUNTOF(tch));
-				PathAbsoluteFromApp(tch, tch, COUNTOF(tch), TRUE);
+				PathAbsoluteFromApp(tch, tch, TRUE);
 				lvi.iItem = i;
 				lvi.pszText = tch;
 				ListView_InsertItem(hwndLV, &lvi);
@@ -2522,8 +2519,20 @@ HKEY_CLASSES_ROOT\Applications\Notepad2.exe
 		(Default)			REG_SZ		"Notepad2.exe" "%1"
 
 HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\notepad.exe
-	Debugger				REG_SZ		"Notepad2.exe" /z
-	UseFilter				REG_DWORD	0
+	Debugger								REG_SZ		"Notepad2.exe" /z
+	UseFilter								REG_DWORD	0
+	0
+		AppExecutionAliasRedirect			REG_DWORD	1
+		AppExecutionAliasRedirectPackages	REG_SZ		*
+		FilterFullPath						REG_SZ		"Notepad2.exe"
+	1
+		AppExecutionAliasRedirect			REG_DWORD	1
+		AppExecutionAliasRedirectPackages	REG_SZ		*
+		FilterFullPath						REG_SZ		"Notepad2.exe"
+	2
+		AppExecutionAliasRedirect			REG_DWORD	1
+		AppExecutionAliasRedirectPackages	REG_SZ		*
+		FilterFullPath						REG_SZ		"Notepad2.exe"
 */
 extern BOOL fIsElevated;
 extern int flagUseSystemMRU;
@@ -2657,15 +2666,49 @@ void UpdateSystemIntegrationStatus(int mask, LPCWSTR lpszText, LPCWSTR lpszName)
 	// replace Windows Notepad
 	if (mask & SystemIntegration_ReplaceNotepad) {
 		HKEY hKey;
-		const LSTATUS status = Registry_CreateKey(HKEY_LOCAL_MACHINE, NP2RegSubKey_ReplaceNotepad, &hKey);
+		LSTATUS status = Registry_CreateKey(HKEY_LOCAL_MACHINE, NP2RegSubKey_ReplaceNotepad, &hKey);
 		if (status == ERROR_SUCCESS) {
 			wsprintf(command, L"\"%s\" /z", tchModule);
 			Registry_SetString(hKey, L"Debugger", command);
 			Registry_SetInt(hKey, L"UseFilter", 0);
+			WCHAR num[2] = { L'0', L'\0' };
+			for (int index = 0; index < 3; index++, num[0]++) {
+				HKEY hSubKey;
+				status = Registry_CreateKey(hKey, num, &hSubKey);
+				if (status == ERROR_SUCCESS) {
+					Registry_SetInt(hSubKey, L"AppExecutionAliasRedirect", 1);
+					Registry_SetString(hSubKey, L"AppExecutionAliasRedirectPackages", L"*");
+					Registry_SetString(hSubKey, L"FilterFullPath", tchModule);
+					RegCloseKey(hSubKey);
+				}
+			}
 			RegCloseKey(hKey);
 		}
 	} else if (mask & SystemIntegration_RestoreNotepad) {
-		Registry_DeleteTree(HKEY_LOCAL_MACHINE, NP2RegSubKey_ReplaceNotepad);
+		// on Windows 11, all keys were created by the system, we should not delete them.
+		HKEY hKey;
+		LSTATUS status = RegOpenKeyEx(HKEY_LOCAL_MACHINE, NP2RegSubKey_ReplaceNotepad, 0, KEY_WRITE, &hKey);
+		if (status == ERROR_SUCCESS) {
+			RegDeleteValue(hKey, L"Debugger");
+			RegDeleteValue(hKey, L"UseFilter");
+			GetWindowsDirectory(tchModule, COUNTOF(tchModule));
+			LPCWSTR const suffix[] = {
+				L"System32\\notepad.exe",
+				L"SysWOW64\\notepad.exe",
+				L"notepad.exe",
+			};
+			WCHAR num[2] = { L'0', L'\0' };
+			for (int index = 0; index < 3; index++, num[0]++) {
+				HKEY hSubKey;
+				status = RegOpenKeyEx(hKey, num, 0, KEY_WRITE, &hSubKey);
+				if (status == ERROR_SUCCESS) {
+					PathCombine(command, tchModule, suffix[index]);
+					Registry_SetString(hSubKey, L"FilterFullPath", command);
+					RegCloseKey(hSubKey);
+				}
+			}
+			RegCloseKey(hKey);
+		}
 	}
 }
 

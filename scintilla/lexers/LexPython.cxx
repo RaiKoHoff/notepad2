@@ -61,7 +61,7 @@ struct EscapeSequence {
 		numBase = 16;
 		if (chNext == 'x') {
 			digitsLeft = 3;
-		} else if (IsADigit(chNext, 8)) {
+		} else if (IsOctalDigit(chNext)) {
 			digitsLeft = 3;
 			numBase = 8;
 		} else if (AnyOf(chNext, '\\', '\'', '"', 'a', 'b', 'f', 'n', 'r', 't', 'v')) {
@@ -85,7 +85,7 @@ struct EscapeSequence {
 
 struct FormattedStringState {
 	int state;
-	int braceCount;
+	int nestedLevel;
 	int parenCount;
 };
 
@@ -211,7 +211,7 @@ inline Sci_Position CheckPercentFormatSpecifier(const StyleContext &sc, LexAcces
 	// 2. (optional) Mapping key
 	if (ch == '(') {
 		ch = styler.SafeGetCharAt(++pos);
-		while (!IsInvalidMappingKey(ch))  {
+		while (!IsInvalidMappingKey(ch)) {
 			ch = styler.SafeGetCharAt(++pos);
 		}
 		if (ch == ')') {
@@ -275,11 +275,11 @@ constexpr bool IsBraceFormatSpecifier(char ch) noexcept {
 					'%');
 }
 
-inline bool IsPyFormattedStringEnd(const StyleContext &sc) noexcept {
-	return sc.ch == '}'
+inline bool IsPyFormattedStringEnd(const StyleContext &sc, int braceCount) noexcept {
+	return (sc.ch == '}' && braceCount == 0) // f"{ {1:2}[1] }"
+		|| sc.ch == ':'
 		|| (sc.ch == '!' && sc.chNext != '=')
-		|| (sc.ch == '=' && !AnyOf(sc.chPrev, ':', '<', '>', '=', '!'))
-		|| (sc.ch == ':' && (sc.chNext != '=' || AnyOf(sc.GetRelative(2), '<', '>', '=', '^')));
+		|| (sc.ch == '=' && !AnyOf(sc.chPrev, '<', '>', '=', '!'));
 }
 
 Sci_Position CheckBraceFormatSpecifier(const StyleContext &sc, LexAccessor &styler) noexcept {
@@ -295,19 +295,24 @@ Sci_Position CheckBraceFormatSpecifier(const StyleContext &sc, LexAccessor &styl
 	}
 
 	ch = styler.SafeGetCharAt(++pos);
+	char chNext = styler.SafeGetCharAt(pos + 1);
+	if (ch == '%' && IsDateTimeFormatSpecifier(chNext)) {
+		return pos + 2 - sc.currentPos;
+	}
 	// [[fill] align]
 	if (AnyOf(ch, '<', '>', '=', '^')) {
-		ch = styler.SafeGetCharAt(++pos);
+		ch = chNext;
+		++pos;
 		if (AnyOf(ch, '<', '>', '=', '^')) {
 			ch = styler.SafeGetCharAt(++pos);
 		}
-	} else {
+	} else if (!AnyOf(ch, '\r', '\n', '{', '}')) {
 		Sci_Position width = 1;
 		if (ch & 0x80) {
 			styler.GetCharacterAndWidth(pos, &width);
+			chNext = styler.SafeGetCharAt(pos + width);
 		}
-		const char chNext = styler.SafeGetCharAt(pos + width);
-		if (!AnyOf(ch, '\r', '\n', '{', '}') && AnyOf(chNext, '<', '>', '=', '^')) {
+		if (AnyOf(chNext, '<', '>', '=', '^')) {
 			pos += 1 + width;
 			ch = styler.SafeGetCharAt(pos);
 		}
@@ -351,7 +356,7 @@ enum {
 	PyLineStateMaskTripleQuote = 1 << 2,
 	PyLineStateMaskCloseBrace = 1 << 3,
 	PyLineStateLineContinuation = 1 << 4,
-	PyLineStateFormattedString = 1 << 5,
+	PyLineStateStringInterpolation = 1 << 5,
 };
 
 void ColourisePyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
@@ -372,7 +377,7 @@ void ColourisePyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 
 	if (startPos != 0) {
 		// backtrack to the line starts expression inside formatted string literal.
-		BacktrackToStart(styler, PyLineStateFormattedString, startPos, lengthDoc, initStyle);
+		BacktrackToStart(styler, PyLineStateStringInterpolation, startPos, lengthDoc, initStyle);
 	}
 
 	StyleContext sc(startPos, lengthDoc, initStyle, styler);
@@ -405,7 +410,7 @@ void ColourisePyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 				if (keywordLists[0]->InList(s)) {
 					sc.ChangeState(SCE_PY_WORD);
 					if (StrEqual(s, "def")) {
-						kwType = SCE_PY_FUNCTION_DEFINE;
+						kwType = SCE_PY_FUNCTION_DEFINITION;
 					} else if (StrEqualsAny(s, "class", "raise", "except")) {
 						kwType = SCE_PY_CLASS;
 					}
@@ -508,7 +513,6 @@ void ColourisePyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 							nestedState.pop_back();
 						}
 						sc.SetState(SCE_PY_DEFAULT);
-						continue;
 					}
 				}
 				break;
@@ -522,14 +526,13 @@ void ColourisePyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 						sc.Forward();
 					} else if (IsPyFormattedString(sc.state)) {
 						if (nestedState.empty()) {
-							nestedState.push_back({sc.state, 1, parenCount});
+							nestedState.push_back({sc.state, 1, 0});
 						} else {
-							nestedState.back().braceCount += 1;
+							nestedState.back().nestedLevel += 1;
 						}
 						insideFStringFormatSpec = false;
 						sc.SetState(SCE_PY_OPERATOR2);
 						sc.ForwardSetState(SCE_PY_DEFAULT);
-						continue;
 					} else if (sc.chNext == '}' || sc.chNext == '!' || sc.chNext == ':' || IsIdentifierCharEx(sc.chNext)) {
 						escSeq.outerState = sc.state;
 						sc.SetState(SCE_PY_PLACEHOLDER);
@@ -543,8 +546,8 @@ void ColourisePyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 						const bool interpolating = !nestedState.empty();
 						if (interpolating) {
 							FormattedStringState &state = nestedState.back();
-							if (state.braceCount > 1) {
-								--state.braceCount;
+							if (state.nestedLevel > 1) {
+								--state.nestedLevel;
 							} else {
 								nestedState.pop_back();
 							}
@@ -695,11 +698,14 @@ void ColourisePyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 		case SCE_PY_COMMENTTAGAT:
 			if (!IsLowerCase(sc.ch)) {
 				if (sc.ch == ' ' || sc.ch == ':') {
+					if (sc.ch == ':') {
+						sc.Forward();
+					}
 					sc.SetState(escSeq.outerState);
 				} else {
 					sc.ChangeState(escSeq.outerState);
-					continue;
 				}
+				continue;
 			}
 			break;
 
@@ -749,21 +755,37 @@ void ColourisePyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 					sc.SetState(SCE_PY_OPERATOR);
 				}
 			} else if (isoperator(sc.ch)) {
-				if (sc.ch == '(') {
-					++parenCount;
-				} else if (sc.ch == ')' && parenCount > 0) {
-					--parenCount;
-				}
 				const bool interpolating = !nestedState.empty();
+				int braceCount = 0;
+				if (sc.ch == '{' || sc.ch == '[' || sc.ch == '(') {
+					if (interpolating) {
+						nestedState.back().parenCount += 1;
+					} else {
+						++parenCount;
+					}
+				} else if (sc.ch == '}' || sc.ch == ']' || sc.ch == ')') {
+					if (interpolating) {
+						FormattedStringState &state = nestedState.back();
+						if (state.parenCount > 0) {
+							braceCount = state.parenCount;
+							--state.parenCount;
+						}
+					} else {
+						if (parenCount > 0) {
+							--parenCount;
+						}
+						if (visibleChars == 0) {
+							lineState |= PyLineStateMaskCloseBrace;
+						}
+					}
+				}
 				if (interpolating) {
-					const FormattedStringState state = nestedState.back();
-					if (parenCount == state.parenCount && IsPyFormattedStringEnd(sc)) {
+					const FormattedStringState &state = nestedState.back();
+					if (state.parenCount == 0 && IsPyFormattedStringEnd(sc, braceCount)) {
 						insideFStringFormatSpec = sc.ch != '}';
 						sc.SetState(state.state);
 						continue;
 					}
-				} else if (visibleChars == 0 && (sc.ch == '}' || sc.ch == ']' || sc.ch == ')')) {
-					lineState |= PyLineStateMaskCloseBrace;
 				}
 				sc.SetState(interpolating ? SCE_PY_OPERATOR2 : SCE_PY_OPERATOR);
 				kwType = SCE_PY_DEFAULT;
@@ -804,7 +826,7 @@ void ColourisePyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 				}
 			}
 			if (!nestedState.empty()) {
-				lineState |= PyLineStateFormattedString | PyLineStateMaskTripleQuote;
+				lineState |= PyLineStateStringInterpolation | PyLineStateMaskTripleQuote;
 			} else if (IsPyStringStyle(sc.state) && IsPyTripleQuotedString(sc.state)) {
 				lineState |= PyLineStateMaskTripleQuote;
 			} else if (visibleChars == 0) {
@@ -846,8 +868,12 @@ struct FoldLineState {
 	}
 };
 
+}
+
+namespace Lexilla {
+
 // code folding based on LexYAML
-void FoldPyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*/, LexerWordList, Accessor &styler) {
+void FoldPyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*/, LexerWordList /*keywordLists*/, Accessor &styler) {
 	const Sci_Position maxPos = startPos + lengthDoc;
 	const Sci_Line docLines = styler.GetLine(styler.Length());
 	const Sci_Line maxLines = (maxPos == styler.Length()) ? docLines : styler.GetLine(maxPos - 1);

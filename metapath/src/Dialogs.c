@@ -96,7 +96,7 @@ static int CALLBACK BFFCallBack(HWND hwnd, UINT umsg, LPARAM lParam, LPARAM lpDa
 //
 BOOL GetDirectory(HWND hwndParent, int iTitle, LPWSTR pszFolder, LPCWSTR pszBase) {
 	WCHAR szTitle[256];
-	lstrcpy(szTitle, L"");
+	StrCpyExW(szTitle, L"");
 	GetString(iTitle, szTitle, COUNTOF(szTitle));
 
 	WCHAR szBase[MAX_PATH];
@@ -130,21 +130,21 @@ BOOL GetDirectory(HWND hwndParent, int iTitle, LPWSTR pszFolder, LPCWSTR pszBase
 //
 // GetDirectory2()
 //
-#if _WIN32_WINNT < _WIN32_WINNT_VISTA
-BOOL GetDirectory2(HWND hwndParent, int iTitle, LPWSTR pszFolder, int iBase)
-#else
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 BOOL GetDirectory2(HWND hwndParent, int iTitle, LPWSTR pszFolder, REFKNOWNFOLDERID iBase)
+#else
+BOOL GetDirectory2(HWND hwndParent, int iTitle, LPWSTR pszFolder, int iBase)
 #endif
 {
 	WCHAR szTitle[256];
-	lstrcpy(szTitle, L"");
+	StrCpyExW(szTitle, L"");
 	GetString(iTitle, szTitle, COUNTOF(szTitle));
 
 	LPITEMIDLIST pidlRoot;
-#if _WIN32_WINNT < _WIN32_WINNT_VISTA
-	if (S_OK != SHGetFolderLocation(hwndParent, iBase, NULL, SHGFP_TYPE_DEFAULT, &pidlRoot))
-#else
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 	if (S_OK != SHGetKnownFolderIDList(iBase, KF_FLAG_DEFAULT, NULL, &pidlRoot))
+#else
+	if (S_OK != SHGetFolderLocation(hwndParent, iBase, NULL, SHGFP_TYPE_DEFAULT, &pidlRoot))
 #endif
 	{
 		return FALSE;
@@ -194,8 +194,8 @@ INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) 
 		DLITEM dli;
 		dli.mask = DLI_FILENAME;
 		if (DirList_GetItem(hwndDirList, -1, &dli) != -1) {
-			LPWSTR psz = GetFilenameStr(dli.szFileName);
-			QuotateFilenameStr(psz);
+			LPWSTR psz = (LPWSTR)PathFindFileName(dli.szFileName);
+			PathQuoteSpaces(psz);
 			Edit_SetText(hwndCtl, psz);
 		}
 
@@ -263,7 +263,7 @@ INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) 
 			}
 
 			if (GetOpenFileName(&ofn)) {
-				QuotateFilenameStr(szFile);
+				PathQuoteSpaces(szFile);
 
 				if (StrNotEmpty(szArg2)) {
 					lstrcat(szFile, L" ");
@@ -489,8 +489,6 @@ INT_PTR CALLBACK AboutDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam
 
 		SetDlgItemText(hwnd, IDC_VERSION, VERSION_FILEVERSION_LONG);
 		SetDlgItemText(hwnd, IDC_BUILD_INFO, wch);
-		SetDlgItemText(hwnd, IDC_COPYRIGHT, VERSION_LEGALCOPYRIGHT_SHORT);
-		SetDlgItemText(hwnd, IDC_AUTHORNAME, VERSION_AUTHORNAME);
 
 		HFONT hFontTitle = (HFONT)SendDlgItemMessage(hwnd, IDC_VERSION, WM_GETFONT, 0, 0);
 		if (hFontTitle == NULL) {
@@ -1191,7 +1189,7 @@ static INT_PTR CALLBACK ProgPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM
 				PathAddBackslash(szQuickview);
 				lstrcat(szQuickview, L"Viewers\\Quikview.exe");
 				PathQuoteSpaces(szQuickview);
-				lstrcpy(szQuickviewParams, L"");
+				StrCpyExW(szQuickviewParams, L"");
 			} else {
 				ExtractFirstArgument(tch, szQuickview, szQuickviewParams);
 			}
@@ -1320,7 +1318,7 @@ INT_PTR OptionsPropSheet(HWND hwnd, HINSTANCE hInstance) {
 			SetListViewTheme(hwndDirList);
 		}
 
-		if (!StrEqual(tchFilter, L"*.*") || bNegFilter) {
+		if (!StrEqualExW(tchFilter, L"*.*") || bNegFilter) {
 			ListView_SetTextColor(hwndDirList, bDefColorFilter ? GetSysColor(COLOR_WINDOWTEXT) : colorFilter);
 			ListView_RedrawItems(hwndDirList, 0, ListView_GetItemCount(hwndDirList) - 1);
 		} else {
@@ -1398,21 +1396,17 @@ INT_PTR CALLBACK GetFilterDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lP
 
 			DWORD dwIndex = 0;
 			DWORD dwCheck = 0xFFFF; // index of current filter
-			for (int i = 0; i < pIniSection->count; i++) {
+			for (int i = 0; i < pIniSection->count; i++, dwIndex++) {
 				const IniKeyValueNode *node = &pIniSection->nodeList[i];
 				LPCWSTR pszFilterValue = node->value;
 				if (*pszFilterValue) {
 					AppendMenu(hMenu, MF_ENABLED | MF_STRING, 1234 + dwIndex, node->key);
 					// Find description for current filter
 					const BOOL negFilter = IsButtonChecked(hwnd, IDC_NEGFILTER);
-					if ((StrCaseEqual(pszFilterValue, szTypedFilter) && !negFilter) ||
-							(StrCaseEqual(CharNext(pszFilterValue), szTypedFilter) &&
-							 negFilter && *pszFilterValue == L'-')) {
+					if ((!negFilter || *pszFilterValue == L'-') && StrCaseEqual(pszFilterValue + negFilter, szTypedFilter)) {
 						dwCheck = dwIndex;
 					}
 				}
-
-				dwIndex++;
 			}
 			IniSectionFree(pIniSection);
 			NP2HeapFree(pIniSectionBuf);
@@ -1463,7 +1457,7 @@ INT_PTR CALLBACK GetFilterDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lP
 			if (GetDlgItemText(hwnd, IDC_FILTER, tchFilter, COUNTOF(tchFilter) - 1)) {
 				bNegFilter = IsButtonChecked(hwnd, IDC_NEGFILTER);
 			} else {
-				lstrcpy(tchFilter, L"*.*");
+				StrCpyExW(tchFilter, L"*.*");
 				bNegFilter = FALSE;
 			}
 			EndDialog(hwnd, IDOK);
@@ -1597,7 +1591,7 @@ BOOL RenameFileDlg(HWND hwnd) {
 	}
 
 	FILEOPDLGDATA fod;
-	lstrcpy(fod.szSource, GetFilenameStr(dli.szFileName));
+	lstrcpy(fod.szSource, PathFindFileName(dli.szFileName));
 
 	if (IDOK == ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_RENAME), hwnd, RenameFileDlgProc, (LPARAM)&fod)) {
 		WCHAR tchSource[MAX_PATH + 4];
@@ -1614,7 +1608,7 @@ BOOL RenameFileDlg(HWND hwnd) {
 
 		// Generate fully qualified destination
 		lstrcpy(szFullDestination, dli.szFileName);
-		*GetFilenameStr(szFullDestination) = 0;
+		*((LPWSTR)PathFindFileName(szFullDestination)) = L'\0';
 		lstrcat(szFullDestination, fod.szDestination);
 
 		// Double null terminated strings are essential!!!
@@ -1771,7 +1765,7 @@ BOOL CopyMoveDlg(HWND hwnd, UINT *wFunc) {
 
 	FILEOPDLGDATA fod;
 	fod.wFunc = *wFunc;
-	lstrcpy(fod.szSource, GetFilenameStr(dli.szFileName));
+	lstrcpy(fod.szSource, PathFindFileName(dli.szFileName));
 
 	if (IDOK == ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_COPYMOVE), hwnd, CopyMoveDlgProc, (LPARAM)&fod)) {
 		WCHAR tchSource[MAX_PATH + 4];
@@ -1846,7 +1840,7 @@ INT_PTR CALLBACK OpenWithDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lPa
 		//SetExplorerTheme(hwndLV);
 		ListView_SetExtendedListViewStyle(hwndLV, /*LVS_EX_FULLROWSELECT | */LVS_EX_DOUBLEBUFFER | LVS_EX_LABELTIP);
 		LVCOLUMN lvc = { LVCF_FMT | LVCF_TEXT, LVCFMT_LEFT, 0, NULL, -1, 0, 0, 0
-#if (NTDDI_VERSION >= NTDDI_VISTA)
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 			, 0, 0, 0
 #endif
 		};
@@ -1971,8 +1965,8 @@ BOOL OpenWithDlg(HWND hwnd, LPCDLITEM lpdliParam) {
 	if (IDOK == ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_OPENWITH), hwnd, OpenWithDlgProc, (LPARAM)&dliOpenWith)) {
 		WCHAR szDestination[MAX_PATH + 4];
 		ZeroMemory(szDestination, sizeof(szDestination));
-
-		if (PathIsLnkToDirectory(dliOpenWith.szFileName, szDestination, COUNTOF(szDestination))) {
+		const BOOL link = PathGetLnkPath(dliOpenWith.szFileName, szDestination);
+		if (link && PathIsDirectory(szDestination)) {
 			WCHAR szSource[MAX_PATH + 4];
 			ZeroMemory(szSource, sizeof(szSource));
 			lstrcpy(szSource, lpdliParam->szFileName);
@@ -1997,31 +1991,28 @@ BOOL OpenWithDlg(HWND hwnd, LPCDLITEM lpdliParam) {
 					}
 				}
 			}
-			return TRUE;
 		}
-		{
+		else {
 			SHELLEXECUTEINFO sei;
-			WCHAR szParam[MAX_PATH];
-
 			ZeroMemory(&sei, sizeof(SHELLEXECUTEINFO));
 			sei.cbSize = sizeof(SHELLEXECUTEINFO);
 			sei.fMask = 0;
 			sei.hwnd = hwnd;
 			sei.lpVerb = NULL;
 			sei.lpFile = dliOpenWith.szFileName;
-			sei.lpParameters = szParam;
+			sei.lpParameters = szDestination;
 			sei.lpDirectory = szCurDir;
 			sei.nShow = SW_SHOWNORMAL;
 
 			// resolve links and get short path name
-			if (!(PathIsLnkFile(lpdliParam->szFileName) && PathGetLnkPath(lpdliParam->szFileName, szParam, COUNTOF(szParam)))) {
-				lstrcpy(szParam, lpdliParam->szFileName);
+			if (!link) {
+				lstrcpy(szDestination, lpdliParam->szFileName);
 			}
 
-			GetShortPathName(szParam, szParam, COUNTOF(szParam));
+			GetShortPathName(szDestination, szDestination, COUNTOF(szDestination));
 			ShellExecuteEx(&sei);
-			return TRUE;
 		}
+		return TRUE;
 	}
 
 	return FALSE;
@@ -2225,7 +2216,7 @@ static INT_PTR CALLBACK FindWinDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 		case IDOK: {
 			WCHAR tch[MAX_PATH] = L"";
 			if (GetDlgItemText(hwnd, IDC_WINMODULE, tch, COUNTOF(tch))) {
-				PathRelativeToApp(tch, tch, COUNTOF(tch), TRUE, TRUE, flagPortableMyDocs);
+				PathRelativeToApp(tch, tch, TRUE, TRUE, flagPortableMyDocs);
 				PathQuoteSpaces(tch);
 				SetDlgItemText(GetParent(hwnd), IDC_TARGETPATH, tch);
 			}
@@ -2396,7 +2387,7 @@ INT_PTR CALLBACK FindTargetDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 
 			GetDlgItemText(hwnd, IDC_TARGETPATH, tchBuf, COUNTOF(tchBuf));
 			ExtractFirstArgument(tchBuf, szFile, szParams);
-			PathAbsoluteFromApp(szFile, szFile, COUNTOF(szFile), TRUE);
+			PathAbsoluteFromApp(szFile, szFile, TRUE);
 
 			WCHAR szTitle[32];
 			WCHAR szFilter[256];
@@ -2421,8 +2412,8 @@ INT_PTR CALLBACK FindTargetDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 
 			// execute file open dlg
 			if (GetOpenFileName(&ofn)) {
-				lstrcpyn(tchBuf, szFile, COUNTOF(tchBuf));
-				PathRelativeToApp(tchBuf, tchBuf, COUNTOF(tchBuf), TRUE, TRUE, flagPortableMyDocs);
+				lstrcpy(tchBuf, szFile);
+				PathRelativeToApp(tchBuf, tchBuf, TRUE, TRUE, flagPortableMyDocs);
 				PathQuoteSpaces(tchBuf);
 				if (StrNotEmpty(szParams)) {
 					StrCatBuff(tchBuf, L" ", COUNTOF(tchBuf));
@@ -2523,8 +2514,8 @@ INT_PTR CALLBACK FindTargetDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 					GetDlgItemText(hwnd, IDC_TARGETPATH, tch, COUNTOF(tch));
 					ExtractFirstArgument(tch, szTargetApplication, szTargetApplicationParams);
 				} else {
-					lstrcpy(szTargetApplication, L"");
-					lstrcpy(szTargetApplicationParams, L"");
+					StrCpyExW(szTargetApplication, L"");
+					StrCpyExW(szTargetApplicationParams, L"");
 				}
 				IniSectionSetString(pIniSection, L"TargetApplicationPath", szTargetApplication);
 				IniSectionSetString(pIniSection, L"TargetApplicationParams", szTargetApplicationParams);
@@ -2545,7 +2536,7 @@ INT_PTR CALLBACK FindTargetDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 				if (IsButtonChecked(hwnd, IDC_SENDDROPMSG) && !i) {
 					lstrcpy(szTargetApplicationWndClass, szTargetWndClass);
 				} else {
-					lstrcpy(szTargetApplicationWndClass, L"");
+					StrCpyExW(szTargetApplicationWndClass, L"");
 				}
 				IniSectionSetString(pIniSection, L"TargetApplicationWndClass", szTargetApplicationWndClass);
 
@@ -2553,21 +2544,21 @@ INT_PTR CALLBACK FindTargetDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 				if (i) {
 					GetDlgItemText(hwnd, IDC_DDEMSG, szDDEMsg, COUNTOF(szDDEMsg));
 				} else {
-					lstrcpy(szDDEMsg, L"");
+					StrCpyExW(szDDEMsg, L"");
 				}
 				IniSectionSetString(pIniSection, L"DDEMessage", szDDEMsg);
 
 				if (i) {
 					GetDlgItemText(hwnd, IDC_DDEAPP, szDDEApp, COUNTOF(szDDEApp));
 				} else {
-					lstrcpy(szDDEApp, L"");
+					StrCpyExW(szDDEApp, L"");
 				}
 				IniSectionSetString(pIniSection, L"DDEApplication", szDDEApp);
 
 				if (i) {
 					GetDlgItemText(hwnd, IDC_DDETOPIC, szDDETopic, COUNTOF(szDDETopic));
 				} else {
-					lstrcpy(szDDETopic, L"");
+					StrCpyExW(szDDETopic, L"");
 				}
 				IniSectionSetString(pIniSection, L"DDETopic", szDDETopic);
 

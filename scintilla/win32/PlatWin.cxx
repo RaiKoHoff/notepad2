@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include <cstdio>
 #include <cstdarg>
@@ -48,14 +49,14 @@
 #define LOAD_LIBRARY_SEARCH_SYSTEM32	0x00000800
 #endif
 
-#if _WIN32_WINNT < _WIN32_WINNT_WIN8
+#if _WIN32_WINNT >= _WIN32_WINNT_WIN8
+#define kSystemLibraryLoadFlags		LOAD_LIBRARY_SEARCH_SYSTEM32
+#else
 #if NP2_FORCE_COMPILE_C_AS_CPP
 extern DWORD kSystemLibraryLoadFlags;
 #else
 extern "C" DWORD kSystemLibraryLoadFlags;
 #endif
-#else
-#define kSystemLibraryLoadFlags		LOAD_LIBRARY_SEARCH_SYSTEM32
 #endif
 
 #if NP2_FORCE_COMPILE_C_AS_CPP
@@ -1000,7 +1001,7 @@ constexpr SIZE SizeOfRect(RECT rc) noexcept {
 	return { rc.right - rc.left, rc.bottom - rc.top };
 }
 
-constexpr const BLENDFUNCTION mergeAlpha = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+constexpr BLENDFUNCTION mergeAlpha = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
 
 }
 
@@ -2535,10 +2536,10 @@ void SurfaceD2D::MeasureWidths(const Font *font_, std::string_view text, XYPOSIT
 	// A cluster may be more than one WCHAR, such as for "ffi" which is a ligature in the Candara font
 	XYPOSITION position = 0.0;
 	int ti = 0;
-	for (unsigned int ci = 0; ci < count; ci++) {
-		const FLOAT width = clusterMetrics[ci].width;
-		const UINT16 length = clusterMetrics[ci].length;
-		for (UINT16 inCluster = 0; inCluster < length; inCluster++) {
+	for (UINT32 ci = 0; ci < count; ci++) {
+		const int length = clusterMetrics[ci].length;
+		const XYPOSITION width = clusterMetrics[ci].width;
+		for (int inCluster = 0; inCluster < length; inCluster++) {
 			poses.buffer[ti++] = position + width * (inCluster + 1) / length;
 		}
 		position += width;
@@ -2664,10 +2665,10 @@ void SurfaceD2D::MeasureWidthsUTF8(const Font *font_, std::string_view text, XYP
 	// A cluster may be more than one WCHAR, such as for "ffi" which is a ligature in the Candara font
 	XYPOSITION position = 0.0f;
 	int ti = 0;
-	for (unsigned int ci = 0; ci < count; ci++) {
-		const FLOAT width = clusterMetrics[ci].width;
-		const UINT16 length = clusterMetrics[ci].length;
-		for (UINT16 inCluster = 0; inCluster < length; inCluster++) {
+	for (UINT32 ci = 0; ci < count; ci++) {
+		const int length = clusterMetrics[ci].length;
+		const XYPOSITION width = clusterMetrics[ci].width;
+		for (int inCluster = 0; inCluster < length; inCluster++) {
 			poses.buffer[ti++] = position + width * (inCluster + 1) / length;
 		}
 		position += width;
@@ -3023,8 +3024,6 @@ public:
 };
 
 static constexpr const WCHAR *ListBoxX_ClassName = L"ListBoxX";
-#define LISTBOXX_USE_THICKFRAME		0
-#define LISTBOXX_USE_BORDER			1
 #define LISTBOXX_USE_FAKE_FRAME		0
 
 class ListBoxX final : public ListBox {
@@ -3053,10 +3052,11 @@ class ListBoxX final : public ListBox {
 	Point dragOffset;
 	Point location;	// Caret location at which the list is opened
 	int wheelDelta = 0; // mouse wheel residue
+	DWORD frameStyle = WS_THICKFRAME;
 
 	HWND GetHWND() const noexcept;
 	void AppendListItem(const char *text, const char *numword);
-	static void AdjustWindowRect(PRectangle *rc, UINT dpi) noexcept;
+	void AdjustWindowRect(PRectangle *rc) const noexcept;
 	int ItemHeight() const;
 	int MinClientWidth() const noexcept;
 	int TextOffset() const;
@@ -3134,13 +3134,7 @@ void ListBoxX::Create(Window &parent_, int ctrlID_, Point location_, int lineHei
 	// Window created as popup so not clipped within parent client area
 	wid = ::CreateWindowEx(
 		WS_EX_WINDOWEDGE, ListBoxX_ClassName, L"",
-#if LISTBOXX_USE_THICKFRAME
-		WS_POPUP | WS_THICKFRAME,
-#elif LISTBOXX_USE_BORDER
-		WS_POPUP | WS_BORDER,
-#else
-		WS_POPUP,
-#endif
+		WS_POPUP | frameStyle,
 		100, 100, 150, 80, hwndParent,
 		{},
 		hinstanceParent,
@@ -3217,7 +3211,7 @@ PRectangle ListBoxX::GetDesiredRect() {
 		rcDesired.right += SystemMetricsForDpi(SM_CXVSCROLL, dpi);
 	}
 
-	AdjustWindowRect(&rcDesired, dpi);
+	AdjustWindowRect(&rcDesired);
 	return rcDesired;
 }
 
@@ -3228,7 +3222,7 @@ int ListBoxX::TextOffset() const {
 
 int ListBoxX::CaretFromEdge() const {
 	PRectangle rc;
-	AdjustWindowRect(&rc, dpi);
+	AdjustWindowRect(&rc);
 	return TextOffset() + static_cast<int>(TextInset.x + (0 - rc.left) - 1);
 }
 
@@ -3448,17 +3442,12 @@ void ListBoxX::SetOptions(ListOptions options_) noexcept {
 	colorBackground = ColourOfElement(options_.back, COLOR_WINDOW);
 	colorHighlightText = ColourOfElement(options_.foreSelected, COLOR_HIGHLIGHTTEXT);
 	colorHighlightBack = ColourOfElement(options_.backSelected, COLOR_HIGHLIGHT);
+	frameStyle = FlagSet(options_.options, AutoCompleteOption::FixedSize) ? WS_BORDER : WS_THICKFRAME;
 }
 
-void ListBoxX::AdjustWindowRect(PRectangle *rc, UINT dpi) noexcept {
+void ListBoxX::AdjustWindowRect(PRectangle *rc) const noexcept {
 	RECT rcw = RectFromPRectangleEx(*rc);
-#if LISTBOXX_USE_THICKFRAME
-	AdjustWindowRectForDpi(&rcw, WS_THICKFRAME, WS_EX_WINDOWEDGE, dpi);
-#elif LISTBOXX_USE_BORDER
-	AdjustWindowRectForDpi(&rcw, WS_BORDER, WS_EX_WINDOWEDGE, dpi);
-#else
-	AdjustWindowRectForDpi(&rcw, 0, WS_EX_WINDOWEDGE, dpi);
-#endif
+	AdjustWindowRectForDpi(&rcw, frameStyle, WS_EX_WINDOWEDGE, dpi);
 	*rc = PRectangleFromRectEx(rcw);
 #if LISTBOXX_USE_FAKE_FRAME
 	*rc = rc->Inflate(ListBoxXFakeFrameSize, ListBoxXFakeFrameSize);
@@ -3480,7 +3469,7 @@ int ListBoxX::MinClientWidth() const noexcept {
 
 POINT ListBoxX::MinTrackSize() const {
 	PRectangle rc = PRectangle::FromInts(0, 0, MinClientWidth(), ItemHeight());
-	AdjustWindowRect(&rc, dpi);
+	AdjustWindowRect(&rc);
 	POINT ret = { static_cast<LONG>(rc.Width()), static_cast<LONG>(rc.Height()) };
 	return ret;
 }
@@ -3491,7 +3480,7 @@ POINT ListBoxX::MaxTrackSize() const {
 	PRectangle rc = PRectangle::FromInts(0, 0,
 		std::max(MinClientWidth(), width),
 		ItemHeight() * lti.Count());
-	AdjustWindowRect(&rc, dpi);
+	AdjustWindowRect(&rc);
 	POINT ret = { static_cast<LONG>(rc.Width()), static_cast<LONG>(rc.Height()) };
 	return ret;
 }
@@ -3606,10 +3595,9 @@ LRESULT ListBoxX::NcHitTest(WPARAM wParam, LPARAM lParam) const noexcept {
 			hit += HTBOTTOM - HTTOP;
 		}
 	}
-#if LISTBOXX_USE_BORDER || LISTBOXX_USE_FAKE_FRAME
-	else if (hit < HTSIZEFIRST || hit > HTSIZELAST) {
+	else if ((hit < HTSIZEFIRST || hit > HTSIZELAST) && (frameStyle == WS_BORDER)) {
 		const int cx = SystemMetricsForDpi(SM_CXVSCROLL, dpi);
-#if LISTBOXX_USE_BORDER
+#if !LISTBOXX_USE_FAKE_FRAME
 		const PRectangle rcInner = rc.Deflate(SystemMetricsForDpi(SM_CXBORDER, dpi), SystemMetricsForDpi(SM_CYBORDER, dpi));
 #else
 		const PRectangle rcInner = rc.Deflate(ListBoxXFakeFrameSize, ListBoxXFakeFrameSize);
@@ -3633,7 +3621,6 @@ LRESULT ListBoxX::NcHitTest(WPARAM wParam, LPARAM lParam) const noexcept {
 		const int h = x + y;
 		hit = h ? (9 + h) : HTERROR;
 	}
-#endif
 
 	// Never permit resizing that moves the left edge. Allow movement of top or bottom edge
 	// depending on whether the list is above or below the caret
@@ -3748,9 +3735,8 @@ LRESULT CALLBACK ListBoxX::ControlWndProc(HWND hWnd, UINT iMessage, WPARAM wPara
 			// We must take control of selection to prevent the ListBox activating
 			// the popup
 			const LRESULT lResult = ::SendMessage(hWnd, LB_ITEMFROMPOINT, 0, lParam);
-			const int item = LOWORD(lResult);
-			if (HIWORD(lResult) == 0 && item >= 0) {
-				ListBox_SetCurSel(hWnd, item);
+			if (HIWORD(lResult) == 0) {
+				ListBox_SetCurSel(hWnd, LOWORD(lResult));
 				if (lbx) {
 					lbx->OnSelChange();
 				}

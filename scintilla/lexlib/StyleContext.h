@@ -16,8 +16,7 @@ class StyleContext final {
 public:
 	LexAccessor &styler;
 private:
-	Sci_PositionU endPos;
-	const Sci_PositionU lengthDocument;
+	const Sci_PositionU endPos;
 #if 0
 	// Used for optimizing GetRelativeCharacter
 	Sci_PositionU posRelative = 0;
@@ -39,7 +38,7 @@ private:
 public:
 	Sci_PositionU currentPos;
 	Sci_Line currentLine;
-	Sci_Line lineDocEnd;
+	const Sci_Line lineDocEnd;
 	//Sci_PositionU lineEnd;
 	Sci_PositionU lineStartNext;
 	const bool multiByteAccess;
@@ -55,19 +54,15 @@ public:
 	StyleContext(Sci_PositionU startPos, Sci_PositionU length,
 		int initStyle, LexAccessor &styler_) noexcept :
 	styler(styler_),
-	endPos(startPos + length),
-	lengthDocument(styler.Length()),
+	endPos(styler.StyleEndPos(startPos, length)),
+	currentLine(styler.GetLine(startPos)),
+	lineDocEnd(styler.GetLine(styler.Length())),
 	multiByteAccess(styler.Encoding() == EncodingType::dbcs),
 	state(initStyle) {
 		styler.StartAt(startPos);
 		styler.StartSegment(startPos);
-		currentLine = styler.GetLine(startPos);
 		//lineEnd = styler.LineEnd(currentLine);
 		lineStartNext = styler.LineStart(currentLine + 1);
-		if (endPos == lengthDocument) {
-			endPos++;
-		}
-		lineDocEnd = styler.GetLine(lengthDocument);
 		atLineStart = static_cast<Sci_PositionU>(styler.LineStart(currentLine)) == startPos;
 		SeekTo(startPos);
 	}
@@ -77,7 +72,11 @@ public:
 	StyleContext &operator=(const StyleContext &) = delete;
 	StyleContext &operator=(StyleContext &&) = delete;
 	void Complete() {
-		styler.ColourTo(currentPos - ((currentPos > lengthDocument) + 1), state);
+#ifndef NDEBUG
+		styler.ColorTo(sci::min<Sci_PositionU>(currentPos, styler.Length()), state);
+#else
+		styler.ColorTo(currentPos, state);
+#endif
 		styler.Flush();
 	}
 	bool More() const noexcept {
@@ -124,7 +123,11 @@ public:
 		state = state_;
 	}
 	void SetState(int state_) {
-		styler.ColourTo(currentPos - ((currentPos > lengthDocument) + 1), state);
+#ifndef NDEBUG
+		styler.ColorTo(sci::min<Sci_PositionU>(currentPos, styler.Length()), state);
+#else
+		styler.ColorTo(currentPos, state);
+#endif
 		state = state_;
 	}
 	void ForwardSetState(int state_) {
@@ -166,6 +169,9 @@ public:
 #endif
 		// fast version for single byte encodings
 		return static_cast<unsigned char>(styler.SafeGetCharAt(currentPos + n));
+	}
+	bool AtDocumentEnd() const noexcept {
+		return currentPos == static_cast<Sci_PositionU>(styler.Length());
 	}
 	bool MatchLineEnd() const noexcept {
 		//return currentPos == lineEnd;
@@ -238,6 +244,14 @@ public:
 
 	void Rewind() noexcept {
 		SeekTo(styler.GetStartSegment());
+	}
+
+	void BackTo(Sci_PositionU startPos) {
+		assert(startPos < styler.GetStartSegment());
+		styler.Flush();
+		styler.StartAt(startPos);
+		styler.StartSegment(startPos);
+		SeekTo(startPos);
 	}
 
 	void Advance(Sci_Position nb) noexcept {

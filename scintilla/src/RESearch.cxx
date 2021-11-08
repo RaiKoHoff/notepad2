@@ -202,6 +202,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 
 #include <stdexcept>
@@ -271,10 +272,6 @@ RESearch::RESearch(const CharClassify *charClassTable) {
 	std::fill(bittab, std::end(bittab), nul);
 	std::fill(tagstk, std::end(tagstk), 0);
 	std::fill(nfa, std::end(nfa), '\0');
-	Clear();
-}
-
-RESearch::~RESearch() {
 	Clear();
 }
 

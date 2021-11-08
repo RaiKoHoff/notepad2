@@ -40,7 +40,7 @@ void ColourisePropsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 	//	For properties files, set to 0 to style all lines that start with whitespace in the default style.
 	//	This is not suitable for SciTE .properties files which use indentation for flow control but
 	//	can be used for RFC2822 text where indentation is used for continuation lines.
-	const bool allowInitialSpaces = styler.GetPropertyInt("lexer.props.allow.initial.spaces", 1) != 0;
+	const bool allowInitialSpaces = styler.GetPropertyInt("lexer.props.allow.initial.spaces", 1) & true;
 
 	const Sci_Position endPos = startPos + lengthDoc;
 	const Sci_Line maxLines = styler.GetLine((endPos == styler.Length()) ? endPos : endPos - 1);
@@ -76,18 +76,19 @@ void ColourisePropsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 		} else if (ch == '[') {
 			initStyle = SCE_PROPS_SECTION;
 		} else if (ch == '@') {
-			styler.ColourTo(i, SCE_PROPS_DEFVAL);
-			const char chNext = styler[++i];
+			++i;
+			styler.ColorTo(i, SCE_PROPS_DEFVAL);
+			const char chNext = styler[i];
 			if (IsAssignChar(chNext)) {
-				styler.ColourTo(i, SCE_PROPS_ASSIGNMENT);
+				styler.ColorTo(i + 1, SCE_PROPS_ASSIGNMENT);
 			}
 		} else if (allowInitialSpaces || !isspacechar(ch)) {
 			while (i < lineStartNext) {
 				ch = styler[i];
 				if (IsAssignChar(ch)) {
-					styler.ColourTo(i - 1, SCE_PROPS_KEY);
-					styler.ColourTo(i, SCE_PROPS_ASSIGNMENT);
+					styler.ColorTo(i, SCE_PROPS_KEY);
 					++i;
+					styler.ColorTo(i, SCE_PROPS_ASSIGNMENT);
 					break;
 				}
 				// ignore trail byte in DBCS character
@@ -98,9 +99,11 @@ void ColourisePropsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 			while (i < lineStartNext) {
 				ch = styler[i];
 				if (IsCommentChar(ch) && IsASpaceOrTab(chPrev))	{
-					styler.ColourTo(i - 1, SCE_PROPS_DEFAULT);
+					styler.ColorTo(i, SCE_PROPS_DEFAULT);
 					initStyle = SCE_PROPS_COMMENT;
+#if ENABLE_FOLD_PROPS_COMMENT
 					changed = true;
+#endif
 					break;
 				}
 				chPrev = ch;
@@ -109,7 +112,7 @@ void ColourisePropsDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 			}
 		}
 
-		styler.ColourTo(lineEndPos, initStyle);
+		styler.ColorTo(lineStartNext, initStyle);
 #if ENABLE_FOLD_PROPS_COMMENT
 		styler.SetLineState(lineCurrent, changed ? SCE_PROPS_DEFAULT : initStyle);
 #else

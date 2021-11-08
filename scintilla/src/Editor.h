@@ -193,6 +193,10 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	Window wMain;	///< The Scintilla parent window
 	Window wMargin;	///< May be separate when using a scroll view for wMain
 
+	// Optimization that avoids superfluous invalidations
+	bool redrawPendingText = false;
+	bool redrawPendingMargin = false;
+
 	/** Style resources may be expensive to allocate so are cached between uses.
 	 * When a style attribute is changed, this cache is flushed. */
 	bool stylesValid;
@@ -209,10 +213,10 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	bool mouseDownCaptures;
 	bool mouseWheelCaptures;
 
-	int xCaretMargin;	///< Ensure this many pixels visible on both sides of caret
 	bool horizontalScrollBarVisible;
-	int scrollWidth;
 	bool verticalScrollBarVisible;
+	int xCaretMargin;	///< Ensure this many pixels visible on both sides of caret
+	int scrollWidth;
 	int endAtLastLine;
 	Scintilla::CaretSticky caretSticky;
 	Scintilla::MarginOption marginOptions;
@@ -266,16 +270,16 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	enum class PaintState {
 		notPainting, painting, abandoned
 	} paintState;
-	bool paintAbandonedByStyling;
 	PRectangle rcPaint;
+	bool paintAbandonedByStyling;
 	bool paintingAllText;
 	bool willRedrawAll;
 	WorkNeeded workNeeded;
 	Scintilla::IdleStyling idleStyling;
 	bool needIdleStyling;
 
-	Scintilla::ModificationFlags modEventMask;
 	bool commandEvents;
+	Scintilla::ModificationFlags modEventMask;
 
 	SelectionText drag;
 
@@ -286,14 +290,13 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	Sci::Position searchAnchor;
 
 	bool recordingMacro;
+	bool convertPastes;
 
 	Scintilla::AutomaticFold foldAutomatic;
 
 	// Wrapping support
 	WrapPending wrapPending;
 	ActionDuration durationWrapOneUnit;
-
-	bool convertPastes;
 
 	Editor();
 	// ~Editor() in public section
@@ -612,7 +615,6 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	bool PositionIsHotspot(Sci::Position position) const noexcept;
 	bool SCICALL PointIsHotspot(Point pt);
 	void SetHotSpotRange(const Point *pt);
-	Range GetHotSpotRange() const noexcept override;
 	void SetHoverIndicatorPosition(Sci::Position position) noexcept;
 	void SCICALL SetHoverIndicatorPoint(Point pt);
 

@@ -604,6 +604,10 @@ NP2_inline void SciCall_StartStyling(Sci_Position start) {
 	SciCall(SCI_STARTSTYLING, start, 0);
 }
 
+NP2_inline int SciCall_GetLineState(Sci_Line line) {
+	return (int)SciCall(SCI_GETLINESTATE, line, 0);
+}
+
 // Style definition
 
 NP2_inline void SciCall_StyleResetDefault(void) {
@@ -674,6 +678,10 @@ NP2_inline void SciCall_StyleSetCase(int style, int caseVisible) {
 	SciCall(SCI_STYLESETCASE, style, caseVisible);
 }
 
+NP2_inline void SciCall_StyleSetCheckMonospaced(int style, BOOL checkMonospaced) {
+	SciCall(SCI_STYLESETCHECKMONOSPACED, style, checkMonospaced);
+}
+
 // Caret, selection, and hotspot styles
 
 NP2_inline void SciCall_SetElementColor(int element, COLORREF color) {
@@ -710,6 +718,10 @@ NP2_inline void SciCall_SetCaretLineFrame(int width) {
 
 NP2_inline void SciCall_SetCaretLineVisibleAlways(BOOL alwaysVisible) {
 	SciCall(SCI_SETCARETLINEVISIBLEALWAYS, alwaysVisible, 0);
+}
+
+NP2_inline void SciCall_SetCaretLineHighlightSubLine(BOOL subLine) {
+	SciCall(SCI_SETCARETLINEHIGHLIGHTSUBLINE, subLine, 0);
 }
 
 NP2_inline void SciCall_SetCaretPeriod(int periodMilliseconds) {
@@ -1037,16 +1049,16 @@ NP2_inline void SciCall_AutoCSetOrder(int ordere) {
 	SciCall(SCI_AUTOCSETORDER, ordere, 0);
 }
 
+NP2_inline void SciCall_AutoCSetOptions(int options) {
+	SciCall(SCI_AUTOCSETOPTIONS, options, 0);
+}
+
 NP2_inline void SciCall_AutoCSetDropRestOfWord(BOOL dropRestOfWord) {
 	SciCall(SCI_AUTOCSETDROPRESTOFWORD, dropRestOfWord, 0);
 }
 
 NP2_inline void SciCall_AutoCSetMaxHeight(int rowCount) {
 	SciCall(SCI_AUTOCSETMAXHEIGHT, rowCount, 0);
-}
-
-NP2_inline void SciCall_AutoCSetMaxWidth(int characterCount) {
-	SciCall(SCI_AUTOCSETMAXWIDTH, characterCount, 0);
 }
 
 NP2_inline BOOL SciCall_IsAutoCompletionWordCharacter(int ch) {

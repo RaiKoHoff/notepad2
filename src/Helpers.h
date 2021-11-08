@@ -167,7 +167,7 @@ NP2_inline int ToLowerA(int ch) {
 	return (ch >= 'A' && ch <= 'Z') ? (ch - 'A' + 'a') : ch;
 }
 
-NP2_inline int GetHexDigit(unsigned char ch) {
+NP2_inline int GetHexDigit(int ch) {
 	unsigned int diff = ch - '0';
 	if (diff < 10) {
 		return diff;
@@ -187,27 +187,13 @@ NP2_inline BOOL StrCaseEqual(LPCWSTR s1, LPCWSTR s2) {
 	return _wcsicmp(s1, s2) == 0;
 }
 
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN7) && !(defined(_MSC_VER) && _MSC_VER >= 1920)
-#define StrHasPrefix(s, prefix)				(FindStringOrdinal(FIND_STARTSWITH, (s), -1, (prefix), CSTRLEN(prefix), FALSE) == 0)
-#define StrHasPrefixCase(s, prefix)			(FindStringOrdinal(FIND_STARTSWITH, (s), -1, (prefix), CSTRLEN(prefix), TRUE) == 0)
-#define StrHasPrefixCaseEx(s, prefix, len)	(FindStringOrdinal(FIND_STARTSWITH, (s), -1, (prefix), (len), TRUE) == 0)
-
-NP2_inline LPWSTR StrStrEx(LPCWSTR pszFirst, LPCWSTR pszSrch, BOOL bIgnoreCase) {
-	const int index = FindStringOrdinal(FIND_FROMSTART, pszFirst, -1, pszSrch, -1, bIgnoreCase);
-	return (index == -1) ? NULL : (LPWSTR)(pszFirst + index);
-}
-
-#undef StrStr
-#undef StrStrI
-#define StrStr(pszFirst, pszSrch)			StrStrEx((pszFirst), (pszSrch), FALSE)
-#define StrStrI(pszFirst, pszSrch)			StrStrEx((pszFirst), (pszSrch), TRUE)
-#else
-#define StrHasPrefix(s, prefix)				(wcsncmp((s), (prefix), CSTRLEN(prefix)) == 0)
+#define StrCpyExW(s, t)						memcpy((s), (t), sizeof(WCHAR)*COUNTOF(t))
+#define StrEqualExW(s, t)					(memcmp((s), (t), sizeof(WCHAR)*COUNTOF(t)) == 0)
+#define StrHasPrefix(s, prefix)				(memcmp((s), (prefix), sizeof(WCHAR)*CSTRLEN(prefix)) == 0)
 #define StrHasPrefixCase(s, prefix)			(_wcsnicmp((s), (prefix), CSTRLEN(prefix)) == 0)
 #define StrHasPrefixCaseEx(s, prefix, len)	(_wcsnicmp((s), (prefix), (len)) == 0)
-#endif
 
-#define StrEqualA(s, t)						(memcmp((s), (t), COUNTOF(t)) == 0)
+#define StrEqualExA(s, t)					(memcmp((s), (t), COUNTOF(t)) == 0)
 #define StrStartsWith(s, prefix)			(memcmp((s), (prefix), CSTRLEN(prefix)) == 0)
 #define StrStartsWithCase(s, prefix)		(_strnicmp((s), (prefix), CSTRLEN(prefix)) == 0)
 #define StrStartsWithCaseEx(s, prefix, len)	(_strnicmp((s), (prefix), (len)) == 0)
@@ -293,7 +279,7 @@ extern DWORD g_uWinVer;
 extern WCHAR szIniFile[MAX_PATH];
 
 // Operating System Version
-// https://docs.microsoft.com/en-us/windows/desktop/SysInfo/operating-system-version
+// https://docs.microsoft.com/en-us/windows/win32/sysinfo/operating-system-version
 
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 #define IsVistaAndAbove()	TRUE
@@ -808,13 +794,35 @@ NP2_inline BOOL PathIsFile(LPCWSTR pszPath) {
 	return (GetFileAttributes(pszPath) & FILE_ATTRIBUTE_DIRECTORY) == 0;
 }
 
-void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, int cchDest,
-					   BOOL bSrcIsFile, BOOL bUnexpandEnv, BOOL bUnexpandMyDocs);
-void PathAbsoluteFromApp(LPCWSTR lpszSrc, LPWSTR lpszDest, int cchDest, BOOL bExpandEnv);
+NP2_inline BOOL PathIsSymbolicLink(LPCWSTR pszPath) {
+	// assume file exists, no check for INVALID_FILE_ATTRIBUTES.
+	return (GetFileAttributes(pszPath) & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+}
 
-BOOL PathIsLnkFile(LPCWSTR pszPath);
-BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath, int cchResPath);
-BOOL PathIsLnkToDirectory(LPCWSTR pszPath, LPWSTR pszResPath, int cchResPath);
+// https://docs.microsoft.com/en-us/windows/win32/intl/handling-sorting-in-your-applications#sort-strings-ordinally
+NP2_inline BOOL PathEqual(LPCWSTR pszPath1, LPCWSTR pszPath2) {
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+	return CompareStringOrdinal(pszPath1, -1, pszPath2, -1, TRUE) == CSTR_EQUAL;
+#else
+	return CompareString(LOCALE_INVARIANT, NORM_IGNORECASE, pszPath1, -1, pszPath2, -1) == CSTR_EQUAL;
+#endif
+}
+
+// similar to realpath() and std::filesystem::canonical()
+BOOL PathGetRealPath(HANDLE hFile, LPCWSTR lpszSrc, LPWSTR lpszDest);
+NP2_inline void GetProgramRealPath(LPWSTR tchModule, DWORD nSize) {
+	GetModuleFileName(NULL, tchModule, nSize);
+	// for symbolic link, module path is link's path not target's.
+	if (PathIsSymbolicLink(tchModule)) {
+		PathGetRealPath(NULL, tchModule, tchModule);
+	}
+}
+
+// similar to std::filesystem::equivalent()
+BOOL PathEquivalent(LPCWSTR pszPath1, LPCWSTR pszPath2);
+void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, BOOL bSrcIsFile, BOOL bUnexpandEnv, BOOL bUnexpandMyDocs);
+void PathAbsoluteFromApp(LPCWSTR lpszSrc, LPWSTR lpszDest, BOOL bExpandEnv);
+BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath);
 BOOL PathCreateDeskLnk(LPCWSTR pszDocument);
 BOOL PathCreateFavLnk(LPCWSTR pszName, LPCWSTR pszTarget, LPCWSTR pszDir);
 void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, BOOL bSelect);
@@ -831,8 +839,6 @@ void	StrTab2Space(LPWSTR lpsz);
 BOOL	PathFixBackslashes(LPWSTR lpsz);
 
 void	ExpandEnvironmentStringsEx(LPWSTR lpSrc, DWORD dwSrc);
-void	PathCanonicalizeEx(LPWSTR lpSrc);
-DWORD	GetLongPathNameEx(LPWSTR lpszPath, DWORD cchBuffer);
 DWORD_PTR SHGetFileInfo2(LPCWSTR pszPath, DWORD dwFileAttributes,
 						 SHFILEINFO *psfi, UINT cbFileInfo, UINT uFlags);
 
@@ -846,14 +852,12 @@ UINT	GetDlgItemTextA2W(UINT uCP, HWND hDlg, int nIDDlgItem, LPSTR lpString, int 
 void	SetDlgItemTextA2W(UINT uCP, HWND hDlg, int nIDDlgItem, LPCSTR lpString);
 void ComboBox_AddStringA2W(UINT uCP, HWND hwnd, LPCSTR lpString);
 
-UINT CodePageFromCharSet(UINT uCharSet);
-
 //==== MRU Functions ==========================================================
 #define MRU_MAXITEMS	32
 
 enum {
 	MRUFlags_Default = 0,
-	MRUFlags_CaseInsensitive = 1,
+	MRUFlags_FilePath = 1,
 	MRUFlags_QuoteValue = 2,
 };
 
@@ -870,13 +874,13 @@ typedef struct MRULIST {
 typedef const MRULIST * LPCMRULIST;
 
 LPMRULIST MRU_Create(LPCWSTR pszRegKey, int iFlags, int iSize);
-BOOL	MRU_Destroy(LPMRULIST pmru);
+void	MRU_Destroy(LPMRULIST pmru);
 BOOL	MRU_Add(LPMRULIST pmru, LPCWSTR pszNew);
 BOOL	MRU_AddMultiline(LPMRULIST pmru, LPCWSTR pszNew);
 BOOL	MRU_AddFile(LPMRULIST pmru, LPCWSTR pszFile, BOOL bRelativePath, BOOL bUnexpandMyDocs);
 BOOL	MRU_Delete(LPMRULIST pmru, int iIndex);
 BOOL	MRU_DeleteFileFromStore(LPCMRULIST pmru, LPCWSTR pszFile);
-BOOL	MRU_Empty(LPMRULIST pmru);
+void	MRU_Empty(LPMRULIST pmru);
 int 	MRU_Enum(LPCMRULIST pmru, int iIndex, LPWSTR pszItem, int cchItem);
 NP2_inline int MRU_GetCount(LPCMRULIST pmru) {
 	return MRU_Enum(pmru, 0, NULL, 0);

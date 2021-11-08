@@ -53,7 +53,7 @@
 HWND	hwndStatus;
 static HWND hwndToolbar;
 static HWND hwndReBar;
-static HWND hwndEdit;
+HWND	hwndEdit;
 static HWND hwndEditFrame;
 HWND	hwndMain;
 static HWND hwndNextCBChain = NULL;
@@ -144,18 +144,26 @@ static int iCallTipsWaitTime = 500; // 500 ms
 #endif
 static BOOL bViewWhiteSpace;
 static BOOL bViewEOLs;
+
+// DBCS code page
+int		iDefaultCodePage;
+int		iDefaultCharSet;
 int		iDefaultEncoding;
+int		iCurrentEncoding;
+static int iOriginalEncoding;
+int		iSrcEncoding = CPI_NONE;
+int		iWeakSrcEncoding = CPI_NONE;
 BOOL	bSkipUnicodeDetection;
 BOOL	bLoadANSIasUTF8;
 BOOL	bLoadASCIIasUTF8;
 BOOL	bLoadNFOasOEM;
 BOOL	bNoEncodingTags;
-int		iSrcEncoding = -1;
-int		iWeakSrcEncoding = -1;
+
 #if defined(_WIN64)
 BOOL	bLargeFileMode = FALSE;
 #endif
 int		iDefaultEOLMode;
+static int iCurrentEOLMode;
 BOOL	bWarnLineEndings;
 BOOL	bFixLineEndings;
 BOOL	bAutoStripBlanks;
@@ -249,13 +257,6 @@ FILEVARS	fvCurFile;
 static BOOL bModified;
 static BOOL bReadOnly = FALSE;
 BOOL bLockedForEditing = FALSE; // save call to SciCall_GetReadOnly()
-static int iOriginalEncoding;
-static int iEOLMode;
-
-int		iEncoding;
-// DBCS code page
-int		iDefaultCodePage;
-int		iDefaultCharSet;
 
 static Sci_Line iInitialLine;
 static Sci_Position iInitialColumn;
@@ -276,13 +277,12 @@ static UINT msgTaskbarCreated = 0;
 
 static WIN32_FIND_DATA fdCurFile;
 static EDITFINDREPLACE efrData;
-UINT	cpLastFind = 0;
 BOOL	bReplaceInitialized = FALSE;
 EditMarkAllStatus editMarkAllStatus;
 HANDLE idleTaskTimer;
 
-static int iSortOptions = 0;
-static int iAlignMode	= 0;
+static EditSortFlag iSortOptions = EditSortFlag_Ascending;
+static EditAlignMode iAlignMode	= EditAlignMode_Left;
 extern int iFontQuality;
 extern int iCaretStyle;
 extern int iOvrCaretStyle;
@@ -378,7 +378,7 @@ static int	flagRelaunchElevated	= 0;
 static int	flagDisplayHelp			= 0;
 
 static inline BOOL IsDocumentModified(void) {
-	return bModified || iEncoding != iOriginalEncoding;
+	return bModified || iCurrentEncoding != iOriginalEncoding;
 }
 
 static inline BOOL IsTopMost(void) {
@@ -845,10 +845,10 @@ void InitInstance(HINSTANCE hInstance, int nCmdShow) {
 			}
 		}
 	} else {
-		if (iSrcEncoding != -1) {
-			iEncoding = iSrcEncoding;
+		if (iSrcEncoding != CPI_NONE) {
+			iCurrentEncoding = iSrcEncoding;
 			iOriginalEncoding = iSrcEncoding;
-			SciCall_SetCodePage((iEncoding == CPI_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
+			SciCall_SetCodePage((iSrcEncoding == CPI_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
 		}
 	}
 
@@ -862,7 +862,7 @@ void InitInstance(HINSTANCE hInstance, int nCmdShow) {
 	}
 
 	// reset
-	iSrcEncoding = -1;
+	iSrcEncoding = CPI_NONE;
 	flagQuietCreate = 0;
 	fKeepTitleExcerpt = 0;
 
@@ -906,7 +906,6 @@ void InitInstance(HINSTANCE hInstance, int nCmdShow) {
 			const UINT cpEdit = SciCall_GetCodePage();
 			WideCharToMultiByte(cpEdit, 0, lpMatchArg, -1, efrData.szFind, COUNTOF(efrData.szFind), NULL, NULL);
 			WideCharToMultiByte(CP_UTF8, 0, lpMatchArg, -1, efrData.szFindUTF8, COUNTOF(efrData.szFindUTF8), NULL, NULL);
-			cpLastFind = cpEdit;
 
 			if (flagMatchText & 4) {
 				efrData.fuFlags |= SCFIND_REGEXP | SCFIND_POSIX;
@@ -1026,7 +1025,7 @@ static inline BOOL IsFileStartsWithDotLog(void) {
 	char tch[5] = "";
 	const Sci_Position len = SciCall_GetText(COUNTOF(tch), tch);
 	// upper case
-	return len >= 4 && StrEqualA(tch, ".LOG");
+	return len >= 4 && StrEqualExA(tch, ".LOG");
 }
 #endif
 
@@ -1271,7 +1270,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 					if (params->flagLexerSpecified) {
 						if (params->iInitialLexer <= 0) {
 							WCHAR wchExt[32] = L".";
-							lstrcpyn(CharNext(wchExt), StrEnd(&params->wchData) + 1, 30);
+							lstrcpyn(wchExt + 1, StrEnd(&params->wchData) + 1, COUNTOF(wchExt) - 1);
 							Style_SetLexerFromName(&params->wchData, wchExt);
 						} else {
 							Style_SetLexerFromID(params->iInitialLexer);
@@ -1284,7 +1283,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 					}
 				}
 				// reset
-				iSrcEncoding = -1;
+				iSrcEncoding = CPI_NONE;
 			}
 
 			if (params->flagJumpTo) {
@@ -1390,7 +1389,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 			if ((iFileWatchingMode == 2 && !IsDocumentModified()) || MsgBoxWarn(MB_YESNO, IDS_FILECHANGENOTIFY) == IDYES) {
 				const BOOL bIsTail = (iFileWatchingMode == 2) && (bFileWatchingKeepAtEnd || (SciCall_LineFromPosition(SciCall_GetCurrentPos()) + 1 == SciCall_GetLineCount()));
 
-				iWeakSrcEncoding = iEncoding;
+				iWeakSrcEncoding = iCurrentEncoding;
 				if (FileLoad(TRUE, FALSE, TRUE, FALSE, szCurFile)) {
 					if (bIsTail) {
 						SciCall_DocumentEnd();
@@ -1663,6 +1662,7 @@ HWND EditCreate(HWND hwndParent) {
 
 	// current line
 	SciCall_SetCaretLineVisibleAlways(TRUE);
+	SciCall_SetCaretLineHighlightSubLine(bHighlightCurrentSubLine);
 
 	// Long Lines
 	if (bMarkLongLines) {
@@ -1722,7 +1722,7 @@ void EditReplaceDocument(HANDLE pdoc) {
 	// reduce reference count to 1
 	SciCall_ReleaseDocument(pdoc);
 	SciCall_SetCodePage(cpEdit);
-	SciCall_SetEOLMode(iEOLMode);
+	SciCall_SetEOLMode(iCurrentEOLMode);
 }
 
 //=============================================================================
@@ -1792,7 +1792,7 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	DragAcceptFiles(hwnd, TRUE);
 
 	// File MRU
-	pFileMRU = MRU_Create(MRU_KEY_RECENT_FILES, MRUFlags_CaseInsensitive, MRU_MAX_RECENT_FILES);
+	pFileMRU = MRU_Create(MRU_KEY_RECENT_FILES, MRUFlags_FilePath, MRU_MAX_RECENT_FILES);
 	MRU_Load(pFileMRU);
 
 	mruFind = MRU_Create(MRU_KEY_RECENT_FIND, MRUFlags_QuoteValue, MRU_MAX_RECENT_FIND);
@@ -2105,13 +2105,13 @@ void UpdateStatusBarCache(int item) {
 		break;
 
 	case STATUS_CODEPAGE:
-		Encoding_GetLabel(iEncoding);
+		Encoding_GetLabel(iCurrentEncoding);
 		cachedStatusItem.updateMask |= StatusBarUpdateMask_CodePage;
 		UpdateStatusBarWidth();
 		break;
 
 	case STATUS_EOLMODE:
-		cachedStatusItem.pszEOLMode = (iEOLMode == SC_EOL_LF) ? L"LF" : ((iEOLMode == SC_EOL_CR) ? L"CR" : L"CR+LF");
+		cachedStatusItem.pszEOLMode = (iCurrentEOLMode == SC_EOL_LF) ? L"LF" : ((iCurrentEOLMode == SC_EOL_CR) ? L"CR" : L"CR+LF");
 		cachedStatusItem.updateMask |= StatusBarUpdateMask_EOLMode;
 		break;
 
@@ -2134,7 +2134,7 @@ void UpdateStatusBarWidth(void) {
 	const Sci_Position iBytes = SciCall_GetLength();
 
 	aWidth[1] = StatusCalcPaneWidth(hwndStatus, cachedStatusItem.pszLexerName) + 4;
-	aWidth[2] = StatusCalcPaneWidth(hwndStatus, mEncoding[iEncoding].wchLabel) + 4;
+	aWidth[2] = StatusCalcPaneWidth(hwndStatus, mEncoding[iCurrentEncoding].wchLabel) + 4;
 	aWidth[3] = StatusCalcPaneWidth(hwndStatus, L"CR+LF");
 	aWidth[4] = StatusCalcPaneWidth(hwndStatus, L"OVR");
 	aWidth[5] = StatusCalcPaneWidth(hwndStatus, L"500%");
@@ -2309,24 +2309,25 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	EnableCmd(hmenu, IDM_RECODE_SELECT, i);
 
-	if (mEncoding[iEncoding].uFlags & NCP_UNICODE_REVERSE) {
+	const UINT uFlags = mEncoding[iCurrentEncoding].uFlags;
+	if (uFlags & NCP_UNICODE_REVERSE) {
 		i = IDM_ENCODING_UNICODEREV;
-	} else if (mEncoding[iEncoding].uFlags & NCP_UNICODE) {
+	} else if (uFlags & NCP_UNICODE) {
 		i = IDM_ENCODING_UNICODE;
-	} else if (mEncoding[iEncoding].uFlags & NCP_UTF8_SIGN) {
+	} else if (uFlags & NCP_UTF8_SIGN) {
 		i = IDM_ENCODING_UTF8SIGN;
-	} else if (mEncoding[iEncoding].uFlags & NCP_UTF8) {
+	} else if (uFlags & NCP_UTF8) {
 		i = IDM_ENCODING_UTF8;
-	} else if (mEncoding[iEncoding].uFlags & NCP_DEFAULT) {
+	} else if (uFlags & NCP_DEFAULT) {
 		i = IDM_ENCODING_ANSI;
 	} else {
 		i = -1;
 	}
 	CheckMenuRadioItem(hmenu, IDM_ENCODING_ANSI, IDM_ENCODING_UTF8SIGN, i, MF_BYCOMMAND);
 
-	if (iEOLMode == SC_EOL_CRLF) {
+	if (iCurrentEOLMode == SC_EOL_CRLF) {
 		i = IDM_LINEENDINGS_CRLF;
-	} else if (iEOLMode == SC_EOL_LF) {
+	} else if (iCurrentEOLMode == SC_EOL_LF) {
 		i = IDM_LINEENDINGS_LF;
 	} else {
 		i = IDM_LINEENDINGS_CR;
@@ -2442,7 +2443,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	EnableCmd(hmenu, IDM_EDIT_LINECOMMENT, bCurrentLexerHasLineComment);
 	EnableCmd(hmenu, IDM_EDIT_STREAMCOMMENT, bCurrentLexerHasBlockComment);
 
-	EnableCmd(hmenu, IDM_EDIT_INSERT_ENCODING, *mEncoding[iEncoding].pszParseNames);
+	EnableCmd(hmenu, IDM_EDIT_INSERT_ENCODING, *mEncoding[iCurrentEncoding].pszParseNames);
 
 	//EnableCmd(hmenu, IDM_EDIT_INSERT_SHORTDATE, !bReadOnly);
 	//EnableCmd(hmenu, IDM_EDIT_INSERT_LONGDATE, !bReadOnly);
@@ -2534,6 +2535,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	CheckCmd(hmenu, IDM_VIEW_SHOWWHITESPACE, bViewWhiteSpace);
 	CheckCmd(hmenu, IDM_VIEW_SHOWEOLS, bViewEOLs);
 	CheckCmd(hmenu, IDM_VIEW_WORDWRAPSYMBOLS, bShowWordWrapSymbols);
+	EnableCmd(hmenu, IDM_VIEW_UNICODE_CONTROL_CHAR, iCurrentEncoding != CPI_DEFAULT);
 	CheckCmd(hmenu, IDM_VIEW_UNICODE_CONTROL_CHAR, bShowUnicodeControlCharacter);
 #if NP2_ENABLE_SHOW_CALLTIPS
 	CheckCmd(hmenu, IDM_VIEW_SHOWCALLTIPS, bShowCallTips);
@@ -2634,7 +2636,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 }
 
 static void ConvertLineEndings(int iNewEOLMode) {
-	iEOLMode = iNewEOLMode;
+	iCurrentEOLMode = iNewEOLMode;
 	SciCall_SetEOLMode(iNewEOLMode);
 	EditEnsureConsistentLineEndings();
 	UpdateStatusBarCache(STATUS_EOLMODE);
@@ -2683,7 +2685,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				return 0;
 			}
 
-			iWeakSrcEncoding = iEncoding;
+			iWeakSrcEncoding = iCurrentEncoding;
 			FileLoad(TRUE, FALSE, TRUE, FALSE, szCurFile);
 		}
 		break;
@@ -2884,10 +2886,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			WCHAR tchSelItem[MAX_PATH];
 
 			if (FavoritesDlg(hwnd, tchSelItem)) {
-				if (PathIsLnkToDirectory(tchSelItem, NULL, 0)) {
-					PathGetLnkPath(tchSelItem, tchSelItem, COUNTOF(tchSelItem));
-				}
-
+				PathGetLnkPath(tchSelItem, tchSelItem);
 				if (PathIsDirectory(tchSelItem)) {
 					WCHAR tchFile[MAX_PATH];
 
@@ -2948,7 +2947,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_ENCODING_UTF8:
 	case IDM_ENCODING_UTF8SIGN:
 	case IDM_ENCODING_SELECT: {
-		int iNewEncoding = iEncoding;
+		int iNewEncoding = iCurrentEncoding;
 		if (LOWORD(wParam) == IDM_ENCODING_SELECT && !SelectEncodingDlg(hwnd, &iNewEncoding, IDS_SELRECT_CURRENT_ENCODING)) {
 			break;
 		}
@@ -2971,15 +2970,15 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			break;
 		}
 
-		if (EditSetNewEncoding(iEncoding, iNewEncoding, (flagSetEncoding), StrIsEmpty(szCurFile))) {
+		if (EditSetNewEncoding(iCurrentEncoding, iNewEncoding, (flagSetEncoding), StrIsEmpty(szCurFile))) {
 			if (SciCall_GetLength() == 0) {
-				iEncoding = iNewEncoding;
+				iCurrentEncoding = iNewEncoding;
 				iOriginalEncoding = iNewEncoding;
 			} else {
-				if (iEncoding == CPI_DEFAULT || iNewEncoding == CPI_DEFAULT) {
-					iOriginalEncoding = -1;
+				if (iCurrentEncoding == CPI_DEFAULT || iNewEncoding == CPI_DEFAULT) {
+					iOriginalEncoding = CPI_NONE;
 				}
-				iEncoding = iNewEncoding;
+				iCurrentEncoding = iNewEncoding;
 			}
 
 			UpdateStatusBarCache(STATUS_CODEPAGE);
@@ -2993,7 +2992,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_RECODE_SELECT:
 		if (StrNotEmpty(szCurFile)) {
 			int iNewEncoding;
-			switch (iEncoding) {
+			switch (iCurrentEncoding) {
 			case CPI_DEFAULT:
 				iNewEncoding = -1;
 				break;
@@ -3007,7 +3006,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				iNewEncoding = CPI_UNICODEBE;
 				break;
 			default:
-				iNewEncoding = iEncoding;
+				iNewEncoding = iCurrentEncoding;
 				break;
 			}
 
@@ -3343,7 +3342,6 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		BeginWaitCursor();
 		SciCall_TargetFromSelection();
 		SciCall_LinesJoin();
-		EditJoinLinesEx();
 		EndWaitCursor();
 		break;
 
@@ -3466,10 +3464,10 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case IDM_EDIT_INSERT_ENCODING: {
-		if (*mEncoding[iEncoding].pszParseNames) {
+		if (*mEncoding[iCurrentEncoding].pszParseNames) {
 			char msz[64];
 			BOOL done = FALSE;
-			strncpy(msz, mEncoding[iEncoding].pszParseNames, COUNTOF(msz) - 1);
+			strncpy(msz, mEncoding[iCurrentEncoding].pszParseNames, COUNTOF(msz) - 1);
 			char *p;
 			if ((p = strchr(msz, ',')) != NULL) {
 				*p = '\0';
@@ -3534,10 +3532,10 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		char mszBuf[32];
 		FILETIME ft;
 		// Windows timestamp in 100-nanosecond
-#if _WIN32_WINNT < _WIN32_WINNT_WIN8
-		GetSystemTimeAsFileTime(&ft);
-#else
+#if _WIN32_WINNT >= _WIN32_WINNT_WIN8
 		GetSystemTimePreciseAsFileTime(&ft);
+#else
+		GetSystemTimeAsFileTime(&ft);
 #endif
 		uint64_t timestamp = (((uint64_t)(ft.dwHighDateTime)) << 32) | ft.dwLowDateTime;
 		// Between Jan 1, 1601 and Jan 1, 1970 there are 11644473600 seconds
@@ -3817,23 +3815,6 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				SendWMCommand(hwnd, IDM_EDIT_REPLACE);
 			}
 		} else {
-			const UINT cpEdit = SciCall_GetCodePage();
-			if (cpLastFind != cpEdit) {
-				if (cpEdit != SC_CP_UTF8) {
-					WCHAR wch[NP2_FIND_REPLACE_LIMIT];
-
-					MultiByteToWideChar(CP_UTF8, 0, efrData.szFindUTF8, -1, wch, COUNTOF(wch));
-					WideCharToMultiByte(cpEdit, 0, wch, -1, efrData.szFind, COUNTOF(efrData.szFind), NULL, NULL);
-
-					MultiByteToWideChar(CP_UTF8, 0, efrData.szReplaceUTF8, -1, wch, COUNTOF(wch));
-					WideCharToMultiByte(cpEdit, 0, wch, -1, efrData.szReplace, COUNTOF(efrData.szReplace), NULL, NULL);
-				} else {
-					strcpy(efrData.szFind, efrData.szFindUTF8);
-					strcpy(efrData.szReplace, efrData.szReplaceUTF8);
-				}
-			}
-
-			cpLastFind = cpEdit;
 			switch (LOWORD(wParam)) {
 			case IDM_EDIT_FINDNEXT:
 				EditFindNext(&efrData, FALSE);
@@ -4146,6 +4127,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_VIEW_HIGHLIGHTCURRENTLINE_SUBLINE:
 		bHighlightCurrentSubLine = !bHighlightCurrentSubLine;
+		SciCall_SetCaretLineHighlightSubLine(bHighlightCurrentSubLine);
 		break;
 
 	case IDM_VIEW_ZOOMIN:
@@ -4329,7 +4311,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_VIEW_SHOWFILENAMEFIRST:
 	case IDM_VIEW_SHOWFULLPATH:
 		iPathNameFormat = LOWORD(wParam) - IDM_VIEW_SHOWFILENAMEONLY;
-		lstrcpy(szTitleExcerpt, L"");
+		StrCpyExW(szTitleExcerpt, L"");
 		UpdateWindowTitle();
 		break;
 
@@ -4544,7 +4526,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_FILE_LARGE_FILE_MODE_RELOAD:
 		if (StrNotEmpty(szCurFile)) {
 			bLargeFileMode = TRUE;
-			iSrcEncoding = iEncoding;
+			iSrcEncoding = iCurrentEncoding;
 			FileLoad(FALSE, FALSE, TRUE, FALSE, szCurFile);
 			bLargeFileMode = SciCall_GetDocumentOptions() & SC_DOCUMENTOPTION_TEXT_LARGE;
 		}
@@ -4655,12 +4637,12 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				*lpsz = '\0';
 			}
 
-			cpLastFind = SciCall_GetCodePage();
+			const UINT cpEdit = SciCall_GetCodePage();
 			strcpy(efrData.szFind, mszSelection);
 
-			if (cpLastFind != SC_CP_UTF8) {
+			if (cpEdit != SC_CP_UTF8) {
 				WCHAR wszBuf[NP2_FIND_REPLACE_LIMIT];
-				MultiByteToWideChar(cpLastFind, 0, mszSelection, -1, wszBuf, COUNTOF(wszBuf));
+				MultiByteToWideChar(cpEdit, 0, mszSelection, -1, wszBuf, COUNTOF(wszBuf));
 				WideCharToMultiByte(CP_UTF8, 0, wszBuf, -1, efrData.szFindUTF8, COUNTOF(efrData.szFindUTF8), NULL, NULL);
 			} else {
 				strcpy(efrData.szFindUTF8, mszSelection);
@@ -4978,7 +4960,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				// Auto indent
 				if (ch == '\r' || ch == '\n') {
 					// in CRLF mode handle LF only...
-					if (autoCompletionConfig.bIndentText && ((SC_EOL_CRLF == iEOLMode && ch != '\n') || SC_EOL_CRLF != iEOLMode)) {
+					if (autoCompletionConfig.bIndentText && ((SC_EOL_CRLF == iCurrentEOLMode && ch != '\n') || SC_EOL_CRLF != iCurrentEOLMode)) {
 						EditAutoIndent();
 					}
 					return 0;
@@ -5149,7 +5131,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		break;
 
 		case SCN_CODEPAGECHANGED:
-			EditOnCodePageChanged(scn->oldCodePage);
+			EditOnCodePageChanged(scn->oldCodePage, bShowUnicodeControlCharacter, &efrData);
 			break;
 		}
 		break;
@@ -5224,14 +5206,14 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 				return TRUE;
 
 			case STATUS_EOLMODE:
-				if (iEOLMode == SC_EOL_CRLF) {
-					iEOLMode = SC_EOL_LF;
-				} else if (iEOLMode == SC_EOL_LF) {
-					iEOLMode = SC_EOL_CR;
+				if (iCurrentEOLMode == SC_EOL_CRLF) {
+					iCurrentEOLMode = SC_EOL_LF;
+				} else if (iCurrentEOLMode == SC_EOL_LF) {
+					iCurrentEOLMode = SC_EOL_CR;
 				} else {
-					iEOLMode = SC_EOL_CRLF;
+					iCurrentEOLMode = SC_EOL_CRLF;
 				}
-				ConvertLineEndings(iEOLMode);
+				ConvertLineEndings(iCurrentEOLMode);
 				return TRUE;
 
 			case STATUS_LEXER:
@@ -5331,32 +5313,32 @@ void LoadSettings(void) {
 
 	LPCWSTR strValue = IniSectionGetValue(pIniSection, L"OpenWithDir");
 	if (StrIsEmpty(strValue)) {
-#if _WIN32_WINNT < _WIN32_WINNT_VISTA
-		SHGetFolderPath(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, tchOpenWithDir);
-#else
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 		LPWSTR pszPath = NULL;
 		if (S_OK == SHGetKnownFolderPath(&FOLDERID_Desktop, KF_FLAG_DEFAULT, NULL, &pszPath)) {
 			lstrcpy(tchOpenWithDir, pszPath);
 			CoTaskMemFree(pszPath);
 		}
+#else
+		SHGetFolderPath(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, tchOpenWithDir);
 #endif
 	} else {
-		PathAbsoluteFromApp(strValue, tchOpenWithDir, COUNTOF(tchOpenWithDir), TRUE);
+		PathAbsoluteFromApp(strValue, tchOpenWithDir, TRUE);
 	}
 
 	strValue = IniSectionGetValue(pIniSection, L"Favorites");
 	if (StrIsEmpty(strValue)) {
-#if _WIN32_WINNT < _WIN32_WINNT_VISTA
-		SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, tchFavoritesDir);
-#else
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 		LPWSTR pszPath = NULL;
 		if (S_OK == SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &pszPath)) {
 			lstrcpy(tchFavoritesDir, pszPath);
 			CoTaskMemFree(pszPath);
 		}
+#else
+		SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, tchFavoritesDir);
 #endif
 	} else {
-		PathAbsoluteFromApp(strValue, tchFavoritesDir, COUNTOF(tchFavoritesDir), TRUE);
+		PathAbsoluteFromApp(strValue, tchFavoritesDir, TRUE);
 	}
 
 	int iValue = IniSectionGetInt(pIniSection, L"PathNameFormat", 1);
@@ -5461,7 +5443,7 @@ void LoadSettings(void) {
 	iDefaultEncoding = iValue;
 
 	bSkipUnicodeDetection = IniSectionGetBool(pIniSection, L"SkipUnicodeDetection", 1);
-	bLoadANSIasUTF8 = IniSectionGetBool(pIniSection, L"LoadANSIasUTF8", 0);
+	bLoadANSIasUTF8 = IniSectionGetBool(pIniSection, L"LoadANSIasUTF8", 1);
 	bLoadASCIIasUTF8 = IniSectionGetBool(pIniSection, L"LoadASCIIasUTF8", 1);
 	bLoadNFOasOEM = IniSectionGetBool(pIniSection, L"LoadNFOasOEM", 1);
 	bNoEncodingTags = IniSectionGetBool(pIniSection, L"NoEncodingTags", 0);
@@ -5629,7 +5611,7 @@ void SaveSettingsNow(BOOL bOnlySaveStyle, BOOL bQuiet) {
 		if (StrNotEmpty(szIniFile2)) {
 			if (CreateIniFile(szIniFile2)) {
 				lstrcpy(szIniFile, szIniFile2);
-				lstrcpy(szIniFile2, L"");
+				StrCpyExW(szIniFile2, L"");
 			} else {
 				bCreateFailure = TRUE;
 			}
@@ -5711,9 +5693,9 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 		IniSectionSetBoolEx(pIniSection, L"FindReplaceWildcardSearch", efrData.bWildcardSearch, 0);
 	}
 
-	PathRelativeToApp(tchOpenWithDir, wchTmp, COUNTOF(wchTmp), FALSE, TRUE, flagPortableMyDocs);
+	PathRelativeToApp(tchOpenWithDir, wchTmp, FALSE, TRUE, flagPortableMyDocs);
 	IniSectionSetString(pIniSection, L"OpenWithDir", wchTmp);
-	PathRelativeToApp(tchFavoritesDir, wchTmp, COUNTOF(wchTmp), FALSE, TRUE, flagPortableMyDocs);
+	PathRelativeToApp(tchFavoritesDir, wchTmp, FALSE, TRUE, flagPortableMyDocs);
 	IniSectionSetString(pIniSection, L"Favorites", wchTmp);
 	IniSectionSetIntEx(pIniSection, L"PathNameFormat", iPathNameFormat, 1);
 
@@ -5770,7 +5752,7 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	IniSectionSetBoolEx(pIniSection, L"ViewEOLs", bViewEOLs, 0);
 	IniSectionSetIntEx(pIniSection, L"DefaultEncoding", Encoding_MapIniSetting(FALSE, iDefaultEncoding), Encoding_MapIniSetting(FALSE, CPI_UTF8));
 	IniSectionSetBoolEx(pIniSection, L"SkipUnicodeDetection", bSkipUnicodeDetection, 1);
-	IniSectionSetBoolEx(pIniSection, L"LoadANSIasUTF8", bLoadANSIasUTF8, 0);
+	IniSectionSetBoolEx(pIniSection, L"LoadANSIasUTF8", bLoadANSIasUTF8, 1);
 	IniSectionSetBoolEx(pIniSection, L"LoadASCIIasUTF8", bLoadASCIIasUTF8, 1);
 	IniSectionSetBoolEx(pIniSection, L"LoadNFOasOEM", bLoadNFOasOEM, 1);
 	IniSectionSetBoolEx(pIniSection, L"NoEncodingTags", bNoEncodingTags, 0);
@@ -6140,7 +6122,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 
 		case L'F':
 			if (chNext == L'0' || chNext == L'O') {
-				lstrcpy(szIniFile, L"*?");
+				StrCpyExW(szIniFile, L"*?");
 				state = 1;
 			}
 			break;
@@ -6326,7 +6308,7 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 			flagDefaultPos = 0;
 			state = 1;
 			while (*p && state == 1) {
-				switch (ToUpperA(*p)) {
+				switch (ToUpperA(*p++)) {
 				case L'F':
 					flagDefaultPos &= ~(4 | 8 | 16 | 32);
 					flagDefaultPos |= 64;
@@ -6363,7 +6345,6 @@ int ParseCommandLineOption(LPWSTR lp1, LPWSTR lp2, BOOL *bIsNotepadReplacement) 
 					state = 0;
 					break;
 				}
-				p = CharNext(p);
 			}
 		}
 		break;
@@ -6531,9 +6512,7 @@ void ParseCommandLine(void) {
 			PathFixBackslashes(lpFileArg);
 			StrTrim(lpFileArg, L" \"");
 
-			if (!PathIsRelative(lpFileArg) && !PathIsUNC(lpFileArg) &&
-					PathGetDriveNumber(lpFileArg) == -1 /*&& PathGetDriveNumber(g_wchWorkingDirectory) != -1*/) {
-
+			if (!PathIsRelative(lpFileArg) && !PathIsUNC(lpFileArg) && PathGetDriveNumber(lpFileArg) == -1) {
 				WCHAR wchPath[MAX_PATH];
 				lstrcpy(wchPath, g_wchWorkingDirectory);
 				PathStripToRoot(wchPath);
@@ -6661,7 +6640,26 @@ BOOL CheckIniFile(LPWSTR lpszFile, LPCWSTR lpszModule) {
 			return TRUE;
 		}
 
-#if _WIN32_WINNT < _WIN32_WINNT_VISTA
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+		REFKNOWNFOLDERID rfidList[] = {
+			&FOLDERID_LocalAppData,
+			&FOLDERID_RoamingAppData,
+			&FOLDERID_Profile,
+		};
+		for (UINT i = 0; i < COUNTOF(rfidList); i++) {
+			LPWSTR pszPath = NULL;
+			if (S_OK == SHGetKnownFolderPath(rfidList[i], KF_FLAG_DEFAULT, NULL, &pszPath)) {
+				lstrcpy(tchBuild, pszPath);
+				CoTaskMemFree(pszPath);
+				PathAppend(tchBuild, WC_NOTEPAD2);
+				PathAppend(tchBuild, tchFileExpanded);
+				if (PathIsFile(tchBuild)) {
+					lstrcpy(lpszFile, tchBuild);
+					return TRUE;
+				}
+			}
+		}
+#else
 		const int csidlList[] = {
 			// %LOCALAPPDATA%
 			// C:\Users\<username>\AppData\Local
@@ -6677,25 +6675,6 @@ BOOL CheckIniFile(LPWSTR lpszFile, LPCWSTR lpszModule) {
 		};
 		for (UINT i = 0; i < COUNTOF(csidlList); i++) {
 			if (S_OK == SHGetFolderPath(NULL, csidlList[i], NULL, SHGFP_TYPE_CURRENT, tchBuild)) {
-				PathAppend(tchBuild, WC_NOTEPAD2);
-				PathAppend(tchBuild, tchFileExpanded);
-				if (PathIsFile(tchBuild)) {
-					lstrcpy(lpszFile, tchBuild);
-					return TRUE;
-				}
-			}
-		}
-#else
-		REFKNOWNFOLDERID rfidList[] = {
-			&FOLDERID_LocalAppData,
-			&FOLDERID_RoamingAppData,
-			&FOLDERID_Profile,
-		};
-		for (UINT i = 0; i < COUNTOF(rfidList); i++) {
-			LPWSTR pszPath = NULL;
-			if (S_OK == SHGetKnownFolderPath(rfidList[i], KF_FLAG_DEFAULT, NULL, &pszPath)) {
-				lstrcpy(tchBuild, pszPath);
-				CoTaskMemFree(pszPath);
 				PathAppend(tchBuild, WC_NOTEPAD2);
 				PathAppend(tchBuild, tchFileExpanded);
 				if (PathIsFile(tchBuild)) {
@@ -6734,14 +6713,15 @@ BOOL CheckIniFileRedirect(LPWSTR lpszFile, LPCWSTR lpszModule, LPCWSTR redirectK
 }
 
 BOOL FindIniFile(void) {
+	if (StrEqualExW(szIniFile, L"*?")) {
+		return FALSE;
+	}
+
 	WCHAR tchTest[MAX_PATH];
 	WCHAR tchModule[MAX_PATH];
-	GetModuleFileName(NULL, tchModule, COUNTOF(tchModule));
+	GetProgramRealPath(tchModule, COUNTOF(tchModule));
 
 	if (StrNotEmpty(szIniFile)) {
-		if (StrEqual(szIniFile, L"*?")) {
-			return FALSE;
-		}
 		if (!CheckIniFile(szIniFile, tchModule)) {
 			ExpandEnvironmentStringsEx(szIniFile, COUNTOF(szIniFile));
 			if (PathIsRelative(szIniFile)) {
@@ -6778,9 +6758,9 @@ BOOL FindIniFile(void) {
 }
 
 BOOL TestIniFile(void) {
-	if (StrEqual(szIniFile, L"*?")) {
-		lstrcpy(szIniFile2, L"");
-		lstrcpy(szIniFile, L"");
+	if (StrEqualExW(szIniFile, L"*?")) {
+		StrCpyExW(szIniFile2, L"");
+		StrCpyExW(szIniFile, L"");
 		return FALSE;
 	}
 
@@ -6789,9 +6769,9 @@ BOOL TestIniFile(void) {
 		return TRUE;
 	}
 
-	if ((dwFileAttributes != INVALID_FILE_ATTRIBUTES) || *CharPrev(szIniFile, StrEnd(szIniFile)) == L'\\') {
+	if ((dwFileAttributes != INVALID_FILE_ATTRIBUTES) || (StrNotEmpty(szIniFile) && szIniFile[lstrlen(szIniFile) - 1] == L'\\')) {
 		WCHAR wchModule[MAX_PATH];
-		GetModuleFileName(NULL, wchModule, COUNTOF(wchModule));
+		GetProgramRealPath(wchModule, COUNTOF(wchModule));
 		PathAppend(szIniFile, PathFindFileName(wchModule));
 		PathRenameExtension(szIniFile, L".ini");
 		dwFileAttributes = GetFileAttributes(szIniFile);
@@ -6808,7 +6788,7 @@ BOOL TestIniFile(void) {
 
 	if ((dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
 		lstrcpy(szIniFile2, szIniFile);
-		lstrcpy(szIniFile, L"");
+		StrCpyExW(szIniFile, L"");
 		return FALSE;
 	}
 
@@ -6833,7 +6813,7 @@ void FindExtraIniFile(LPWSTR lpszIniFile, LPCWSTR defaultName, LPCWSTR redirectK
 		lstrcpy(lpszIniFile, szIniFile);
 	} else {
 		// relative to program exe file
-		GetModuleFileName(NULL, lpszIniFile, MAX_PATH);
+		GetProgramRealPath(lpszIniFile, MAX_PATH);
 	}
 	lstrcpy(PathFindFileName(lpszIniFile), defaultName);
 }
@@ -6972,8 +6952,8 @@ void UpdateStatusbar(void) {
 	const Sci_Position iSelStart = SciCall_GetSelectionStart();
 	const Sci_Position iSelEnd = SciCall_GetSelectionEnd();
 	if (iSelStart == iSelEnd) {
-		lstrcpy(tchSelByte, L"0");
-		lstrcpy(tchSelChar, L"0");
+		StrCpyExW(tchSelByte, L"0");
+		StrCpyExW(tchSelChar, L"0");
 	} else if (!SciCall_IsRectangleSelection()) {
 		Sci_Position iSel = SciCall_GetSelTextLength() - 1;
 		PosToStrW(iSel, tchSelByte);
@@ -6982,21 +6962,21 @@ void UpdateStatusbar(void) {
 		PosToStrW(iSel, tchSelChar);
 		FormatNumberStr(tchSelChar);
 	} else {
-		lstrcpy(tchSelByte, L"--");
-		lstrcpy(tchSelChar, L"--");
+		StrCpyExW(tchSelByte, L"--");
+		StrCpyExW(tchSelChar, L"--");
 	}
 
 	// Print number of selected lines in statusbar
 	WCHAR tchLinesSelected[32];
 	WCHAR tchMatchesCount[32];
 	if (iSelStart == iSelEnd) {
-		lstrcpy(tchLinesSelected, L"0");
+		StrCpyExW(tchLinesSelected, L"0");
 	} else {
 		const Sci_Line iStartLine = SciCall_LineFromPosition(iSelStart);
 		const Sci_Line iEndLine = SciCall_LineFromPosition(iSelEnd);
 		const Sci_Position iStartOfLinePos = SciCall_PositionFromLine(iEndLine);
 		Sci_Line iLinesSelected = iEndLine - iStartLine;
-		if (iSelStart != iSelEnd && iStartOfLinePos != iSelEnd) {
+		if (iStartOfLinePos != iSelEnd) {
 			iLinesSelected += 1;
 		}
 		PosToStrW(iLinesSelected, tchLinesSelected);
@@ -7025,7 +7005,7 @@ void UpdateStatusbar(void) {
 		StatusSetText(hwndStatus, STATUS_LEXER, cachedStatusItem.pszLexerName);
 	}
 	if (updateMask & StatusBarUpdateMask_CodePage) {
-		StatusSetText(hwndStatus, STATUS_CODEPAGE, mEncoding[iEncoding].wchLabel);
+		StatusSetText(hwndStatus, STATUS_CODEPAGE, mEncoding[iCurrentEncoding].wchLabel);
 	}
 	if (updateMask & StatusBarUpdateMask_EOLMode) {
 		StatusSetText(hwndStatus, STATUS_EOLMODE, cachedStatusItem.pszEOLMode);
@@ -7183,7 +7163,7 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 
 	if (!bNew && StrNotEmpty(lpszFile)) {
 		lstrcpy(tch, lpszFile);
-		if (lpszFile == szCurFile || StrCaseEqual(lpszFile, szCurFile)) {
+		if (lpszFile == szCurFile || PathEqual(lpszFile, szCurFile)) {
 			iCurPos = SciCall_GetCurrentPos();
 			iAnchorPos = SciCall_GetAnchor();
 			iLine = SciCall_LineFromPosition(iCurPos) + 1;
@@ -7204,19 +7184,19 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 	}
 
 	if (bNew) {
-		lstrcpy(szCurFile, L"");
+		StrCpyExW(szCurFile, L"");
 		SetDlgItemText(hwndMain, IDC_FILENAME, szCurFile);
 		SetDlgItemInt(hwndMain, IDC_REUSELOCK, GetTickCount(), FALSE);
 		if (!keepTitleExcerpt) {
-			lstrcpy(szTitleExcerpt, L"");
+			StrCpyExW(szTitleExcerpt, L"");
 		}
 		FileVars_Init(NULL, 0, &fvCurFile);
 		EditSetEmptyText();
 		bModified = FALSE;
 		bReadOnly = FALSE;
-		iEOLMode = GetScintillaEOLMode(iDefaultEOLMode);
-		SciCall_SetEOLMode(iEOLMode);
-		iEncoding = iDefaultEncoding;
+		iCurrentEOLMode = GetScintillaEOLMode(iDefaultEOLMode);
+		SciCall_SetEOLMode(iCurrentEOLMode);
+		iCurrentEncoding = iDefaultEncoding;
 		iOriginalEncoding = iDefaultEncoding;
 		SciCall_SetCodePage((iDefaultEncoding == CPI_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
 		Style_SetLexer(NULL, TRUE);
@@ -7251,20 +7231,19 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 		lstrcpy(szFileName, tch);
 	}
 
-	PathCanonicalizeEx(szFileName);
-	GetLongPathNameEx(szFileName, COUNTOF(szFileName));
-
-	if (PathIsLnkFile(szFileName)) {
-		PathGetLnkPath(szFileName, szFileName, COUNTOF(szFileName));
+	if (PathCanonicalize(tch, szFileName)) {
+		lstrcpy(szFileName, tch);
 	}
+	GetLongPathName(szFileName, szFileName, COUNTOF(szFileName));
+	PathGetLnkPath(szFileName, szFileName);
 
 #if NP2_USE_DESIGNATED_INITIALIZER
 	EditFileIOStatus status = {
-		.iEncoding = iEncoding,
-		.iEOLMode = iEOLMode,
+		.iEncoding = iCurrentEncoding,
+		.iEOLMode = iCurrentEOLMode,
 	};
 #else
-	EditFileIOStatus status = { iEncoding, iEOLMode };
+	EditFileIOStatus status = { iCurrentEncoding, iCurrentEOLMode };
 #endif
 
 	// Ask to create a new file...
@@ -7280,16 +7259,16 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 				CloseHandle(hFile);
 				FileVars_Init(NULL, 0, &fvCurFile);
 				EditSetEmptyText();
-				iEOLMode = GetScintillaEOLMode(iDefaultEOLMode);
-				SciCall_SetEOLMode(iEOLMode);
-				if (iSrcEncoding != -1) {
-					iEncoding = iSrcEncoding;
+				iCurrentEOLMode = GetScintillaEOLMode(iDefaultEOLMode);
+				SciCall_SetEOLMode(iCurrentEOLMode);
+				if (iSrcEncoding != CPI_NONE) {
+					iCurrentEncoding = iSrcEncoding;
 					iOriginalEncoding = iSrcEncoding;
 				} else {
-					iEncoding = iDefaultEncoding;
+					iCurrentEncoding = iDefaultEncoding;
 					iOriginalEncoding = iDefaultEncoding;
 				}
-				SciCall_SetCodePage((iEncoding == CPI_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
+				SciCall_SetCodePage((iCurrentEncoding == CPI_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
 				Style_SetLexer(NULL, TRUE);
 				bReadOnly = FALSE;
 			}
@@ -7302,8 +7281,8 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 	} else {
 		fSuccess = FileIO(TRUE, szFileName, bNoEncDetect, &status);
 		if (fSuccess) {
-			iEncoding = status.iEncoding;
-			iEOLMode = status.iEOLMode;
+			iCurrentEncoding = status.iEncoding;
+			iCurrentEOLMode = status.iEOLMode;
 		}
 	}
 
@@ -7312,11 +7291,11 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 		SetDlgItemText(hwndMain, IDC_FILENAME, szCurFile);
 		SetDlgItemInt(hwndMain, IDC_REUSELOCK, GetTickCount(), FALSE);
 		if (!keepTitleExcerpt) {
-			lstrcpy(szTitleExcerpt, L"");
+			StrCpyExW(szTitleExcerpt, L"");
 		}
-		iOriginalEncoding = iEncoding;
+		iOriginalEncoding = iCurrentEncoding;
 		bModified = FALSE;
-		SciCall_SetEOLMode(iEOLMode);
+		SciCall_SetEOLMode(iCurrentEOLMode);
 		UpdateStatusBarCache(STATUS_CODEPAGE);
 		UpdateStatusBarCache(STATUS_EOLMODE);
 		UpdateStatusBarCacheLineColumn();
@@ -7325,7 +7304,7 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 		if (!keepCurrentLexer) {
 			if (flagLexerSpecified) {
 				if (pLexCurrent->rid == iInitialLexer) {
-					UpdateLineNumberWidth();
+					Style_SetLexer(pLexCurrent, TRUE);
 				} else if (lpSchemeArg) {
 					Style_SetLexerFromName(szCurFile, lpSchemeArg);
 					LocalFree(lpSchemeArg);
@@ -7354,7 +7333,7 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 		InstallFileWatching(FALSE);
 
 		// check for binary file (file with unknown encoding: ANSI)
-		const BOOL binary = (iEncoding == CPI_DEFAULT) && Style_MaybeBinaryFile(szCurFile);
+		const BOOL binary = (iCurrentEncoding == CPI_DEFAULT) && Style_MaybeBinaryFile(szCurFile);
 		if (binary || pLexCurrent->iLexer == SCLEX_DIFF) {
 			// ignore auto "detected" Tab settings for binary file and diff file.
 			if (fvCurFile.mask & FV_MaskHasFileTabSettings) {
@@ -7414,7 +7393,7 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 		// Show inconsistent line endings warning
 		if (status.bInconsistent && bWarnLineEndings) {
 			// file with unknown lexer and unknown encoding
-			bUnknownFile = bUnknownFile && (iEncoding == CPI_DEFAULT);
+			bUnknownFile = bUnknownFile && (iCurrentEncoding == CPI_DEFAULT);
 			// Set default button to "No" for diff/patch and unknown file.
 			// diff/patch file may contains content from files with different line endings.
 			status.bLineEndingsDefaultNo = bUnknownFile || pLexCurrent->iLexer == SCLEX_DIFF;
@@ -7478,11 +7457,11 @@ BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy) {
 	WCHAR tchFile[MAX_PATH];
 #if NP2_USE_DESIGNATED_INITIALIZER
 	EditFileIOStatus status = {
-		.iEncoding = iEncoding,
-		.iEOLMode = iEOLMode,
+		.iEncoding = iCurrentEncoding,
+		.iEOLMode = iCurrentEOLMode,
 	};
 #else
-	EditFileIOStatus status = { iEncoding, iEOLMode };
+	EditFileIOStatus status = { iCurrentEncoding, iCurrentEOLMode };
 #endif
 
 	// Read only...
@@ -7524,7 +7503,7 @@ BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy) {
 					SetDlgItemText(hwndMain, IDC_FILENAME, szCurFile);
 					SetDlgItemInt(hwndMain, IDC_REUSELOCK, GetTickCount(), FALSE);
 					if (!fKeepTitleExcerpt) {
-						lstrcpy(szTitleExcerpt, L"");
+						StrCpyExW(szTitleExcerpt, L"");
 					}
 					if (flagLexerSpecified) {
 						if (pLexCurrent->rid == iInitialLexer) {
@@ -7555,7 +7534,7 @@ BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy) {
 	if (fSuccess) {
 		if (!bSaveCopy) {
 			bModified = FALSE;
-			iOriginalEncoding = iEncoding;
+			iOriginalEncoding = iCurrentEncoding;
 			MRU_AddFile(pFileMRU, szCurFile, flagRelativeFileMRU, flagPortableMyDocs);
 			if (flagUseSystemMRU == 2) {
 				SHAddToRecentDocs(SHARD_PATHW, szCurFile);
@@ -7609,7 +7588,7 @@ BOOL OpenFileDlg(HWND hwnd, LPWSTR lpstrFile, int cchFile, LPCWSTR lpstrInitialD
 	}
 
 	WCHAR szFile[MAX_PATH];
-	lstrcpy(szFile, L"");
+	StrCpyExW(szFile, L"");
 	int lexers[1 + OPENDLG_MAX_LEXER_COUNT] = {0}; // 1-based filter index
 	LPWSTR szFilter = Style_GetOpenDlgFilterStr(TRUE, szCurFile, lexers);
 
@@ -7708,7 +7687,7 @@ BOOL SaveFileDlg(HWND hwnd, BOOL Untitled, LPWSTR lpstrFile, int cchFile, LPCWST
 *
 *
 ******************************************************************************/
-BOOL CALLBACK EnumWndProc(HWND hwnd, LPARAM lParam) {
+static BOOL CALLBACK EnumWindProcReuseWindow(HWND hwnd, LPARAM lParam) {
 	BOOL bContinue = TRUE;
 	WCHAR szClassName[64];
 
@@ -7726,7 +7705,7 @@ BOOL CALLBACK EnumWndProc(HWND hwnd, LPARAM lParam) {
 	return bContinue;
 }
 
-BOOL CALLBACK EnumWndProc2(HWND hwnd, LPARAM lParam) {
+static BOOL CALLBACK EnumWindProcSingleFileInstance(HWND hwnd, LPARAM lParam) {
 	BOOL bContinue = TRUE;
 	WCHAR szClassName[64];
 
@@ -7740,7 +7719,7 @@ BOOL CALLBACK EnumWndProc2(HWND hwnd, LPARAM lParam) {
 
 				WCHAR tchFileName[MAX_PATH] = L"";
 				GetDlgItemText(hwnd, IDC_FILENAME, tchFileName, COUNTOF(tchFileName));
-				if (StrCaseEqual(tchFileName, lpFileArg)) {
+				if (PathEquivalent(tchFileName, lpFileArg)) {
 					*(HWND *)lParam = hwnd;
 				} else {
 					bContinue = TRUE;
@@ -7766,10 +7745,10 @@ BOOL ActivatePrevInst(void) {
 			lstrcpy(lpFileArg, tchTmp);
 		}
 
-		GetLongPathNameEx(lpFileArg, MAX_PATH);
+		GetLongPathName(lpFileArg, lpFileArg, MAX_PATH);
 
 		HWND hwnd = NULL;
-		EnumWindows(EnumWndProc2, (LPARAM)&hwnd);
+		EnumWindows(EnumWindProcSingleFileInstance, (LPARAM)&hwnd);
 
 		if (hwnd != NULL) {
 			// Enabled
@@ -7808,7 +7787,7 @@ BOOL ActivatePrevInst(void) {
 				params->iInitialLine = iInitialLine;
 				params->iInitialColumn = iInitialColumn;
 
-				params->iSrcEncoding = (lpEncodingArg) ? Encoding_Match(lpEncodingArg) : -1;
+				params->iSrcEncoding = (lpEncodingArg) ? Encoding_Match(lpEncodingArg) : CPI_NONE;
 				params->flagSetEncoding = flagSetEncoding;
 				params->flagSetEOLMode = flagSetEOLMode;
 				params->flagTitleExcerpt = 0;
@@ -7837,7 +7816,7 @@ BOOL ActivatePrevInst(void) {
 	}
 
 	HWND hwnd = NULL;
-	EnumWindows(EnumWndProc, (LPARAM)&hwnd);
+	EnumWindows(EnumWindProcReuseWindow, (LPARAM)&hwnd);
 
 	// Found a window
 	if (hwnd != NULL) {
@@ -7895,7 +7874,7 @@ BOOL ActivatePrevInst(void) {
 				params->iInitialLine = iInitialLine;
 				params->iInitialColumn = iInitialColumn;
 
-				params->iSrcEncoding = (lpEncodingArg) ? Encoding_Match(lpEncodingArg) : -1;
+				params->iSrcEncoding = (lpEncodingArg) ? Encoding_Match(lpEncodingArg) : CPI_NONE;
 				params->flagSetEncoding = flagSetEncoding;
 				params->flagSetEOLMode = flagSetEOLMode;
 
@@ -7940,13 +7919,13 @@ BOOL RelaunchMultiInst(void) {
 		LPWSTR lp2 = (LPWSTR)NP2HeapAlloc(cmdSize);
 
 		StrTab2Space(lpCmdLineNew);
-		lstrcpy(lpCmdLineNew + cchiFileList, L"");
+		StrCpyExW(lpCmdLineNew + cchiFileList, L"");
 
-		LPWSTR pwch = CharPrev(lpCmdLineNew, StrEnd(lpCmdLineNew));
+		LPWSTR pwch = StrEnd(lpCmdLineNew) - 1;
 		int i = 0;
 		while (*pwch == L' ' || *pwch == L'-' || *pwch == L'+') {
 			*pwch = L' ';
-			pwch = CharPrev(lpCmdLineNew, pwch);
+			pwch--;
 			if (i++ > 1) {
 				cchiFileList--;
 			}
@@ -8031,7 +8010,7 @@ void GetRelaunchParameters(LPWSTR szParameters, LPCWSTR lpszFile, BOOL newWind, 
 
 	if (!emptyWind && StrNotEmpty(lpszFile)) {
 		// file encoding
-		switch (iEncoding) {
+		switch (iCurrentEncoding) {
 		case CPI_DEFAULT:
 			lstrcat(szParameters, L" -ansi");
 			break;
@@ -8055,7 +8034,7 @@ void GetRelaunchParameters(LPWSTR szParameters, LPCWSTR lpszFile, BOOL newWind, 
 			break;
 
 		default: {
-			const char *enc = mEncoding[iEncoding].pszParseNames;
+			const char *enc = mEncoding[iCurrentEncoding].pszParseNames;
 			const char *sep = strchr(enc, ',');
 			ZeroMemory(tch, sizeof(tch));
 			MultiByteToWideChar(CP_UTF8, 0, enc, (int)(sep - enc), tch, COUNTOF(tch));
@@ -8132,7 +8111,7 @@ BOOL RelaunchElevated(void) {
 				return FALSE;
 			}
 
-			exit = StrCaseEqual(tchFile, szCurFile);
+			exit = PathEqual(tchFile, szCurFile);
 			lpArg1 = (LPWSTR)NP2HeapAlloc(sizeof(WCHAR) * MAX_PATH);
 			GetModuleFileName(NULL, lpArg1, MAX_PATH);
 			lpArg2 = (LPWSTR)NP2HeapAlloc(sizeof(WCHAR) * 1024);
@@ -8271,9 +8250,9 @@ void SetNotifyIconTitle(HWND hwnd) {
 	}
 
 	if (IsDocumentModified()) {
-		lstrcpy(nid.szTip, L"* ");
+		StrCpyExW(nid.szTip, L"* ");
 	} else {
-		lstrcpy(nid.szTip, L"");
+		StrCpyExW(nid.szTip, L"");
 	}
 	lstrcat(nid.szTip, tchTitle);
 

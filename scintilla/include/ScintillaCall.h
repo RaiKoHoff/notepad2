@@ -194,6 +194,8 @@ public:
 	Scintilla::FontWeight StyleGetWeight(int style);
 	void StyleSetCharacterSet(int style, Scintilla::CharacterSet characterSet);
 	void StyleSetHotSpot(int style, bool hotspot);
+	void StyleSetCheckMonospaced(int style, bool checkMonospaced);
+	bool StyleGetCheckMonospaced(int style);
 	void SetElementColour(Scintilla::Element element, ColourAlpha colourElement);
 	ColourAlpha ElementColour(Scintilla::Element element);
 	void ResetElementColour(Scintilla::Element element);
@@ -207,6 +209,8 @@ public:
 	void SetSelectionLayer(Scintilla::Layer layer);
 	Scintilla::Layer CaretLineLayer();
 	void SetCaretLineLayer(Scintilla::Layer layer);
+	bool CaretLineHighlightSubLine();
+	void SetCaretLineHighlightSubLine(bool subLine);
 	void AssignCmdKey(int keyDefinition, int sciCommand);
 	void ClearCmdKey(int keyDefinition);
 	void ClearAllCmdKeys();
@@ -263,6 +267,8 @@ public:
 	void UserListShow(int listType, const char *itemList);
 	void AutoCSetAutoHide(bool autoHide);
 	bool AutoCGetAutoHide();
+	void AutoCSetOptions(Scintilla::AutoCompleteOption options);
+	Scintilla::AutoCompleteOption AutoCGetOptions();
 	void AutoCSetDropRestOfWord(bool dropRestOfWord);
 	bool AutoCGetDropRestOfWord();
 	void RegisterImage(int type, const char *xpmData);
@@ -827,7 +833,7 @@ public:
 	std::string DescribeProperty(const char *name);
 	int DescribeKeyWordSets(char *descriptions);
 	std::string DescribeKeyWordSets();
-	int LineEndTypesSupported();
+	Scintilla::LineEndType LineEndTypesSupported();
 	int AllocateSubStyles(int styleBase, int numberStyles);
 	int SubStylesStart(int styleBase);
 	int SubStylesLength(int styleBase);

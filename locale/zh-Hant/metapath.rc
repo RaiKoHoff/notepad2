@@ -227,14 +227,13 @@ BEGIN
     ICON            IDR_MAINWND,IDC_STATIC,7,7,20,20
     LTEXT           "",IDC_VERSION,45,7,200,8
     LTEXT           "",IDC_BUILD_INFO,45,18,200,8
-    LTEXT           "",IDC_COPYRIGHT,45,30,200,8
-    LTEXT           "",IDC_AUTHORNAME,130,30,200,8
+    LTEXT           "版權所有 © 1996-2012 Florian Balmer.",IDC_STATIC,45,30,200,8
     LTEXT           "",IDC_WEBPAGE_TEXT,45,40,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_WEBPAGE_LINK,"SysLink",WS_TABSTOP,45,40,200,10
-    LTEXT           "開啟 metapath 網站: ",IDC_STATIC,45,52,140,8
+    LTEXT           "版權所有 © 2011-2021 Zufu Liu 和所有貢獻者.",IDC_STATIC,45,52,200,8
     LTEXT           "",IDC_NEW_PAGE_TEXT,45,60,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_NEW_PAGE_LINK,"SysLink",WS_TABSTOP,45,60,200,10
-    LTEXT           "連絡 Florian Balmer: ",IDC_STATIC,45,72,140,8
+    LTEXT           "連絡 Florian Balmer:",IDC_STATIC,45,72,140,8
     LTEXT           "",IDC_EMAIL_TEXT,45,80,140,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_EMAIL_LINK,"SysLink",WS_TABSTOP,45,80,140,10
 END
@@ -639,7 +638,7 @@ BEGIN
     IDS_ERR_DROP1           "無權存取拖曳放置的檔案或資料夾。"
     //IDS_ERR_DROP2           "Only a single file or directory can be dropped at a time."
     IDS_ERR_FAVORITES       "無權存取「我的最愛」資料夾。\n請在「選項」對話框中指定合法的資料夾。"
-    IDS_ERR_LNK_GETPATH     "沒有可用於連結的物件的合法的檔案系統路徑。\n連結可能未指向一個檔案或資料夾。"
+    //IDS_ERR_LNK_GETPATH     "沒有可用於連結的物件的合法的檔案系統路徑。\n連結可能未指向一個檔案或資料夾。"
     IDS_ERR_LNK_NOACCESS    "無權存取連結物件的檔案系統路徑。\n請檢查磁碟或網路連線。"
     IDS_ERR_CREATELINK      "建立指定的連結時發生錯誤。\n可能目標資料夾被寫保護了。"
     IDS_ERR_FILTER          "沒有指定其他過濾項目。\n請參閱 metapath 自述檔案以取得更多資訊。"

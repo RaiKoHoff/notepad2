@@ -47,12 +47,12 @@ static void ColouriseMarkdownDoc(Sci_PositionU startPos, Sci_Position length, in
 		switch (state) {
 		}
 
-		if (state == SCE_C_DEFAULT) {
+		if (state == SCE_MARKDOWN_DEFAULT) {
 		}
 	}
 
 	// Colourise remaining document
-	styler.ColourTo(endPos - 1, state);
+	styler.ColorTo(endPos, state);
 }
 
 LexerModule lmMarkdown(SCLEX_MARKDOWN, ColouriseMarkdownDoc, "md", 0);

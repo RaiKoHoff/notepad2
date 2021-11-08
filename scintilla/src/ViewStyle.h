@@ -10,7 +10,7 @@ namespace Scintilla::Internal {
 
 /**
  */
-class MarginStyle {
+class MarginStyle final {
 public:
 	Scintilla::MarginType style;
 	ColourRGBA back;
@@ -24,16 +24,10 @@ public:
 
 /**
  */
-class FontRealised : public FontMeasurements {
+class FontRealised final {
 public:
+	FontMeasurements measurements;
 	std::shared_ptr<Font> font;
-	FontRealised() noexcept = default;
-	// FontRealised objects can not be copied.
-	FontRealised(const FontRealised &) = delete;
-	FontRealised(FontRealised &&) = delete;
-	FontRealised &operator=(const FontRealised &) = delete;
-	FontRealised &operator=(FontRealised &&) = delete;
-	virtual ~FontRealised() noexcept = default;
 	void Realise(Surface &surface, int zoomLevel, Scintilla::Technology technology, const FontSpecification &fs, const char *localeName);
 };
 
@@ -41,8 +35,8 @@ using FontMap = std::map<FontSpecification, std::unique_ptr<FontRealised>>;
 
 constexpr int GetFontSizeZoomed(int size, int zoomLevel) noexcept {
 	size = (size * zoomLevel + 50) / 100;
-	// Hangs if sizeZoomed (in point) <= 1
-	return std::max(size, 2 * Scintilla::FontSizeMultiplier);
+	// May fail if sizeZoomed (in point) < 1
+	return std::max(size, Scintilla::FontSizeMultiplier);
 }
 
 constexpr std::optional<ColourRGBA> OptionalColour(uptr_t wParam, sptr_t lParam) {
@@ -54,48 +48,48 @@ constexpr std::optional<ColourRGBA> OptionalColour(uptr_t wParam, sptr_t lParam)
 
 struct SelectionAppearance {
 	// Whether to draw on base layer or over text
-	Scintilla::Layer layer;
+	Scintilla::Layer layer = Layer::Base;
 	// Draw selection past line end characters up to right border
-	bool eolFilled;
-	int eolSelectedWidth;
+	bool eolFilled = false;
+	int eolSelectedWidth = 100;
 };
 
 struct CaretLineAppearance {
 	// Whether to draw on base layer or over text
-	Scintilla::Layer layer;
+	Scintilla::Layer layer = Layer::Base;
 	// Also show when non-focused
-	bool alwaysShow;
+	bool alwaysShow = false;
+	// highlight sub line instead of whole line
+	bool subLine = false;
 	// Non-0: draw a rectangle around line instead of filling line. Value is pixel width of frame
-	int frame;
+	int frame = 0;
 };
 
 struct CaretAppearance {
 	// Line, block, over-strike bar ...
-	Scintilla::CaretStyle style;
+	Scintilla::CaretStyle style = CaretStyle::Line;
 	// Width in pixels
-	int width;
+	int width = 1;
 };
 
 struct WrapAppearance {
 	// No wrapping, word, character, whitespace appearance
-	Scintilla::Wrap state;
+	Scintilla::Wrap state = Wrap::None;
 	// Show indication of wrap at line end, line start, or in margin
-	Scintilla::WrapVisualFlag visualFlags;
+	Scintilla::WrapVisualFlag visualFlags = WrapVisualFlag::None;
 	// Show indication near margin or near text
-	Scintilla::WrapVisualLocation visualFlagsLocation;
+	Scintilla::WrapVisualLocation visualFlagsLocation = WrapVisualLocation::Default;
 	// How much indentation to show wrapping
-	int visualStartIndent;
-	// WrapIndentMode::Fixed, _SAME, _INDENT, _DEEPINDENT
-	Scintilla::WrapIndentMode indentMode;
+	int visualStartIndent = 0;
+	// WrapIndentMode::Fixed, Same, Indent, DeepIndent
+	Scintilla::WrapIndentMode indentMode = WrapIndentMode::Fixed;
 };
 
 struct EdgeProperties {
 	int column;
 	ColourRGBA colour;
-	EdgeProperties(int column_ = 0, ColourRGBA colour_ = ColourRGBA(0)) noexcept :
+	constexpr EdgeProperties(int column_ = 0, ColourRGBA colour_ = ColourRGBA(0)) noexcept :
 		column(column_), colour(colour_) {}
-	EdgeProperties(Scintilla::uptr_t wParam, Scintilla::sptr_t lParam) noexcept :
-		column(static_cast<int>(wParam)), colour(ColourRGBA::FromIpRGB(lParam)) {}
 };
 
 // This is an old style enum so that its members can be used directly as indices without casting
@@ -112,23 +106,23 @@ enum StyleIndices {
 
 /**
  */
-class ViewStyle {
+class ViewStyle final {
 	UniqueStringSet fontNames;
 	FontMap fonts;
 public:
 	std::vector<Style> styles;
-	int nextExtendedStyle;
 	std::vector<LineMarker> markers;
-	int largestMarkerHeight;
 	std::vector<Indicator> indicators;
+	int nextExtendedStyle;
+	int largestMarkerHeight;
 	bool indicatorsDynamic;
 	bool indicatorsSetFore;
 	bool fontsValid;
 	Scintilla::Technology technology;
 	int lineHeight;
 	int lineOverlap;
-	unsigned int maxAscent;
-	unsigned int maxDescent;
+	XYPOSITION maxAscent;
+	XYPOSITION maxDescent;
 	XYPOSITION aveCharWidth;
 	XYPOSITION spaceWidth;
 	XYPOSITION tabWidth;
@@ -142,14 +136,14 @@ public:
 	std::optional<ColourRGBA> foldmarginColour;
 	std::optional<ColourRGBA> foldmarginHighlightColour;
 	bool hotspotUnderline;
+	bool marginInside;	///< true: margin included in text view, false: separate views
 	/// Margins are ordered: Line Numbers, Selection Margin, Spacing Margin
 	int leftMarginWidth;	///< Spacing margin on left of text
 	int rightMarginWidth;	///< Spacing margin on right of text
-	MarkerMask maskInLine;	///< Mask for markers to be put into text because there is nowhere for them to go in margin
-	MarkerMask maskDrawInText;///< Mask for markers that always draw in text
+	MarkerMask maskInLine = 0;	///< Mask for markers to be put into text because there is nowhere for them to go in margin
+	MarkerMask maskDrawInText = 0;///< Mask for markers that always draw in text
 	std::vector<MarginStyle> ms;
-	int fixedColumnWidth;	///< Total width of margins
-	bool marginInside;	///< true: margin included in text view, false: separate views
+	int fixedColumnWidth = 0;	///< Total width of margins
 	int textStart;	///< Starting x position of text within the view
 	/// 2018-09-04 Changed to a percent value
 	int zoomLevel;
@@ -160,7 +154,6 @@ public:
 	bool viewEOL;
 
 	CaretAppearance caret;
-
 	CaretLineAppearance caretLine;
 
 	bool someStylesProtected;
@@ -168,7 +161,7 @@ public:
 	Scintilla::FontQuality extraFontFlag;
 	int extraAscent;
 	int extraDescent;
-	int marginStyleOffset;
+
 	Scintilla::AnnotationVisible annotationVisible;
 	int annotationStyleOffset;
 	Scintilla::EOLAnnotationVisible eolAnnotationVisible;
@@ -177,9 +170,12 @@ public:
 	bool braceBadLightIndicatorSet;
 	int braceHighlightIndicator;
 	int braceBadLightIndicator;
+
 	Scintilla::EdgeVisualStyle edgeState;
 	EdgeProperties theEdge;
 	std::vector<EdgeProperties> theMultiEdge;
+
+	int marginStyleOffset;
 	int marginNumberPadding; // the right-side padding of the number margin
 	int ctrlCharPadding; // the padding around control character text blobs
 	int lastSegItalicsOffset; // the offset so as not to clip italic characters at EOLs
@@ -193,7 +189,7 @@ public:
 
 	std::string localeName;
 
-	ViewStyle();
+	ViewStyle(size_t stylesSize_ = 256);
 	ViewStyle(const ViewStyle &source);
 	ViewStyle(ViewStyle &&) = delete;
 	// Can only be copied through copy constructor which ensures font names initialised correctly
@@ -201,7 +197,6 @@ public:
 	ViewStyle &operator=(ViewStyle &&) = delete;
 	~ViewStyle();
 	void CalculateMarginWidthAndMask() noexcept;
-	void Init(size_t stylesSize_ = 256);
 	void Refresh(Surface &surface, int tabInChars);
 	void ReleaseAllExtendedStyles() noexcept;
 	int AllocateExtendedStyles(int numberStyles);
@@ -224,7 +219,7 @@ public:
 	bool WhitespaceBackgroundDrawn() const;
 	ColourRGBA WrapColour() const;
 
-	void AddMultiEdge(Scintilla::uptr_t wParam, Scintilla::sptr_t lParam);
+	void AddMultiEdge(int column, ColourRGBA colour);
 
 	std::optional<ColourRGBA> ElementColour(Scintilla::Element element) const;
 	bool ElementAllowsTranslucent(Scintilla::Element element) const;
@@ -243,15 +238,14 @@ public:
 
 	enum class CaretShape { invisible, line, block, bar };
 	bool IsBlockCaretStyle() const noexcept;
-	bool IsCaretVisible() const noexcept;
+	bool IsCaretVisible(bool isMainSelection) const noexcept;
 	bool DrawCaretInsideSelection(bool inOverstrike, bool imeCaretBlockOverride) const noexcept;
-	CaretShape CaretShapeForMode(bool inOverstrike, bool drawDrag, bool drawOverstrikeCaret, bool imeCaretBlockOverride) const noexcept;
+	CaretShape CaretShapeForMode(bool inOverstrike, bool isMainSelection, bool drawDrag, bool drawOverstrikeCaret, bool imeCaretBlockOverride) const noexcept;
 
 	bool ZoomIn() noexcept;
 	bool ZoomOut() noexcept;
 
 private:
-	void AllocStyles(size_t sizeNew);
 	void CreateAndAddFont(const FontSpecification &fs);
 	FontRealised *Find(const FontSpecification &fs) const;
 	void FindMaxAscentDescent() noexcept;

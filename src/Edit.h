@@ -47,21 +47,26 @@ typedef struct EDITFINDREPLACE {
 
 typedef const EDITFINDREPLACE * LPCEDITFINDREPLACE;
 
-#define ALIGN_LEFT			0
-#define ALIGN_RIGHT			1
-#define ALIGN_CENTER		2
-#define ALIGN_JUSTIFY		3
-#define ALIGN_JUSTIFY_EX	4
+typedef enum EditAlignMode {
+	EditAlignMode_Left = 0,
+	EditAlignMode_Right = 1,
+	EditAlignMode_Center = 2,
+	EditAlignMode_Justify = 3,
+	EditAlignMode_JustifyEx = 4,
+} EditAlignMode;
 
-#define SORT_ASCENDING		0
-#define SORT_DESCENDING		1
-#define SORT_SHUFFLE		2
-#define SORT_MERGEDUP		4
-#define SORT_UNIQDUP		8
-#define SORT_UNIQUNIQ		16
-#define SORT_NOCASE			32
-#define SORT_LOGICAL		64
-#define SORT_COLUMN			128
+typedef enum EditSortFlag {
+	EditSortFlag_Ascending = 0,
+	EditSortFlag_Descending = 1,
+	EditSortFlag_IgnoreCase = 2,
+	EditSortFlag_LogicalNumber = 4,
+	EditSortFlag_MergeDuplicate = 8,
+	EditSortFlag_RemoveDuplicate = 16,
+	EditSortFlag_RemoveUnique = 32,
+	EditSortFlag_Shuffle = 64,
+	EditSortFlag_ColumnSort = 128,
+	EditSortFlag_GroupByFileType = 256,
+} EditSortFlag;
 
 // wrap indent
 enum {
@@ -113,8 +118,8 @@ char*	EditGetClipboardText(HWND hwnd); // LocalFree()
 BOOL	EditCopyAppend(HWND hwnd);
 
 static inline int GetScintillaEOLMode(int mode) {
-	const int mask = SC_EOL_CRLF | (SC_EOL_LF << 4) | (SC_EOL_CR << 8);
-	return (mask >> (mode << 2)) & 0x0f;
+	const int mask = SC_EOL_CRLF | (SC_EOL_LF << 2) | (SC_EOL_CR << 4);
+	return (mask >> (mode << 1)) & 3;
 }
 
 struct EditFileIOStatus;
@@ -144,7 +149,7 @@ void	EditSpacesToTabs(int nTabWidth, BOOL bOnlyIndentingWS);
 void	EditMoveUp(void);
 void	EditMoveDown(void);
 void	EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend);
-void	EditAlignText(int nMode);
+void	EditAlignText(EditAlignMode nMode);
 void	EditEncloseSelection(LPCWSTR pwszOpen, LPCWSTR pwszClose);
 void	EditToggleLineComments(LPCWSTR pwszComment, BOOL bInsertAtStart);
 void	EditPadWithSpaces(BOOL bSkipEmpty, BOOL bNoUndoGroup);
@@ -156,7 +161,7 @@ void	EditCompressSpaces(void);
 void	EditRemoveBlankLines(BOOL bMerge);
 void	EditWrapToColumn(int nColumn/*, int nTabWidth*/);
 void	EditJoinLinesEx(void);
-void	EditSortLines(int iSortFlags);
+void	EditSortLines(EditSortFlag iSortFlags);
 
 void	EditJumpTo(Sci_Line iNewLine, Sci_Position iNewCol);
 void	EditSelectEx(Sci_Position iAnchorPos, Sci_Position iCurrentPos);
@@ -182,8 +187,8 @@ void	EditInsertDateTime(BOOL bShort);
 void	EditUpdateTimestampMatchTemplate(HWND hwnd);
 void	EditInsertUnicodeControlCharacter(int menu);
 void	EditShowUnicodeControlCharacter(BOOL bShow);
-BOOL	EditSortDlg(HWND hwnd, int *piSortFlags);
-BOOL	EditAlignDlg(HWND hwnd, int *piAlignMode);
+BOOL	EditSortDlg(HWND hwnd, EditSortFlag *piSortFlags);
+BOOL	EditAlignDlg(HWND hwnd, EditAlignMode *piAlignMode);
 void	EditSelectionAction(int action);
 void	TryBrowseFile(HWND hwnd, LPCWSTR pszFile, BOOL bWarn);
 void	EditOpenSelection(int type);
@@ -355,9 +360,46 @@ typedef struct NP2ENCODING {
 	LPWSTR wchLabel;
 } NP2ENCODING;
 
-// https://www.unicode.org/faq/utf_bom.html
+// see UniConversion.h and https://www.unicode.org/faq/utf_bom.html
+#define SURROGATE_LEAD_FIRST		0xD800
+#define SURROGATE_TRAIL_FIRST		0xDC00
+#define SUPPLEMENTAL_PLANE_FIRST	0x10000
+#define MAX_UNICODE					0x10ffff
 #define SURROGATE_OFFSET			(0x10000 - (0xD800 << 10) - 0xDC00)
 #define UTF16_TO_UTF32(lead, trail)	(((lead) << 10) + (trail) + SURROGATE_OFFSET)
+
+// https://docs.microsoft.com/en-us/windows/win32/intl/locale_iuseutf8legacyacp
+#ifndef LOCALE_IUSEUTF8LEGACYACP
+#define LOCALE_IUSEUTF8LEGACYACP     0x00000666	// NTDDI_VERSION >= NTDDI_WIN10_MN
+#endif
+// https://docs.microsoft.com/en-us/windows/win32/intl/locale_iuseutf8legacyoemcp
+#ifndef LOCALE_IUSEUTF8LEGACYOEMCP
+#define LOCALE_IUSEUTF8LEGACYOEMCP   0x00000999	// NTDDI_VERSION >= NTDDI_WIN10_MN
+#endif
+// https://docs.microsoft.com/en-us/windows/win32/intl/locale-sname
+#ifndef LOCALE_SNAME
+#define LOCALE_SNAME				0x0000005c	// _WIN32_WINNT >= _WIN32_WINNT_VISTA
+#endif
+
+static inline BOOL GetLegacyACP(UINT *acp) {
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+	return GetLocaleInfoEx(LOCALE_NAME_SYSTEM_DEFAULT, LOCALE_IUSEUTF8LEGACYACP | LOCALE_RETURN_NUMBER,
+		(LPWSTR)(acp), sizeof(UINT) / sizeof(WCHAR));
+#else
+	return GetLocaleInfoW(LOCALE_SYSTEM_DEFAULT, LOCALE_IUSEUTF8LEGACYACP | LOCALE_RETURN_NUMBER,
+		(LPWSTR)(acp), sizeof(UINT) / sizeof(WCHAR));
+#endif
+}
+
+static inline BOOL GetLegacyOEMCP(UINT *oemcp) {
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+	return GetLocaleInfoEx(LOCALE_NAME_SYSTEM_DEFAULT, LOCALE_IUSEUTF8LEGACYOEMCP | LOCALE_RETURN_NUMBER,
+		(LPWSTR)(oemcp), sizeof(UINT) / sizeof(WCHAR));
+#else
+	return GetLocaleInfoW(LOCALE_SYSTEM_DEFAULT, LOCALE_IUSEUTF8LEGACYOEMCP | LOCALE_RETURN_NUMBER,
+		(LPWSTR)(oemcp), sizeof(UINT) / sizeof(WCHAR));
+#endif
+}
 
 // 932 Shift-JIS, 936 GBK, 949 UHC, 950 Big5, 1361 Johab
 static inline BOOL IsDBCSCodePage(UINT page) {
@@ -383,8 +425,8 @@ static inline BOOL IsZeroFlagsCodePage(UINT page) {
 // in EditEncoding.c
 extern NP2ENCODING mEncoding[];
 void	Encoding_ReleaseResources(void);
-BOOL	EditSetNewEncoding(int iCurrentEncoding, int iNewEncoding, BOOL bNoUI, BOOL bSetSavePoint);
-void	EditOnCodePageChanged(UINT oldCodePage);
+BOOL	EditSetNewEncoding(int iEncoding, int iNewEncoding, BOOL bNoUI, BOOL bSetSavePoint);
+void	EditOnCodePageChanged(UINT oldCodePage, BOOL showControlCharacter, LPEDITFINDREPLACE lpefr);
 const char* GetFoldDisplayEllipsis(UINT cpEdit, UINT acp);
 void	Encoding_InitDefaults(void);
 int 	Encoding_MapIniSetting(BOOL bLoad, int iSetting);
@@ -392,6 +434,7 @@ void	Encoding_GetLabel(int iEncoding);
 int 	Encoding_Match(LPCWSTR pwszTest);
 int 	Encoding_MatchA(LPCSTR pchTest);
 BOOL	Encoding_IsValid(int iTestEncoding);
+int		Encoding_GetIndex(UINT codePage);
 void	Encoding_AddToTreeView(HWND hwnd, int idSel, BOOL bRecodeOnly);
 BOOL	Encoding_GetFromTreeView(HWND hwnd, int *pidEncoding, BOOL bQuiet);
 #if 0
@@ -401,6 +444,7 @@ void	Encoding_AddToComboboxEx(HWND hwnd, int idSel, BOOL bRecodeOnly);
 BOOL	Encoding_GetFromComboboxEx(HWND hwnd, int *pidEncoding);
 #endif
 
+UINT	CodePageFromCharSet(UINT uCharSet);
 BOOL	IsUnicode(const char *pBuffer, DWORD cb, LPBOOL lpbBOM, LPBOOL lpbReverse);
 BOOL	IsUTF8(const char *pTest, DWORD nLength);
 BOOL	IsUTF7(const char *pTest, DWORD nLength);

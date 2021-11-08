@@ -91,12 +91,12 @@ typedef const EDITLEXER *LPCEDITLEXER;
 #define NP2LEX_TEXTFILE		63000	// SCLEX_NULL		Text File
 #define NP2LEX_CPP			63001	// SCLEX_CPP		C/C++ Source
 #define NP2LEX_JAVA			63002	// SCLEX_JAVA		Java Source
-#define NP2LEX_CSHARP		63003	// SCLEX_CPP		C# Source
+#define NP2LEX_CSHARP		63003	// SCLEX_CSHARP		C# Source
 #define NP2LEX_JAVASCRIPT	63004	// SCLEX_JAVASCRIPT	JavaScript
 #define NP2LEX_RC			63005	// SCLEX_CPP		Resource Script
 //#define NP2LEX_IDL		63006	// SCLEX_CPP		Interface Definition Language
 #define NP2LEX_D			63007	// SCLEX_CPP		D Source
-#define NP2LEX_ASY			63008	// SCLEX_CPP		Asymptote Code
+#define NP2LEX_ASYMPTOTE	63008	// SCLEX_ASYMPTOTE	Asymptote Code
 #define NP2LEX_CIL			63009	// SCLEX_CIL		CIL Assembly
 //#define NP2LEX_OBJC		63010	// SCLEX_CPP		Objective C/C++
 #define NP2LEX_ACTIONSCRIPT	63011	// SCLEX_JAVASCRIPT	ActionScript
@@ -138,7 +138,7 @@ typedef const EDITLEXER *LPCEDITLEXER;
 #define NP2LEX_DIFF			63050	// SCLEX_DIFF		Diff/Patch
 #define NP2LEX_AWK			63051	// SCLEX_AWK		Awk Script
 #define NP2LEX_JAM			63052	// SCLEX_JAM		Jamfile
-#define NP2LEX_DOT			63053	// SCLEX_GRAPHVIZ	GraphViz Dot
+#define NP2LEX_GRAPHVIZ		63053	// SCLEX_GRAPHVIZ	GraphViz Dot
 #define NP2LEX_JSON			63054	// SCLEX_JSON		JSON Document
 #define NP2LEX_SMALI		63055	// SCLEX_SMALI		Android Smali
 #define NP2LEX_NSIS			63056	// SCLEX_NSIS		Nsis Setup Script
@@ -163,6 +163,7 @@ typedef const EDITLEXER *LPCEDITLEXER;
 #define NP2LEX_TYPESCRIPT	63076	// SCLEX_JAVASCRIPT	TypeScript
 #define NP2LEX_APDL			63077	// SCLEX_APDL		ANSYS APDL
 #define NP2LEX_ABAQUS		63078	// SCLEX_APDL		ABAQUS
+#define NP2LEX_BLOCKDIAG	63079	// SCLEX_GRAPHVIZ	blockdiag
 
 #define NP2LEX_AVS			63087	// SCLEX_AVS		AviSynth Script
 #define NP2LEX_TEHEX		63088	// SCLEX_TEHEX		Tektronix extended HEX

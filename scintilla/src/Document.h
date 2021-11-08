@@ -164,19 +164,36 @@ public:
 	bool isEnabled;
 };
 
+struct LexerReleaser {
+	// Called by unique_ptr to destroy/free the Resource
+	void operator()(Scintilla::ILexer5 *pLexer) noexcept {
+		if (pLexer) {
+			// ILexer5::Release must not throw, ignore if it does.
+			pLexer->Release();
+		}
+	}
+};
+
+using LexerInstance = std::unique_ptr<Scintilla::ILexer5, LexerReleaser>;
+
+// LexInterface defines the interface to ILexer used in Document.
+// The LexState subclass is actually created and that is used within ScintillaBase
+// to provide more methods that are exposed through Scintilla's external API.
 class LexInterface {
 protected:
 	Document *pdoc;
-	Scintilla::ILexer5 *instance;
+	LexerInstance instance;
 	bool performingStyle;	///< Prevent reentrance
 public:
-	explicit LexInterface(Document *pdoc_) noexcept : pdoc(pdoc_), instance(nullptr), performingStyle(false) {}
-	virtual ~LexInterface() = default;
+	explicit LexInterface(Document *pdoc_) noexcept;
+	LexInterface(const LexInterface &) = delete;
+	LexInterface(LexInterface &&) = delete;
+	LexInterface &operator=(const LexInterface &) = delete;
+	LexInterface &operator=(LexInterface &&) = delete;
+	virtual ~LexInterface() noexcept;
 	void Colourise(Sci::Position start, Sci::Position end);
 	virtual Scintilla::LineEndType LineEndTypesSupported() const noexcept;
-	bool UseContainerLexing() const noexcept {
-		return instance == nullptr;
-	}
+	bool UseContainerLexing() const noexcept;
 };
 
 struct RegexError : public std::runtime_error {
@@ -194,8 +211,8 @@ struct RegexError : public std::runtime_error {
  */
 
 class ActionDuration {
-	double duration = 1e-5;
-	static constexpr double minDuration = 1e-6;
+	double duration = 1e-6;
+	static constexpr double minDuration = 1e-7;
 	static constexpr double maxDuration = 1e-4;
 	// measure time in KiB instead of byte.
 	static constexpr int unitBytes = 1024;
@@ -345,8 +362,8 @@ public:
 		return dbcsCharClass->IsTrailByte(ch);
 	}
 	bool IsDBCSDualByteAt(Sci::Position pos) const noexcept;
-	int DBCSDrawBytes(std::string_view text) const noexcept;
-	int SafeSegment(const char *text, int length, int lengthSegment) const noexcept;
+	int DBCSDrawBytes(const char *text, size_t length) const noexcept;
+	size_t SafeSegment(const char *text, size_t lengthSegment, EncodingFamily encodingFamily) const noexcept;
 	EncodingFamily CodePageFamily() const noexcept;
 
 	// Gateways to modifying document

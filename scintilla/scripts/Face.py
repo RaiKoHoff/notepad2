@@ -71,7 +71,9 @@ class Face:
 		currentCommentFinished = 0
 		maxInt = (1 << 31) - 1
 		lineno = 0
-		for line in open(name).readlines():
+		with open(name, encoding='utf-8') as fd:
+			lines = fd.readlines()
+		for line in lines:
 			lineno += 1
 			line = sanitiseLine(line)
 			if line:
@@ -122,15 +124,18 @@ class Face:
 					elif featureType == "val":
 						try:
 							name, value = featureVal.split("=", 1)
-							if value[0] == '-':
-								# add parenthesis for negative value
-								value = '(' + value + ')'
-							elif int(value, 0) > maxInt:
-								# unsigned value
-								value = value + 'U'
+							if value:
+								if value[0] == '-':
+									# add parenthesis for negative value
+									value = '(' + value + ')'
+								elif int(value, 0) > maxInt:
+									# unsigned value
+									value = value + 'U'
+							else:
+								value = 'auto'
 						except ValueError:
 							print("Failure line %d: %s" % (lineno, featureVal))
-							raise Exception()
+							raise
 						self.features[name] = {
 							"FeatureType": featureType,
 							"Category": currentCategory,

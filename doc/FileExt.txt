@@ -50,6 +50,7 @@ CSS Style Sheet
 	scss			Sassy CSS
 	less			Less CSS
 	hss				HSS
+	wxss			WeChat Mini Program
 
 Java Source
 	java
@@ -101,7 +102,7 @@ Python Script
 	empy			EmPy
 	cobra			Cobra
 	gs				GNOME Genie
-	bzl				Bazel BUILD file, https://docs.bazel.build/versions/master/build-ref.html
+	bzl				Bazel BUILD file, https://docs.bazel.build/versions/main/build-ref.html
 
 Ruby Script
 	rb
@@ -157,6 +158,7 @@ XML Document
 	mm				FreeMind Mind Map
 	xrc				wxWidgets XML Resource
 	fbp				wxFormBuilder Project
+	wxml			WeChat Mini Program
 
 	web.config		ASP.NET Web Configuration
 
@@ -185,6 +187,12 @@ Assembler Source
 Asymptote Code
 	asy
 
+AutoHotkey Script
+	ahk
+
+	ia
+	scriptlet
+
 AutoIt3 Script
 	au3
 
@@ -200,6 +208,9 @@ Batch File
 	bat
 	cmd
 
+blockdiag
+	diag
+
 
 CIL Assembly
 	il
@@ -212,6 +223,13 @@ CMake Script
 	CMakeCache.txt
 	*.cmake.in
 	*.ctest.in
+
+CoffeeScript
+	coffee
+	cjsx			CoffeeScript with JSX
+	cson			https://github.com/bevry/cson
+
+	Cakefile
 
 Config File
 	conf
@@ -286,8 +304,6 @@ Gradle Build Script
 GraphViz Dot
 	dot
 	gv
-
-	diag			blockdiag
 
 Groovy Script
 	groovy

@@ -9,58 +9,57 @@
 namespace Scintilla::Internal {
 
 struct FontSpecification {
-	const char *fontName = nullptr;
+	// fontName is allocated by a ViewStyle container object and may be null
+	const char *fontName;
+	int size;
 	Scintilla::FontWeight weight = Scintilla::FontWeight::Normal;
 	bool italic = false;
-	int size = 10 * Scintilla::FontSizeMultiplier;
+	bool checkMonospaced = false;
 	Scintilla::CharacterSet characterSet = Scintilla::CharacterSet::Default;
 	Scintilla::FontQuality extraFontFlag = Scintilla::FontQuality::QualityDefault;
-	constexpr FontSpecification() noexcept = default;
+	constexpr FontSpecification(const char *fontName_ = nullptr, int size_ = 10*Scintilla::FontSizeMultiplier) noexcept :
+		fontName(fontName_), size(size_) { }
 	bool operator==(const FontSpecification &other) const noexcept;
 	bool operator<(const FontSpecification &other) const noexcept;
 };
 
 struct FontMeasurements {
-	unsigned int ascent;
-	unsigned int descent;
-	XYPOSITION capitalHeight;	// Top of capital letter to baseline: ascent - internal leading
-	XYPOSITION aveCharWidth;
-	XYPOSITION spaceWidth;
-	int sizeZoomed;
-	FontMeasurements() noexcept;
-	void ClearMeasurements() noexcept;
+	XYPOSITION ascent = 1;
+	XYPOSITION descent = 1;
+	XYPOSITION capitalHeight = 1;	// Top of capital letter to baseline: ascent - internal leading
+	XYPOSITION aveCharWidth = 1;
+#if PLAT_MACOSX
+	XYPOSITION monospaceCharacterWidth = 1; // for macOS
+#endif
+	XYPOSITION spaceWidth = 1;
+	bool monospaceASCII = false;
+	int sizeZoomed = 2;
 };
 
 // used to optimize style copy.
 struct StylePod {
-	ColourRGBA fore;
-	ColourRGBA back;
-	bool eolFilled;
-	bool underline;
-	bool strike;
+	ColourRGBA fore = ColourRGBA(0, 0, 0);
+	ColourRGBA back = ColourRGBA(0xff, 0xff, 0xff);
+	bool eolFilled = false;
+	bool underline = false;
+	bool strike = false;
 	enum class CaseForce : uint8_t {
 		mixed, upper, lower, camel
 	};
-	CaseForce caseForce;
-	bool visible;
-	bool changeable;
-	bool hotspot;
+	CaseForce caseForce = CaseForce::mixed;
+	bool visible = true;
+	bool changeable = true;
+	bool hotspot = false;
 };
 
 /**
  */
-class Style : public FontSpecification, public FontMeasurements, public StylePod {
+class Style final : public FontSpecification, public FontMeasurements, public StylePod {
 public:
 	std::shared_ptr<Font> font;
 
-	Style() noexcept;
-	Style(const Style &source) noexcept;
-	Style(Style &&) noexcept = default;
-	~Style() = default;
-	Style &operator=(const Style &source) noexcept;
-	Style &operator=(Style &&) = delete;
-	void ResetDefault(const char *fontName_) noexcept;
-	void ClearTo(const Style &source) noexcept;
+	Style(const char *fontName_ = nullptr) noexcept;
+	void ResetDefault(const char *fontName_ = nullptr) noexcept;
 	void Copy(std::shared_ptr<Font> font_, const FontMeasurements &fm_) noexcept;
 	bool IsProtected() const noexcept {
 		return !(changeable && visible);

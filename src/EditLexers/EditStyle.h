@@ -98,7 +98,7 @@
 #define NP2STYLE_UnknownPseudoClass		63405
 #define NP2STYLE_CSSProperty			63406
 #define NP2STYLE_UnknownProperty		63407
-#define NP2STYLE_Media					63408
+#define NP2STYLE_GroupRule				63408
 #define NP2STYLE_Value					63409
 #define NP2STYLE_Important				63410
 
@@ -118,8 +118,9 @@
 #define NP2STYLE_Annotation				63433
 #define NP2STYLE_Record					63434
 #define NP2STYLE_Type					63435
-#define NP2STYLE_FunctionDefine			63436
+#define NP2STYLE_FunctionDefinition		63436
 #define NP2STYLE_Protocol				63437
+#define NP2STYLE_MethodDefinition		63438
 
 #define NP2STYLE_Label					63440
 #define NP2STYLE_Command				63441
@@ -139,8 +140,6 @@
 #define NP2STYLE_TaskMarker				63455
 
 #define NP2STYLE_BracketArgument		63461
-
-#define NP2STYLE_LINQKeyword			63491
 
 #define NP2STYLE_ScalarVar				63501
 #define NP2STYLE_ArrayVar				63502
@@ -190,6 +189,8 @@
 
 #define NP2STYLE_SendKey				63591
 #define NP2STYLE_Special				63592
+#define NP2STYLE_HotString				63593
+#define NP2STYLE_HotKey					63594
 
 #define NP2STYLE_PascalKeyword 			63601
 

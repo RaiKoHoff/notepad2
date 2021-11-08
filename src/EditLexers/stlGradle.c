@@ -93,7 +93,7 @@ NULL
 "tarTree targetCompatibility task taskDependencies taskGraph tasks temporaryDir uri useLogger version with zipTree "
 
 , // 9 GroovyDoc
-"author code deprecated docRoot exception hide inheritDoc link linkplain literal param return "
+"author code deprecated docRoot exception exclude hide inheritDoc link linkplain literal param return "
 "see serial serialData serialField since throws value version "
 
 , NULL, NULL, NULL, NULL, NULL
@@ -112,6 +112,7 @@ static EDITSTYLE Styles_Gradle[] = {
 	{ SCE_GROOVY_INTERFACE, NP2StyleX_Interface, L"bold; fore:#1E90FF" },
 	{ SCE_GROOVY_TRAIT, NP2StyleX_Trait, L"bold; fore:#1E90FF" },
 	{ SCE_GROOVY_ENUM, NP2StyleX_Enumeration, L"fore:#FF8000" },
+	{ SCE_GROOVY_FUNCTION_DEFINITION, NP2StyleX_MethodDefinition, L"bold; fore:#A46000" },
 	{ SCE_GROOVY_FUNCTION, NP2StyleX_Method, L"fore:#A46000" },
 	{ SCE_GROOVY_ACTION, NP2StyleX_Action, L"fore:#FF8000" },
 	{ SCE_GROOVY_PROPERTY, NP2StyleX_Property, L"fore:#A46000" },
@@ -121,9 +122,9 @@ static EDITSTYLE Styles_Gradle[] = {
 	{ MULTI_STYLE(SCE_GROOVY_COMMENTTAGAT, SCE_GROOVY_COMMENTTAGHTML, 0, 0), NP2StyleX_DocCommentTag, L"fore:#408080" },
 	{ SCE_GROOVY_TASKMARKER, NP2StyleX_TaskMarker, L"bold; fore:#408080" },
 	{ MULTI_STYLE(SCE_GROOVY_STRING_DQ, SCE_GROOVY_STRING_SQ, 0, 0), NP2StyleX_String, L"fore:#008000" },
-	{ MULTI_STYLE(SCE_GROOVY_TRIPLE_STRING_DQ, SCE_GROOVY_TRIPLE_STRING_SQ, SCE_GROOVY_TRIPLE_STRING_DQSTART, SCE_GROOVY_TRIPLE_STRING_DQEND), NP2StyleX_TripleQuotedString, L"fore:#F08000" },
+	{ MULTI_STYLE(SCE_GROOVY_TRIPLE_STRING_DQ, SCE_GROOVY_TRIPLE_STRING_SQ, 0, 0), NP2StyleX_TripleQuotedString, L"fore:#F08000" },
 	{ SCE_GROOVY_ESCAPECHAR, NP2StyleX_EscapeSequence, L"fore:#0080C0" },
-	{ MULTI_STYLE(SCE_GROOVY_SLASHY_STRING, SCE_GROOVY_DOLLAR_SLASHY, SCE_GROOVY_SLASHY_STRINGSTART, SCE_GROOVY_SLASHY_STRINGEND), NP2StyleX_Regex, L"fore:#006633; back:#FFF1A8; eolfilled" },
+	{ MULTI_STYLE(SCE_GROOVY_SLASHY_STRING, SCE_GROOVY_DOLLAR_SLASHY, 0, 0), NP2StyleX_Regex, L"fore:#006633; back:#FFF1A8; eolfilled" },
 	{ SCE_GROOVY_ATTRIBUTE_AT, NP2StyleX_Attribute, L"fore:#FF4000" },
 	{ SCE_GROOVY_LABEL, NP2StyleX_Label, L"back:#FFC040" },
 	{ SCE_GROOVY_NUMBER, NP2StyleX_Number, L"fore:#FF0000" },
