@@ -110,7 +110,7 @@
 #define NP2StyleX_UnknownPseudoClass	EDITSTYLE_HOLE(UnknownPseudoClass, L"Unknown Pseudo Class")
 #define NP2StyleX_CSSProperty			EDITSTYLE_HOLE(CSSProperty, L"CSS Property")
 #define NP2StyleX_UnknownProperty		EDITSTYLE_HOLE(UnknownProperty, L"Unknown Property")
-#define NP2StyleX_Media					EDITSTYLE_HOLE(Media, L"Media")
+#define NP2StyleX_Media					EDITSTYLE_HOLE(GroupRule, L"Group Rule")
 #define NP2StyleX_Value					EDITSTYLE_HOLE(Value, L"Value")
 #define NP2StyleX_Important				EDITSTYLE_HOLE(Important, L"Important")
 
@@ -130,8 +130,9 @@
 #define NP2StyleX_Annotation			EDITSTYLE_HOLE(Annotation, L"Annotation")
 #define NP2StyleX_Record				EDITSTYLE_HOLE(Record, L"Record")
 #define NP2StyleX_Type					EDITSTYLE_HOLE(Type, L"Type")
-#define NP2StyleX_FunctionDefine		EDITSTYLE_HOLE(FunctionDefine, L"Function Define")
+#define NP2StyleX_FunctionDefinition	EDITSTYLE_HOLE(FunctionDefinition, L"Function Definition")
 #define NP2StyleX_Protocol				EDITSTYLE_HOLE(Protocol, L"Protocol")
+#define NP2StyleX_MethodDefinition		EDITSTYLE_HOLE(MethodDefinition, L"Method Definition")
 
 #define NP2StyleX_Label					EDITSTYLE_HOLE(Label, L"Label")
 #define NP2StyleX_Command				EDITSTYLE_HOLE(Command, L"Command")
@@ -151,8 +152,6 @@
 #define NP2StyleX_TaskMarker			EDITSTYLE_HOLE(TaskMarker, L"Task Marker")
 
 #define NP2StyleX_BracketArgument		EDITSTYLE_HOLE(BracketArgument, L"Bracket Argument")
-
-#define NP2StyleX_LINQKeyword			EDITSTYLE_HOLE(LINQKeyword, L"LINQ Keyword")
 
 #define NP2StyleX_ScalarVar				EDITSTYLE_HOLE(ScalarVar, L"Scalar $var")
 #define NP2StyleX_ArrayVar				EDITSTYLE_HOLE(ArrayVar, L"Array @var")
@@ -202,6 +201,8 @@
 
 #define NP2StyleX_SendKey				EDITSTYLE_HOLE(SendKey, L"Send Key")
 #define NP2StyleX_Special				EDITSTYLE_HOLE(Special, L"Special")
+#define NP2StyleX_HotString				EDITSTYLE_HOLE(HotString, L"HotString")
+#define NP2StyleX_HotKey				EDITSTYLE_HOLE(HotKey, L"HotKey")
 
 #define NP2StyleX_PascalKeyword			EDITSTYLE_HOLE(PascalKeyword, L"Pascal Keyword")
 

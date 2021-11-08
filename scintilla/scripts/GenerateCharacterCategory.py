@@ -2,19 +2,14 @@
 # Script to generate CharacterCategory.cxx from Python's Unicode data
 # Should be run rarely when a Python with a new version of Unicode data is available.
 
-import sys
 import codecs
 import platform
 import unicodedata
 from enum import IntEnum
-import math
 
 from FileGenerator import Regenerate
-from splitbins import *
-
-UnicodeCharacterCount = sys.maxunicode + 1
-BMPCharacterCharacterCount = 0xffff + 1
-DBCSCharacterCount = 0xffff + 1
+from MultiStageTable import *
+from UnicodeData import *
 
 class CharClassify(IntEnum):
 	ccSpace = 0
@@ -22,8 +17,6 @@ class CharClassify(IntEnum):
 	ccWord = 2
 	ccPunctuation = 3
 	ccCJKWord = 4
-
-	RLEValueBit = 3
 
 CharClassifyOrder = [CharClassify.ccCJKWord, CharClassify.ccWord, CharClassify.ccPunctuation, CharClassify.ccNewLine]
 def prefCharClassify(values):
@@ -172,62 +165,6 @@ def isCJKCharacter(category, ch):
 
 	return False
 
-def dumpArray(items, step, fmt='%d'):
-	lines = []
-	if step:
-		for i in range(0, len(items), step):
-			line = ", ".join(fmt % value for value in items[i:i+step]) + ","
-			lines.append(line)
-	else:
-		line = ", ".join(fmt % value for value in items)
-		lines.append(line)
-	return lines
-
-def updateCharacterCategory(categories):
-	values = ["// Created with Python %s, Unicode %s" % (
-		platform.python_version(), unicodedata.unidata_version)]
-
-	# catLatin
-	values.append("#if CHARACTERCATEGORY_OPTIMIZE_LATIN1")
-	values.append("const unsigned char catLatin[] = {")
-	table = [categories.index(unicodedata.category(chr(ch))) for ch in range(256)]
-	for i in range(0, len(table), 16):
-		line = ', '.join(str(value) for value in table[i:i+16]) + ','
-		values.append(line)
-	values.append("};")
-	values.append("#endif")
-	values.append("")
-
-	# catRanges
-	startRange = 0
-	category = unicodedata.category(chr(startRange))
-	table = []
-	for ch in range(sys.maxunicode):
-		uch = chr(ch)
-		current = unicodedata.category(uch)
-		if current != category:
-			value = startRange * 32 + categories.index(category)
-			table.append(value)
-			category = current
-			startRange = ch
-	value = startRange * 32 + categories.index(category)
-	table.append(value)
-
-	# the sentinel value is used to simplify CharacterMap::Optimize()
-	category = 'Cn'
-	value = (sys.maxunicode + 1)*32 + categories.index(category)
-	table.append(value)
-
-	print('catRanges:', len(table), 4*len(table)/1024, math.ceil(math.log2(len(table))))
-	values.append("#if CHARACTERCATEGORY_USE_BINARY_SEARCH")
-	values.append("const int catRanges[] = {")
-	values.extend(["%d," % value for value in table])
-	values.append("};")
-	values.append("")
-	values.append("#else")
-
-	return values
-
 def bytesToHex(b):
 	return ''.join('\\x%02X' % ch for ch in b)
 
@@ -239,7 +176,7 @@ def buildFoldDisplayEllipsis():
 
 	# DBCS
 	encodingList = [
-		('cp932', 932, 'Shift_JIS'),
+		('cp932', 932, 'Shift-JIS'),
 		('cp936', 936, 'GBK'),
 		('cp949', 949, 'UHC'),
 		('cp950', 950, 'Big5'),
@@ -406,160 +343,6 @@ def buildANSICharClassifyTable(filename):
 	print('ANSICharClassifyTable:', len(result), len(encodingList))
 	Regenerate(filename, "//", output)
 
-def compressIndexTable(head, indexTable, args):
-	indexA, indexC, indexD, shiftA, shiftC = splitbins(indexTable, True)
-	print(f'{head}:', (len(indexA), max(indexA)), (len(indexC), max(indexC)), len(indexD), (shiftA, shiftC))
-
-	sizeA = getsize(indexA)
-	sizeC = getsize(indexC)
-	sizeD = getsize(indexD)
-	total = len(indexA)*sizeA + len(indexC)*sizeC + len(indexD)*sizeD
-	print(f'{head} total size:', total/1024)
-
-	maskA = (1 << shiftA) - 1
-	maskC = (1 << shiftC) - 1
-	shiftA2 = shiftA
-	shiftC2 = shiftC
-
-	if True:
-		shiftA2 = preshift(indexA, shiftA)
-		shiftC2 = preshift(indexC, shiftC)
-
-	for ch in range(len(indexTable)):
-		i = (indexA[ch >> shiftA] << shiftA2) | (ch & maskA)
-		i = (indexC[i >> shiftC] << shiftC2) | (i & maskC)
-		value = indexD[i]
-		expect = indexTable[ch]
-		if value != expect:
-			print(f'{head} verify fail:', '%04X, expect: %d, got: %d' % (ch, expect, value))
-			return None
-
-	typemap = {
-		1: 'unsigned char',
-		2: 'unsigned short',
-	}
-
-	prefix = args['table']
-	with_function = args.get('with_function', True)
-
-	# one table
-	if sizeA == sizeC == sizeD:
-		output = []
-		name = args.get('table_var', prefix)
-		output.append("const %s %s[] = {" % (typemap[sizeA], name))
-		output.append("// %s1" % prefix)
-		output.extend(dumpArray(indexA, 20))
-		output.append("// %s2" % prefix)
-		output.extend(dumpArray(indexC, 20))
-		output.append("// %s" % prefix)
-		output.extend(dumpArray(indexD, 20))
-		output.append("};")
-		table = '\n'.join(output)
-
-		args.update({
-			'shiftA': shiftA,
-			'shiftA2': shiftA2,
-			'maskA': maskA,
-			'offsetC': len(indexA),
-			'shiftC': shiftC,
-			'shiftC2': shiftC2,
-			'maskC': maskC,
-			'offsetD': len(indexA) + len(indexC)
-		})
-		if with_function:
-			function = """{function}
-	ch = ({table}[ch >> {shiftA}] << {shiftA2}) | (ch & {maskA});
-	ch = ({table}[{offsetC} + (ch >> {shiftC})] << {shiftC2}) | (ch & {maskC});
-	return static_cast<{returnType}>({table}[{offsetD} + ch]);
-}}""".format(**args)
-		else:
-			function = """
-constexpr int {table}Shift11 = {shiftA};
-constexpr int {table}Shift12 = {shiftA2};
-constexpr int {table}Mask1 = {maskA};
-constexpr int {table}Offset1 = {offsetC};
-constexpr int {table}Shift21 = {shiftC};
-constexpr int {table}Shift22 = {shiftC2};
-constexpr int {table}Mask2 = {maskC};
-constexpr int {table}Offset2 = {offsetD};
-""".format(**args)
-	# three tables
-	else:
-		output = []
-		output.append("const %s %s1[] = {" % (typemap[sizeA], prefix))
-		output.extend(dumpArray(indexA, 20))
-		output.append("};")
-		output.append("")
-		output.append("const %s %s2[] = {" % (typemap[sizeC], prefix))
-		output.extend(dumpArray(indexC, 20))
-		output.append("};")
-		output.append("")
-		output.append("const %s %s[] = {" % (typemap[sizeD], prefix))
-		output.extend(dumpArray(indexD, 20))
-		output.append("};")
-		table = '\n'.join(output)
-
-		args.update({
-			'shiftA': shiftA,
-			'shiftA2': shiftA2,
-			'maskA': maskA,
-			'shiftC': shiftC,
-			'shiftC2': shiftC2,
-			'maskC': maskC,
-		})
-		if with_function:
-			function = """{function}
-	ch = ({table}1[ch >> {shiftA}] << {shiftA2}) | (ch & {maskA});
-	ch = ({table}2[(ch >> {shiftC})] << {shiftC2}) | (ch & {maskC});
-	return static_cast<{returnType}>({table}[ch]);
-}}""".format(**args)
-		else:
-			function = """
-constexpr int {table}Shift11 = {shiftA};
-constexpr int {table}Shift12 = {shiftA2};
-constexpr int {table}Mask1 = {maskA};
-constexpr int {table}Shift21 = {shiftC};
-constexpr int {table}Shift22 = {shiftC2};
-constexpr int {table}Mask2 = {maskC};
-""".format(**args)
-	return table, function
-
-def runLengthEncode(head, indexTable, valueBit, totalBit=16):
-	assert max(indexTable) < 2**valueBit
-	maxLength = 2**(totalBit - valueBit) - 1
-
-	values = []
-	prevValue = indexTable[0]
-	prevIndex = 0;
-	for index, value in enumerate(indexTable):
-		if value != prevValue:
-			values.append((prevValue, index - prevIndex))
-			prevValue = value
-			prevIndex = index
-	values.append((prevValue, len(indexTable) - prevIndex))
-
-	output = []
-	for value, count in values:
-		if count > maxLength:
-			output.extend([(maxLength << valueBit) | value] * (count // maxLength))
-			count = count % maxLength
-			if count == 0:
-				continue
-		output.append((count << valueBit) | value)
-
-	total = getsize(output)*len(output)/1024
-	print(f'{head} RLE size: {len(output)} {total}')
-
-	result = []
-	mask = 2**valueBit - 1
-	for ch in output:
-		value = ch & mask
-		count = ch >> valueBit
-		result.extend([value] * count)
-
-	assert result == indexTable
-	return output
-
 def updateCharClassifyTable(filename, headfile):
 	indexTable = [0] * UnicodeCharacterCount
 	for ch in range(UnicodeCharacterCount):
@@ -574,42 +357,44 @@ def updateCharClassifyTable(filename, headfile):
 		platform.python_version(), unicodedata.unidata_version)]
 	head_output = output[:]
 
-	data = runLengthEncode('CharClassify Unicode BMP', indexTable[:BMPCharacterCharacterCount], int(CharClassify.RLEValueBit))
-	output.append(f'const unsigned short CharClassifyRLE_BMP[] = {{')
+	valueBit, totalBit, data = runLengthEncode('CharClassify Unicode BMP', indexTable[:BMPCharacterCharacterCount])
+	assert valueBit == 3
+	assert totalBit == 16
+	output.append(f'const uint16_t CharClassifyRLE_BMP[] = {{')
 	output.extend(dumpArray(data, 20))
 	output.append("};")
 	output.append("")
 	output.append("}") # namespace
 	output.append("")
 
-	args = {
-		'table_var': 'CharClassify::CharClassifyTable',
-		'table': 'CharClassifyTable',
-		'function': """static cc ClassifyCharacter(unsigned int ch) noexcept {
+	config = {
+		'tableVarName': 'CharClassify::CharClassifyTable',
+		'tableName': 'CharClassifyTable',
+		'function': """static CharacterClass ClassifyCharacter(uint32_t ch) noexcept {
 	if (ch < sizeof(classifyMap)) {
-		return static_cast<cc>(classifyMap[ch]);
+		return static_cast<CharacterClass>(classifyMap[ch]);
 	}
 	if (ch > maxUnicode) {
 		// Cn
-		return ccSpace;
+		return CharacterClass::space;
 	}
 
 	ch -= sizeof(classifyMap);""",
-		'returnType': 'cc'
+		'returnType': 'CharacterClass'
 	}
 
-	table, function = compressIndexTable('CharClassify Unicode', indexTable[BMPCharacterCharacterCount:], args)
-	output.extend(table.splitlines())
-
-	for line in function.splitlines():
-		head_output.append('\t' + line)
+	table = indexTable[BMPCharacterCharacterCount:]
+	data, function = buildMultiStageTable('CharClassify Unicode', table, config=config, level=3)
+	output.extend(data)
+	head_output.extend('\t' + line for line in function)
 
 	Regenerate(filename, "//", output)
 	Regenerate(headfile, "//", head_output)
 
 def updateCharacterCategoryTable(filename):
 	categories = findCategories("../lexlib/CharacterCategory.h")
-	output = updateCharacterCategory(categories)
+	output = ["// Created with Python %s, Unicode %s" % (
+		platform.python_version(), unicodedata.unidata_version)]
 
 	indexTable = [0] * UnicodeCharacterCount
 	for ch in range(UnicodeCharacterCount):
@@ -618,19 +403,34 @@ def updateCharacterCategoryTable(filename):
 		value = categories.index(category)
 		indexTable[ch] = value
 
-	args = {
-		'table': 'catTable',
-		'with_function': False,
+	# the sentinel value is used to simplify CharacterMap::Optimize()
+	sentinel = UnicodeCharacterCount*32 + categories.index('Cn')
+	valueBit, rangeList = rangeEncode('catRanges', indexTable, sentinel=sentinel)
+	assert valueBit == 5
+	output.append("#if CharacterCategoryUseRangeList")
+	output.append("const int catRanges[] = {")
+	output.extend("%d," % value for value in rangeList)
+	output.append("};")
+	output.append("")
+	output.append("#else")
+
+	config = {
+		'tableName': 'catTable',
+		'function': """CharacterCategory CategoriseCharacter(int character) noexcept {
+	if (character < 0 || character > maxUnicode) {
+		return ccCn;
+	}""",
+		'returnType': 'CharacterCategory',
 	}
-
-	table, function = compressIndexTable('CharacterCategoryTable', indexTable, args)
+	table, function = buildMultiStageTable('CharacterCategory', indexTable, config=config, level=3)
 	output.append("")
-	output.extend(table.splitlines())
-	output.extend(function.splitlines())
+	output.extend(table)
 
-	data = runLengthEncode('CharacterCategoryTable', indexTable[:BMPCharacterCharacterCount], 5)
+	valueBit, totalBit, data = runLengthEncode('CharacterCategory BMP', indexTable[:BMPCharacterCharacterCount])
+	assert valueBit == 5
+	assert totalBit == 16
 	output.append("")
-	output.append(f'const unsigned short CatTableRLE_BMP[] = {{')
+	output.append(f'const uint16_t CatTableRLE_BMP[] = {{')
 	output.extend(dumpArray(data, 20))
 	output.append("};")
 
@@ -638,6 +438,7 @@ def updateCharacterCategoryTable(filename):
 	output.append("#endif")
 
 	Regenerate(filename, "//", output)
+	Regenerate(filename, "//function", function)
 
 def getDBCSCharClassify(decode, ch, isReservedOrUDC=None):
 	buf = bytes([ch]) if ch < 256 else bytes([ch >> 8, ch & 0xff])
@@ -681,17 +482,23 @@ def makeDBCSCharClassifyTable(output, encodingList, isReservedOrUDC=None):
 	suffix = '_' + encodingList[0].upper()
 	head = 'CharClassify' + suffix
 
-	if True:
-		data = runLengthEncode(head, indexTable, int(CharClassify.RLEValueBit))
-		output.append(f'const unsigned short CharClassifyRLE{suffix}[] = {{')
+	valueBit, totalBit, data = runLengthEncode(head, indexTable)
+	assert valueBit == 3
+	if encodingList[0] == 'cp1361':
+		#skipBlockEncode(head, indexTable, tableName=head)
+		data = runBlockEncode(head, indexTable, tableName=head)
+		output.extend(data)
+	else:
+		assert totalBit == 16
+		output.append(f'const uint16_t CharClassifyRLE{suffix}[] = {{')
 		output.extend(dumpArray(data, 20))
 		output.append("};")
-		output.append("")
+	output.append("")
 
 	if False:
-		args = {
-			'table': 'CharClassifyTable' + suffix,
-			'function': """CharClassify::cc ClassifyCharacter%s(unsigned int ch) noexcept {
+		config = {
+			'tableName': 'CharClassifyTable' + suffix,
+			'function': """CharClassify::cc ClassifyCharacter%s(uint32_t ch) noexcept {
 	if (ch > maxDBCSCharacter) {
 		// Cn
 		return CharClassify::ccSpace;
@@ -700,10 +507,10 @@ def makeDBCSCharClassifyTable(output, encodingList, isReservedOrUDC=None):
 			'returnType': 'CharClassify::cc'
 		}
 
-		table, function = compressIndexTable(head, indexTable, args)
-		output.extend(table.splitlines())
+		table, function = buildMultiStageTable(head, indexTable, config)
+		output.extend(table)
 		output.append('')
-		output.extend(function.splitlines())
+		output.extend(function)
 		output.append('')
 
 # https://en.wikipedia.org/wiki/GBK_(character_encoding)
@@ -725,7 +532,7 @@ def isReservedOrUDC_GBK(ch, buf):
 # https://en.wikipedia.org/wiki/Big5
 def isReservedOrUDC_Big5(ch, buf):
 	for block in [(0x8140, 0xA0FE), (0xA3C0, 0xA3FE), (0xC6A1, 0xC8FE), (0xF9D6, 0xFEFE)]:
-		if ch >= block[0] or ch <= block[1]:
+		if ch >= block[0] and ch <= block[1]:
 			return True
 	return False
 

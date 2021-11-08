@@ -70,7 +70,7 @@ public:
 	void operator=(const ContractionState &) = delete;
 	ContractionState(ContractionState &&) = delete;
 	void operator=(ContractionState &&) = delete;
-	~ContractionState() override;
+	~ContractionState() noexcept override;
 
 	void Clear() noexcept override;
 
@@ -113,9 +113,7 @@ ContractionState<LINE>::ContractionState() noexcept : linesInDocument(1) {
 }
 
 template <typename LINE>
-ContractionState<LINE>::~ContractionState() {
-	Clear();
-}
+ContractionState<LINE>::~ContractionState() noexcept = default;
 
 template <typename LINE>
 void ContractionState<LINE>::EnsureData() {
@@ -228,7 +226,7 @@ Sci::Line ContractionState<LINE>::DocFromDisplay(Sci::Line lineDisplay) const no
 	if (OneToOne()) {
 		return lineDisplay;
 	} else {
-		if (lineDisplay <= 0) {
+		if (lineDisplay < 0) {
 			return 0;
 		}
 		if (lineDisplay > LinesDisplayed()) {
@@ -375,7 +373,7 @@ bool ContractionState<LINE>::SetFoldDisplayText(Sci::Line lineDoc, const char *t
 	EnsureData();
 	const char *foldText = foldDisplayTexts->ValueAt(lineDoc).get();
 	if (!foldText || !text || 0 != strcmp(text, foldText)) {
-		UniqueString uns = IsNullOrEmpty(text) ? UniqueString() : UniqueStringCopy(text);
+		UniqueString uns = UniqueStringCopy(text);
 		foldDisplayTexts->SetValueAt(lineDoc, std::move(uns));
 		Check();
 		return true;

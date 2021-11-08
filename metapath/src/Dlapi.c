@@ -67,7 +67,7 @@ void DirList_Init(HWND hwnd, LPCWSTR pszHeader) {
 	lpdl->cbidl = 0;
 	lpdl->pidl = NULL;
 	lpdl->lpsf = NULL;
-	lstrcpy(lpdl->szPath, L"");
+	StrCpyExW(lpdl->szPath, L"");
 
 	SHFILEINFO shfi;
 	// Add Imagelists
@@ -185,15 +185,15 @@ int DirList_Fill(HWND hwnd, LPCWSTR lpszDir, DWORD grfFlags, LPCWSTR lpszFileSpe
 		ULONG chParsed = 0;
 		ULONG dwAttributes = 0;
 #if defined(__cplusplus)
-		if (S_OK == lpsfDesktop->ParseDisplayName(hwnd, NULL, wszDir, &chParsed, &pidl, &dwAttributes)) {
+		if (S_OK == lpsfDesktop->ParseDisplayName(hwnd, nullptr, wszDir, &chParsed, &pidl, &dwAttributes)) {
 			// Bind pidl to IShellFolder
-			if (S_OK == lpsfDesktop->BindToObject(pidl, NULL, IID_IShellFolder, (void **)(&lpsf))) {
+			if (S_OK == lpsfDesktop->BindToObject(pidl, nullptr, IID_IShellFolder, (void **)(&lpsf))) {
 				// Create an Enumeration object for lpsf
-				LPENUMIDLIST lpe = NULL;
+				LPENUMIDLIST lpe = nullptr;
 				if (S_OK == lpsf->EnumObjects(hwnd, grfFlags, &lpe)) {
 					// Enumerate the contents of lpsf
-					LPITEMIDLIST pidlEntry = NULL;
-					while (S_OK == lpe->Next(1, &pidlEntry, NULL)) {
+					LPITEMIDLIST pidlEntry = nullptr;
+					while (S_OK == lpe->Next(1, &pidlEntry, nullptr)) {
 						// Add found item to the List
 						// Check if it's part of the Filesystem
 						dwAttributes = SFGAO_FILESYSTEM | SFGAO_FOLDER;
@@ -647,17 +647,17 @@ BOOL DirList_PropertyDlg(HWND hwnd, int iItem) {
 	LPCONTEXTMENU lpcm;
 
 #if defined(__cplusplus)
-	if (S_OK == lplvid->lpsf->GetUIObjectOf(GetParent(hwnd), 1, (LPCITEMIDLIST *)(&lplvid->pidl), IID_IContextMenu, NULL, (void **)(&lpcm))) {
+	if (S_OK == lplvid->lpsf->GetUIObjectOf(GetParent(hwnd), 1, (LPCITEMIDLIST *)(&lplvid->pidl), IID_IContextMenu, nullptr, (void **)(&lpcm))) {
 		CMINVOKECOMMANDINFO cmi;
 		cmi.cbSize = sizeof(CMINVOKECOMMANDINFO);
 		cmi.fMask = 0;
 		cmi.hwnd = GetParent(hwnd);
 		cmi.lpVerb = lpVerb;
-		cmi.lpParameters = NULL;
-		cmi.lpDirectory = NULL;
+		cmi.lpParameters = nullptr;
+		cmi.lpDirectory = nullptr;
 		cmi.nShow = SW_SHOWNORMAL;
 		cmi.dwHotKey = 0;
-		cmi.hIcon = NULL;
+		cmi.hIcon = nullptr;
 
 		if (S_OK != lpcm->InvokeCommand(&cmi)) {
 			bSuccess = FALSE;
@@ -717,7 +717,7 @@ void DirList_DoDragDrop(HWND hwnd, LPARAM lParam) {
 		LPLV_ITEMDATA lplvid = (LPLV_ITEMDATA)lvi.lParam;
 		LPDATAOBJECT lpdo;
 #if defined(__cplusplus)
-		if (SUCCEEDED(lplvid->lpsf->GetUIObjectOf(GetParent(hwnd), 1, (LPCITEMIDLIST *)(&lplvid->pidl), IID_IDataObject, NULL, (void **)(&lpdo)))) {
+		if (SUCCEEDED(lplvid->lpsf->GetUIObjectOf(GetParent(hwnd), 1, (LPCITEMIDLIST *)(&lplvid->pidl), IID_IDataObject, nullptr, (void **)(&lpdo)))) {
 			LPDROPSOURCE lpds = (LPDROPSOURCE)CreateDropSource();
 			DWORD dwEffect;
 
@@ -791,7 +791,7 @@ BOOL DirList_SelectItem(HWND hwnd, LPCWSTR lpszDisplayName, LPCWSTR lpszFullPath
 		DirList_GetItem(hwnd, i, &dli);
 		GetShortPathName(dli.szFileName, dli.szFileName, MAX_PATH);
 
-		if (StrCaseEqual(dli.szFileName, szShortPath)) {
+		if (PathEqual(dli.szFileName, szShortPath)) {
 			ListView_SetItemState(hwnd, i, LVIS_FLAGS, LVIS_FLAGS);
 			ListView_EnsureVisible(hwnd, i, FALSE);
 			return TRUE;
@@ -826,13 +826,12 @@ BOOL DirList_IsFileSelected(HWND hwnd) {
 //
 void DirList_CreateFilter(PDL_FILTER pdlf, LPCWSTR lpszFileSpec, BOOL bExcludeFilter) {
 	ZeroMemory(pdlf, sizeof(DL_FILTER));
-	lstrcpyn(pdlf->tFilterBuf, lpszFileSpec, (DL_FILTER_BUFSIZE - 1));
-	pdlf->bExcludeFilter = bExcludeFilter;
-
-	if (StrIsEmpty(lpszFileSpec) || StrEqual(lpszFileSpec, L"*.*")) {
+	if (StrIsEmpty(lpszFileSpec) || StrEqualExW(lpszFileSpec, L"*.*")) {
 		return;
 	}
 
+	lstrcpyn(pdlf->tFilterBuf, lpszFileSpec, (DL_FILTER_BUFSIZE - 1));
+	pdlf->bExcludeFilter = bExcludeFilter;
 	pdlf->nCount = 1;
 	pdlf->pFilter[0] = pdlf->tFilterBuf;    // Zeile zum Ausprobieren
 
@@ -930,10 +929,10 @@ int DriveBox_Fill(HWND hwnd) {
 
 	// Get pidl to [My Computer]
 	LPITEMIDLIST pidl;
-#if _WIN32_WINNT < _WIN32_WINNT_VISTA
-	if (S_OK == SHGetFolderLocation(hwnd, CSIDL_DRIVES, NULL, SHGFP_TYPE_DEFAULT, &pidl))
-#else
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 	if (S_OK == SHGetKnownFolderIDList(&FOLDERID_ComputerFolder, KF_FLAG_DEFAULT, NULL, &pidl))
+#else
+	if (S_OK == SHGetFolderLocation(hwnd, CSIDL_DRIVES, NULL, SHGFP_TYPE_DEFAULT, &pidl))
 #endif
 	{
 		// Get Desktop Folder
@@ -942,14 +941,14 @@ int DriveBox_Fill(HWND hwnd) {
 			// Bind pidl to IShellFolder
 			LPSHELLFOLDER lpsf; // Workspace == CSIDL_DRIVES
 #if defined(__cplusplus)
-			if (S_OK == lpsfDesktop->BindToObject(pidl, NULL, IID_IShellFolder, (void **)(&lpsf))) {
+			if (S_OK == lpsfDesktop->BindToObject(pidl, nullptr, IID_IShellFolder, (void **)(&lpsf))) {
 				// Create an Enumeration object for lpsf
 				const DWORD grfFlags = SHCONTF_FOLDERS;
 				LPENUMIDLIST lpe;
 				if (S_OK == lpsf->EnumObjects(hwnd, grfFlags, &lpe)) {
 					// Enumerate the contents of [My Computer]
 					LPITEMIDLIST pidlEntry;
-					while (S_OK == lpe->Next(1, &pidlEntry, NULL)) {
+					while (S_OK == lpe->Next(1, &pidlEntry, nullptr)) {
 						// Add item to the List if it is part of the
 						// Filesystem
 						ULONG dwAttributes = SFGAO_FILESYSTEM;
@@ -1155,17 +1154,17 @@ BOOL DriveBox_PropertyDlg(HWND hwnd) {
 	LPCONTEXTMENU lpcm;
 
 #if defined(__cplusplus)
-	if (S_OK == lpdcid->lpsf->GetUIObjectOf(GetParent(hwnd), 1, (LPCITEMIDLIST *)(&lpdcid->pidl), IID_IContextMenu, NULL, (void **)(&lpcm))) {
+	if (S_OK == lpdcid->lpsf->GetUIObjectOf(GetParent(hwnd), 1, (LPCITEMIDLIST *)(&lpdcid->pidl), IID_IContextMenu, nullptr, (void **)(&lpcm))) {
 		CMINVOKECOMMANDINFO cmi;
 		cmi.cbSize = sizeof(CMINVOKECOMMANDINFO);
 		cmi.fMask = 0;
 		cmi.hwnd = GetParent(hwnd);
 		cmi.lpVerb = lpVerb;
-		cmi.lpParameters = NULL;
-		cmi.lpDirectory = NULL;
+		cmi.lpParameters = nullptr;
+		cmi.lpDirectory = nullptr;
 		cmi.nShow = SW_SHOWNORMAL;
 		cmi.dwHotKey = 0;
-		cmi.hIcon = NULL;
+		cmi.hIcon = nullptr;
 
 		if (S_OK != lpcm->InvokeCommand(&cmi)) {
 			bSuccess = FALSE;

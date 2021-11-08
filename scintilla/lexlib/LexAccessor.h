@@ -11,11 +11,9 @@ namespace Lexilla {
 enum class EncodingType { eightBit, unicode, dbcs };
 
 class LexAccessor {
-public:
 	enum {
 		extremePosition = 0x7FFFFFFF
 	};
-private:
 	Scintilla::IDocument * const pAccess;
 	/** @a bufferSize is a trade off between time taken to copy the characters
 	 * and retrieval overhead.
@@ -28,8 +26,9 @@ private:
 	char buf[bufferSize + 1];
 	Sci_Position startPos;
 	Sci_Position endPos;
-	const int codePage;
-	const enum EncodingType encodingType;
+	//const int codePage;
+	//const int documentVersion;
+	const EncodingType encodingType;
 	const Sci_Position lenDoc;
 	unsigned char styleBuf[bufferSize];
 	Sci_Position validLen;
@@ -49,11 +48,16 @@ private:
 		buf[m] = '\0';
 	}
 
+	static constexpr EncodingType EncodingTypeForCodePage(int codePage) noexcept {
+		return (codePage == 65001) ? EncodingType::unicode : (codePage ? EncodingType::dbcs : EncodingType::eightBit);
+	}
+
 public:
 	explicit LexAccessor(Scintilla::IDocument *pAccess_) noexcept :
 		pAccess(pAccess_), startPos(0), endPos(0),
-		codePage(pAccess->CodePage()),
-		encodingType((codePage == 65001) ? EncodingType::unicode : (codePage ? EncodingType::dbcs : EncodingType::eightBit)),
+		//codePage(pAccess->CodePage()),
+		//documentVersion(pAccess->Version()),
+		encodingType(EncodingTypeForCodePage(pAccess->CodePage())),
 		lenDoc(pAccess->Length()),
 		validLen(0),
 		startSeg(0),
@@ -156,6 +160,13 @@ public:
 	constexpr Sci_Position Length() const noexcept {
 		return lenDoc;
 	}
+	Sci_PositionU StyleEndPos(Sci_PositionU startPos_, Sci_PositionU length) const noexcept {
+		length += startPos_;
+		if (length == static_cast<Sci_PositionU>(lenDoc)) {
+			++length;
+		}
+		return length;
+	}
 	void Flush() {
 		if (validLen > 0) {
 			pAccess->SetStyles(validLen, styleBuf);
@@ -180,29 +191,32 @@ public:
 	void StartSegment(Sci_PositionU pos) noexcept {
 		startSeg = pos;
 	}
+#if 0
+	[[deprecated]]
 	void ColourTo(Sci_PositionU pos, int chAttr) {
+		ColorTo(pos + 1, chAttr);
+	}
+#endif
+	void ColorTo(Sci_PositionU endPos_, int chAttr) {
 		// Only perform styling if non empty range
-		if (pos != startSeg - 1) {
-			assert(pos >= startSeg);
-			if (pos < startSeg) {
-				return;
-			}
-
-			if (validLen + (pos - startSeg + 1) >= bufferSize) {
+		assert(endPos_ <= static_cast<Sci_PositionU>(Length()));
+		if (endPos_ > startSeg) {
+			const Sci_PositionU len = endPos_ - startSeg;
+			if (validLen + len >= bufferSize) {
 				Flush();
 			}
 			const unsigned char attr = static_cast<unsigned char>(chAttr);
-			if (validLen + (pos - startSeg + 1) >= bufferSize) {
+			if (validLen + len >= bufferSize) {
 				// Too big for buffer so send directly
-				pAccess->SetStyleFor(pos - startSeg + 1, attr);
+				pAccess->SetStyleFor(len, attr);
 			} else {
-				for (Sci_PositionU i = startSeg; i <= pos; i++) {
+				for (Sci_PositionU i = 0; i < len; i++) {
 					assert((startPosStyling + validLen) < Length());
 					styleBuf[validLen++] = attr;
 				}
 			}
 		}
-		startSeg = pos + 1;
+		startSeg = endPos_;
 	}
 	void SetLevel(Sci_Line line, int level) {
 		pAccess->SetLevel(line, level);
@@ -230,10 +244,6 @@ constexpr int MultiStyle(int style1, int style2) noexcept {
 	return style1 | (style2 << 8);
 }
 
-constexpr bool IsSpaceOrTab(int ch) noexcept {
-	return ch == ' ' || ch == '\t';
-}
-
 constexpr bool IsWhiteSpace(int ch) noexcept {
 	return (ch == ' ') || ((ch >= 0x09) && (ch <= 0x0d));
 }
@@ -256,12 +266,13 @@ bool IsLexLineStartsWith(Sci_Line line, LexAccessor &styler, const char *word, b
 Sci_Position LexLineSkipSpaceTab(Sci_Line line, LexAccessor &styler) noexcept;
 
 inline Sci_Position LexSkipSpaceTab(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler) noexcept {
-	for (Sci_Position i = startPos; i < endPos; i++) {
-		if (!IsSpaceOrTab(styler.SafeGetCharAt(i))) {
-			return i;
+	for (; startPos < endPos; startPos++) {
+		const char ch = styler.SafeGetCharAt(startPos);
+		if (!(ch == ' ' || ch == '\t')) {
+			break;
 		}
 	}
-	return endPos;
+	return startPos;
 }
 
 Sci_Position LexSkipWhiteSpace(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler) noexcept;
@@ -297,12 +308,11 @@ inline unsigned char LexGetNextChar(Sci_Position startPos, LexAccessor &styler) 
 }
 
 inline unsigned char LexGetNextChar(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler) noexcept {
-	while (startPos < endPos) {
+	for (; startPos < endPos; startPos++) {
 		const unsigned char ch = styler[startPos];
 		if (!IsWhiteSpace(ch)) {
 			return ch;
 		}
-		++startPos;
 	}
 	return '\0';
 }

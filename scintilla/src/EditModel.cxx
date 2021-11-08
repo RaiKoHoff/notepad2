@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <cstdint>
 #include <cassert>
 #include <cstring>
 #include <cmath>
@@ -59,8 +60,8 @@ Caret::Caret() noexcept :
 
 EditModel::EditModel() : braces{} {
 	inOverstrike = false;
-	xOffset = 0;
 	trackLineWidth = false;
+	xOffset = 0;
 	posDrag = SelectionPosition(Sci::invalidPosition);
 	braces[0] = Sci::invalidPosition;
 	braces[1] = Sci::invalidPosition;
@@ -97,7 +98,7 @@ bool EditModel::BidirectionalR2L() const noexcept {
 }
 
 void EditModel::SetDefaultFoldDisplayText(const char *text) {
-	defaultFoldDisplayText = IsNullOrEmpty(text) ? UniqueString() : UniqueStringCopy(text);
+	defaultFoldDisplayText = UniqueStringCopy(text);
 }
 
 const char *EditModel::GetDefaultFoldDisplayText() const noexcept {

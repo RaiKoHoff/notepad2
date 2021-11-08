@@ -66,7 +66,7 @@ static void ColouriseAsmDoc(Sci_PositionU startPos, Sci_Position length, int ini
 	//const WordList &directives4foldend= *keywordLists[7];
 	const WordList &GNUdirective = *keywordLists[8];
 	const WordList &kwProprocessor = *keywordLists[9];
-	std::string delimiters;
+	constexpr std::string_view delimiters;
 	// Do not leak onto next line
 	if (initStyle == SCE_ASM_STRINGEOL)
 		initStyle = SCE_ASM_DEFAULT;
@@ -165,7 +165,7 @@ static void ColouriseAsmDoc(Sci_PositionU startPos, Sci_Position length, int ini
 					sc.SetState(SCE_ASM_DEFAULT);
 				}
 				if (IsDirective && StrEqual(s, "comment")) {
-					const char delimiter = delimiters.empty() ? '~' : delimiters.c_str()[0];
+					const char delimiter = delimiters.empty() ? '~' : delimiters[0];
 					while (IsASpaceOrTab(sc.ch) && !sc.atLineEnd) {
 						sc.ForwardSetState(SCE_ASM_DEFAULT);
 					}
@@ -175,7 +175,7 @@ static void ColouriseAsmDoc(Sci_PositionU startPos, Sci_Position length, int ini
 				}
 			}
 		} else if (sc.state == SCE_ASM_COMMENTDIRECTIVE) {
-			const char delimiter = delimiters.empty() ? '~' : delimiters.c_str()[0];
+			const char delimiter = delimiters.empty() ? '~' : delimiters[0];
 			if (sc.ch == delimiter) {
 				while (!sc.atLineEnd) {
 					sc.Forward();
@@ -206,7 +206,7 @@ static void ColouriseAsmDoc(Sci_PositionU startPos, Sci_Position length, int ini
 				sc.ChangeState(SCE_ASM_STRINGEOL);
 				sc.ForwardSetState(SCE_ASM_DEFAULT);
 			} else if (isIncludePreprocessor) {
-				if (sc.ch == '>' || sc.ch == '\"' || sc.ch == '\'') {
+				if (sc.ch == '>' || sc.ch == '\'') {
 					sc.ForwardSetState(SCE_ASM_DEFAULT);
 					isIncludePreprocessor = false;
 				}
@@ -320,6 +320,9 @@ static constexpr bool IsAsmDefaultStyle(int style) noexcept {
 	return style == SCE_ASM_DEFAULT || style == SCE_ASM_IDENTIFIER;
 }
 static bool IsEquLine(Sci_Line line, LexAccessor &styler) noexcept {
+	if (line < 0) {
+		return false;
+	}
 	const Sci_Position startPos = styler.LineStart(line);
 	const Sci_Position endPos = styler.LineStart(line + 1) - 1;
 	Sci_Position pos = LexSkipWhiteSpace(startPos, endPos, styler, IsAsmDefaultStyle);
@@ -331,6 +334,9 @@ static bool IsEquLine(Sci_Line line, LexAccessor &styler) noexcept {
 	return false;
 }
 static bool IsAsmDefineLine(Sci_Line line, LexAccessor &styler) noexcept {
+	if (line < 0) {
+		return false;
+	}
 	const Sci_Position startPos = styler.LineStart(line);
 	const Sci_Position endPos = styler.LineStart(line + 1) - 1;
 	Sci_Position pos = LexSkipSpaceTab(startPos, endPos, styler);
@@ -365,6 +371,7 @@ static void FoldAsmDoc(Sci_PositionU startPos, Sci_Position length, int initStyl
 
 	char chNext = styler[startPos];
 	int style = initStyle;
+	int styleEOL = initStyle;
 	int styleNext = styler.StyleAt(startPos);
 	char word[MAX_ASM_WORD_LEN + 1] = "";
 	int wordlen = 0;
@@ -390,7 +397,7 @@ static void FoldAsmDoc(Sci_PositionU startPos, Sci_Position length, int initStyl
 		if (atEOL && IsAsmDefineLine(lineCurrent, styler)) {
 			levelNext += IsAsmDefineLine(lineCurrent + 1, styler) - IsAsmDefineLine(lineCurrent - 1, styler);
 		}
-		if (atEOL) {
+		if (atEOL && !IsStreamCommentStyle(style) && !IsStreamCommentStyle(styleEOL)) {
 			levelNext += IsBackslashLine(lineCurrent, styler) - IsBackslashLine(lineCurrent - 1, styler);
 		}
 		if (atEOL && IsEquLine(lineCurrent, styler)) {
@@ -451,6 +458,7 @@ static void FoldAsmDoc(Sci_PositionU startPos, Sci_Position length, int initStyl
 			}
 			lineCurrent++;
 			levelCurrent = levelNext;
+			styleEOL = style;
 		}
 	}
 }

@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <cstdint>
 #include <cassert>
 #include <cstring>
 #include <cstdio>
@@ -404,6 +405,7 @@ class ScintillaWin final :
 	UINT dpi;
 	ReverseArrowCursor reverseArrowCursor;
 
+	PRectangle rectangleClient;
 	HRGN hRgnUpdate;
 
 	bool hasOKText;
@@ -563,8 +565,10 @@ class ScintillaWin final :
 	bool IsCompatibleDC(HDC hOtherDC) const noexcept;
 	DWORD EffectFromState(DWORD grfKeyState) const noexcept;
 
+	BOOL IsVisible() const noexcept;
 	int SetScrollInfo(int nBar, LPCSCROLLINFO lpsi, BOOL bRedraw) const noexcept;
 	bool GetScrollInfo(int nBar, LPSCROLLINFO lpsi) const noexcept;
+	bool ChangeScrollRange(int nBar, int nMin, int nMax, UINT nPage) const noexcept;
 	void ChangeScrollPos(int barType, Sci::Position pos);
 	sptr_t GetTextLength() const noexcept;
 	sptr_t GetText(uptr_t wParam, sptr_t lParam) const;
@@ -572,6 +576,9 @@ class ScintillaWin final :
 #if SCI_EnablePopupMenu
 	sptr_t ShowContextMenu(unsigned int iMessage, uptr_t wParam, sptr_t lParam);
 #endif
+	PRectangle GetClientRectangle() const noexcept override {
+		return rectangleClient;
+	}
 	void SizeWindow();
 	sptr_t MouseMessage(unsigned int iMessage, uptr_t wParam, sptr_t lParam);
 	sptr_t KeyMessage(unsigned int iMessage, uptr_t wParam, sptr_t lParam);
@@ -1338,8 +1345,13 @@ bool ScintillaWin::HandleLaTeXTabCompletion() {
 		return false;
 	}
 
-	char buffer[MaxLaTeXInputBufferLength];
 	const Sci::Position main = sel.MainCaret();
+	if (main <= MinLaTeXInputSequenceLength) {
+		return false;
+	}
+
+	char buffer[MaxLaTeXInputBufferLength];
+#if 1
 	Sci::Position pos = main - 1;
 	char *ptr = buffer + sizeof(buffer) - 1;
 	*ptr = '\0';
@@ -1364,6 +1376,37 @@ bool ScintillaWin::HandleLaTeXTabCompletion() {
 	}
 
 	ptrdiff_t wclen = buffer + sizeof(buffer) - 1 - ptr;
+#else
+	Sci::Position pos = std::max<Sci::Position>(0, main - (sizeof(buffer) - 1));
+	Sci::Position wclen = main - pos;
+	pdoc->GetCharRange(buffer, pos, wclen);
+
+	pos = main;
+	char *ptr = buffer + wclen;
+	*ptr = '\0';
+	char ch;
+	do {
+		--pos;
+		--ptr;
+		ch = *ptr;
+		if (!IsLaTeXInputSequenceChar(ch)) {
+			break;
+		}
+	} while (ptr != buffer);
+	if (ch != '\\') {
+		return false;
+	}
+	if (pdoc->dbcsCodePage && pdoc->dbcsCodePage != CpUtf8) {
+		ch = pdoc->CharAt(pos - 1);
+		if (!UTF8IsAscii(ch) && pdoc->IsDBCSLeadByteNoExcept(ch)) {
+			return false;
+		}
+	}
+
+	++ptr;
+	wclen = main - pos - 1;
+#endif
+
 	const uint32_t wch = GetLaTeXInputUnicodeCharacter(ptr, wclen);
 	if (wch == 0) {
 		return false;
@@ -1520,7 +1563,7 @@ constexpr Message SciMessageFromEM(unsigned int iMessage) noexcept {
 }
 
 UINT ScintillaWin::CodePageOfDocument() const noexcept {
-	return pdoc->dbcsCodePage; // see SCI_GETCODEPAGE in Editor.cxx
+	return pdoc->dbcsCodePage; // see Message::GetCodePage in Editor.cxx
 }
 
 std::string ScintillaWin::EncodeWString(std::wstring_view wsv) {
@@ -1620,6 +1663,7 @@ void ScintillaWin::SizeWindow() {
 	}
 #endif
 	//Platform::DebugPrintf("Scintilla WM_SIZE %d %d\n", LOWORD(lParam), HIWORD(lParam));
+	rectangleClient = wMain.GetClientPosition();
 	ChangeSize();
 }
 
@@ -2294,6 +2338,15 @@ sptr_t ScintillaWin::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		case WM_ERASEBKGND:
 			return 1;   // Avoid any background erasure as whole window painted.
 
+		case WM_SETREDRAW:
+			::DefWindowProc(MainHWND(), msg, wParam, lParam);
+			if (wParam) {
+				SetScrollBars();
+				SetVerticalScrollPos();
+				SetHorizontalScrollPos();
+			}
+			return 0;
+
 		case WM_CAPTURECHANGED:
 			capturedMouse = false;
 			return 0;
@@ -2419,15 +2472,15 @@ void ScintillaWin::FineTickerStart(TickReason reason, int millis, int tolerance)
 	FineTickerCancel(reason);
 	const UINT_PTR reasonIndex = static_cast<UINT_PTR>(reason);
 	const UINT_PTR eventID = static_cast<UINT_PTR>(fineTimerStart) + reasonIndex;
-#if _WIN32_WINNT < _WIN32_WINNT_WIN8
-	if (SetCoalescableTimerFn && tolerance) {
-		timers[reasonIndex] = SetCoalescableTimerFn(MainHWND(), eventID, millis, nullptr, tolerance);
+#if _WIN32_WINNT >= _WIN32_WINNT_WIN8
+	if (tolerance) {
+		timers[reasonIndex] = ::SetCoalescableTimer(MainHWND(), eventID, millis, nullptr, tolerance);
 	} else {
 		timers[reasonIndex] = ::SetTimer(MainHWND(), eventID, millis, nullptr);
 	}
 #else
-	if (tolerance) {
-		timers[reasonIndex] = ::SetCoalescableTimer(MainHWND(), eventID, millis, nullptr, tolerance);
+	if (SetCoalescableTimerFn && tolerance) {
+		timers[reasonIndex] = SetCoalescableTimerFn(MainHWND(), eventID, millis, nullptr, tolerance);
 	} else {
 		timers[reasonIndex] = ::SetTimer(MainHWND(), eventID, millis, nullptr);
 	}
@@ -2555,6 +2608,10 @@ void ScintillaWin::UpdateSystemCaret() {
 	}
 }
 
+BOOL ScintillaWin::IsVisible() const noexcept {
+	return GetWindowStyle(MainHWND()) & WS_VISIBLE;
+}
+
 int ScintillaWin::SetScrollInfo(int nBar, LPCSCROLLINFO lpsi, BOOL bRedraw) const noexcept {
 	return ::SetScrollInfo(MainHWND(), nBar, lpsi, bRedraw);
 }
@@ -2565,6 +2622,10 @@ bool ScintillaWin::GetScrollInfo(int nBar, LPSCROLLINFO lpsi) const noexcept {
 
 // Change the scroll position but avoid repaint if changing to same value
 void ScintillaWin::ChangeScrollPos(int barType, Sci::Position pos) {
+	if (!IsVisible()) {
+		return;
+	}
+
 	SCROLLINFO sci {};
  	sci.cbSize = sizeof(sci);
 	sci.fMask = SIF_POS;
@@ -2584,49 +2645,37 @@ void ScintillaWin::SetHorizontalScrollPos() {
 	ChangeScrollPos(SB_HORZ, xOffset);
 }
 
+bool ScintillaWin::ChangeScrollRange(int nBar, int nMin, int nMax, UINT nPage) const noexcept {
+	SCROLLINFO sci = { sizeof(sci), SIF_PAGE | SIF_RANGE, 0, 0, 0, 0, 0 };
+	GetScrollInfo(nBar, &sci);
+	if ((sci.nMin != nMin) || (sci.nMax != nMax) ||	(sci.nPage != nPage)) {
+		sci.nMin = nMin;
+		sci.nMax = nMax;
+		sci.nPage = nPage;
+		SetScrollInfo(nBar, &sci, TRUE);
+		return true;
+	}
+	return false;
+}
+
 bool ScintillaWin::ModifyScrollBars(Sci::Line nMax, Sci::Line nPage) {
-	bool modified = false;
-	SCROLLINFO sci {};
-	sci.cbSize = sizeof(sci);
-	sci.fMask = SIF_PAGE | SIF_RANGE;
-	GetScrollInfo(SB_VERT, &sci);
-	const Sci::Line vertEndPreferred = nMax;
-	if (!verticalScrollBarVisible)
-		nPage = vertEndPreferred + 1;
-	if ((sci.nMin != 0) ||
-		(sci.nMax != vertEndPreferred) ||
-		(sci.nPage != static_cast<unsigned int>(nPage)) ||
-		(sci.nPos != 0)) {
-		sci.fMask = SIF_PAGE | SIF_RANGE;
-		sci.nMin = 0;
-		sci.nMax = static_cast<int>(vertEndPreferred);
-		sci.nPage = static_cast<UINT>(nPage);
-		sci.nPos = 0;
-		sci.nTrackPos = 1;
-		SetScrollInfo(SB_VERT, &sci, TRUE);
-		modified = true;
+	if (!IsVisible()) {
+		return false;
 	}
 
+	const Sci::Line vertEndPreferred = nMax;
+	if (!verticalScrollBarVisible) {
+		nPage = vertEndPreferred + 1;
+	}
+
+	bool modified = ChangeScrollRange(SB_VERT, 0, static_cast<int>(vertEndPreferred), static_cast<unsigned int>(nPage));
 	const PRectangle rcText = GetTextRectangle();
-	int horizEndPreferred = scrollWidth;
-	if (horizEndPreferred < 0)
-		horizEndPreferred = 0;
 	int pageWidth = static_cast<int>(rcText.Width());
-	if (!horizontalScrollBarVisible || Wrapping())
+	const int horizEndPreferred = std::max(scrollWidth, pageWidth - 1);
+	if (!horizontalScrollBarVisible || Wrapping()) {
 		pageWidth = horizEndPreferred + 1;
-	sci.fMask = SIF_PAGE | SIF_RANGE;
-	GetScrollInfo(SB_HORZ, &sci);
-	if ((sci.nMin != 0) ||
-		(sci.nMax != horizEndPreferred) ||
-		(sci.nPage != static_cast<unsigned int>(pageWidth)) ||
-		(sci.nPos != 0)) {
-		sci.fMask = SIF_PAGE | SIF_RANGE;
-		sci.nMin = 0;
-		sci.nMax = horizEndPreferred;
-		sci.nPage = pageWidth;
-		sci.nPos = 0;
-		sci.nTrackPos = 1;
-		SetScrollInfo(SB_HORZ, &sci, TRUE);
+	}
+	if (ChangeScrollRange(SB_HORZ, 0, horizEndPreferred, pageWidth)) {
 		modified = true;
 		if (scrollWidth < pageWidth) {
 			HorizontalScrollTo(0);

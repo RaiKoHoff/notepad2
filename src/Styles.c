@@ -63,15 +63,18 @@ extern EDITLEXER lexSmali;
 extern EDITLEXER lexANSI;
 extern EDITLEXER lexAPDL;
 extern EDITLEXER lexASM;
-extern EDITLEXER lexASY;
+extern EDITLEXER lexAsymptote;
+extern EDITLEXER lexAutoHotkey;
 extern EDITLEXER lexAU3;
 extern EDITLEXER lexAVS;
 extern EDITLEXER lexAwk;
 
 extern EDITLEXER lexBatch;
+extern EDITLEXER lexBlockdiag;
 
 extern EDITLEXER lexCIL;
 extern EDITLEXER lexCMake;
+extern EDITLEXER lexCoffeeScript;
 extern EDITLEXER lexCONF;
 
 extern EDITLEXER lexD;
@@ -84,7 +87,7 @@ extern EDITLEXER lexFortran;
 extern EDITLEXER lexGN;
 extern EDITLEXER lexGo;
 extern EDITLEXER lexGradle;
-extern EDITLEXER lexDOT;
+extern EDITLEXER lexGraphViz;
 extern EDITLEXER lexGroovy;
 
 extern EDITLEXER lexHaxe;
@@ -162,15 +165,18 @@ static PEDITLEXER pLexArray[] = {
 	&lexANSI,
 	&lexAPDL,
 	&lexASM,
-	&lexASY,
+	&lexAsymptote,
+	&lexAutoHotkey,
 	&lexAU3,
 	&lexAVS,
 	&lexAwk,
 
 	&lexBatch,
+	&lexBlockdiag,
 
 	&lexCIL,
 	&lexCMake,
+	&lexCoffeeScript,
 	&lexCONF,
 
 	&lexD,
@@ -183,7 +189,7 @@ static PEDITLEXER pLexArray[] = {
 	&lexGN,
 	&lexGo,
 	&lexGradle,
-	&lexDOT,
+	&lexGraphViz,
 	&lexGroovy,
 
 	&lexHaxe,
@@ -327,7 +333,7 @@ static LPWSTR g_AllFileExtensions = NULL;
 
 // Notepad2.c
 extern HWND hwndMain;
-extern int	iEncoding;
+extern int	iCurrentEncoding;
 extern int	g_DOSEncoding;
 extern int	iDefaultCodePage;
 extern int	iDefaultCharSet;
@@ -423,7 +429,6 @@ enum ANSIArtStyleIndex {
 #define IMEIndicatorDefaultColor	RGB(0x10, 0x80, 0x10)
 #define MarkOccurrencesDefaultAlpha	100
 #define SelectionDefaultAlpha		95
-#define CaretLineDefaultAlpha		90
 
 #define	BookmarkImageDefaultColor	RGB(0x40, 0x80, 0x40)
 #define	BookmarkLineDefaultColor	RGB(0, 0xff, 0)
@@ -515,6 +520,7 @@ static inline UINT GetLexerStyleControlMask(int rid, int index) {
 static inline void FindSystemDefaultCodeFont(void) {
 	LPCWSTR const commonCodeFontName[] = {
 		L"DejaVu Sans Mono",
+		L"Cascadia Mono",
 		L"Consolas",			// Vista and above
 		//L"Source Code Pro",
 		//L"Liberation Mono",
@@ -1238,9 +1244,6 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[13] = KeywordAttr_NoLexer;		// C Function
 		attr[14] = KeywordAttr_NoLexer;		// C++ Function
 		break;
-	case NP2LEX_CSHARP:
-		attr[2] = KeywordAttr_NoAutoComp;	// Preprocessor
-		break;
 	case NP2LEX_D:
 		attr[2] = KeywordAttr_NoAutoComp;	// Preprocessor
 		attr[11] = KeywordAttr_NoAutoComp;	// Assembler Intruction
@@ -1251,7 +1254,7 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[2] = KeywordAttr_MakeLower | KeywordAttr_NoAutoComp;	// VBScript
 		attr[3] = KeywordAttr_NoAutoComp;	// Python
 		attr[4] = KeywordAttr_NoAutoComp;	// PHP
-		attr[7] = KeywordAttr_NoLexer;		// Value
+		attr[8] = KeywordAttr_NoLexer;		// Value
 		break;
 	case NP2LEX_RC:
 		attr[2] = KeywordAttr_NoAutoComp;	// Preprocessor
@@ -1281,6 +1284,19 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 	case NP2LEX_ACTIONSCRIPT:
 		attr[8] = KeywordAttr_NoLexer;		// function
 		break;
+	case NP2LEX_AHK:
+		attr[0] = KeywordAttr_MakeLower;	// keywords
+		attr[1] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// directives
+		attr[2] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// compiler directives
+		attr[3] = KeywordAttr_MakeLower;	// objects
+		attr[4] = KeywordAttr_MakeLower;	// built-in variables
+		attr[5] = KeywordAttr_MakeLower;	// keys
+		attr[6] = KeywordAttr_MakeLower;	// functions
+		attr[7] = KeywordAttr_NoLexer;		// misc
+		break;
+	case NP2LEX_ASYMPTOTE:
+		attr[4] = KeywordAttr_NoLexer;		// functions
+		break;
 	case NP2LEX_AVS:
 		attr[1] = KeywordAttr_MakeLower;	// internal functions
 		attr[2] = KeywordAttr_MakeLower;	// internal filters
@@ -1298,9 +1314,21 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[4] = KeywordAttr_NoLexer;		// environment variables
 		attr[5] = KeywordAttr_NoLexer;		// command options
 		break;
+	case NP2LEX_BLOCKDIAG:
+		attr[1] = KeywordAttr_NoLexer;		// labels
+		attr[2] = KeywordAttr_NoLexer;		// attributes
+		attr[3] = KeywordAttr_NoLexer;		// node shapes
+		attr[4] = KeywordAttr_NoLexer;		// color names
+		attr[5] = KeywordAttr_NoLexer;		// values
+		break;
 	case NP2LEX_CMAKE:
 		attr[6] = KeywordAttr_NoLexer;		// long properties
 		attr[7] = KeywordAttr_NoLexer;		// long variables
+		break;
+	case NP2LEX_CSHARP:
+		attr[2] = KeywordAttr_NoAutoComp;	// vala types
+		attr[3] = KeywordAttr_NoAutoComp;	// preprocessor
+		attr[10] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// comment tag
 		break;
 	case NP2LEX_DART:
 		attr[4] = KeywordAttr_NoLexer;		// metadata
@@ -1320,6 +1348,13 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 		attr[8] = KeywordAttr_NoLexer;		// function
 		attr[9] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// GroovyDoc
 		break;
+	case NP2LEX_GRAPHVIZ:
+		attr[1] = KeywordAttr_NoLexer;		// labels
+		attr[2] = KeywordAttr_NoLexer;		// attributes
+		attr[3] = KeywordAttr_NoLexer;		// node shapes
+		attr[4] = KeywordAttr_NoLexer;		// color names
+		attr[5] = KeywordAttr_NoLexer;		// values
+		break;
 	case NP2LEX_GROOVY:
 		attr[7] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// annotation
 		attr[9] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// GroovyDoc
@@ -1327,6 +1362,19 @@ void Style_UpdateLexerKeywordAttr(LPCEDITLEXER pLexNew) {
 	case NP2LEX_HAXE:
 		attr[1] = KeywordAttr_NoAutoComp;	// preprocessor
 		attr[8] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// comment
+		break;
+	case NP2LEX_INNO:
+		attr[0] = KeywordAttr_NoLexer;		// section
+		attr[1] = KeywordAttr_NoLexer;		// parameters
+		attr[2] = KeywordAttr_NoLexer;		// constants
+		attr[4] = KeywordAttr_NoLexer | KeywordAttr_NoAutoComp;	// directives
+		attr[6] = KeywordAttr_MakeLower;	// predefined variables
+		attr[7] = KeywordAttr_NoLexer;		// functions
+		attr[8] = KeywordAttr_MakeLower;	// pascal keywords
+		attr[9] = KeywordAttr_MakeLower;	// pascal types
+		attr[10] = KeywordAttr_NoLexer;		// pascal functions
+		attr[11] = KeywordAttr_MakeLower;	// pascal constants
+		attr[12] = KeywordAttr_NoLexer;		// misc
 		break;
 	case NP2LEX_JAM:
 		attr[5] = KeywordAttr_NoLexer;		// rule
@@ -1623,6 +1671,7 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	// Default Values are always set
 	SciCall_StyleResetDefault();
 	SciCall_StyleSetCharacterSet(STYLE_DEFAULT, DEFAULT_CHARSET);
+	SciCall_StyleSetCheckMonospaced(STYLE_DEFAULT, TRUE);
 
 	//! begin STYLE_DEFAULT
 	LPCWSTR szValue = pLexGlobal->Styles[GlobalStyleIndex_DefaultCode].szValue;
@@ -1649,7 +1698,7 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 			GetUserDefaultLocaleName(localeWide, COUNTOF(localeWide));
 #else
-			GetLocaleInfo(0 /*LOCALE_NAME_USER_DEFAULT*/, 0x0000005c /*LOCALE_SNAME*/, localeWide, COUNTOF(localeWide));
+			GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_SNAME, localeWide, COUNTOF(localeWide));
 #endif
 		}
 		WideCharToMultiByte(CP_UTF8, 0, localeWide, -1, localeName, COUNTOF(localeName), NULL, NULL);
@@ -1819,6 +1868,8 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 		} while (iMarkerIDs);
 
 		fillColor = ColorAlpha(fillColor, SC_ALPHA_OPAQUE);
+		//SciCall_SetElementColor(SC_ELEMENT_FOLD_LINE, fillColor);
+		//SciCall_SetElementColor(SC_ELEMENT_HIDDEN_LINE, fillColor);
 		SciCall_MarkerSetForeTranslucent(SC_MARKNUM_FOLDER, fillColor);
 		SciCall_MarkerSetForeTranslucent(SC_MARKNUM_FOLDEREND, fillColor);
 
@@ -2672,7 +2723,7 @@ static PEDITLEXER Style_GetLexerFromFile(LPCWSTR lpszFile, BOOL bCGIGuess, LPCWS
 			if (pDotFile) {
 				*pDotFile = TRUE;
 			}
-			if (StrHasPrefix(lpszExt, L"bash") || StrEqual(lpszExt, L"profile")) { // .bash_history, .bash_logout, .bash_profile, .bashrc, .profile
+			if (StrHasPrefix(lpszExt, L"bash") || StrEqualExW(lpszExt, L"profile")) { // .bash_history, .bash_logout, .bash_profile, .bashrc, .profile
 				pLexNew = &lexBash;
 				bFound = TRUE;
 			}
@@ -2686,6 +2737,10 @@ static PEDITLEXER Style_GetLexerFromFile(LPCWSTR lpszFile, BOOL bCGIGuess, LPCWS
 		}
 		if (!bFound && (StrHasPrefixCase(lpszName, L"Makefile") || StrHasPrefixCase(lpszName, L"Kbuild"))) {
 			pLexNew = &lexMake;
+			bFound = TRUE;
+		}
+		if (!bFound && StrCaseEqual(lpszName, L"Cakefile")) {
+			pLexNew = &lexCoffeeScript;
 			bFound = TRUE;
 		}
 		if (!bFound && (StrCaseEqual(lpszName, L"Rakefile") || StrCaseEqual(lpszName, L"Podfile"))) {
@@ -2786,7 +2841,7 @@ BOOL Style_SetLexerFromFile(LPCWSTR lpszFile) {
 			char tchText[256] = "";
 			SciCall_GetText(COUNTOF(tchText), tchText);
 			if ((pLexSniffed = Style_SniffShebang(tchText)) != NULL) {
-				if (iEncoding != g_DOSEncoding || pLexSniffed != &lexTextFile
+				if (iCurrentEncoding != g_DOSEncoding || pLexSniffed != &lexTextFile
 						|| !(StrCaseEqual(lpszExt, L"nfo") || StrCaseEqual(lpszExt, L"diz"))) {
 					// Although .nfo and .diz were removed from the default lexer's
 					// default extensions list, they may still presist in the user's INI
@@ -2806,7 +2861,7 @@ BOOL Style_SetLexerFromFile(LPCWSTR lpszFile) {
 		}
 	}
 
-	if (!bFound && iEncoding == g_DOSEncoding) {
+	if (!bFound && iCurrentEncoding == g_DOSEncoding) {
 		pLexNew = &lexANSI;
 		bFound = TRUE;
 	}
@@ -3149,11 +3204,11 @@ void Style_HighlightCurrentLine(void) {
 			}
 
 			SciCall_SetCaretLineFrame(size);
-			SciCall_SetCaretLineLayer(SC_LAYER_OVER_TEXT);
+			SciCall_SetCaretLineLayer(SC_LAYER_UNDER_TEXT);
 
 			int alpha;
 			if (!Style_StrGetAlphaEx(outline, szValue, &alpha)) {
-				alpha = CaretLineDefaultAlpha;
+				alpha = SC_ALPHA_OPAQUE;
 			}
 			SciCall_SetElementColor(SC_ELEMENT_CARET_LINE_BACK, ColorAlpha(rgb, alpha));
 			return;
@@ -3363,15 +3418,15 @@ BOOL Style_StrGetFontEx(LPCWSTR lpszStyle, LPWSTR lpszFont, int cchFont, BOOL bD
 		TrimString(lpszFont);
 
 		if (bDefaultStyle) {
-			if (StrEqual(lpszFont, L"$(Text)")) {
+			if (StrEqualExW(lpszFont, L"$(Text)")) {
 				lstrcpyn(lpszFont, systemTextFontName, cchFont);
-			} else if (StrCaseEqual(lpszFont, L"$(Code)") || !IsFontAvailable(lpszFont)) {
+			} else if (StrEqualExW(lpszFont, L"$(Code)") || !IsFontAvailable(lpszFont)) {
 				lstrcpyn(lpszFont, systemCodeFontName, cchFont);
 			}
 		} else {
-			if (StrEqual(lpszFont, L"$(Text)")) {
+			if (StrEqualExW(lpszFont, L"$(Text)")) {
 				lstrcpyn(lpszFont, defaultTextFontName, cchFont);
-			} else if (StrCaseEqual(lpszFont, L"$(Code)") || !IsFontAvailable(lpszFont)) {
+			} else if (StrEqualExW(lpszFont, L"$(Code)") || !IsFontAvailable(lpszFont)) {
 				lstrcpyn(lpszFont, defaultCodeFontName, cchFont);
 			}
 		}
@@ -3742,7 +3797,7 @@ BOOL Style_SelectColor(HWND hwnd, BOOL bFore, LPWSTR lpszStyle, int cchStyle) {
 	WCHAR szNewStyle[MAX_LEXER_STYLE_EDIT_SIZE];
 	WCHAR tch[MAX_STYLE_VALUE_LENGTH];
 
-	lstrcpy(szNewStyle, L"");
+	StrCpyExW(szNewStyle, L"");
 	Style_StrCopyFont(szNewStyle, lpszStyle, tch);
 	Style_StrCopyCharSet(szNewStyle, lpszStyle, tch);
 	Style_StrCopyLocale(szNewStyle, lpszStyle, tch);
@@ -3973,7 +4028,7 @@ int Style_GetLexerIconId(LPCEDITLEXER pLex, DWORD iconFlags) {
 	}
 
 	WCHAR pszFile[MAX_PATH];
-	lstrcpy(pszFile, L"*.");
+	StrCpyExW(pszFile, L"*.");
 
 	// TODO: avoid copying all extensions then find separators.
 	// we only need the first extension, it's usually very short.
@@ -3990,7 +4045,7 @@ int Style_GetLexerIconId(LPCEDITLEXER pLex, DWORD iconFlags) {
 
 	// check for ; at beginning
 	if (p == pszFile + 2) {
-		lstrcpy(p, L"txt");
+		StrCpyExW(p, L"txt");
 	}
 
 	SHFILEINFO shfi;
@@ -4269,7 +4324,7 @@ static void Style_ResetStyle(PEDITLEXER pLex, PEDITSTYLE pStyle) {
 		WCHAR wch[MAX_EDITSTYLE_VALUE_SIZE] = L"";
 		// use "NULL" to distinguish between empty style value like: Keyword=
 		GetPrivateProfileString(pLex->pszName, pStyle->pszName, L"NULL", wch, COUNTOF(wch), themePath);
-		if (!StrEqual(wch, L"NULL")) {
+		if (!StrEqualExW(wch, L"NULL")) {
 			lstrcpy(pStyle->szValue, wch);
 			return;
 		}

@@ -38,7 +38,6 @@ public:
 	RunStyles<POS, int> rs;
 
 	explicit Decoration(int indicator_) : indicator(indicator_) {}
-	~Decoration() override = default;
 
 	bool Empty() const noexcept override {
 		return (rs.Runs() == 1) && (rs.AllSameAs(0));
@@ -73,7 +72,7 @@ template <typename POS>
 class DecorationList : public IDecorationList {
 	int currentIndicator;
 	int currentValue;
-	Decoration<POS> *current;	// Cached so FillRange doesn't have to search for each call.
+	Decoration<POS> *current;	// Non-owning. Cached so FillRange doesn't have to search for each call.
 	Sci::Position lengthDocument;
 	// Ordered by indicator
 	std::vector<std::unique_ptr<Decoration<POS>>> decorationList;
@@ -88,7 +87,6 @@ class DecorationList : public IDecorationList {
 public:
 
 	DecorationList() noexcept;
-	~DecorationList() override;
 
 	const std::vector<const IDecoration*> &View() const noexcept override {
 		return decorationView;
@@ -128,11 +126,6 @@ public:
 template <typename POS>
 DecorationList<POS>::DecorationList() noexcept : currentIndicator(0), currentValue(1), current(nullptr),
 lengthDocument(0), clickNotified(false) {
-}
-
-template <typename POS>
-DecorationList<POS>::~DecorationList() {
-	current = nullptr;
 }
 
 template <typename POS>
@@ -265,7 +258,7 @@ int DecorationList<POS>::AllOnFor(Sci::Position position) const noexcept {
 	for (const auto &deco : decorationList) {
 		if (deco->rs.ValueAt(static_cast<POS>(position))) {
 			if (deco->Indicator() < static_cast<int>(Scintilla::IndicatorNumbers::Ime)) {
-				mask |= 1 << deco->Indicator();
+				mask |= 1u << deco->Indicator();
 			}
 		}
 	}

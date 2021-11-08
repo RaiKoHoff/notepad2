@@ -975,8 +975,10 @@
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\scintilla\lexers\LexAsm.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexAPDL.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexAsm.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexAsymptote.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexAutoHotkey.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexAutoIt3.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexAviSynth.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexAwk.cxx" />
@@ -984,8 +986,10 @@
     <ClCompile Include="..\..\scintilla\lexers\LexBatch.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexCIL.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexCMake.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexCoffeeScript.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexConfig.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexCPP.cxx" />
+    <ClCompile Include="..\..\scintilla\lexers\LexCSharp.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexCSS.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexDart.cxx" />
     <ClCompile Include="..\..\scintilla\lexers\LexDiff.cxx" />
@@ -1089,13 +1093,16 @@
     <ClCompile Include="..\..\src\EditLexers\stlAPDL.c" />
     <ClCompile Include="..\..\src\EditLexers\stlAsm.c" />
     <ClCompile Include="..\..\src\EditLexers\stlAsymptote.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlAutoHotkey.c" />
     <ClCompile Include="..\..\src\EditLexers\stlAutoIt3.c" />
     <ClCompile Include="..\..\src\EditLexers\stlAviSynth.c" />
     <ClCompile Include="..\..\src\EditLexers\stlAwk.c" />
     <ClCompile Include="..\..\src\EditLexers\stlBash.c" />
     <ClCompile Include="..\..\src\EditLexers\stlBatch.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlBlockdiag.c" />
     <ClCompile Include="..\..\src\EditLexers\stlCIL.c" />
     <ClCompile Include="..\..\src\EditLexers\stlCMake.c" />
+    <ClCompile Include="..\..\src\EditLexers\stlCoffeeScript.c" />
     <ClCompile Include="..\..\src\EditLexers\stlCPP.c" />
     <ClCompile Include="..\..\src\EditLexers\stlCSharp.c" />
     <ClCompile Include="..\..\src\EditLexers\stlCSS.c" />

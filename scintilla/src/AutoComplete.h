@@ -12,10 +12,10 @@ namespace Scintilla::Internal {
  */
 class AutoComplete {
 	bool active;
-	std::string stopChars;
-	std::string fillUpChars;
 	char separator;
 	char typesep; // Type separator
+	std::string stopChars;
+	std::string fillUpChars;
 	enum {
 		maxItemLen = 1024
 	};
@@ -25,6 +25,7 @@ public:
 
 	bool ignoreCase;
 	bool chooseSingle;
+	AutoCompleteOption options;
 	std::unique_ptr<ListBox> lb;
 	Sci::Position posStart;
 	Sci::Position startLen;
@@ -42,14 +43,22 @@ public:
 	Scintilla::Ordering autoSort;
 
 	AutoComplete();
+	// Deleted so AutoComplete objects can not be copied.
+	AutoComplete(const AutoComplete &) = delete;
+	AutoComplete(AutoComplete &&) = delete;
+	AutoComplete &operator=(const AutoComplete &) = delete;
+	AutoComplete &operator=(AutoComplete &&) = delete;
 	~AutoComplete();
 
 	/// Is the auto completion list displayed?
-	bool Active() const noexcept;
+	bool Active() const noexcept {
+		return active;
+	}
 
 	/// Display the auto completion list positioned to be near a character position
 	void SCICALL Start(Window &parent, int ctrlID, Sci::Position position, Point location,
-		Sci::Position startLen_, int lineHeight, bool unicodeMode, Scintilla::Technology technology) noexcept;
+		Sci::Position startLen_, int lineHeight, bool unicodeMode, Scintilla::Technology technology,
+		ListOptions listOptions) noexcept;
 
 	/// The stop chars are characters which, when typed, cause the auto completion list to disappear
 	void SetStopChars(const char *stopChars_);

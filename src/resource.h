@@ -25,8 +25,6 @@
 // About
 #define IDD_ABOUT						100
 #define IDC_VERSION						100
-#define IDC_COPYRIGHT					101
-#define IDC_AUTHORNAME					102
 #define IDC_WEBPAGE_TEXT				103
 #define IDC_WEBPAGE_LINK				104
 #define IDC_EMAIL_TEXT					105
@@ -276,6 +274,7 @@
 #define IDC_SORT_IGNORE_CASE			106
 #define IDC_SORT_LOGICAL_NUMBER			107
 #define IDC_SORT_COLUMN					108
+#define IDC_SORT_GROUPBY_FILE_TYPE		109
 // Align Lines
 #define IDD_ALIGN						112
 #define IDC_ALIGN_LEFT					100

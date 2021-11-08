@@ -227,11 +227,10 @@ BEGIN
     ICON            IDR_MAINWND,IDC_STATIC,7,7,20,20
     LTEXT           "",IDC_VERSION,45,7,200,8
     LTEXT           "",IDC_BUILD_INFO,45,18,200,8
-    LTEXT           "",IDC_COPYRIGHT,45,30,200,8
-    LTEXT           "",IDC_AUTHORNAME,130,30,200,8
+    LTEXT           "Copyright © 1996-2012 Florian Balmer.",IDC_STATIC,45,30,200,8
     LTEXT           "",IDC_WEBPAGE_TEXT,45,40,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_WEBPAGE_LINK,"SysLink",WS_TABSTOP,45,40,200,10
-    LTEXT           "metapath のサイトにアクセス:",IDC_STATIC,45,52,140,8
+    LTEXT           "Copyright © 2011-2021 Zufu Liu and all contributors.",IDC_STATIC,45,52,200,8
     LTEXT           "",IDC_NEW_PAGE_TEXT,45,60,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_NEW_PAGE_LINK,"SysLink",WS_TABSTOP,45,60,200,10
     LTEXT           "Florian Balmer の連絡先:",IDC_STATIC,45,72,140,8
@@ -640,7 +639,7 @@ BEGIN
     IDS_ERR_DROP1           "ドロップしたファイルやフォルダにアクセスできません。"
     //IDS_ERR_DROP2           "同時にひとつのファイルかフォルダしかドロップできません。"
     IDS_ERR_FAVORITES       "お気に入り\n「お気に入り」フォルダにアクセスできません。\n設定から存在するフォルダを指定してください。"
-    IDS_ERR_LNK_GETPATH     "ショートカットする対象のパスが正しくありません。\nおそらくファイルやフォルダではありません。"
+    //IDS_ERR_LNK_GETPATH     "ショートカットする対象のパスが正しくありません。\nおそらくファイルやフォルダではありません。"
     IDS_ERR_LNK_NOACCESS    "ショートカットの対象のパスにアクセスできません。\nディスクあるいはネットワーク接続を確認してください。"
     IDS_ERR_CREATELINK      "指定したショートカットを作成できません。\nおそらくフォルダが書き込み保護されています。"
     IDS_ERR_FILTER          "追加のフィルタの指定がありません。\n詳細は metapath の readme ファイルを参照してください。"

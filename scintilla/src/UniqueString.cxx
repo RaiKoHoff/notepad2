@@ -17,8 +17,8 @@ namespace Scintilla::Internal {
 /// Equivalent to strdup but produces a std::unique_ptr<const char[]> allocation to go
 /// into collections.
 UniqueString UniqueStringCopy(const char *text) {
-	if (!text) {
-		return UniqueString();
+	if (IsNullOrEmpty(text)) {
+		return {};
 	}
 	const std::string_view sv(text);
 	std::unique_ptr<char[]> upcNew = std::make_unique<char[]>(sv.length() + 1);
@@ -30,9 +30,7 @@ UniqueString UniqueStringCopy(const char *text) {
 
 UniqueStringSet::UniqueStringSet() noexcept = default;
 
-UniqueStringSet::~UniqueStringSet() {
-	strings.clear();
-}
+UniqueStringSet::~UniqueStringSet() = default;
 
 void UniqueStringSet::Clear() noexcept {
 	strings.clear();
@@ -50,7 +48,9 @@ const char *UniqueStringSet::Save(const char *text) {
 		}
 	}
 
-	strings.push_back(UniqueStringCopy(text));
+	std::unique_ptr<char[]> upcNew = std::make_unique<char[]>(sv.length() + 1);
+	sv.copy(upcNew.get(), sv.length());
+	strings.push_back(UniqueString(upcNew.release()));
 	return strings.back().get();
 }
 

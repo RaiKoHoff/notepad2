@@ -4,13 +4,15 @@ import os.path
 import re
 from collections import Counter
 from enum import IntFlag
+import string
 
 from FileGenerator import Regenerate
 
 AllKeywordAttrList = {}
+ColorNameList = set()
 JavaKeywordMap = {}
-GroovyKeyword = []
 JavaScriptKeywordMap = {}
+GroovyKeyword = []
 
 # see EditLexer.h
 class KeywordAttr(IntFlag):
@@ -128,8 +130,7 @@ def UpdateKeywordFile(rid, path, keywordList, keywordCount=16):
 	output = BuildKeywordContent(rid, keywordList, keywordCount=keywordCount)
 	Regenerate(path, '//', output)
 
-def read_api_file(path, comment, commentKind=0):
-	doc = open(path, encoding='utf-8').read()
+def split_api_section(doc, comment, commentKind=0):
 	if commentKind == 0:
 		doc = re.sub(comment + r'[^!].+', '', doc) # normal comment
 	sections = []
@@ -156,6 +157,14 @@ def read_api_file(path, comment, commentKind=0):
 		sections.append((key, doc))
 	return sections
 
+def read_file(path):
+	with open(path, encoding='utf-8') as fd:
+		return fd.read()
+
+def read_api_file(path, comment, commentKind=0):
+	doc = read_file(path)
+	return split_api_section(doc, comment, commentKind=commentKind)
+
 def to_lower(items):
 	return [item.lower() for item in items]
 
@@ -169,6 +178,15 @@ def to_upper_conditional(items):
 			result.append(item)
 		else:
 			result.append(item.upper())
+	return result
+
+def to_lower_conditional(items):
+	result = []
+	for item in items:
+		if sum(ch.isupper() for ch in item) > 1:
+			result.append(item)
+		else:
+			result.append(item.lower())
 	return result
 
 
@@ -205,6 +223,52 @@ def parse_actionscript_api_file(path):
 		('doc tag', [], KeywordAttr.Default),
 	]
 
+def parse_autohotkey_api_file(pathList):
+	keywordMap = {}
+	for path in pathList:
+		sections = read_api_file(path, ';')
+		for key, doc in sections:
+			if key in ('keywords', 'built-in variables', 'keys', 'misc'):
+				items = doc.split()
+			elif key == 'flow of control':
+				key = 'keywords'
+				items = re.findall(r'^\s*(\w+)', doc, re.MULTILINE)
+			elif key == 'directives':
+				items = re.findall(r'#(\w+)', doc)
+			elif key == 'script compiler directives':
+				items = re.findall(r'@([\w\-]+)', doc)
+			elif key == 'functions':
+				items = re.findall(r'^\s*(\w+\(?)', doc, re.MULTILINE)
+				functions = []
+				for item in items:
+					if item.endswith('('):
+						functions.append(item + ')')
+					else:
+						functions.append(item)
+				items = functions
+			elif key == 'objects':
+				items = doc.replace('.', ' ').split()
+			keywordMap.setdefault(key, []).extend(items)
+
+	keywordMap['keywords'].extend(to_lower_conditional(keywordMap['keywords']))
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'objects',
+		'built-in variables',
+		'keys',
+		'misc',
+	])
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.MakeLower),
+		('directives', keywordMap['directives'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
+		('compiler directives', keywordMap['script compiler directives'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
+		('objects', keywordMap['objects'], KeywordAttr.MakeLower),
+		('built-in variables', keywordMap['built-in variables'], KeywordAttr.MakeLower),
+		('keys', keywordMap['keys'], KeywordAttr.MakeLower),
+		('functions', keywordMap['functions'], KeywordAttr.MakeLower),
+		('misc', keywordMap['misc'], KeywordAttr.NoLexer),
+	]
+
 def parse_apdl_api_file(path):
 	ext = os.path.splitext(path)[1].lower()
 	comment = '!' if ext == '.cdb' else '**'
@@ -213,7 +277,7 @@ def parse_apdl_api_file(path):
 	for key, doc in sections:
 		key = key.strip('*! ')
 		if key == 'function':
-			items = re.findall('(\w+\()', doc)
+			items = re.findall(r'(\w+\()', doc)
 		else:
 			items = doc.split()
 			if key in ('code folding', 'slash command', 'star command'):
@@ -228,6 +292,31 @@ def parse_apdl_api_file(path):
 		('star command', keywordMap['star command'], KeywordAttr.Default),
 		('argument', keywordMap['argument'], KeywordAttr.Default),
 		('function', keywordMap['function'], KeywordAttr.Default),
+	]
+
+def parse_asymptote_api_file(path):
+	sections = read_api_file(path, '//')
+	keywordMap = {}
+	for key, doc in sections:
+		if key == 'functions':
+			items = re.findall(r'(\w+\()', doc)
+			items = [item for item in items if len(item) > 2]
+		else:
+			items = doc.split()
+		keywordMap[key] = items
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'types',
+		'structs',
+		'constants',
+	])
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('types', keywordMap['types'], KeywordAttr.Default),
+		('structs', keywordMap['structs'], KeywordAttr.Default),
+		('constants', keywordMap['constants'], KeywordAttr.Default),
+		('functions', keywordMap['functions'], KeywordAttr.NoLexer),
 	]
 
 def parse_avisynth_api_file(path):
@@ -357,6 +446,28 @@ def parse_batch_api_file(path):
 		('command options', keywordMap['options'], KeywordAttr.NoLexer),
 	]
 
+def parse_coffeescript_api_file(path):
+	sections = read_api_file(path, '#')
+	keywordMap = {}
+	for key, doc in sections:
+		keywordMap[key] = doc.split()
+
+	keywordMap['directive'] = JavaScriptKeywordMap['directive']
+	keywordMap['class'] = JavaScriptKeywordMap['class']
+	RemoveDuplicateKeyword(keywordMap, [
+		'directive',
+		'keywords',
+		'reserved words',
+		'class',
+	])
+
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('reserved words', keywordMap['reserved words'], KeywordAttr.Default),
+		('directive', keywordMap['directive'], KeywordAttr.Default),
+		('class', keywordMap['class'], KeywordAttr.Default),
+	]
+
 def parse_cmake_api_file(path):
 	# languages from https://gitlab.kitware.com/cmake/cmake/blob/master/Auxiliary/vim/extract-upper-case.pl
 	cmakeLang = "ASM C CSharp CUDA CXX Fortran Java RC Swift".split()
@@ -469,6 +580,55 @@ def parse_cmake_api_file(path):
 		#('long variables', keywordMap['long variables'], KeywordAttr.NoLexer),
 		('long properties', [], KeywordAttr.NoLexer),
 		('long variables', [], KeywordAttr.NoLexer),
+	]
+
+def parse_csharp_api_file(path):
+	sections = read_api_file(path, '//')
+	keywordMap = {}
+	for key, doc in sections:
+		if key in ('keywords', 'types', 'vala types'):
+			keywordMap[key] = doc.split()
+		elif key == 'preprocessor':
+			items = re.findall(r'#(\w+)', doc)
+			keywordMap[key] = items
+		elif key == 'api':
+			items = re.findall(r'class\s+(\w+)', doc)
+			keywordMap['class'] = items
+			items = re.findall(r'struct\s+(\w+)', doc)
+			keywordMap['struct'] = items
+			items = re.findall(r'interface\s+(\w+)', doc)
+			keywordMap['interface'] = items
+			items = re.findall(r'enum\s+(\w+)', doc)
+			keywordMap['enumeration'] = items
+			items = re.findall(r'\[(\w+)', doc)
+			keywordMap['attributes'] = items
+			items = re.findall(r'delegate\s+\w+\s+(\w+)', doc)
+			keywordMap['class'].extend(items)
+		elif key == 'comment':
+			items = re.findall(r'<(\w+)', doc)
+			keywordMap['comment tag'] = items
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'types',
+		'class',
+		'struct',
+		'interface',
+		'enumeration',
+		'vala types',
+	])
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('types', keywordMap['types'], KeywordAttr.Default),
+		('vala types', keywordMap['vala types'], KeywordAttr.NoAutoComp),
+		('preprocessor', keywordMap['preprocessor'], KeywordAttr.NoAutoComp),
+		('attributes', keywordMap['attributes'], KeywordAttr.Default),
+		('class', keywordMap['class'], KeywordAttr.Default),
+		('struct', keywordMap['struct'], KeywordAttr.Default),
+		('interface', keywordMap['interface'], KeywordAttr.Default),
+		('enumeration', keywordMap['enumeration'], KeywordAttr.Default),
+		('constant', [], KeywordAttr.Default),
+		('comment tag', keywordMap['comment tag'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
 	]
 
 def parse_dart_api_file(path):
@@ -639,6 +799,57 @@ def parse_gradle_api_file(path):
 		('GroovyDoc', JavaKeywordMap['javadoc'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
 	]
 
+def parse_graphviz_api_file(path):
+	sections = read_api_file(path, '//')
+	keywordMap = {
+		'attributes': [],
+		'values': [],
+		'labels': [],
+	}
+	for key, doc in sections:
+		if key in ('keywords', 'node shapes'):
+			keywordMap[key] = doc.split()
+		elif key == 'attributes':
+			attributes = []
+			values = []
+			doc = doc.replace('[', '').replace(']', '')
+			for line in doc.splitlines():
+				line = line.strip()
+				if not line:
+					continue
+				items = line.split('=', 2)
+				attributes.append(items[0].strip())
+				if len(items) > 1:
+					items = [item for item in items[1].replace(',', ' ').split() if item]
+					values.extend(items)
+			keywordMap['attributes'].extend(attributes)
+			keywordMap['values'].extend(values)
+		elif key == 'color names':
+			items = [item for item in doc.split() if not item[-1] in string.digits]
+			ColorNameList.update(items)
+		elif key == 'labels':
+			items = re.findall(r'<(\w+)', doc)
+			keywordMap[key].extend(items)
+			items = re.findall(r'([\w\-]+)=', doc)
+			keywordMap['attributes'].extend(items)
+
+	keywordMap['color names'] = ColorNameList
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'color names',
+		'attributes',
+		'node shapes',
+		'values',
+	])
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('labels', keywordMap['labels'], KeywordAttr.NoLexer),
+		('attributes', keywordMap['attributes'], KeywordAttr.NoLexer),
+		('node shapes', keywordMap['node shapes'], KeywordAttr.NoLexer),
+		('color names', ColorNameList, KeywordAttr.NoLexer),
+		('values', keywordMap['values'], KeywordAttr.NoLexer),
+	]
+
 def parse_groovy_api_file(path):
 	sections = read_api_file(path, '//')
 	keywords = []
@@ -698,6 +909,128 @@ def parse_haxe_api_file(path):
 		('metadata', [], KeywordAttr.Default),
 		('function', [], KeywordAttr.Default),
 		('comment', keywordMap['comment'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
+	]
+
+def parse_inno_setup_api_file(path):
+	section = ''
+	lines = []
+	sections = []
+	doc = read_file(path)
+	for line in doc.splitlines():
+		line = line.strip()
+		if not line:
+			continue
+		if line[0] == '[':
+			if section and lines:
+				doc = '\n'.join(lines)
+				sections.append((section, doc))
+			section = line.strip('[]').strip()
+			lines = []
+		else:
+			lines.append(line)
+	if section and lines:
+		doc = '\n'.join(lines)
+		sections.append((section, doc))
+
+	keywordMap = {
+		'section': [],
+		'parameters': [],
+		'constants': [],
+
+		'keywords': [],
+		'directives': [],
+		'types': [],
+		'predefined variables': [],
+		'functions': [],
+
+		'pascal keywords': [],
+		'pascal types': ['IDispatch', 'IUnknown'],
+		'pascal functions': [],
+		'pascal constants': [],
+		'misc': ['Local'],
+	}
+	for section, content in sections:
+		if section == 'ISPP':
+			for key, doc in split_api_section(content, '//'):
+				if key == 'directives':
+					items = re.findall(r'^#(\w+)', doc, re.MULTILINE)
+				elif key in ('keywords', 'types', 'predefined variables'):
+					items = doc.split()
+				elif key == 'functions':
+					items = re.findall(r'(\w+)\(', doc)
+					items = [item + '()' for item in items]
+				else:
+					items = []
+				keywordMap[key].extend(items)
+		elif section in ('Constants', 'Misc'):
+			items = re.findall(r'^\{?(\w+)', content, re.MULTILINE)
+			keywordMap[section.lower()].extend(items)
+		elif section == 'Code':
+			keywordMap['section'].append(section)
+			for key, doc in split_api_section(content, '//'):
+				items = []
+				if key == 'keywords':
+					items = doc.split()
+				elif key == 'constants':
+					items = doc.replace(',', ' ').split()
+				elif key in ('event', 'functions', 'classes'):
+					items = re.findall(r'^\s*(function|procedure|constructor|property)\s+(\w+\(?)', doc, re.MULTILINE | re.IGNORECASE)
+					functions = []
+					properties = []
+					for kind, name in items:
+						if key == 'event' or kind.lower() == 'property':
+							properties.append(name)
+						elif not name.endswith('('):
+							functions.append(name)
+						else:
+							functions.append(name + ')')
+
+					types = re.findall(r':\s*(\w+)', doc)
+					if 'array' in types:
+						types.remove('array')
+					if key == 'classes':
+						items = re.findall(r'^(T\w+)\s*=', doc, re.MULTILINE)
+						types.extend(items)
+						items = re.findall(r'^T\w+\s*=\s*\(([\w\s,]+)\)', doc, re.MULTILINE)
+						for item in items:
+							keywordMap['pascal constants'].extend(item.replace(',', ' ').split())
+					keywordMap['misc'].extend(properties)
+					if key == 'functions':
+						items = functions
+					else:
+						key = 'types'
+						items = types
+				keywordMap['pascal ' + key].extend(items)
+		else:
+			keywordMap['section'].append(section)
+			items = re.findall(r'^(\w+)=?:?', content, re.MULTILINE)
+			keywordMap['parameters'].extend(items)
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'pascal keywords',
+		'pascal types',
+		'functions',
+		'pascal functions',
+		'predefined variables',
+		'pascal constants',
+		'misc',
+	])
+	return [
+		('section', keywordMap['section'], KeywordAttr.NoLexer),
+		('parameters', keywordMap['parameters'], KeywordAttr.NoLexer),
+		('constants', keywordMap['constants'], KeywordAttr.NoLexer),
+
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('directives', keywordMap['directives'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp),
+		('types', keywordMap['types'], KeywordAttr.Default),
+		('predefined variables', keywordMap['predefined variables'], KeywordAttr.MakeLower),
+		('functions', keywordMap['functions'], KeywordAttr.NoLexer),
+
+		('pascal keywords', keywordMap['pascal keywords'], KeywordAttr.MakeLower),
+		('pascal types', keywordMap['pascal types'], KeywordAttr.MakeLower),
+		('pascal functions', keywordMap['pascal functions'], KeywordAttr.NoLexer),
+		('pascal constants', keywordMap['pascal constants'], KeywordAttr.MakeLower),
+		('misc', keywordMap['misc'], KeywordAttr.NoLexer),
 	]
 
 def parse_jam_api_file(path):
@@ -1499,7 +1832,7 @@ def parse_wasm_lexer_keywords(path):
 	def has_type_prefix(word):
 		return any(word.startswith(prefix + '.') for prefix in types)
 
-	for line in open(path).readlines():
+	for line in read_file(path).splitlines():
 		if not line or not (line[0].islower() and ',' in line and '::' in line):
 			continue
 

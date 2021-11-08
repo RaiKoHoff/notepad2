@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <cstdint>
 #include <cassert>
 #include <cstring>
 #include <cstdio>
@@ -156,10 +157,10 @@ Editor::Editor() {
 
 	searchAnchor = 0;
 
-	xCaretMargin = 50;
 	horizontalScrollBarVisible = true;
-	scrollWidth = 2000;
 	verticalScrollBarVisible = true;
+	xCaretMargin = 50;
+	scrollWidth = 2000;
 	endAtLastLine = 1;
 	caretSticky = CaretSticky::Off;
 	marginOptions = MarginOption::None;
@@ -187,15 +188,14 @@ Editor::Editor() {
 	idleStyling = IdleStyling::None;
 	needIdleStyling = false;
 
-	modEventMask = ModificationFlags::EventMaskAll;
 	commandEvents = true;
+	modEventMask = ModificationFlags::EventMaskAll;
 
 	pdoc->AddWatcher(this, nullptr);
 
 	recordingMacro = false;
-	foldAutomatic = AutomaticFold::None;
-
 	convertPastes = true;
+	foldAutomatic = AutomaticFold::None;
 
 	SetRepresentations();
 }
@@ -485,12 +485,17 @@ void Editor::DiscardOverdraw() noexcept {
 }
 
 void Editor::Redraw() noexcept {
+	if (redrawPendingText) {
+		return;
+	}
 	//Platform::DebugPrintf("Redraw all\n");
 	const PRectangle rcClient = GetClientRectangle();
 	wMain.InvalidateRectangle(rcClient);
-	if (wMargin.GetID())
+	if (wMargin.GetID()) {
 		wMargin.InvalidateAll();
-	//wMain.InvalidateAll();
+	} else if (paintState == PaintState::notPainting) {
+		redrawPendingText = true;
+	}
 }
 
 void Editor::RedrawSelMargin(Sci::Line line, bool allAfter) noexcept {
@@ -504,11 +509,15 @@ void Editor::RedrawSelMargin(Sci::Line line, bool allAfter) noexcept {
 		Redraw();
 		return;
 	}
+	if (redrawPendingMargin) {
+		return;
+	}
 	PRectangle rcMarkers = GetClientRectangle();
 	if (!markersInText) {
 		// Normal case: just draw the margin
 		rcMarkers.right = rcMarkers.left + vs.fixedColumnWidth;
 	}
+	const PRectangle rcMarkersFull = rcMarkers;
 	if (line != -1) {
 		PRectangle rcLine = RectangleFromRange(Range(pdoc->LineStart(line)), 0);
 
@@ -531,6 +540,9 @@ void Editor::RedrawSelMargin(Sci::Line line, bool allAfter) noexcept {
 		wMargin.InvalidateRectangle(rcMarkers);
 	} else {
 		wMain.InvalidateRectangle(rcMarkers);
+		if (rcMarkers == rcMarkersFull) {
+			redrawPendingMargin = true;
+		}
 	}
 }
 
@@ -553,6 +565,9 @@ PRectangle Editor::RectangleFromRange(Range r, int overlap) const noexcept {
 }
 
 void Editor::InvalidateRange(Sci::Position start, Sci::Position end) noexcept {
+	if (redrawPendingText) {
+		return;
+	}
 	RedrawRect(RectangleFromRange(Range(start, end), view.LinesOverlap() ? vs.lineOverlap : 0));
 }
 
@@ -759,9 +774,9 @@ void Editor::MultipleSelectAdd(AddNumber addNumber) {
 			searchRanges.push_back(rangeTarget);
 		}
 
-		for (const auto & searchRange : searchRanges) {
-			Sci::Position searchStart = searchRange.start;
-			const Sci::Position searchEnd = searchRange.end;
+		for (const auto & range : searchRanges) {
+			Sci::Position searchStart = range.start;
+			const Sci::Position searchEnd = range.end;
 			for (;;) {
 				Sci::Position lengthFound = selectedText.length();
 				const Sci::Position pos = pdoc->FindText(searchStart, searchEnd,
@@ -1760,6 +1775,9 @@ void Editor::RefreshPixMaps(Surface *surfaceWindow) {
 }
 
 void Editor::Paint(Surface *surfaceWindow, PRectangle rcArea) {
+	redrawPendingText = false;
+	redrawPendingMargin = false;
+
 	//Platform::DebugPrintf("Paint:%1d (%.0f,%.0f) ... (%.0f,%.0f)\n",
 	//	paintingAllText, rcArea.left, rcArea.top, rcArea.right, rcArea.bottom);
 
@@ -2174,7 +2192,7 @@ void Editor::InsertPasteShape(const char *text, Sci::Position len, PasteShape sh
 				pdoc->LineStart(pdoc->LineFromPosition(sel.MainCaret()));
 			Sci::Position lengthInserted = pdoc->InsertString(insertPos, text, len);
 			// add the newline if necessary
-			if ((len > 0) && !IsEOLChar(text[len - 1])) {
+			if ((len > 0) && !IsEOLCharacter(text[len - 1])) {
 				const char *endline = StringFromEOLMode(pdoc->eolMode);
 				const Sci::Position length = strlen(endline);
 				lengthInserted += pdoc->InsertString(insertPos + lengthInserted, endline, length);
@@ -2274,11 +2292,11 @@ void Editor::PasteRectangular(SelectionPosition pos, const char *ptr, Sci::Posit
 	sel.RangeMain().caret = RealizeVirtualSpace(sel.RangeMain().caret);
 	const int xInsert = XFromPosition(sel.RangeMain().caret);
 	bool prevCr = false;
-	while ((len > 0) && IsEOLChar(ptr[len - 1])) {
+	while ((len > 0) && IsEOLCharacter(ptr[len - 1])) {
 		len--;
 	}
 	for (Sci::Position i = 0; i < len; i++) {
-		if (IsEOLChar(ptr[i])) {
+		if (IsEOLCharacter(ptr[i])) {
 			if ((ptr[i] == '\r') || (!prevCr))
 				line++;
 			if (line >= pdoc->LinesTotal()) {
@@ -4871,10 +4889,6 @@ void Editor::SetHotSpotRange(const Point *pt) {
 	}
 }
 
-Range Editor::GetHotSpotRange() const noexcept {
-	return hotspot;
-}
-
 void Editor::ButtonMoveWithModifiers(Point pt, unsigned int, KeyMod modifiers) {
 	if (ptMouseLast != pt) {
 		DwellEnd(true);
@@ -5842,6 +5856,9 @@ void Editor::StyleSetMessage(Message iMessage, uptr_t wParam, sptr_t lParam) {
 	case Message::StyleSetHotSpot:
 		vs.styles[wParam].hotspot = lParam != 0;
 		break;
+	case Message::StyleSetCheckMonospaced:
+		vs.styles[wParam].checkMonospaced = lParam != 0;
+		break;
 	default:
 		break;
 	}
@@ -5881,6 +5898,8 @@ sptr_t Editor::StyleGetMessage(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		return vs.styles[wParam].changeable ? 1 : 0;
 	case Message::StyleGetHotSpot:
 		return vs.styles[wParam].hotspot ? 1 : 0;
+	case Message::StyleGetCheckMonospaced:
+		return vs.styles[wParam].checkMonospaced ? 1 : 0;
 	default:
 		break;
 	}
@@ -7275,6 +7294,7 @@ sptr_t Editor::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 	case Message::StyleSetVisible:
 	case Message::StyleSetChangeable:
 	case Message::StyleSetHotSpot:
+	case Message::StyleSetCheckMonospaced:
 		StyleSetMessage(iMessage, wParam, lParam);
 		break;
 
@@ -7293,6 +7313,7 @@ sptr_t Editor::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 	case Message::StyleGetVisible:
 	case Message::StyleGetChangeable:
 	case Message::StyleGetHotSpot:
+	case Message::StyleGetCheckMonospaced:
 		return StyleGetMessage(iMessage, wParam, lParam);
 
 	case Message::StyleResetDefault:
@@ -7349,6 +7370,13 @@ sptr_t Editor::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		InvalidateStyleRedraw();
 		break;
 
+	case Message::GetCaretLineHighlightSubLine:
+		return vs.caretLine.subLine;
+	case Message::SetCaretLineHighlightSubLine:
+		vs.caretLine.subLine = wParam != 0;
+		InvalidateStyleRedraw();
+		break;
+
 	case Message::GetCaretLineFrame:
 		return vs.caretLine.frame;
 	case Message::SetCaretLineFrame:
@@ -7401,8 +7429,7 @@ sptr_t Editor::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		break;
 
 	case Message::HideLines:
-		if (wParam > 0)
-			pcs->SetVisible(LineFromUPtr(wParam), lParam, false);
+		pcs->SetVisible(LineFromUPtr(wParam), lParam, false);
 		SetScrollBars();
 		Redraw();
 		break;
@@ -7538,7 +7565,7 @@ sptr_t Editor::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		return static_cast<sptr_t>(vs.selection.layer);
 
 	case Message::SetCaretStyle:
-		if (static_cast<CaretStyle>(wParam) <= (CaretStyle::Block | CaretStyle::OverstrikeBlock | CaretStyle::BlockAfter))
+		if (static_cast<CaretStyle>(wParam) <= (CaretStyle::Block | CaretStyle::OverstrikeBlock | CaretStyle::Curses | CaretStyle::BlockAfter))
 			vs.caret.style = static_cast<CaretStyle>(wParam);
 		else
 			/* Default to the line caret */
@@ -7886,7 +7913,7 @@ sptr_t Editor::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		break;
 
 	case Message::MultiEdgeAddLine:
-		vs.AddMultiEdge(wParam, lParam);
+		vs.AddMultiEdge(static_cast<int>(wParam), ColourRGBA::FromIpRGB(lParam));
 		InvalidateStyleRedraw();
 		break;
 

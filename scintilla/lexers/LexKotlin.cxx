@@ -50,6 +50,16 @@ enum {
 	KotlinLineStateMaskImport = 1 << 1, // import
 };
 
+enum class KeywordType {
+	None = SCE_KOTLIN_DEFAULT,
+	Annotation = SCE_KOTLIN_ANNOTATION,
+	Class = SCE_KOTLIN_CLASS,
+	Interface = SCE_KOTLIN_INTERFACE,
+	Enum = SCE_KOTLIN_ENUM,
+	Label = SCE_KOTLIN_LABEL,
+	Return = 0x40,
+};
+
 static_assert(DefaultNestedStateBaseStyle + 1 == SCE_KOTLIN_STRING);
 static_assert(DefaultNestedStateBaseStyle + 2 == SCE_KOTLIN_RAWSTRING);
 
@@ -61,13 +71,15 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 	int lineStateLineType = 0;
 	int commentLevel = 0;	// nested block comment level
 
-	int kwType = SCE_KOTLIN_DEFAULT;
+	KeywordType kwType = KeywordType::None;
 	int chBeforeIdentifier = 0;
 
 	std::vector<int> nestedState; // string interpolation "${}"
 
 	int visibleChars = 0;
+	int chBefore = 0;
 	int visibleCharsBefore = 0;
+	int chPrevNonWhite = 0;
 	EscapeSequence escSeq;
 
 	StyleContext sc(startPos, lengthDoc, initStyle, styler);
@@ -105,81 +117,92 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 			}
 			break;
 
-		case SCE_KOTLIN_IDENTIFIER:
-			if (!IsIdentifierCharEx(sc.ch)) {
-				char s[128];
-				sc.GetCurrent(s, sizeof(s));
-				if (keywordLists[0]->InList(s)) {
-					sc.ChangeState(SCE_KOTLIN_WORD);
-					if (StrEqual(s, "import")) {
-						if (visibleChars == sc.LengthCurrent()) {
-							lineStateLineType = KotlinLineStateMaskImport;
-						}
-					} else if (StrEqualsAny(s, "break", "continue", "return", "this", "super")) {
-						kwType = SCE_KOTLIN_LABEL;
-					} else if (StrEqualsAny(s, "class", "typealias")) {
-						if (!(kwType == SCE_KOTLIN_ANNOTATION || kwType == SCE_KOTLIN_ENUM)) {
-							kwType = SCE_KOTLIN_CLASS;
-						}
-					} else if (StrEqual(s, "enum")) {
-						kwType = SCE_KOTLIN_ENUM;
-					} else if (StrEqual(s, "annotation")) {
-						kwType = SCE_KOTLIN_ANNOTATION;
-					} else if (StrEqual(s, "interface")) {
-						kwType = SCE_KOTLIN_INTERFACE;
-					}
-					if (kwType != SCE_KOTLIN_DEFAULT) {
-						const int chNext = sc.GetDocNextChar();
-						if (!((kwType == SCE_KOTLIN_LABEL && chNext == '@') || (kwType != SCE_KOTLIN_LABEL && IsIdentifierStartEx(chNext)))) {
-							kwType = SCE_KOTLIN_DEFAULT;
-						}
-					}
-				} else if (sc.ch == '@') {
-					sc.ChangeState(SCE_KOTLIN_LABEL);
-					sc.Forward();
-				} else if (keywordLists[1]->InList(s)) {
-					sc.ChangeState(SCE_KOTLIN_CLASS);
-				} else if (keywordLists[2]->InList(s)) {
-					sc.ChangeState(SCE_KOTLIN_INTERFACE);
-				} else if (keywordLists[3]->InList(s)) {
-					sc.ChangeState(SCE_KOTLIN_ENUM);
-				} else if (sc.ch != '.') {
-					if (kwType != SCE_KOTLIN_DEFAULT && kwType != SCE_KOTLIN_LABEL) {
-						sc.ChangeState(kwType);
-					} else {
-						const int chNext = sc.GetDocNextChar(sc.ch == '?');
-						if (chNext == '(') {
-							sc.ChangeState(SCE_KOTLIN_FUNCTION);
-						} else if (sc.Match(':', ':')
-							|| (chBeforeIdentifier == '<' && (chNext == '>' || chNext == '<'))) {
-							// type::class
-							// type<type>
-							// type<type?>
-							// type<type<type>>
-							sc.ChangeState(SCE_KOTLIN_CLASS);
-						}
-					}
-				}
-				if (sc.state != SCE_KOTLIN_WORD && sc.ch != '.') {
-					kwType = SCE_KOTLIN_DEFAULT;
-				}
-				sc.SetState(SCE_KOTLIN_DEFAULT);
-			}
-			break;
-
+		case SCE_KOTLIN_VARIABLE:
 		case SCE_KOTLIN_LABEL:
-			if (!IsIdentifierCharEx(sc.ch)) {
-				sc.SetState(SCE_KOTLIN_DEFAULT);
-			}
-			break;
-
+		case SCE_KOTLIN_IDENTIFIER:
 		case SCE_KOTLIN_ANNOTATION:
-			if (sc.ch == '.' || sc.ch == ':') {
-				sc.SetState(SCE_KOTLIN_OPERATOR);
-				sc.ForwardSetState(SCE_KOTLIN_ANNOTATION);
-				continue;
-			}
 			if (!IsIdentifierCharEx(sc.ch)) {
+				switch (sc.state) {
+				case SCE_KOTLIN_VARIABLE:
+					sc.SetState(escSeq.outerState);
+					continue;
+
+				case SCE_KOTLIN_ANNOTATION:
+					if (sc.ch == '.' || sc.ch == ':') {
+						sc.SetState(SCE_KOTLIN_OPERATOR);
+						sc.ForwardSetState(SCE_KOTLIN_ANNOTATION);
+						continue;
+					}
+					break;
+
+				case SCE_KOTLIN_IDENTIFIER: {
+					char s[128];
+					sc.GetCurrent(s, sizeof(s));
+					if (keywordLists[0]->InList(s)) {
+						sc.ChangeState(SCE_KOTLIN_WORD);
+						if (StrEqual(s, "import")) {
+							if (visibleChars == sc.LengthCurrent()) {
+								lineStateLineType = KotlinLineStateMaskImport;
+							}
+						} else if (StrEqualsAny(s, "break", "continue", "return", "this", "super")) {
+							kwType = KeywordType::Label;
+						} else if (StrEqualsAny(s, "class", "typealias")) {
+							if (!(kwType == KeywordType::Annotation || kwType == KeywordType::Enum)) {
+								kwType = KeywordType::Class;
+							}
+						} else if (StrEqual(s, "enum")) {
+							kwType = KeywordType::Enum;
+						} else if (StrEqual(s, "annotation")) {
+							kwType = KeywordType::Annotation;
+						} else if (StrEqual(s, "interface")) {
+							kwType = KeywordType::Interface;
+						} else if (StrEqual(s, "return")) {
+							kwType = KeywordType::Return;
+						}
+						if (kwType > KeywordType::None && kwType < KeywordType::Return) {
+							const int chNext = sc.GetDocNextChar();
+							if (!((kwType == KeywordType::Label) ? (chNext == '@') : IsIdentifierStartEx(chNext))) {
+								kwType = KeywordType::None;
+							}
+						}
+					} else if (sc.ch == '@') {
+						sc.ChangeState(SCE_KOTLIN_LABEL);
+						sc.Forward();
+					} else if (keywordLists[1]->InList(s)) {
+						sc.ChangeState(SCE_KOTLIN_CLASS);
+					} else if (keywordLists[2]->InList(s)) {
+						sc.ChangeState(SCE_KOTLIN_INTERFACE);
+					} else if (keywordLists[3]->InList(s)) {
+						sc.ChangeState(SCE_KOTLIN_ENUM);
+					} else if (sc.ch != '.') {
+						if (kwType > KeywordType::None && kwType < KeywordType::Return) {
+							sc.ChangeState(static_cast<int>(kwType));
+						} else {
+							const int chNext = sc.GetDocNextChar(sc.ch == '?');
+							if (chNext == '(') {
+								// type function()
+								// type[] function()
+								// type<type> function()
+								if (kwType != KeywordType::Return && (IsIdentifierCharEx(chBefore) || chBefore == ']')) {
+									sc.ChangeState(SCE_KOTLIN_FUNCTION_DEFINITION);
+								} else {
+									sc.ChangeState(SCE_KOTLIN_FUNCTION);
+								}
+							} else if (sc.Match(':', ':')
+								|| (chBeforeIdentifier == '<' && (chNext == '>' || chNext == '<'))) {
+								// type::class
+								// type<type>
+								// type<type?>
+								// type<type<type>>
+								sc.ChangeState(SCE_KOTLIN_CLASS);
+							}
+						}
+					}
+					if (sc.state != SCE_KOTLIN_WORD && sc.ch != '.') {
+						kwType = KeywordType::None;
+					}
+				} break;
+				}
 				sc.SetState(SCE_KOTLIN_DEFAULT);
 			}
 			break;
@@ -238,7 +261,6 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 				}
 			} else if (sc.ch == '\"' && (sc.state == SCE_KOTLIN_STRING || sc.MatchNext('"', '"'))) {
 				if (sc.state == SCE_KOTLIN_RAWSTRING) {
-					sc.SetState(SCE_KOTLIN_RAWSTRINGEND);
 					sc.Advance(2);
 				}
 				sc.ForwardSetState(SCE_KOTLIN_DEFAULT);
@@ -260,13 +282,6 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 
 		case SCE_KOTLIN_ESCAPECHAR:
 			if (escSeq.atEscapeEnd(sc.ch)) {
-				sc.SetState(escSeq.outerState);
-				continue;
-			}
-			break;
-
-		case SCE_KOTLIN_VARIABLE:
-			if (!IsIdentifierCharEx(sc.ch)) {
 				sc.SetState(escSeq.outerState);
 				continue;
 			}
@@ -301,24 +316,24 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 			}
 			if (sc.ch == '\"') {
 				if (sc.MatchNext('"', '"')) {
-					sc.SetState(SCE_KOTLIN_RAWSTRINGSTART);
+					sc.SetState(SCE_KOTLIN_RAWSTRING);
 					sc.Advance(2);
-					sc.ForwardSetState(SCE_KOTLIN_RAWSTRING);
-					continue;
+				} else {
+					sc.SetState(SCE_KOTLIN_STRING);
 				}
-				sc.SetState(SCE_KOTLIN_STRING);
 			} else if (sc.ch == '\'') {
 				sc.SetState(SCE_KOTLIN_CHARACTER);
 			} else if (IsNumberStart(sc.ch, sc.chNext)) {
 				sc.SetState(SCE_KOTLIN_NUMBER);
 			} else if (sc.ch == '@' && IsIdentifierStartEx(sc.chNext)) {
-				sc.SetState((kwType == SCE_KOTLIN_LABEL) ? SCE_KOTLIN_LABEL : SCE_KOTLIN_ANNOTATION);
-				kwType = SCE_KOTLIN_DEFAULT;
+				sc.SetState((kwType == KeywordType::Label) ? SCE_KOTLIN_LABEL : SCE_KOTLIN_ANNOTATION);
+				kwType = KeywordType::None;
 			} else if (sc.ch == '`') {
 				sc.SetState(SCE_KOTLIN_BACKTICKS);
 			} else if (IsIdentifierStartEx(sc.ch)) {
-				if (sc.chPrev != '.') {
-					chBeforeIdentifier = sc.chPrev;
+				chBefore = chPrevNonWhite;
+				if (chPrevNonWhite != '.') {
+					chBeforeIdentifier = chPrevNonWhite;
 				}
 				sc.SetState(SCE_KOTLIN_IDENTIFIER);
 			} else if (isoperator(sc.ch)) {
@@ -338,6 +353,9 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 
 		if (!isspacechar(sc.ch)) {
 			visibleChars++;
+			if (!IsSpaceEquiv(sc.state)) {
+				chPrevNonWhite = sc.ch;
+			}
 		}
 		if (sc.atLineEnd) {
 			int lineState = (commentLevel << 2) | lineStateLineType;
@@ -348,7 +366,7 @@ void ColouriseKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 			lineStateLineType = 0;
 			visibleChars = 0;
 			visibleCharsBefore = 0;
-			kwType = SCE_KOTLIN_DEFAULT;
+			kwType = KeywordType::None;
 		}
 		sc.Forward();
 	}
@@ -364,6 +382,13 @@ struct FoldLineState {
 		packageImport((lineState >> 1) & 1) {
 	}
 };
+
+constexpr bool IsMultilineStringStyle(int style) noexcept {
+	return style == SCE_KOTLIN_RAWSTRING
+		|| style == SCE_KOTLIN_OPERATOR2
+		|| style == SCE_KOTLIN_ESCAPECHAR
+		|| style == SCE_KOTLIN_VARIABLE;
+}
 
 void FoldKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
 	const Sci_PositionU endPos = startPos + lengthDoc;
@@ -408,14 +433,10 @@ void FoldKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle
 			}
 		} break;
 
-		case SCE_KOTLIN_RAWSTRINGSTART:
-			if (style != stylePrev) {
+		case SCE_KOTLIN_RAWSTRING:
+			if (!IsMultilineStringStyle(stylePrev)) {
 				levelNext++;
-			}
-			break;
-
-		case SCE_KOTLIN_RAWSTRINGEND:
-			if (style != styleNext) {
+			} else if (!IsMultilineStringStyle(styleNext)) {
 				levelNext--;
 			}
 			break;
@@ -443,7 +464,9 @@ void FoldKotlinDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle
 				if (bracePos) {
 					levelNext++;
 					i = bracePos; // skip the brace
-					chNext = '\0';
+					style = SCE_KOTLIN_OPERATOR;
+					chNext = styler.SafeGetCharAt(i + 1);
+					styleNext = styler.StyleAt(i + 1);
 				}
 			}
 

@@ -105,7 +105,7 @@ inline Sci_Position CheckFormatSpecifier(const StyleContext &sc, LexAccessor &st
 	// argument index
 	if (ch == '[') {
 		ch = styler.SafeGetCharAt(++pos);
-		while (IsADigit(ch))  {
+		while (IsADigit(ch)) {
 			ch = styler.SafeGetCharAt(++pos);
 		}
 		if (ch == ']') {
@@ -119,7 +119,7 @@ inline Sci_Position CheckFormatSpecifier(const StyleContext &sc, LexAccessor &st
 		ch = styler.SafeGetCharAt(++pos);
 	} else if (ch == '[') {
 		ch = styler.SafeGetCharAt(++pos);
-		while (IsADigit(ch))  {
+		while (IsADigit(ch)) {
 			ch = styler.SafeGetCharAt(++pos);
 		}
 		if (ch == ']') {
@@ -128,7 +128,7 @@ inline Sci_Position CheckFormatSpecifier(const StyleContext &sc, LexAccessor &st
 			return 0;
 		}
 	} else {
-		while (IsADigit(ch))  {
+		while (IsADigit(ch)) {
 			ch = styler.SafeGetCharAt(++pos);
 		}
 	}
@@ -139,7 +139,7 @@ inline Sci_Position CheckFormatSpecifier(const StyleContext &sc, LexAccessor &st
 			ch = styler.SafeGetCharAt(++pos);
 		} else if (ch == '[') {
 			ch = styler.SafeGetCharAt(++pos);
-			while (IsADigit(ch))  {
+			while (IsADigit(ch)) {
 				ch = styler.SafeGetCharAt(++pos);
 			}
 			if (ch == ']') {
@@ -148,7 +148,7 @@ inline Sci_Position CheckFormatSpecifier(const StyleContext &sc, LexAccessor &st
 				return 0;
 			}
 		} else {
-			while (IsADigit(ch))  {
+			while (IsADigit(ch)) {
 				ch = styler.SafeGetCharAt(++pos);
 			}
 		}
@@ -302,7 +302,7 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 					} else if (chNext == '(') {
 						if (funcState != GoFunction_None) {
 							funcState = GoFunction_Name;
-							sc.ChangeState(SCE_GO_FUNCTION_DEFINE);
+							sc.ChangeState(SCE_GO_FUNCTION_DEFINITION);
 						} else {
 							sc.ChangeState(SCE_GO_FUNCTION);
 						}
@@ -499,13 +499,19 @@ void ColouriseGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 	sc.Complete();
 }
 
-constexpr bool IsInnerStyle(int style) noexcept {
-	return style == SCE_GO_ESCAPECHAR || style == SCE_GO_FORMAT_SPECIFIER
+constexpr int GetLineCommentState(int lineState) noexcept {
+	return lineState & SimpleLineStateMaskLineComment;
+}
+
+constexpr bool IsStreamCommentStyle(int style) noexcept {
+	return style == SCE_GO_COMMENTBLOCK
 		|| style == SCE_GO_TASKMARKER;
 }
 
-constexpr int GetLineCommentState(int lineState) noexcept {
-	return lineState & SimpleLineStateMaskLineComment;
+constexpr bool IsMultilineStringStyle(int style) noexcept {
+	return style == SCE_GO_RAW_STRING
+		|| style == SCE_GO_ESCAPECHAR
+		|| style == SCE_GO_FORMAT_SPECIFIER;
 }
 
 void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
@@ -537,11 +543,18 @@ void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 		styleNext = styler.StyleAt(i + 1);
 
 		switch (style) {
-		case SCE_GO_RAW_STRING:
 		case SCE_GO_COMMENTBLOCK:
-			if (style != stylePrev && !IsInnerStyle(stylePrev)) {
+			if (!IsStreamCommentStyle(stylePrev)) {
 				levelNext++;
-			} else if (style != styleNext && !IsInnerStyle(styleNext)) {
+			} else if (!IsStreamCommentStyle(styleNext)) {
+				levelNext--;
+			}
+			break;
+
+		case SCE_GO_RAW_STRING:
+			if (!IsMultilineStringStyle(stylePrev)) {
+				levelNext++;
+			} else if (!IsMultilineStringStyle(styleNext)) {
 				levelNext--;
 			}
 			break;
@@ -568,6 +581,8 @@ void FoldGoDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, Le
 				if (bracePos) {
 					levelNext++;
 					i = bracePos; // skip the brace
+					style = SCE_GO_OPERATOR;
+					styleNext = styler.StyleAt(i + 1);
 				}
 			}
 

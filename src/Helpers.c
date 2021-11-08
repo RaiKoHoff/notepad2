@@ -407,7 +407,7 @@ BOOL FindUserResourcePath(LPCWSTR path, LPWSTR outPath) {
 		}
 
 		// relative to program exe file
-		GetModuleFileName(NULL, tchBuild, COUNTOF(tchBuild));
+		GetProgramRealPath(tchBuild, COUNTOF(tchBuild));
 		lstrcpy(PathFindFileName(tchBuild), tchFileExpanded);
 		if (PathIsFile(tchBuild)) {
 			lstrcpy(outPath, tchBuild);
@@ -468,9 +468,8 @@ void BackgroundWorker_Init(BackgroundWorker *worker, HWND hwnd) {
 
 void BackgroundWorker_Stop(BackgroundWorker *worker) {
 	SetEvent(worker->eventCancel);
-	HANDLE workerThread = worker->workerThread;
+	HANDLE workerThread = InterlockedExchangePointer(&worker->workerThread, NULL);
 	if (workerThread) {
-		worker->workerThread = NULL;
 		while (WaitForSingleObject(workerThread, 0) != WAIT_OBJECT_0) {
 			MSG msg;
 			if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -857,7 +856,7 @@ BOOL SetWindowTitle(HWND hwnd, UINT uIDAppName, BOOL bIsElevated, UINT uIDUntitl
 		lstrcat(szTitle, szExcerptQuote);
 	} else if (StrNotEmpty(lpszFile)) {
 		if (iFormat < 2 && !PathIsRoot(lpszFile)) {
-			if (!StrCaseEqual(szCachedFile, lpszFile)) {
+			if (!StrEqual(szCachedFile, lpszFile)) {
 				SHFILEINFO shfi;
 				lstrcpy(szCachedFile, lpszFile);
 				if (SHGetFileInfo2(lpszFile, 0, &shfi, sizeof(SHFILEINFO), SHGFI_DISPLAYNAME)) {
@@ -879,8 +878,8 @@ BOOL SetWindowTitle(HWND hwnd, UINT uIDAppName, BOOL bIsElevated, UINT uIDUntitl
 			lstrcat(szTitle, lpszFile);
 		}
 	} else {
-		lstrcpy(szCachedFile, L"");
-		lstrcpy(szCachedDisplayName, L"");
+		StrCpyExW(szCachedFile, L"");
+		StrCpyExW(szCachedDisplayName, L"");
 		lstrcat(szTitle, szUntitled);
 	}
 
@@ -1567,7 +1566,7 @@ HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName) {
 	}
 
 	WCHAR path[MAX_PATH];
-	GetModuleFileName(NULL, path, COUNTOF(path));
+	GetProgramRealPath(path, COUNTOF(path));
 	PathRemoveFileSpec(path);
 	PathAppend(path, L"locale");
 	PathAppend(path, folder);
@@ -1606,83 +1605,187 @@ void GetLocaleDefaultUIFont(LANGID lang, LPWSTR lpFaceName, WORD *wSize) {
 	lstrcpy(lpFaceName, font);
 }
 #endif
+#endif // NP2_ENABLE_APP_LOCALIZATION_DLL
+
+BOOL PathGetRealPath(HANDLE hFile, LPCWSTR lpszSrc, LPWSTR lpszDest) {
+	WCHAR path[8 + MAX_PATH] = L"";
+	if (IsVistaAndAbove()) {
+		const BOOL closing = hFile == NULL;
+		if (closing) {
+			hFile = CreateFile(lpszSrc, FILE_READ_ATTRIBUTES,
+				FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+				NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+		}
+		if (hFile != INVALID_HANDLE_VALUE) {
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+			DWORD cch = GetFinalPathNameByHandleW(hFile, path, COUNTOF(path), FILE_NAME_OPENED);
+#else
+			typedef DWORD (WINAPI *GetFinalPathNameByHandleSig)(HANDLE hFile, LPWSTR lpszFilePath, DWORD cchFilePath, DWORD dwFlags);
+			static GetFinalPathNameByHandleSig pfnGetFinalPathNameByHandle = NULL;
+			if (pfnGetFinalPathNameByHandle == NULL) {
+				pfnGetFinalPathNameByHandle = DLLFunctionEx(GetFinalPathNameByHandleSig, L"kernel32.dll", "GetFinalPathNameByHandleW");
+			}
+			DWORD cch = pfnGetFinalPathNameByHandle(hFile, path, COUNTOF(path), FILE_NAME_OPENED);
 #endif
+			// TODO: support long path
+			if (closing) {
+				CloseHandle(hFile);
+			}
+			if (cch != 0 && StrHasPrefix(path, L"\\\\?\\")) {
+				cch -= CSTRLEN(L"\\\\?\\");
+				WCHAR *p = path + CSTRLEN(L"\\\\?\\");
+				if (StrHasPrefix(p, L"UNC\\")) {
+					cch -= 2;
+					p += 2;
+					*p = L'\\'; // replace 'C' with backslash
+				}
+				if (cch > 0 && cch < MAX_PATH) {
+					memcpy(lpszDest, p, (cch + 1)*sizeof(WCHAR));
+					return TRUE;
+				}
+			}
+		}
+	}
+
+	DWORD cch = GetFullPathName(lpszSrc, COUNTOF(path), path, NULL);
+	if (cch > 0 && cch < COUNTOF(path)) {
+		WCHAR *p = path;
+		if (StrHasPrefix(path, L"\\\\?\\")) {
+			cch -= CSTRLEN(L"\\\\?\\");
+			p += CSTRLEN(L"\\\\?\\");
+			if (StrHasPrefix(p, L"UNC\\")) {
+				cch -= 2;
+				p += 2;
+				*p = L'\\'; // replace 'C' with backslash
+			}
+		}
+		if (cch > 0 && cch < MAX_PATH) {
+			memcpy(lpszDest, p, (cch + 1)*sizeof(WCHAR));
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+#if _WIN32_WINNT < _WIN32_WINNT_WIN8
+#if !defined(_WIN64) && defined(_MSC_BUILD) && (VER_PRODUCTVERSION_W <= _WIN32_WINNT_WIN7)
+typedef struct FILE_ID_128 {
+	BYTE Identifier[16];
+} FILE_ID_128;
+#endif // Win32 XP with Windows 7 SDK.
+
+enum { FileIdInfo = 0x12 };
+typedef struct FILE_ID_INFO {
+	ULONGLONG VolumeSerialNumber;
+	FILE_ID_128 FileId;
+} FILE_ID_INFO;
+#endif
+
+static inline BOOL PathGetFileId(LPCWSTR pszPath, FILE_ID_INFO *fileId) {
+	HANDLE hFile = CreateFile(pszPath, FILE_READ_ATTRIBUTES,
+		FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+		NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+	if (hFile == INVALID_HANDLE_VALUE) {
+		return FALSE;
+	}
+	BOOL success;
+	if (IsWin8AndAbove()) {
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+		success = GetFileInformationByHandleEx(hFile, FileIdInfo, fileId, sizeof(FILE_ID_INFO));
+#else
+		typedef BOOL (WINAPI *GetFileInformationByHandleExSig)(HANDLE hFile, int FileInformationClass, LPVOID lpFileInformation, DWORD dwBufferSize);
+		static GetFileInformationByHandleExSig pfnGetFileInformationByHandleEx = NULL;
+		if (pfnGetFileInformationByHandleEx == NULL) {
+			pfnGetFileInformationByHandleEx = DLLFunctionEx(GetFileInformationByHandleExSig, L"kernel32.dll", "GetFileInformationByHandleEx");
+		}
+		success = pfnGetFileInformationByHandleEx(hFile, FileIdInfo, fileId, sizeof(FILE_ID_INFO));
+#endif
+	} else {
+		BY_HANDLE_FILE_INFORMATION info;
+		success = GetFileInformationByHandle(hFile, &info);
+		if (success) {
+			fileId->VolumeSerialNumber = info.dwVolumeSerialNumber;
+			memcpy(fileId->FileId.Identifier, &info.nFileIndexHigh, 8);
+			memset(fileId->FileId.Identifier + 8, 0, 8);
+		}
+	}
+
+	CloseHandle(hFile);
+	return success;
+}
+
+BOOL PathEquivalent(LPCWSTR pszPath1, LPCWSTR pszPath2) {
+	BOOL same = FALSE;
+	FILE_ID_INFO info1;
+	FILE_ID_INFO info2;
+	if (PathGetFileId(pszPath1, &info1) && PathGetFileId(pszPath2, &info2)) {
+		same = memcmp(&info1, &info2, sizeof(FILE_ID_INFO)) == 0;
+	}
+	return same;
+}
 
 //=============================================================================
 //
 // PathRelativeToApp()
 //
-void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, int cchDest,
-					   BOOL bSrcIsFile, BOOL bUnexpandEnv, BOOL bUnexpandMyDocs) {
-	WCHAR wchAppPath[MAX_PATH];
-	WCHAR wchWinDir[MAX_PATH];
+void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, BOOL bSrcIsFile, BOOL bUnexpandEnv, BOOL bUnexpandMyDocs) {
 	WCHAR wchUserFiles[MAX_PATH];
 	WCHAR wchPath[MAX_PATH];
 	const DWORD dwAttrTo = bSrcIsFile ? 0 : FILE_ATTRIBUTE_DIRECTORY;
 
-	GetModuleFileName(NULL, wchAppPath, COUNTOF(wchAppPath));
-	PathRemoveFileSpec(wchAppPath);
-	GetWindowsDirectory(wchWinDir, COUNTOF(wchWinDir));
-#if _WIN32_WINNT < _WIN32_WINNT_VISTA
-	if (S_OK != SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, wchUserFiles)) {
-		return;
-	}
-#else
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 	LPWSTR pszPath = NULL;
 	if (S_OK != SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &pszPath)) {
 		return;
 	}
 	lstrcpy(wchUserFiles, pszPath);
 	CoTaskMemFree(pszPath);
+#else
+	if (S_OK != SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, wchUserFiles)) {
+		return;
+	}
 #endif
 
-	if (bUnexpandMyDocs &&
-			!PathIsRelative(lpszSrc) &&
-			!PathIsPrefix(wchUserFiles, wchAppPath) &&
-			PathIsPrefix(wchUserFiles, lpszSrc) &&
-			PathRelativePathTo(wchPath, wchUserFiles, FILE_ATTRIBUTE_DIRECTORY, lpszSrc, dwAttrTo)) {
+	WCHAR wchAppPath[MAX_PATH];
+	WCHAR wchWinDir[MAX_PATH];
+	GetModuleFileName(NULL, wchAppPath, COUNTOF(wchAppPath));
+	PathRemoveFileSpec(wchAppPath);
+	GetWindowsDirectory(wchWinDir, COUNTOF(wchWinDir));
+
+	if (bUnexpandMyDocs && !PathIsRelative(lpszSrc) && !PathIsPrefix(wchUserFiles, wchAppPath) && PathIsPrefix(wchUserFiles, lpszSrc)
+		&& PathRelativePathTo(wchPath, wchUserFiles, FILE_ATTRIBUTE_DIRECTORY, lpszSrc, dwAttrTo)) {
 		lstrcpy(wchUserFiles, L"%CSIDL:MYDOCUMENTS%");
 		PathAppend(wchUserFiles, wchPath);
 		lstrcpy(wchPath, wchUserFiles);
-	} else if (PathIsRelative(lpszSrc) || PathCommonPrefix(wchAppPath, wchWinDir, NULL)) {
+	} else if (PathIsRelative(lpszSrc) || PathCommonPrefix(wchAppPath, wchWinDir, NULL)
+		|| !PathRelativePathTo(wchPath, wchAppPath, FILE_ATTRIBUTE_DIRECTORY, lpszSrc, dwAttrTo)) {
 		lstrcpyn(wchPath, lpszSrc, COUNTOF(wchPath));
-	} else {
-		if (!PathRelativePathTo(wchPath, wchAppPath, FILE_ATTRIBUTE_DIRECTORY, lpszSrc, dwAttrTo)) {
-			lstrcpyn(wchPath, lpszSrc, COUNTOF(wchPath));
-		}
 	}
 
-	WCHAR wchResult[MAX_PATH];
-	if (bUnexpandEnv) {
-		if (!PathUnExpandEnvStrings(wchPath, wchResult, COUNTOF(wchResult))) {
-			lstrcpyn(wchResult, wchPath, COUNTOF(wchResult));
-		}
-	} else {
-		lstrcpyn(wchResult, wchPath, COUNTOF(wchResult));
+	if (!bUnexpandEnv || !PathUnExpandEnvStrings(wchPath, lpszDest, MAX_PATH)) {
+		lstrcpy(lpszDest, wchPath);
 	}
-
-	lstrcpyn(lpszDest, wchResult, (cchDest == 0) ? MAX_PATH : cchDest);
 }
 
 //=============================================================================
 //
 // PathAbsoluteFromApp()
 //
-void PathAbsoluteFromApp(LPCWSTR lpszSrc, LPWSTR lpszDest, int cchDest, BOOL bExpandEnv) {
+void PathAbsoluteFromApp(LPCWSTR lpszSrc, LPWSTR lpszDest, BOOL bExpandEnv) {
 	WCHAR wchPath[MAX_PATH];
 
 	if (StrHasPrefix(lpszSrc, L"%CSIDL:MYDOCUMENTS%")) {
-#if _WIN32_WINNT < _WIN32_WINNT_VISTA
-		if (S_OK != SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, wchPath)) {
-			return;
-		}
-#else
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 		LPWSTR pszPath = NULL;
 		if (S_OK != SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &pszPath)) {
 			return;
 		}
 		lstrcpy(wchPath, pszPath);
 		CoTaskMemFree(pszPath);
+#else
+		if (S_OK != SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, wchPath)) {
+			return;
+		}
 #endif
 		PathAppend(wchPath, lpszSrc + CSTRLEN("%CSIDL:MYDOCUMENTS%"));
 	} else {
@@ -1694,59 +1797,16 @@ void PathAbsoluteFromApp(LPCWSTR lpszSrc, LPWSTR lpszDest, int cchDest, BOOL bEx
 	}
 
 	WCHAR wchResult[MAX_PATH];
+	lpszSrc = wchPath;
 	if (PathIsRelative(wchPath)) {
 		GetModuleFileName(NULL, wchResult, COUNTOF(wchResult));
 		PathRemoveFileSpec(wchResult);
 		PathAppend(wchResult, wchPath);
-	} else {
-		lstrcpyn(wchResult, wchPath, COUNTOF(wchResult));
+		lpszSrc = wchResult;
 	}
-
-	PathCanonicalizeEx(wchResult);
-	if (PathGetDriveNumber(wchResult) != -1) {
-		CharUpperBuff(wchResult, 1);
+	if (!PathCanonicalize(lpszDest, lpszSrc)) {
+		lstrcpy(lpszDest, lpszSrc);
 	}
-
-	lstrcpyn(lpszDest, wchResult, (cchDest == 0) ? MAX_PATH : cchDest);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-//
-//
-// Name: PathIsLnkFile()
-//
-// Purpose: Determine wheter pszPath is a Windows Shell Link File by
-// comparing the filename extension with L".lnk"
-//
-// Manipulates:
-//
-BOOL PathIsLnkFile(LPCWSTR pszPath) {
-	if (!pszPath || !*pszPath) {
-		return FALSE;
-	}
-
-	/*
-	LPCWSTR pszExt = StrRChr(pszPath, NULL, L'.');
-	if (!pszExt) {
-		return FALSE;
-	}
-	if (StrCaseEqual(pszExt, L".lnk")) {
-		return TRUE;
-	}
-	return FALSE;
-
-	if (StrCaseEqual(PathFindExtension(pszPath), L".lnk")) {
-		return TRUE;
-	}
-	return FALSE;
-	*/
-
-	if (!StrCaseEqual(PathFindExtension(pszPath), L".lnk")) {
-		return FALSE;
-	}
-
-	WCHAR tchResPath[MAX_PATH];
-	return PathGetLnkPath(pszPath, tchResPath, COUNTOF(tchResPath));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1759,24 +1819,26 @@ BOOL PathIsLnkFile(LPCWSTR pszPath) {
 //
 // Manipulates: pszResPath
 //
-BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath, int cchResPath) {
+BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath) {
+	if (StrIsEmpty(pszLnkFile)) {
+		return FALSE;
+	}
+	if (!StrCaseEqual(PathFindExtension(pszLnkFile), L".lnk")) {
+		return FALSE;
+	}
+
 	IShellLink *psl;
-	BOOL bSucceeded = FALSE;
+	HRESULT hr = S_FALSE;
+	WCHAR tchPath[MAX_PATH];
+	tchPath[0] = L'\0';
 
 #if defined(__cplusplus)
-	if (SUCCEEDED(CoCreateInstance(IID_IShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)(&psl)))) {
+	if (SUCCEEDED(CoCreateInstance(IID_IShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)(&psl)))) {
 		IPersistFile *ppf;
 
 		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (void **)(&ppf)))) {
-			WCHAR wsz[MAX_PATH];
-			lstrcpy(wsz, pszLnkFile);
-
-			if (SUCCEEDED(ppf->Load(wsz, STGM_READ))) {
-				WIN32_FIND_DATA fd;
-				if (S_OK == psl->GetPath(pszResPath, cchResPath, &fd, 0)) {
-					// This additional check seems reasonable
-					bSucceeded = StrNotEmpty(pszResPath);
-				}
+			if (SUCCEEDED(ppf->Load(pszLnkFile, STGM_READ))) {
+				hr = psl->GetPath(tchPath, COUNTOF(tchPath), nullptr, 0);
 			}
 			ppf->Release();
 		}
@@ -1787,15 +1849,8 @@ BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath, int cchResPath) {
 		IPersistFile *ppf;
 
 		if (SUCCEEDED(psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void **)(&ppf)))) {
-			WCHAR wsz[MAX_PATH];
-			lstrcpy(wsz, pszLnkFile);
-
-			if (SUCCEEDED(ppf->lpVtbl->Load(ppf, wsz, STGM_READ))) {
-				WIN32_FIND_DATA fd;
-				if (S_OK == psl->lpVtbl->GetPath(psl, pszResPath, cchResPath, &fd, 0)) {
-					// This additional check seems reasonable
-					bSucceeded = StrNotEmpty(pszResPath);
-				}
+			if (SUCCEEDED(ppf->lpVtbl->Load(ppf, pszLnkFile, STGM_READ))) {
+				hr = psl->lpVtbl->GetPath(psl, tchPath, COUNTOF(tchPath), NULL, 0);
 			}
 			ppf->lpVtbl->Release(ppf);
 		}
@@ -1803,34 +1858,14 @@ BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath, int cchResPath) {
 	}
 #endif
 
-	if (bSucceeded) {
-		ExpandEnvironmentStringsEx(pszResPath, cchResPath);
-		PathCanonicalizeEx(pszResPath);
-	}
-
-	return bSucceeded;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-//
-//
-// Name: PathIsLnkToDirectory()
-//
-// Purpose: Determine wheter pszPath is a Windows Shell Link File which
-// refers to a directory
-//
-// Manipulates: pszResPath
-//
-BOOL PathIsLnkToDirectory(LPCWSTR pszPath, LPWSTR pszResPath, int cchResPath) {
-	if (PathIsLnkFile(pszPath)) {
-		WCHAR tchResPath[MAX_PATH];
-		if (PathGetLnkPath(pszPath, tchResPath, COUNTOF(tchResPath))) {
-			if (PathIsDirectory(tchResPath)) {
-				lstrcpyn(pszResPath, tchResPath, cchResPath);
-				return TRUE;
-			}
+	if (hr == S_OK && StrNotEmpty(tchPath)) {
+		ExpandEnvironmentStringsEx(tchPath, COUNTOF(tchPath));
+		if (!PathCanonicalize(pszResPath, tchPath)) {
+			lstrcpy(pszResPath, tchPath);
 		}
+		return TRUE;
 	}
+
 	return FALSE;
 }
 
@@ -1857,23 +1892,23 @@ BOOL PathCreateDeskLnk(LPCWSTR pszDocument) {
 	PathQuoteSpaces(tchDocTemp);
 
 	WCHAR tchArguments[MAX_PATH + 16];
-	lstrcpy(tchArguments, L"-n ");
+	StrCpyExW(tchArguments, L"-n ");
 	lstrcat(tchArguments, tchDocTemp);
 
-#if _WIN32_WINNT < _WIN32_WINNT_VISTA
-	WCHAR tchLinkDir[MAX_PATH];
-	if (S_OK != SHGetFolderPath(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, tchLinkDir)) {
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+	LPWSTR tchLinkDir = NULL;
+	if (S_OK != SHGetKnownFolderPath(&FOLDERID_Desktop, KF_FLAG_DEFAULT, NULL, &tchLinkDir)) {
 		return FALSE;
 	}
 #else
-	LPWSTR tchLinkDir = NULL;
-	if (S_OK != SHGetKnownFolderPath(&FOLDERID_Desktop, KF_FLAG_DEFAULT, NULL, &tchLinkDir)) {
+	WCHAR tchLinkDir[MAX_PATH];
+	if (S_OK != SHGetFolderPath(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, tchLinkDir)) {
 		return FALSE;
 	}
 #endif
 
 	WCHAR tchDescription[128];
-	// TODO: read custom menu text from registry, see System Integratio.
+	// TODO: read custom menu text from registry, see System Integration.
 	GetString(IDS_LINKDESCRIPTION, tchDescription, COUNTOF(tchDescription));
 	//StripMnemonic(tchDescription);
 
@@ -1894,18 +1929,15 @@ BOOL PathCreateDeskLnk(LPCWSTR pszDocument) {
 	IShellLink *psl;
 	BOOL bSucceeded = FALSE;
 #if defined(__cplusplus)
-	if (SUCCEEDED(CoCreateInstance(IID_IShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)(&psl)))) {
+	if (SUCCEEDED(CoCreateInstance(IID_IShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)(&psl)))) {
 		IPersistFile *ppf;
 
 		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (void **)(&ppf)))) {
-			WCHAR wsz[MAX_PATH];
-			lstrcpy(wsz, tchLnkFileName);
-
 			psl->SetPath(tchExeFile);
 			psl->SetArguments(tchArguments);
 			psl->SetDescription(tchDescription);
 
-			if (SUCCEEDED(ppf->Save(wsz, TRUE))) {
+			if (SUCCEEDED(ppf->Save(tchLnkFileName, TRUE))) {
 				bSucceeded = TRUE;
 			}
 			ppf->Release();
@@ -1917,14 +1949,11 @@ BOOL PathCreateDeskLnk(LPCWSTR pszDocument) {
 		IPersistFile *ppf;
 
 		if (SUCCEEDED(psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void **)(&ppf)))) {
-			WCHAR wsz[MAX_PATH];
-			lstrcpy(wsz, tchLnkFileName);
-
 			psl->lpVtbl->SetPath(psl, tchExeFile);
 			psl->lpVtbl->SetArguments(psl, tchArguments);
 			psl->lpVtbl->SetDescription(psl, tchDescription);
 
-			if (SUCCEEDED(ppf->lpVtbl->Save(ppf, wsz, TRUE))) {
+			if (SUCCEEDED(ppf->lpVtbl->Save(ppf, tchLnkFileName, TRUE))) {
 				bSucceeded = TRUE;
 			}
 
@@ -1963,16 +1992,12 @@ BOOL PathCreateFavLnk(LPCWSTR pszName, LPCWSTR pszTarget, LPCWSTR pszDir) {
 	IShellLink *psl;
 	BOOL bSucceeded = FALSE;
 #if defined(__cplusplus)
-	if (SUCCEEDED(CoCreateInstance(IID_IShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)(&psl)))) {
+	if (SUCCEEDED(CoCreateInstance(IID_IShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)(&psl)))) {
 		IPersistFile *ppf;
 
 		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (void **)(&ppf)))) {
-			WCHAR wsz[MAX_PATH];
-			lstrcpy(wsz, tchLnkFileName);
-
 			psl->SetPath(pszTarget);
-
-			if (SUCCEEDED(ppf->Save(wsz, TRUE))) {
+			if (SUCCEEDED(ppf->Save(tchLnkFileName, TRUE))) {
 				bSucceeded = TRUE;
 			}
 
@@ -1985,12 +2010,8 @@ BOOL PathCreateFavLnk(LPCWSTR pszName, LPCWSTR pszTarget, LPCWSTR pszDir) {
 		IPersistFile *ppf;
 
 		if (SUCCEEDED(psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void **)(&ppf)))) {
-			WCHAR wsz[MAX_PATH];
-			lstrcpy(wsz, tchLnkFileName);
-
 			psl->lpVtbl->SetPath(psl, pszTarget);
-
-			if (SUCCEEDED(ppf->lpVtbl->Save(ppf, wsz, TRUE))) {
+			if (SUCCEEDED(ppf->lpVtbl->Save(ppf, tchLnkFileName, TRUE))) {
 				bSucceeded = TRUE;
 			}
 
@@ -2134,7 +2155,8 @@ BOOL ExtractFirstArgument(LPCWSTR lpArgs, LPWSTR lpArg1, LPWSTR lpArg2) {
 void PrepareFilterStr(LPWSTR lpFilter) {
 	LPWSTR psz = StrEnd(lpFilter);
 	while (psz != lpFilter) {
-		if (*(psz = CharPrev(lpFilter, psz)) == L'|') {
+		--psz;
+		if (*psz == L'|') {
 			*psz = L'\0';
 		}
 	}
@@ -2159,7 +2181,7 @@ BOOL PathFixBackslashes(LPWSTR lpsz) {
 	WCHAR *c = lpsz;
 	BOOL bFixed = FALSE;
 	while ((c = StrChr(c, L'/')) != NULL) {
-		if (*CharPrev(lpsz, c) == L':' && *CharNext(c) == L'/') {
+		if (c != lpsz && c[-1] == L':' && c[1] == L'/') {
 			c += 2;
 		} else {
 			*c++ = L'\\';
@@ -2181,35 +2203,6 @@ void ExpandEnvironmentStringsEx(LPWSTR lpSrc, DWORD dwSrc) {
 	if (ExpandEnvironmentStrings(lpSrc, szBuf, COUNTOF(szBuf))) {
 		lstrcpyn(lpSrc, szBuf, dwSrc);
 	}
-}
-
-//=============================================================================
-//
-// PathCanonicalizeEx()
-//
-//
-void PathCanonicalizeEx(LPWSTR lpSrc) {
-	WCHAR szDst[MAX_PATH];
-
-	if (PathCanonicalize(szDst, lpSrc)) {
-		lstrcpy(lpSrc, szDst);
-	}
-}
-
-//=============================================================================
-//
-// GetLongPathNameEx()
-//
-//
-DWORD GetLongPathNameEx(LPWSTR lpszPath, DWORD cchBuffer) {
-	const DWORD dwRet = GetLongPathName(lpszPath, lpszPath, cchBuffer);
-	if (dwRet) {
-		if (PathGetDriveNumber(lpszPath) != -1) {
-			CharUpperBuff(lpszPath, 1);
-		}
-		return dwRet;
-	}
-	return 0;
 }
 
 //=============================================================================
@@ -2280,21 +2273,14 @@ void FormatNumberStr(LPWSTR lpNumberStr) {
 	// https://docs.microsoft.com/en-us/windows/desktop/Intl/locale-sthousand
 	// https://docs.microsoft.com/en-us/windows/desktop/Intl/locale-sgrouping
 	WCHAR szSep[4];
-	const WCHAR sep = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, szSep, COUNTOF(szSep))? szSep[0] : L',';
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+	const WCHAR sep = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STHOUSAND, szSep, COUNTOF(szSep))? szSep[0] : L',';
+#else
+	const WCHAR sep = GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, szSep, COUNTOF(szSep))? szSep[0] : L',';
+#endif
 
 	WCHAR *c = lpNumberStr + i;
 	WCHAR *end = c;
-#if 0
-	i = 0;
-	while ((c = CharPrev(lpNumberStr, c)) != lpNumberStr) {
-		if (++i == 3) {
-			i = 0;
-			MoveMemory(c + 1, c, sizeof(WCHAR) * (end - c + 1));
-			*c = sep;
-			++end;
-		}
-	}
-#endif
 	lpNumberStr += 3;
 	do {
 		c -= 3;
@@ -2356,18 +2342,6 @@ void ComboBox_AddStringA2W(UINT uCP, HWND hwnd, LPCSTR lpString) {
 
 //=============================================================================
 //
-// CodePageFromCharSet()
-//
-UINT CodePageFromCharSet(UINT uCharSet) {
-	CHARSETINFO ci;
-	if (TranslateCharsetInfo((DWORD *)(UINT_PTR)uCharSet, &ci, TCI_SRCCHARSET)) {
-		return ci.ciACP;
-	}
-	return GetACP();
-}
-
-//=============================================================================
-//
 // MRU functions
 //
 LPMRULIST MRU_Create(LPCWSTR pszRegKey, int iFlags, int iSize) {
@@ -2378,7 +2352,7 @@ LPMRULIST MRU_Create(LPCWSTR pszRegKey, int iFlags, int iSize) {
 	return pmru;
 }
 
-BOOL MRU_Destroy(LPMRULIST pmru) {
+void MRU_Destroy(LPMRULIST pmru) {
 	for (int i = 0; i < pmru->iSize; i++) {
 		if (pmru->pszItems[i]) {
 			LocalFree(pmru->pszItems[i]);
@@ -2387,18 +2361,26 @@ BOOL MRU_Destroy(LPMRULIST pmru) {
 
 	ZeroMemory(pmru, sizeof(MRULIST));
 	NP2HeapFree(pmru);
-	return TRUE;
 }
 
-int MRU_Compare(LPCMRULIST pmru, LPCWSTR psz1, LPCWSTR psz2) {
-	return (pmru->iFlags & MRUFlags_CaseInsensitive) ? StrCmpI(psz1, psz2) : StrCmp(psz1, psz2);
+static inline BOOL MRU_Equal(int flags, LPCWSTR psz1, LPCWSTR psz2) {
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+	return CompareStringOrdinal(psz1, -1, psz2, -1, flags & MRUFlags_FilePath) == CSTR_EQUAL;
+#else
+	return (flags & MRUFlags_FilePath) ? PathEqual(psz1, psz2) : StrEqual(psz1, psz2);
+#endif
 }
 
 BOOL MRU_Add(LPMRULIST pmru, LPCWSTR pszNew) {
+	const int flags = pmru->iFlags;
 	int i;
 	for (i = 0; i < pmru->iSize; i++) {
-		if (MRU_Compare(pmru, pmru->pszItems[i], pszNew) == 0) {
-			LocalFree(pmru->pszItems[i]);
+		WCHAR * const item = pmru->pszItems[i];
+		if (item == NULL) {
+			break;
+		}
+		if (MRU_Equal(flags, item, pszNew)) {
+			LocalFree(item);
 			break;
 		}
 	}
@@ -2422,18 +2404,19 @@ BOOL MRU_AddMultiline(LPMRULIST pmru, LPCWSTR pszNew) {
 BOOL MRU_AddFile(LPMRULIST pmru, LPCWSTR pszFile, BOOL bRelativePath, BOOL bUnexpandMyDocs) {
 	int i;
 	for (i = 0; i < pmru->iSize; i++) {
-		if (pmru->pszItems[i] == NULL) {
+		WCHAR * const item = pmru->pszItems[i];
+		if (item == NULL) {
 			break;
 		}
-		if (StrCaseEqual(pmru->pszItems[i], pszFile)) {
-			LocalFree(pmru->pszItems[i]);
+		if (PathEqual(item, pszFile)) {
+			LocalFree(item);
 			break;
 		}
 		{
 			WCHAR wchItem[MAX_PATH];
-			PathAbsoluteFromApp(pmru->pszItems[i], wchItem, COUNTOF(wchItem), TRUE);
-			if (StrCaseEqual(wchItem, pszFile)) {
-				LocalFree(pmru->pszItems[i]);
+			PathAbsoluteFromApp(item, wchItem, TRUE);
+			if (PathEqual(wchItem, pszFile)) {
+				LocalFree(item);
 				break;
 			}
 		}
@@ -2445,25 +2428,18 @@ BOOL MRU_AddFile(LPMRULIST pmru, LPCWSTR pszFile, BOOL bRelativePath, BOOL bUnex
 
 	if (bRelativePath) {
 		WCHAR wchFile[MAX_PATH];
-		PathRelativeToApp(pszFile, wchFile, COUNTOF(wchFile), TRUE, TRUE, bUnexpandMyDocs);
+		PathRelativeToApp(pszFile, wchFile, TRUE, TRUE, bUnexpandMyDocs);
 		pmru->pszItems[0] = StrDup(wchFile);
 	} else {
 		pmru->pszItems[0] = StrDup(pszFile);
 	}
 
-	/* notepad2-mod custom code start */
-	// Needed to make Win7 jump lists work when NP2 is not explicitly associated
-	if (IsWin7AndAbove()) {
-		SHAddToRecentDocs(SHARD_PATHW, pszFile);
-	}
-	/* notepad2-mod custom code end */
-
 	return TRUE;
 }
 
 BOOL MRU_Delete(LPMRULIST pmru, int iIndex) {
-	if (iIndex < 0 || iIndex > pmru->iSize - 1) {
-		return 0;
+	if (iIndex < 0 || iIndex >= pmru->iSize) {
+		return FALSE;
 	}
 	if (pmru->pszItems[iIndex]) {
 		LocalFree(pmru->pszItems[iIndex]);
@@ -2483,8 +2459,8 @@ BOOL MRU_DeleteFileFromStore(LPCMRULIST pmru, LPCWSTR pszFile) {
 	MRU_Load(pmruStore);
 
 	while (MRU_Enum(pmruStore, i, wchItem, COUNTOF(wchItem)) != -1) {
-		PathAbsoluteFromApp(wchItem, wchItem, COUNTOF(wchItem), TRUE);
-		if (StrCaseEqual(wchItem, pszFile)) {
+		PathAbsoluteFromApp(wchItem, wchItem, TRUE);
+		if (PathEqual(wchItem, pszFile)) {
 			MRU_Delete(pmruStore, i);
 		} else {
 			i++;
@@ -2496,14 +2472,13 @@ BOOL MRU_DeleteFileFromStore(LPCMRULIST pmru, LPCWSTR pszFile) {
 	return 1;
 }
 
-BOOL MRU_Empty(LPMRULIST pmru) {
+void MRU_Empty(LPMRULIST pmru) {
 	for (int i = 0; i < pmru->iSize; i++) {
 		if (pmru->pszItems[i]) {
 			LocalFree(pmru->pszItems[i]);
 			pmru->pszItems[i] = NULL;
 		}
 	}
-	return TRUE;
 }
 
 int MRU_Enum(LPCMRULIST pmru, int iIndex, LPWSTR pszItem, int cchItem) {
@@ -2515,7 +2490,7 @@ int MRU_Enum(LPCMRULIST pmru, int iIndex, LPWSTR pszItem, int cchItem) {
 		return i;
 	}
 
-	if (iIndex < 0 || iIndex > pmru->iSize - 1 || !pmru->pszItems[iIndex]) {
+	if (iIndex < 0 || iIndex >= pmru->iSize || pmru->pszItems[iIndex] == NULL) {
 		return -1;
 	}
 	lstrcpyn(pszItem, pmru->pszItems[iIndex], cchItem);
@@ -2593,7 +2568,7 @@ BOOL MRU_MergeSave(LPCMRULIST pmru, BOOL bAddFiles, BOOL bRelativePath, BOOL bUn
 		for (int i = pmru->iSize - 1; i >= 0; i--) {
 			if (pmru->pszItems[i]) {
 				WCHAR wchItem[MAX_PATH];
-				PathAbsoluteFromApp(pmru->pszItems[i], wchItem, COUNTOF(wchItem), TRUE);
+				PathAbsoluteFromApp(pmru->pszItems[i], wchItem, TRUE);
 				MRU_AddFile(pmruBase, wchItem, bRelativePath, bUnexpandMyDocs);
 			}
 		}
@@ -2650,7 +2625,7 @@ BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
 		NONCLIENTMETRICS ncm;
 		ZeroMemory(&ncm, sizeof(ncm));
 		ncm.cbSize = sizeof(NONCLIENTMETRICS);
-#if (_WIN32_WINNT >= _WIN32_WINNT_VISTA)
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 		if (!IsVistaAndAbove()) {
 			ncm.cbSize -= sizeof(ncm.iPaddedBorderWidth);
 		}
@@ -2802,7 +2777,7 @@ static LRESULT CALLBACK OpenSaveFileDlgSubProc(HWND hwnd, UINT umsg, WPARAM wPar
 	case WM_COMMAND:
 		switch (wParam) {
 		case IDOK: {
-			TCHAR szPath[MAX_PATH];
+			WCHAR szPath[MAX_PATH];
 			HWND hCmbPath = GetDlgItem(hwnd, cmb13); // cmb13: dlgs.h
 			GetWindowText(hCmbPath, szPath, MAX_PATH);
 			if (PathFixBackslashes(szPath)) {
@@ -2888,7 +2863,7 @@ unsigned int UnSlash(char *s, UINT cpEdit) {
 		case 'x':
 		case 'u': {
 			const int digitCount = (*s == 'x') ? 2 : 4;
-			int value = 0;
+			UINT value = 0;
 			int count = 0;
 			for (; count < digitCount; count++) {
 				const int hex = GetHexDigit(s[1]);

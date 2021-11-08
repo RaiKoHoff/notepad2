@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-import sys
 import os.path
 import re
 import string
 import json
 from statistics import variance
-import unicodedata
 import time
 
 from FileGenerator import Regenerate
+import UnicodeData
 
 header_path = '../include/LaTeXInput.h'
 data_path = '../win32/LaTeXInputData.h'
@@ -50,17 +49,12 @@ def find_word_contains_punctuation(items):
 	result.sort()
 	return result
 
-def get_character_name(ch):
-	try:
-		return unicodedata.name(ch).title()
-	except ValueError:
-		return ''
-
 def json_dump(obj):
 	return json.dumps(obj, ensure_ascii=False, indent='\t')
 
 def json_load(path):
-	return json.loads(open(path, encoding='utf-8', newline='\n').read())
+	with open(path, encoding='utf-8', newline='\n') as fd:
+		return json.loads(fd.read())
 
 def djb2_hash(buf, multiplier):
 	value = 0
@@ -365,7 +359,8 @@ def fix_character_and_code(character, code):
 def parse_julia_unicode_input_html(path):
 	from bs4 import BeautifulSoup
 
-	doc = open(path, encoding='utf-8', newline='\n').read()
+	with open(path, encoding='utf-8', newline='\n') as fd:
+		doc = fd.read()
 	soup = BeautifulSoup(doc, 'html5lib')
 	documenter = soup.body.find(id='documenter')
 	page = documenter.find(id='documenter-page')
@@ -384,7 +379,7 @@ def parse_julia_unicode_input_html(path):
 	source_info['latex_version'] = version
 
 	table = page.find('table').find('tbody')
-	high = sys.maxunicode >> 16
+	high = UnicodeData.MaxCharacter >> 16
 	latex_map = {}
 	emoji_map = {}
 	for row in table.find_all('tr'):
@@ -456,7 +451,7 @@ def parse_iamcal_emoji_data_json(path):
 		code = 'U+' + code
 		name = info['name'].title().strip()
 		if not name:
-			name = get_character_name(character)
+			name = UnicodeData.getCharacterName(character)
 		short_name = info['short_name']
 		short_names = info['short_names']
 		assert short_name in short_names
