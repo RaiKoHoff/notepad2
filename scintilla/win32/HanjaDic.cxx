@@ -6,17 +6,28 @@
 // Copyright 2015 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
 
+//#include <cstdio>
 #include <string>
 #include <string_view>
+#include <memory>
 
 #include <windows.h>
 #include <ole2.h>
 
-#include "UniConversion.h"
+#include "Debugging.h"
+
+#include "WinTypes.h"
 #include "HanjaDic.h"
 
-namespace Scintilla::Internal {
+// see https://sourceforge.net/p/scintilla/bugs/2295/
+// interface definitions based on generated header with following MSVC statement:
+//#import "file:C:\Windows\System32\IME\IMEKR\DICTS\imkrhjd.dll" raw_interfaces_only
+//#include "imkrhjd.tlh"
+//using namespace IMKRHJDLib;
 
+namespace Scintilla::Internal::HanjaDict {
+
+#if 1
 interface IRadical;
 interface IHanja;
 interface IStrokes;
@@ -55,83 +66,183 @@ interface IHanjaDic : IUnknown {
 
 extern "C" const GUID __declspec(selectany) IID_IHanjaDic =
 { 0xad75f3ac, 0x18cd, 0x48c6, { 0xa2, 0x7d, 0xf1, 0xe9, 0xa7, 0xdc, 0xe4, 0x32 } };
+#endif
 
 class HanjaDic {
-private:
-	HRESULT hr;
-	CLSID CLSID_HanjaDic;
+	std::unique_ptr<IHanjaDic, UnknownReleaser> HJinterface;
 
-public:
-	IHanjaDic *HJinterface;
-
-	HanjaDic() noexcept : HJinterface(nullptr) {
-		hr = CLSIDFromProgID(OLESTR("mshjdic.hanjadic"), &CLSID_HanjaDic);
+	bool OpenHanjaDic(LPCOLESTR lpszProgID) noexcept {
+		CLSID CLSID_HanjaDic;
+		HRESULT hr = CLSIDFromProgID(lpszProgID, &CLSID_HanjaDic);
 		if (SUCCEEDED(hr)) {
+			IHanjaDic *instance = nullptr;
 			hr = CoCreateInstance(CLSID_HanjaDic, nullptr,
+				//CLSCTX_INPROC_SERVER, __uuidof(IHanjaDic),
 				CLSCTX_INPROC_SERVER, IID_IHanjaDic,
-				(LPVOID *)& HJinterface);
+				(LPVOID *)&instance);
 			if (SUCCEEDED(hr)) {
-				hr = HJinterface->OpenMainDic();
+				HJinterface.reset(instance);
+				hr = instance->OpenMainDic();
+				return SUCCEEDED(hr);
 			}
-		}
-	}
-
-	// Deleted so HanjaDic objects can not be copied.
-	HanjaDic(const HanjaDic &) = delete;
-	HanjaDic(HanjaDic &&) = delete;
-	HanjaDic &operator=(const HanjaDic &) = delete;
-	HanjaDic &operator=(HanjaDic &&) = delete;
-
-	~HanjaDic() {
-		if (SUCCEEDED(hr)) {
-			hr = HJinterface->CloseMainDic();
-			try {
-				// This can never fail but IUnknown::Release is not marked noexcept.
-				HJinterface->Release();
-			} catch (...) {
-				// Ignore any exception
-			}
-		}
-	}
-
-	bool HJdictAvailable() const noexcept {
-		return SUCCEEDED(hr);
-	}
-
-	bool IsHanja(int hanja) noexcept {
-		HANJA_TYPE hanjaType;
-		hr = HJinterface->GetHanjaType(static_cast<unsigned short>(hanja), &hanjaType);
-		if (SUCCEEDED(hr)) {
-			return (hanjaType > 0);
 		}
 		return false;
 	}
+
+public:
+	IHanjaDic *GetHanjaDic() const noexcept {
+		return HJinterface.get();
+	}
+
+	bool Open() noexcept {
+		return OpenHanjaDic(OLESTR("imkrhjd.hanjadic"))
+			|| OpenHanjaDic(OLESTR("mshjdic.hanjadic"));
+	}
+
+	void Close() const noexcept {
+		HJinterface->CloseMainDic();
+	}
+
+	bool IsHanja(wchar_t hanja) const noexcept {
+		HANJA_TYPE hanjaType = HANJA_UNKNOWN;
+		const HRESULT hr = HJinterface->GetHanjaType(hanja, &hanjaType);
+		return SUCCEEDED(hr) && hanjaType > HANJA_UNKNOWN;
+	}
+
+	bool HanjaToHangul(BSTR bstrHanja, BSTR* pbstrHangul) const noexcept {
+		const HRESULT hr = HJinterface->HanjaToHangul(bstrHanja, pbstrHangul);
+		return SUCCEEDED(hr);
+	}
+
+	bool HanjaToHangul(BSTR bstrHanja, UniqueBSTR &bstrHangul) const noexcept {
+		BSTR result = nullptr;
+		const HRESULT hr = HJinterface->HanjaToHangul(bstrHanja, &result);
+		bstrHangul.reset(result);
+		return SUCCEEDED(hr);
+	}
 };
 
-int GetHangulOfHanja(wchar_t *inout) noexcept {
+struct HanjaDicCloser {
+	IHanjaDic * const HJinterface;
+	~HanjaDicCloser() {
+		HJinterface->CloseMainDic();
+	}
+};
+
+bool GetHangulOfHanja(std::wstring &inout) noexcept {
 	// Convert every hanja to hangul.
-	// Return the number of characters converted.
-	int changed = 0;
+	// Return whether any character been converted.
+	// Hanja linked to different notes in Hangul have different codes,
+	// so current character based conversion is enough.
+	// great thanks for BLUEnLIVE.
+	bool changed = false;
 	HanjaDic dict;
-	if (dict.HJdictAvailable()) {
-		const size_t len = lstrlenW(inout);
-		wchar_t conv[UTF8MaxBytes]{};
-		BSTR bstrHangul = SysAllocString(conv);
-		for (size_t i = 0; i < len; i++) {
-			if (dict.IsHanja(static_cast<int>(inout[i]))) { // Pass hanja only!
-				conv[0] = inout[i];
-				BSTR bstrHanja = SysAllocString(conv);
-				const HRESULT hr = dict.HJinterface->HanjaToHangul(bstrHanja, &bstrHangul);
-				if (SUCCEEDED(hr)) {
-					inout[i] = static_cast<wchar_t>(bstrHangul[0]);
-					changed += 1;
+	if (dict.Open()) {
+		for (wchar_t &character : inout) {
+			if (dict.IsHanja(character)) { // Pass hanja only!
+#if 0
+				const UniqueBSTR bstrHanja{SysAllocStringLen(&character, 1)};
+				UniqueBSTR bstrHangul;
+				if (dict.HanjaToHangul(bstrHanja.get(), bstrHangul)) {
+					changed = true;
+					character = bstrHangul[0];
 				}
+#else
+				BSTR bstrHanja = SysAllocStringLen(&character, 1);
+				BSTR bstrHangul = nullptr;
+				if (dict.HanjaToHangul(bstrHanja, &bstrHangul)) {
+					changed = true;
+					character = bstrHangul[0];
+				}
+				SysFreeString(bstrHangul);
 				SysFreeString(bstrHanja);
+#endif
 			}
 		}
-		SysFreeString(bstrHangul);
+		dict.Close();
 	}
 	return changed;
 }
 
 }
+
+#if 0
+// cl /utf-8 /W4 /EHsc /std:c++17 /GS- /GR- /Gv /Ox /FAcs /DNDEBUG /DUNICODE /I../src HanjaDic.cxx
+// g++ -Wall -Wextra -std=gnu++17 -O2 -fno-rtti -DNDEBUG -DUNICODE -I../src HanjaDic.cxx -lole32 -loleaut32
+#ifdef _MSC_VER
+#pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "oleaut32.lib")
+#endif
+
+using namespace Scintilla::Internal::HanjaDict;
+
+bool GetHangulOfHanja2(std::wstring &inout) {
+	bool changed = false;
+	HanjaDic dict;
+	if (dict.Open()) {
+		const HanjaDicCloser dictCloser { dict.GetHanjaDic() };
+		std::wstring result;
+		for (auto it = inout.cbegin(); it != inout.cend(); ) {
+			bool converted = false;
+			if (dict.IsHanja(*it)) {
+				// scan consecutive hanja.
+				auto next = it + 1;
+				while (next != inout.cend() && dict.IsHanja(*next)) {
+					++next;
+				}
+				const UniqueBSTR bstrHanja{SysAllocStringLen(&*it, static_cast<UINT>(next - it))};
+				BSTR temp = nullptr;
+				converted = dict.HanjaToHangul(bstrHanja.get(), &temp);
+				const UniqueBSTR bstrHangul{temp};
+				if (converted) {
+					changed = true;
+					it = next;
+					const UINT len = SysStringLen(bstrHangul.get());
+					//printf("converted %u => %u\n", SysStringLen(bstrHanja.get()), len);
+					for (UINT i = 0; i < len; i++) {
+						result.push_back(bstrHangul[i]);
+					}
+				}
+			}
+			if (!converted) {
+				result.push_back(*it++);
+			}
+		}
+		if (changed) {
+			inout = result;
+		}
+	}
+	return changed;
+}
+
+void ShowString(const char *name, std::wstring_view sv) noexcept {
+	printf("%s[%zu]:", name, sv.length());
+	for (const wchar_t character : sv) {
+		if (character != ' ') {
+			printf(" U+%04X", character);
+		}
+	}
+	printf("\n");
+}
+
+int __cdecl main() {
+	OleInitialize(nullptr);
+	// https://www.koreanwikiproject.com/wiki/Hanja#Does_every_Hanja_character_have_only_one_sound_representation.3F
+	constexpr std::wstring_view origin = L"年初 年末 昨年 來年 立式 獨立 組立 女子 女學生 少女 美女 不正 不得已 不便 不可能";
+	ShowString(" origin", origin);
+
+	std::wstring output1 { origin };
+	GetHangulOfHanja(output1);
+	ShowString("output1", output1);
+
+	std::wstring output2 { origin };
+	GetHangulOfHanja2(output2);
+	ShowString("output2", output2);
+
+	const bool same = output1 == output2;
+	printf("%s %s %s\n", "output1", (same ? "==" : "!="), "output2");
+
+	OleUninitialize();
+	return 0;
+}
+#endif

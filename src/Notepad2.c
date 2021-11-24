@@ -158,6 +158,7 @@ BOOL	bLoadANSIasUTF8;
 BOOL	bLoadASCIIasUTF8;
 BOOL	bLoadNFOasOEM;
 BOOL	bNoEncodingTags;
+extern int g_DOSEncoding;
 
 #if defined(_WIN64)
 BOOL	bLargeFileMode = FALSE;
@@ -254,7 +255,7 @@ LPMRULIST	mruReplace;
 DWORD	dwLastIOError;
 WCHAR	szCurFile[MAX_PATH + 40];
 FILEVARS	fvCurFile;
-static BOOL bModified;
+static BOOL bDocumentModified = FALSE;
 static BOOL bReadOnly = FALSE;
 BOOL bLockedForEditing = FALSE; // save call to SciCall_GetReadOnly()
 
@@ -378,7 +379,7 @@ static int	flagRelaunchElevated	= 0;
 static int	flagDisplayHelp			= 0;
 
 static inline BOOL IsDocumentModified(void) {
-	return bModified || iCurrentEncoding != iOriginalEncoding;
+	return bDocumentModified || iCurrentEncoding != iOriginalEncoding;
 }
 
 static inline BOOL IsTopMost(void) {
@@ -1023,9 +1024,9 @@ void OnDropOneFile(HWND hwnd, LPCWSTR szBuf) {
 #if NP2_ENABLE_DOT_LOG_FEATURE
 static inline BOOL IsFileStartsWithDotLog(void) {
 	char tch[5] = "";
-	const Sci_Position len = SciCall_GetText(COUNTOF(tch), tch);
+	const Sci_Position len = SciCall_GetText(COUNTOF(tch) - 1, tch);
 	// upper case
-	return len >= 4 && StrEqualExA(tch, ".LOG");
+	return len == 4 && StrEqualExA(tch, ".LOG");
 }
 #endif
 
@@ -2411,6 +2412,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	EnableCmd(hmenu, IDM_EDIT_MAP_CYRILLIC_LATIN, i && IsWin7AndAbove());
 	EnableCmd(hmenu, IDM_EDIT_MAP_BENGALI_LATIN, i && IsWin7AndAbove());
 	EnableCmd(hmenu, IDM_EDIT_MAP_HANGUL_DECOMPOSITION, i && IsWin7AndAbove());
+	EnableCmd(hmenu, IDM_EDIT_MAP_HANJA_HANGUL, i);
 
 	EnableCmd(hmenu, IDM_EDIT_CONVERTTABS, i /*&& !bReadOnly*/);
 	EnableCmd(hmenu, IDM_EDIT_CONVERTSPACES, i /*&& !bReadOnly*/);
@@ -3381,6 +3383,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case IDM_EDIT_MAP_CYRILLIC_LATIN:
 	case IDM_EDIT_MAP_BENGALI_LATIN:
 	case IDM_EDIT_MAP_HANGUL_DECOMPOSITION:
+	case IDM_EDIT_MAP_HANJA_HANGUL:
 		BeginWaitCursor();
 		EditMapTextCase(LOWORD(wParam));
 		EndWaitCursor();
@@ -4619,10 +4622,10 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	case CMD_FINDNEXTSEL:
 	case CMD_FINDPREVSEL:
 	case IDM_EDIT_SAVEFIND: {
-		Sci_Position cchSelection = SciCall_GetSelTextLength() - 1;
+		Sci_Position cchSelection = SciCall_GetSelTextLength();
 		if (cchSelection == 0) {
 			SendWMCommand(hwnd, IDM_EDIT_SELECTWORD);
-			cchSelection = SciCall_GetSelTextLength() - 1;
+			cchSelection = SciCall_GetSelTextLength();
 		}
 
 		if (cchSelection > 0 && cchSelection < NP2_FIND_REPLACE_LIMIT) {
@@ -5095,7 +5098,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			break;
 
 		case SCN_SAVEPOINTREACHED:
-			bModified = FALSE;
+			bDocumentModified = FALSE;
 			UpdateDocumentModificationStatus();
 			break;
 
@@ -5118,7 +5121,7 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			break;
 
 		case SCN_SAVEPOINTLEFT:
-			bModified = TRUE;
+			bDocumentModified = TRUE;
 			UpdateDocumentModificationStatus();
 			break;
 
@@ -6955,7 +6958,7 @@ void UpdateStatusbar(void) {
 		StrCpyExW(tchSelByte, L"0");
 		StrCpyExW(tchSelChar, L"0");
 	} else if (!SciCall_IsRectangleSelection()) {
-		Sci_Position iSel = SciCall_GetSelTextLength() - 1;
+		Sci_Position iSel = SciCall_GetSelTextLength();
 		PosToStrW(iSel, tchSelByte);
 		FormatNumberStr(tchSelByte);
 		iSel = SciCall_CountCharacters(iSelStart, iSelEnd);
@@ -7192,13 +7195,13 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 		}
 		FileVars_Init(NULL, 0, &fvCurFile);
 		EditSetEmptyText();
-		bModified = FALSE;
+		bDocumentModified = FALSE;
 		bReadOnly = FALSE;
 		iCurrentEOLMode = GetScintillaEOLMode(iDefaultEOLMode);
 		SciCall_SetEOLMode(iCurrentEOLMode);
 		iCurrentEncoding = iDefaultEncoding;
-		iOriginalEncoding = iDefaultEncoding;
-		SciCall_SetCodePage((iDefaultEncoding == CPI_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
+		iOriginalEncoding = iCurrentEncoding;
+		SciCall_SetCodePage((iCurrentEncoding == CPI_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
 		Style_SetLexer(NULL, TRUE);
 		UpdateStatusBarCache(STATUS_CODEPAGE);
 		UpdateStatusBarCache(STATUS_EOLMODE);
@@ -7263,11 +7266,10 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 				SciCall_SetEOLMode(iCurrentEOLMode);
 				if (iSrcEncoding != CPI_NONE) {
 					iCurrentEncoding = iSrcEncoding;
-					iOriginalEncoding = iSrcEncoding;
 				} else {
 					iCurrentEncoding = iDefaultEncoding;
-					iOriginalEncoding = iDefaultEncoding;
 				}
+				iOriginalEncoding = iCurrentEncoding;
 				SciCall_SetCodePage((iCurrentEncoding == CPI_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
 				Style_SetLexer(NULL, TRUE);
 				bReadOnly = FALSE;
@@ -7294,7 +7296,7 @@ BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWST
 			StrCpyExW(szTitleExcerpt, L"");
 		}
 		iOriginalEncoding = iCurrentEncoding;
-		bModified = FALSE;
+		bDocumentModified = FALSE;
 		SciCall_SetEOLMode(iCurrentEOLMode);
 		UpdateStatusBarCache(STATUS_CODEPAGE);
 		UpdateStatusBarCache(STATUS_EOLMODE);
@@ -7424,7 +7426,7 @@ BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy) {
 			bIsEmptyNewFile = TRUE;
 		} else if (cchText < 2048) {
 			char tchText[2048] = "";
-			SciCall_GetText(COUNTOF(tchText), tchText);
+			SciCall_GetText(COUNTOF(tchText) - 1, tchText);
 			StrTrimA(tchText, " \t\n\r"); // failure means not empty.
 			if (StrIsEmptyA(tchText)) {
 				bIsEmptyNewFile = TRUE;
@@ -7533,7 +7535,7 @@ BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy) {
 
 	if (fSuccess) {
 		if (!bSaveCopy) {
-			bModified = FALSE;
+			bDocumentModified = FALSE;
 			iOriginalEncoding = iCurrentEncoding;
 			MRU_AddFile(pFileMRU, szCurFile, flagRelativeFileMRU, flagPortableMyDocs);
 			if (flagUseSystemMRU == 2) {
@@ -7560,6 +7562,44 @@ BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy) {
 	}
 
 	return fSuccess;
+}
+
+void EditApplyDefaultEncoding(PEDITLEXER pLex) {
+	int iEncoding;
+	int iEOLMode;
+	switch (pLex->rid) {
+	case NP2LEX_ANSI:
+		iEncoding = bLoadNFOasOEM ? g_DOSEncoding : CPI_DEFAULT;
+		iEOLMode = SC_EOL_CRLF;
+		break;
+
+	case NP2LEX_BASH:
+		iEncoding = CPI_UTF8;
+		iEOLMode = SC_EOL_LF;
+		break;
+
+	case NP2LEX_BATCH:
+		iEncoding = CPI_DEFAULT;
+		iEOLMode = SC_EOL_CRLF;
+		break;
+
+	default:
+		iEncoding = iDefaultEncoding;
+		iEOLMode = GetScintillaEOLMode(iDefaultEOLMode);
+		break;
+	}
+
+	if (iEOLMode != iCurrentEOLMode) {
+		iCurrentEOLMode = iEOLMode;
+		SciCall_SetEOLMode(iEOLMode);
+		UpdateStatusBarCache(STATUS_EOLMODE);
+	}
+	if (iEncoding != iCurrentEncoding) {
+		iCurrentEncoding = iEncoding;
+		iOriginalEncoding = iEncoding;
+		SciCall_SetCodePage((iEncoding == CPI_DEFAULT) ? iDefaultCodePage : SC_CP_UTF8);
+		UpdateStatusBarCache(STATUS_CODEPAGE);
+	}
 }
 
 //=============================================================================
