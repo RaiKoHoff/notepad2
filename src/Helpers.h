@@ -230,7 +230,7 @@ NP2_inline BOOL HexStrToInt(LPCWSTR str, int *value) {
 
 int ParseCommaList(LPCWSTR str, int result[], int count);
 int ParseCommaList64(LPCWSTR str, int64_t result[], int count);
-LPCSTR GetCurrentLogTime(void);
+LPCSTR GetCurrentLogTime(char buf[16]);
 
 typedef struct StopWatch {
 	LARGE_INTEGER freq; // not changed after system boot
@@ -826,6 +826,20 @@ BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath);
 BOOL PathCreateDeskLnk(LPCWSTR pszDocument);
 BOOL PathCreateFavLnk(LPCWSTR pszName, LPCWSTR pszTarget, LPCWSTR pszDir);
 void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, BOOL bSelect);
+
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+#if defined(__cplusplus)
+#define KnownFolderId_Desktop			FOLDERID_Desktop
+#define KnownFolderId_Documents			FOLDERID_Documents
+#define KnownFolderId_LocalAppData		FOLDERID_LocalAppData
+#define KnownFolderId_ComputerFolder	FOLDERID_ComputerFolder
+#else
+#define KnownFolderId_Desktop			(&FOLDERID_Desktop)
+#define KnownFolderId_Documents			(&FOLDERID_Documents)
+#define KnownFolderId_LocalAppData		(&FOLDERID_LocalAppData)
+#define KnownFolderId_ComputerFolder	(&FOLDERID_ComputerFolder)
+#endif
+#endif
 
 NP2_inline void TrimString(LPWSTR lpString) {
 	StrTrim(lpString, L" ");

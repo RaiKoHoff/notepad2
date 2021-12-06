@@ -35,6 +35,7 @@
 
 //#include "CharacterSet.h"
 //#include "CharacterCategory.h"
+//#include "EastAsianWidth.h"
 #include "Position.h"
 #include "UniqueString.h"
 #include "SplitVector.h"
@@ -69,6 +70,7 @@ LineLayout::LineLayout(Sci::Line lineNumber_, int maxLineLength_) :
 	maxLineLength(-1),
 	numCharsInLine(0),
 	numCharsBeforeEOL(0),
+	lastSegmentEnd(0),
 	validity(ValidLevel::invalid),
 	xHighlightGuide(0),
 	highlightColumn(false),
@@ -121,10 +123,6 @@ void LineLayout::Invalidate(ValidLevel validity_) noexcept {
 		validity = validity_;
 }
 
-Sci::Line LineLayout::LineNumber() const noexcept {
-	return lineNumber;
-}
-
 bool LineLayout::CanHold(Sci::Line lineDoc, int lineLength_) const noexcept {
 	return (lineNumber == lineDoc) && (lineLength_ <= maxLineLength);
 }
@@ -153,6 +151,9 @@ int LineLayout::LineLastVisible(int line, Scope scope) const noexcept {
 	if (line < 0) {
 		return 0;
 	} else if ((line >= lines - 1) || !lineStarts) {
+		if (PartialPosition()) {
+			return lastSegmentEnd;
+		}
 		return scope == Scope::visibleOnly ? numCharsBeforeEOL : numCharsInLine;
 	} else {
 		return lineStarts[line + 1];
@@ -391,9 +392,9 @@ constexpr size_t NextPowerOfTwo(size_t x) noexcept {
 #else
 inline size_t NextPowerOfTwo(size_t x) noexcept {
 #if SIZE_MAX > UINT_MAX
-	return UINT64_C(1) << (64 - np2::clz(x - 1));
+	return UINT64_C(1) << (1 + np2::bsr(x - 1));
 #else
-	return 1U << (32 - np2::clz(x - 1));
+	return 1U << (1 + np2::bsr(x - 1));
 #endif
 }
 #endif
@@ -509,24 +510,30 @@ void LineLayoutCache::AllocateForLevel(Sci::Line linesOnScreen, Sci::Line linesI
 	} else if (level == LineCache::Document) {
 		lengthForLevel = AlignUp(linesInDoc, 64);
 	}
-	if (lengthForLevel != cache.size()) {
+	if (lengthForLevel != shortCache.size()) {
 		allInvalidated = false;
-		cache.resize(lengthForLevel);
+		shortCache.resize(lengthForLevel);
 		//printf("%s level=%d, size=%zu/%zu, LineLayout=%zu/%zu, BidiData=%zu, XYPOSITION=%zu\n",
-		//	__func__, level, cache.size(), cache.capacity(), sizeof(LineLayout),
+		//	__func__, level, shortCache.size(), shortCache.capacity(), sizeof(LineLayout),
 		//	sizeof(std::unique_ptr<LineLayout>), sizeof(BidiData), sizeof(XYPOSITION));
 	}
-	PLATFORM_ASSERT(cache.size() >= lengthForLevel);
+	PLATFORM_ASSERT(shortCache.size() >= lengthForLevel);
 }
 
 void LineLayoutCache::Deallocate() noexcept {
-	cache.clear();
+	shortCache.clear();
+	longCache.clear();
 	lastCaretSlot = SIZE_MAX;
 }
 
 void LineLayoutCache::Invalidate(LineLayout::ValidLevel validity_) noexcept {
-	if (!cache.empty() && !allInvalidated) {
-		for (const auto &ll : cache) {
+	if (!allInvalidated) {
+		for (const auto &ll : shortCache) {
+			if (ll) {
+				ll->Invalidate(validity_);
+			}
+		}
+		for (const auto &ll : longCache) {
 			if (ll) {
 				ll->Invalidate(validity_);
 			}
@@ -541,7 +548,8 @@ void LineLayoutCache::SetLevel(LineCache level_) noexcept {
 	if (level != level_) {
 		level = level_;
 		allInvalidated = false;
-		cache.clear();
+		shortCache.clear();
+		longCache.clear();
 		lastCaretSlot = SIZE_MAX;
 	}
 }
@@ -556,17 +564,26 @@ LineLayout *LineLayoutCache::Retrieve(Sci::Line lineNumber, Sci::Line lineCaret,
 	allInvalidated = false;
 
 	size_t pos = 0;
-	if (level == LineCache::Page) {
+	LineLayout *ret = nullptr;
+	const int useLongCache = maxChars >> (10 + 8); // 1024*256
+	if (useLongCache) {
+		for (const auto &ll : longCache) {
+			if (ll->LineNumber() == lineNumber) {
+				ret = ll.get();
+				break;
+			}
+		}
+	} else if (level == LineCache::Page) {
 		// two arenas, each with two pages to ensure cache efficiency on scrolling.
 		// first arena for lines near top visible line.
 		// second arena for other lines, e.g. folded lines near top visible line.
 		// TODO: use/cleanup second arena after some periods, e.g. after Editor::WrapLines() finished.
 		const size_t diff = std::abs(lineNumber - topLine);
-		const size_t gap = cache.size() / 2;
+		const size_t gap = shortCache.size() / 2;
 		pos = 1 + (lineNumber % gap) + ((diff < gap) ? 0 : gap);
 		// first slot reserved for caret line, which is rapidly retrieved when caret blinking.
 		if (lineNumber == lineCaret) {
-			if (lastCaretSlot == 0 && cache[0]->lineNumber == lineCaret) {
+			if (lastCaretSlot == 0 && shortCache[0]->lineNumber == lineCaret) {
 				pos = 0;
 			} else {
 				lastCaretSlot = pos;
@@ -574,7 +591,7 @@ LineLayout *LineLayoutCache::Retrieve(Sci::Line lineNumber, Sci::Line lineCaret,
 		} else if (pos == lastCaretSlot) {
 			// save cache for caret line.
 			lastCaretSlot = 0;
-			std::swap(cache[0], cache[pos]);
+			std::swap(shortCache[0], shortCache[pos]);
 		}
 	} else if (level == LineCache::Caret) {
 		pos = lineNumber != lineCaret;
@@ -582,7 +599,9 @@ LineLayout *LineLayoutCache::Retrieve(Sci::Line lineNumber, Sci::Line lineCaret,
 		pos = lineNumber;
 	}
 
-	LineLayout *ret = cache[pos].get();
+	if (!useLongCache) {
+		ret = shortCache[pos].get();
+	}
 	if (ret) {
 		if (!ret->CanHold(lineNumber, maxChars)) {
 			//printf("USE line=%zd/%zd, caret=%zd/%zd top=%zd, pos=%zu, clock=%d\n",
@@ -596,8 +615,13 @@ LineLayout *LineLayoutCache::Retrieve(Sci::Line lineNumber, Sci::Line lineCaret,
 	} else {
 		//printf("NEW line=%zd, caret=%zd/%zd top=%zd, pos=%zu, clock=%d\n",
 		//	lineNumber, lineCaret, lastCaretSlot, topLine, pos, styleClock_);
-		cache[pos] = std::make_unique<LineLayout>(lineNumber, maxChars);
-		ret = cache[pos].get();
+		auto ll = std::make_unique<LineLayout>(lineNumber, maxChars);
+		ret = ll.get();
+		if (useLongCache) {
+			longCache.push_back(std::move(ll));
+		} else {
+			shortCache[pos].swap(ll);
+		}
 	}
 
 	// LineLineCache::None is not supported, we only use LineCache::Page.
@@ -1017,6 +1041,37 @@ void PositionCache::MeasureWidths(Surface *surface, const ViewStyle &vstyle, uin
 #endif
 		return;
 	}
+
+#ifdef MeasureWidthsUseEastAsianWidth
+	if (style.monospaceASCII) {
+#if PLAT_MACOSX
+		const XYPOSITION characterWidth = style.monospaceCharacterWidth;
+#else
+		const XYPOSITION characterWidth = style.aveCharWidth;
+#endif
+		XYPOSITION *ptr = positions;
+		XYPOSITION lastPos = 0;
+		for (auto it = sv.begin(); it != sv.end();) {
+			const uint8_t ch = *it;
+			lastPos += characterWidth;
+			if (UTF8IsAscii(ch)) {
+				*ptr++ = lastPos;
+				++it;
+			} else {
+				int byteCount = UTF8BytesOfLead(ch);
+				const uint32_t character = UnicodeFromUTF8(reinterpret_cast<const uint8_t *>(&*it));
+				if (GetEastAsianWidth(character)) {
+					lastPos += characterWidth;
+				}
+				it += byteCount;
+				while (byteCount--) {
+					*ptr++ = lastPos;
+				}
+			}
+		}
+		return;
+	}
+#endif // MeasureWidthsUseEastAsianWidth
 
 	size_t probe = pces.size();	// Out of bounds
 	if ((sv.length() < 64)) {

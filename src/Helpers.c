@@ -37,8 +37,7 @@
 #include "GraphicUtils.h"
 #include "resource.h"
 
-LPCSTR GetCurrentLogTime(void) {
-	static char buf[16];
+LPCSTR GetCurrentLogTime(char buf[16]) {
 	SYSTEMTIME lt;
 	GetLocalTime(&lt);
 	sprintf(buf, "%02d:%02d:%02d.%03d", lt.wHour, lt.wMinute, lt.wSecond, lt.wMilliseconds);
@@ -1691,7 +1690,7 @@ static inline BOOL PathGetFileId(LPCWSTR pszPath, FILE_ID_INFO *fileId) {
 	BOOL success;
 	if (IsWin8AndAbove()) {
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
-		success = GetFileInformationByHandleEx(hFile, FileIdInfo, fileId, sizeof(FILE_ID_INFO));
+		success = GetFileInformationByHandleEx(hFile, (FILE_INFO_BY_HANDLE_CLASS)FileIdInfo, fileId, sizeof(FILE_ID_INFO));
 #else
 		typedef BOOL (WINAPI *GetFileInformationByHandleExSig)(HANDLE hFile, int FileInformationClass, LPVOID lpFileInformation, DWORD dwBufferSize);
 		static GetFileInformationByHandleExSig pfnGetFileInformationByHandleEx = NULL;
@@ -1715,13 +1714,16 @@ static inline BOOL PathGetFileId(LPCWSTR pszPath, FILE_ID_INFO *fileId) {
 }
 
 BOOL PathEquivalent(LPCWSTR pszPath1, LPCWSTR pszPath2) {
-	BOOL same = FALSE;
+	if (PathEqual(pszPath1, pszPath2)) {
+		return TRUE;
+	}
+
 	FILE_ID_INFO info1;
 	FILE_ID_INFO info2;
 	if (PathGetFileId(pszPath1, &info1) && PathGetFileId(pszPath2, &info2)) {
-		same = memcmp(&info1, &info2, sizeof(FILE_ID_INFO)) == 0;
+		return memcmp(&info1, &info2, sizeof(FILE_ID_INFO)) == 0;
 	}
-	return same;
+	return FALSE;
 }
 
 //=============================================================================
@@ -1735,7 +1737,7 @@ void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, BOOL bSrcIsFile, BOOL b
 
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 	LPWSTR pszPath = NULL;
-	if (S_OK != SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &pszPath)) {
+	if (S_OK != SHGetKnownFolderPath(KnownFolderId_Documents, KF_FLAG_DEFAULT, NULL, &pszPath)) {
 		return;
 	}
 	lstrcpy(wchUserFiles, pszPath);
@@ -1777,7 +1779,7 @@ void PathAbsoluteFromApp(LPCWSTR lpszSrc, LPWSTR lpszDest, BOOL bExpandEnv) {
 	if (StrHasPrefix(lpszSrc, L"%CSIDL:MYDOCUMENTS%")) {
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 		LPWSTR pszPath = NULL;
-		if (S_OK != SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &pszPath)) {
+		if (S_OK != SHGetKnownFolderPath(KnownFolderId_Documents, KF_FLAG_DEFAULT, NULL, &pszPath)) {
 			return;
 		}
 		lstrcpy(wchPath, pszPath);
@@ -1897,7 +1899,7 @@ BOOL PathCreateDeskLnk(LPCWSTR pszDocument) {
 
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 	LPWSTR tchLinkDir = NULL;
-	if (S_OK != SHGetKnownFolderPath(&FOLDERID_Desktop, KF_FLAG_DEFAULT, NULL, &tchLinkDir)) {
+	if (S_OK != SHGetKnownFolderPath(KnownFolderId_Desktop, KF_FLAG_DEFAULT, NULL, &tchLinkDir)) {
 		return FALSE;
 	}
 #else
@@ -2047,12 +2049,12 @@ void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, BOOL bSelect) {
 		return;
 	}
 
-	LPITEMIDLIST pidl = ILCreateFromPath(wchDirectory);
+	PIDLIST_ABSOLUTE pidl = ILCreateFromPath(wchDirectory);
 	if (pidl) {
 		HRESULT hr;
-		LPITEMIDLIST pidlEntry = path ? ILCreateFromPath(path) : NULL;
+		PIDLIST_ABSOLUTE pidlEntry = path ? ILCreateFromPath(path) : NULL;
 		if (pidlEntry) {
-			hr = SHOpenFolderAndSelectItems(pidl, 1, (LPCITEMIDLIST *)(&pidlEntry), 0);
+			hr = SHOpenFolderAndSelectItems(pidl, 1, (PCUITEMID_CHILD_ARRAY)(&pidlEntry), 0);
 			CoTaskMemFree((LPVOID)pidlEntry);
 		} else if (!bSelect) {
 #if 0

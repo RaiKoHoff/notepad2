@@ -959,7 +959,7 @@ int EditDetermineEncoding(LPCWSTR pszFile, char *lpData, DWORD cbData, BOOL bSki
 	int preferedEncoding = CPI_NONE;
 	if (bLoadNFOasOEM && (StrCaseEqual(pszExt, L".nfo") || StrCaseEqual(pszExt, L".diz"))) {
 		preferedEncoding = g_DOSEncoding;
-	} else if (StrCaseEqual(pszExt, L".bat")) {
+	} else if (StrCaseEqual(pszExt, L".bat") || StrCaseEqual(pszExt, L".cmd")) {
 		preferedEncoding = CPI_DEFAULT;
 	} else if (StrEqual(pszExt, L".sh") || StrStartsWith(lpData, "#!/")) {
 		// shell script: #!/bin/sh[LF]
@@ -1278,22 +1278,22 @@ BOOL EditLoadFile(LPWSTR pszFile, BOOL bSkipEncodingDetection, EditFileIOStatus 
 //
 // EditSaveFile()
 //
-BOOL EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, EditFileIOStatus *status) {
+BOOL EditSaveFile(HWND hwnd, LPCWSTR pszFile, int saveFlag, EditFileIOStatus *status) {
 	HANDLE hFile = CreateFile(pszFile,
-					   GENERIC_WRITE,
+					   GENERIC_READ | GENERIC_WRITE,
 					   FILE_SHARE_READ | FILE_SHARE_WRITE,
 					   NULL, OPEN_ALWAYS,
 					   FILE_ATTRIBUTE_NORMAL,
 					   NULL);
 	dwLastIOError = GetLastError();
 
-	// failure could be due to missing attributes (2k/XP)
+	// failure could be due to missing attributes (Windows 2000, XP)
 	if (hFile == INVALID_HANDLE_VALUE) {
 		DWORD dwAttributes = GetFileAttributes(pszFile);
 		if (dwAttributes != INVALID_FILE_ATTRIBUTES) {
 			dwAttributes = dwAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
 			hFile = CreateFile(pszFile,
-							   GENERIC_WRITE,
+							   GENERIC_READ | GENERIC_WRITE,
 							   FILE_SHARE_READ | FILE_SHARE_WRITE,
 							   NULL,
 							   OPEN_ALWAYS,
@@ -1307,14 +1307,16 @@ BOOL EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, EditFileIOStatus *
 		return FALSE;
 	}
 
-	// ensure consistent line endings
-	if (bFixLineEndings) {
-		EditEnsureConsistentLineEndings();
-	}
+	if (!(saveFlag & FileSaveFlag_EndSession)) {
+		// ensure consistent line endings
+		if (bFixLineEndings) {
+			EditEnsureConsistentLineEndings();
+		}
 
-	// strip trailing blanks
-	if (bAutoStripBlanks) {
-		EditStripTrailingBlanks(hwnd, TRUE);
+		// strip trailing blanks
+		if (bAutoStripBlanks) {
+			EditStripTrailingBlanks(hwnd, TRUE);
+		}
 	}
 
 	BOOL bWriteSuccess;
@@ -1400,26 +1402,20 @@ BOOL EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, EditFileIOStatus *
 		} else if (uFlags & (NCP_8BIT | NCP_7BIT)) {
 			BOOL bCancelDataLoss = FALSE;
 			const UINT uCodePage = mEncoding[iEncoding].uCodePage;
-			const BOOL zeroFlags = IsZeroFlagsCodePage(uCodePage);
 
 			LPWSTR lpDataWide = (LPWSTR)NP2HeapAlloc(cbData * sizeof(WCHAR) + 16);
 			const int cbDataWide = MultiByteToWideChar(CP_UTF8, 0, lpData, cbData, lpDataWide, (int)(NP2HeapSize(lpDataWide) / sizeof(WCHAR)));
 
-			if (zeroFlags) {
+			if (IsZeroFlagsCodePage(uCodePage)) {
 				NP2HeapFree(lpData);
 				lpData = (char *)NP2HeapAlloc(NP2HeapSize(lpDataWide) * 2);
 			} else {
 				ZeroMemory(lpData, NP2HeapSize(lpData));
+				cbData = WideCharToMultiByte(uCodePage, WC_NO_BEST_FIT_CHARS, lpDataWide, cbDataWide, lpData, (int)NP2HeapSize(lpData), NULL, &bCancelDataLoss);
 			}
 
-			if (zeroFlags) {
+			if (!bCancelDataLoss) {
 				cbData = WideCharToMultiByte(uCodePage, 0, lpDataWide, cbDataWide, lpData, (int)NP2HeapSize(lpData), NULL, NULL);
-			} else {
-				cbData = WideCharToMultiByte(uCodePage, WC_NO_BEST_FIT_CHARS, lpDataWide, cbDataWide, lpData, (int)NP2HeapSize(lpData), NULL, &bCancelDataLoss);
-				if (!bCancelDataLoss) {
-					cbData = WideCharToMultiByte(uCodePage, 0, lpDataWide, cbDataWide, lpData, (int)NP2HeapSize(lpData), NULL, NULL);
-					bCancelDataLoss = FALSE;
-				}
 			}
 			NP2HeapFree(lpDataWide);
 
@@ -1444,7 +1440,7 @@ BOOL EditSaveFile(HWND hwnd, LPCWSTR pszFile, BOOL bSaveCopy, EditFileIOStatus *
 
 	CloseHandle(hFile);
 	if (bWriteSuccess) {
-		if (!bSaveCopy) {
+		if (!(saveFlag & FileSaveFlag_SaveCopy)) {
 			SciCall_SetSavePoint();
 		}
 		return TRUE;
@@ -5880,7 +5876,8 @@ static Sci_Line EditMarkAll_Bookmark(Sci_Line bookmarkLine, const Sci_Position *
 BOOL EditMarkAll_Continue(EditMarkAllStatus *status, HANDLE timer) {
 	// use increment search to ensure FindText() terminated in expected time.
 	//++EditMarkAll_Runs;
-	//printf("match %3u %s\n", EditMarkAll_Runs, GetCurrentLogTime());
+	//char logTime[16];
+	//printf("match %3u %s\n", EditMarkAll_Runs, GetCurrentLogTime(logTime));
 	QueryPerformanceCounter(&status->watch.begin);
 	const Sci_Position iLength = SciCall_GetLength();
 	Sci_Position iStartPos = status->iStartPos;
@@ -7922,11 +7919,10 @@ static void FoldLevelStack_Push(struct FoldLevelStack *levelStack, int level) {
 	++levelStack->levelCount;
 }
 
-static UINT Style_GetDefaultFoldLevel(int iLexer, int rid, int *maxLevel, int *ignoreInner) {
+static UINT Style_GetDefaultFoldLevel(int iLexer, int rid, int *ignoreInner) {
 	switch (iLexer) {
 	case SCLEX_NULL:
 	case SCLEX_COFFEESCRIPT: // class, function
-		*maxLevel = 2;
 		return (1 << 1) | (1 << 2);
 
 	case SCLEX_ASYMPTOTE: // struct, function
@@ -7940,17 +7936,14 @@ static UINT Style_GetDefaultFoldLevel(int iLexer, int rid, int *maxLevel, int *i
 	case SCLEX_CPP:
 		switch (rid) {
 		case NP2LEX_CPP: // preprocessor, namespace, class, method
-			*maxLevel = 3;
 			return (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3);
 
 		case NP2LEX_SCALA: // class, inner class, method
-			*maxLevel = 2;
 			return (1 << 0) | (1 << 1) | (1 << 2);
 		}
 		break;
 
 	case SCLEX_CSHARP: // namespace, class, method
-		*maxLevel = 2;
 		*ignoreInner = SCE_CSHARP_FUNCTION_DEFINITION;
 		return (1 << 0) | (1 << 1) | (1 << 2);
 
@@ -7959,7 +7952,6 @@ static UINT Style_GetDefaultFoldLevel(int iLexer, int rid, int *maxLevel, int *i
 		break;
 
 	case SCLEX_DIFF: // file, diff in file
-		*maxLevel = 2;
 		return (1 << 0) | (1 << 2);
 
 	case SCLEX_GO: // struct, function
@@ -7977,16 +7969,13 @@ static UINT Style_GetDefaultFoldLevel(int iLexer, int rid, int *maxLevel, int *i
 	case SCLEX_HTML:
 	case SCLEX_JSON:
 	case SCLEX_XML:
-		*maxLevel = 3;
 		return (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3);
 
 	case SCLEX_JAVA: // class, inner class, method
-		*maxLevel = 2;
 		*ignoreInner = SCE_JAVA_FUNCTION_DEFINITION;
 		return (1 << 0) | (1 << 1) | (1 << 2);
 
 	case SCLEX_JAVASCRIPT: // object, anonymous object, function
-		*maxLevel = 2;
 		*ignoreInner = SCE_JS_FUNCTION_DEFINITION;
 		return (1 << 0) | (1 << 1) | (1 << 2);
 
@@ -7995,22 +7984,18 @@ static UINT Style_GetDefaultFoldLevel(int iLexer, int rid, int *maxLevel, int *i
 		break;
 
 	case SCLEX_KOTLIN: // class, inner class, method
-		*maxLevel = 2;
 		*ignoreInner = SCE_KOTLIN_FUNCTION_DEFINITION;
 		return (1 << 0) | (1 << 1) | (1 << 2);
 
 	case SCLEX_PROPERTIES: // section
 	case SCLEX_TOML: // table
-		*maxLevel = 0;
 		return (1 << 0);
 
 	case SCLEX_PYTHON: // class, function
-		*maxLevel = 2;
 		*ignoreInner = SCE_PY_FUNCTION_DEFINITION;
 		return (1 << 1) | (1 << 2);
 
 	case SCLEX_RUBY: // module, class, method
-		*maxLevel = 2;
 		return (1 << 0) | (1 << 1) | (1 << 2);
 
 	case SCLEX_RUST: // struct, function
@@ -8022,11 +8007,9 @@ static UINT Style_GetDefaultFoldLevel(int iLexer, int rid, int *maxLevel, int *i
 		break;
 
 	case SCLEX_YAML:
-		*maxLevel = 4;
 		return (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4);
 	}
 
-	*maxLevel = 1;
 	return (1 << 0) | (1 << 1);
 }
 
@@ -8190,9 +8173,9 @@ void FoldToggleCurrentLevel(FOLD_ACTION action) {
 
 void FoldToggleDefault(FOLD_ACTION action) {
 	SciCall_ColouriseAll();
-	int maxLevel = 0;
 	int ignoreInner = 0;
-	const UINT levelMask = Style_GetDefaultFoldLevel(pLexCurrent->iLexer, pLexCurrent->rid, &maxLevel, &ignoreInner);
+	const UINT levelMask = Style_GetDefaultFoldLevel(pLexCurrent->iLexer, pLexCurrent->rid, &ignoreInner);
+	const int maxLevel = np2_bsr(levelMask);
 	const Sci_Line lineCount = SciCall_GetLineCount();
 	Sci_Line line = 0;
 	BOOL fToggled = FALSE;
