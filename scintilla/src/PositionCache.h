@@ -48,7 +48,7 @@ private:
 	std::unique_ptr<int[]> lineStarts;
 	int lenLineStarts;
 	/// Drawing is only performed for @a maxLineLength characters on each line.
-	Sci::Line lineNumber;
+	const Sci::Line lineNumber;
 public:
 	enum {
 		wrapWidthInfinite = 0x7ffffff
@@ -57,6 +57,7 @@ public:
 	int maxLineLength;
 	int numCharsInLine;
 	int numCharsBeforeEOL;
+	int lastSegmentEnd;
 	enum class ValidLevel {
 		invalid, checkTextAndStyle, positions, lines
 	} validity;
@@ -87,7 +88,12 @@ public:
 	void EnsureBidiData();
 	void Free() noexcept;
 	void Invalidate(ValidLevel validity_) noexcept;
-	Sci::Line LineNumber() const noexcept;
+	Sci::Line LineNumber() const noexcept {
+		return lineNumber;
+	}
+	bool PartialPosition() const noexcept {
+		return lastSegmentEnd < numCharsInLine;
+	}
 	bool CanHold(Sci::Line lineDoc, int lineLength_) const noexcept;
 	int LineStart(int line) const noexcept;
 	int LineLength(int line) const noexcept;
@@ -142,7 +148,8 @@ struct ScreenLine : public IScreenLine {
  */
 class LineLayoutCache final {
 private:
-	std::vector<std::unique_ptr<LineLayout>> cache;
+	std::vector<std::unique_ptr<LineLayout>> shortCache;
+	std::vector<std::unique_ptr<LineLayout>> longCache;
 	size_t lastCaretSlot;
 	Scintilla::LineCache level;
 	bool allInvalidated;
@@ -253,12 +260,11 @@ public:
 	// If a whole run is longer than lengthStartSubdivision then subdivide
 	// into smaller runs at spaces or punctuation.
 	enum {
-		lengthStartSubdivision = 300
+		lengthStartSubdivision = 4096
 	};
 	// Try to make each subdivided run lengthEachSubdivision or shorter.
-	// 100 + 35 (longest emoji sequence) + 4 (UTF8MaxBytes)
 	enum {
-		lengthEachSubdivision = 128 + 12
+		lengthEachSubdivision = 1024
 	};
 	enum class BreakFor {
 		Text = 0,

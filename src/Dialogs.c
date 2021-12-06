@@ -232,7 +232,7 @@ BOOL GetDirectory(HWND hwndParent, int iTitle, LPWSTR pszFolder, LPCWSTR pszBase
 	bi.lParam = (LPARAM)szBase;
 	bi.iImage = 0;
 
-	LPITEMIDLIST pidl = SHBrowseForFolder(&bi);
+	PIDLIST_ABSOLUTE pidl = SHBrowseForFolder(&bi);
 	if (pidl) {
 		SHGetPathFromIDList(pidl, pszFolder);
 		CoTaskMemFree((LPVOID)pidl);
@@ -2227,7 +2227,6 @@ void ZoomLevelDlg(HWND hwnd, BOOL bBottom) {
 extern EditAutoCompletionConfig autoCompletionConfig;
 
 static INT_PTR CALLBACK AutoCompletionSettingsDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) {
-	UNREFERENCED_PARAMETER(wParam);
 	UNREFERENCED_PARAMETER(lParam);
 
 	switch (umsg) {
@@ -2406,6 +2405,81 @@ BOOL AutoCompletionSettingsDlg(HWND hwnd) {
 	return iResult == IDOK;
 }
 
+extern int iAutoSaveOption;
+extern DWORD dwAutoSavePeriod;
+
+static INT_PTR CALLBACK AutoSaveSettingsDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) {
+	UNREFERENCED_PARAMETER(lParam);
+
+	switch (umsg) {
+	case WM_INITDIALOG: {
+		if (iAutoSaveOption & AutoSaveOption_Periodic) {
+			CheckDlgButton(hwnd, IDC_AUTOSAVE_ENABLE, BST_CHECKED);
+		}
+		if (iAutoSaveOption & AutoSaveOption_Suspend) {
+			CheckDlgButton(hwnd, IDC_AUTOSAVE_SUSPEND, BST_CHECKED);
+		}
+		if (iAutoSaveOption & AutoSaveOption_Shutdown) {
+			CheckDlgButton(hwnd, IDC_AUTOSAVE_SHUTDOWN, BST_CHECKED);
+		}
+
+		WCHAR tch[32];
+		const UINT seconds = dwAutoSavePeriod / 1000;
+		const UINT milliseconds = dwAutoSavePeriod % 1000;
+		if (milliseconds) {
+			wsprintf(tch, L"%u.%03u", seconds, milliseconds);
+		} else {
+			wsprintf(tch, L"%u.0", seconds);
+		}
+		SetDlgItemText(hwnd, IDC_AUTOSAVE_PERIOD, tch);
+
+		CenterDlgInParent(hwnd);
+	};
+	return TRUE;
+
+	case WM_COMMAND:
+		switch (LOWORD(wParam)) {
+		case IDOK: {
+			int option = 0;
+			if (IsButtonChecked(hwnd, IDC_AUTOSAVE_ENABLE)) {
+				option |= AutoSaveOption_Periodic;
+			}
+			if (IsButtonChecked(hwnd, IDC_AUTOSAVE_SUSPEND)) {
+				option |= AutoSaveOption_Suspend;
+			}
+			if (IsButtonChecked(hwnd, IDC_AUTOSAVE_SHUTDOWN)) {
+				option |= AutoSaveOption_Shutdown;
+			}
+			iAutoSaveOption = option;
+
+			WCHAR tch[32] = L"";
+			GetDlgItemText(hwnd, IDC_AUTOSAVE_PERIOD, tch, COUNTOF(tch));
+			float period = 0;
+			StrToFloat(tch, &period);
+			dwAutoSavePeriod = (DWORD)(period * 1000);
+			EndDialog(hwnd, IDOK);
+		}
+		break;
+
+		case IDC_AUTOSAVE_OPENFOLDER: {
+			LPCWSTR szFolder = AutoSave_GetDefaultFolder();
+			OpenContainingFolder(hwnd, szFolder, FALSE);
+		} break;
+
+		case IDCANCEL:
+			EndDialog(hwnd, IDCANCEL);
+			break;
+		}
+		return TRUE;
+	}
+	return FALSE;
+}
+
+BOOL AutoSaveSettingsDlg(HWND hwnd) {
+	const INT_PTR iResult = ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_AUTOSAVE), hwnd, AutoSaveSettingsDlgProc, 0);
+	return iResult == IDOK;
+}
+
 //=============================================================================
 //
 // InfoBoxDlgProc()
@@ -2519,20 +2593,9 @@ HKEY_CLASSES_ROOT\Applications\Notepad2.exe
 		(Default)			REG_SZ		"Notepad2.exe" "%1"
 
 HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\notepad.exe
+	(Default)				REG_SZ			Notepad2.exe
 	Debugger								REG_SZ		"Notepad2.exe" /z
 	UseFilter								REG_DWORD	0
-	0
-		AppExecutionAliasRedirect			REG_DWORD	1
-		AppExecutionAliasRedirectPackages	REG_SZ		*
-		FilterFullPath						REG_SZ		"Notepad2.exe"
-	1
-		AppExecutionAliasRedirect			REG_DWORD	1
-		AppExecutionAliasRedirectPackages	REG_SZ		*
-		FilterFullPath						REG_SZ		"Notepad2.exe"
-	2
-		AppExecutionAliasRedirect			REG_DWORD	1
-		AppExecutionAliasRedirectPackages	REG_SZ		*
-		FilterFullPath						REG_SZ		"Notepad2.exe"
 */
 extern BOOL fIsElevated;
 extern int flagUseSystemMRU;
@@ -2669,10 +2732,14 @@ void UpdateSystemIntegrationStatus(int mask, LPCWSTR lpszText, LPCWSTR lpszName)
 		LSTATUS status = Registry_CreateKey(HKEY_LOCAL_MACHINE, NP2RegSubKey_ReplaceNotepad, &hKey);
 		if (status == ERROR_SUCCESS) {
 			wsprintf(command, L"\"%s\" /z", tchModule);
+			Registry_SetDefaultString(hKey, tchModule);
 			Registry_SetString(hKey, L"Debugger", command);
 			Registry_SetInt(hKey, L"UseFilter", 0);
 			WCHAR num[2] = { L'0', L'\0' };
 			for (int index = 0; index < 3; index++, num[0]++) {
+#if 1
+				Registry_DeleteTree(hKey, num);
+#else
 				HKEY hSubKey;
 				status = Registry_CreateKey(hKey, num, &hSubKey);
 				if (status == ERROR_SUCCESS) {
@@ -2681,14 +2748,19 @@ void UpdateSystemIntegrationStatus(int mask, LPCWSTR lpszText, LPCWSTR lpszName)
 					Registry_SetString(hSubKey, L"FilterFullPath", tchModule);
 					RegCloseKey(hSubKey);
 				}
+#endif
 			}
 			RegCloseKey(hKey);
 		}
 	} else if (mask & SystemIntegration_RestoreNotepad) {
+#if 1
+		Registry_DeleteTree(HKEY_LOCAL_MACHINE, NP2RegSubKey_ReplaceNotepad);
+#else
 		// on Windows 11, all keys were created by the system, we should not delete them.
 		HKEY hKey;
 		LSTATUS status = RegOpenKeyEx(HKEY_LOCAL_MACHINE, NP2RegSubKey_ReplaceNotepad, 0, KEY_WRITE, &hKey);
 		if (status == ERROR_SUCCESS) {
+			RegDeleteValue(hKey, NULL);
 			RegDeleteValue(hKey, L"Debugger");
 			RegDeleteValue(hKey, L"UseFilter");
 			GetWindowsDirectory(tchModule, COUNTOF(tchModule));
@@ -2709,6 +2781,7 @@ void UpdateSystemIntegrationStatus(int mask, LPCWSTR lpszText, LPCWSTR lpszName)
 			}
 			RegCloseKey(hKey);
 		}
+#endif
 	}
 }
 

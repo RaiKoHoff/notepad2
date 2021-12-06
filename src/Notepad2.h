@@ -86,6 +86,7 @@ typedef struct NP2PARAMS {
 
 #define ID_WATCHTIMER				0xA000	// file watch timer
 #define ID_PASTEBOARDTIMER			0xA001	// paste board timer
+#define ID_AUTOSAVETIMER			0xA002	// AutoSave timer
 
 #define REUSEWINDOWLOCKTIMEOUT		1000	// Reuse Window Lock Timeout
 
@@ -172,6 +173,7 @@ enum {
 
 	FullScreenMode_Default = FullScreenMode_HideCaption,
 };
+
 void ToggleFullScreenMode(void);
 
 typedef struct EditFileIOStatus {
@@ -190,11 +192,42 @@ typedef struct EditFileIOStatus {
 	BOOL bCancelDataLoss;// save output
 } EditFileIOStatus;
 
-BOOL FileIO(BOOL fLoad, LPWSTR pszFile, BOOL bFlag, EditFileIOStatus *status);
-BOOL FileLoad(BOOL bDontSave, BOOL bNew, BOOL bReload, BOOL bNoEncDetect, LPCWSTR lpszFile);
-BOOL FileSave(BOOL bSaveAlways, BOOL bAsk, BOOL bSaveAs, BOOL bSaveCopy);
+typedef enum FileLoadFlag {
+	FileLoadFlag_Default = 0,
+	FileLoadFlag_DontSave = 1,
+	FileLoadFlag_New = 2,
+	FileLoadFlag_Reload = 4,
+	FileLoadFlag_NoEncDetect = 8,
+} FileLoadFlag;
+
+typedef enum FileSaveFlag {
+	FileSaveFlag_Default = 0,
+	FileSaveFlag_SaveAlways = 1,
+	FileSaveFlag_Ask = 2,
+	FileSaveFlag_SaveAs = 4,
+	FileSaveFlag_SaveCopy = 8,
+	FileSaveFlag_EndSession = 16,
+} FileSaveFlag;
+
+BOOL FileIO(BOOL fLoad, LPWSTR pszFile, int flag, EditFileIOStatus *status);
+BOOL FileLoad(FileLoadFlag loadFlag, LPCWSTR lpszFile);
+BOOL FileSave(FileSaveFlag saveFlag);
 BOOL OpenFileDlg(HWND hwnd, LPWSTR lpstrFile, int cchFile, LPCWSTR lpstrInitialDir);
 BOOL SaveFileDlg(HWND hwnd, BOOL Untitled, LPWSTR lpstrFile, int cchFile, LPCWSTR lpstrInitialDir);
+
+enum {
+	AutoSaveOption_None = 0,
+	AutoSaveOption_Periodic = 1,
+	AutoSaveOption_Suspend = 2,
+	AutoSaveOption_Shutdown = 4,
+	AutoSaveOption_Default = AutoSaveOption_Suspend | AutoSaveOption_Shutdown,
+	AutoSaveDefaultPeriod = 5000,
+};
+
+void	AutoSave_Start(BOOL reset);
+void	AutoSave_Stop(BOOL keepBackup);
+void	AutoSave_DoWork(BOOL keepBackup);
+LPCWSTR AutoSave_GetDefaultFolder(void);
 
 LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam);
 LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam);
