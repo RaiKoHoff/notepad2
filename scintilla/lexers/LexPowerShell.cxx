@@ -20,12 +20,14 @@
 
 using namespace Lexilla;
 
+namespace {
+
 // Extended to accept accented characters
-static constexpr bool IsPSWordChar(int ch) noexcept {
+constexpr bool IsPSWordChar(int ch) noexcept {
 	return ch >= 0x80 || IsAlphaNumeric(ch) || ch == '-' || ch == '_';
 }
 
-/*static const char * const powershellWordLists[] = {
+/*const char * const powershellWordLists[] = {
 	"Commands",
 	"Cmdlets",
 	"Aliases",
@@ -34,7 +36,7 @@ static constexpr bool IsPSWordChar(int ch) noexcept {
 	0
 };*/
 
-static void ColourisePowerShellDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler) {
+void ColourisePowerShellDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	const WordList &keywords = *keywordLists[0];
 	const WordList &keywords2 = *keywordLists[1];
 	const WordList &keywords3 = *keywordLists[2];
@@ -55,13 +57,13 @@ static void ColourisePowerShellDoc(Sci_PositionU startPos, Sci_Position length, 
 				sc.ForwardSetState(SCE_POWERSHELL_DEFAULT);
 			}
 			break;
-		case SCE_POWERSHELL_STRING:
+		case SCE_POWERSHELL_STRING_DQ:
 			// This is a doubles quotes string
 			if (sc.ch == '\"') {
 				sc.ForwardSetState(SCE_POWERSHELL_DEFAULT);
 			}
 			break;
-		case SCE_POWERSHELL_CHARACTER:
+		case SCE_POWERSHELL_STRING_SQ:
 			// This is a single quote string
 			if (sc.ch == '\'') {
 				sc.ForwardSetState(SCE_POWERSHELL_DEFAULT);
@@ -110,9 +112,9 @@ static void ColourisePowerShellDoc(Sci_PositionU startPos, Sci_Position length, 
 			} else if (sc.ch == '<' && sc.chNext == '#') {
 				sc.SetState(SCE_POWERSHELL_COMMENTSTREAM);
 			} else if (sc.ch == '\"') {
-				sc.SetState(SCE_POWERSHELL_STRING);
+				sc.SetState(SCE_POWERSHELL_STRING_DQ);
 			} else if (sc.ch == '\'') {
-				sc.SetState(SCE_POWERSHELL_CHARACTER);
+				sc.SetState(SCE_POWERSHELL_STRING_SQ);
 			} else if (sc.ch == '$') {
 				sc.SetState(SCE_POWERSHELL_VARIABLE);
 			} else if (IsNumberStart(sc.ch, sc.chNext)) {
@@ -131,7 +133,7 @@ static void ColourisePowerShellDoc(Sci_PositionU startPos, Sci_Position length, 
 // Store both the current line's fold level and the next lines in the
 // level store to make it easy to pick up with each increment
 // and to make it possible to fiddle the current level for "} else {".
-static void FoldPowerShellDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
+void FoldPowerShellDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
 	const Sci_PositionU endPos = startPos + length;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
@@ -173,6 +175,8 @@ static void FoldPowerShellDoc(Sci_PositionU startPos, Sci_Position length, int i
 			levelCurrent = levelNext;
 		}
 	}
+}
+
 }
 
 LexerModule lmPowerShell(SCLEX_POWERSHELL, ColourisePowerShellDoc, "powershell", FoldPowerShellDoc);

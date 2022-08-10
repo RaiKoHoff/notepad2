@@ -163,8 +163,12 @@
 #endif
 #endif
 
-// fix MSVC 2017 bad code for zero memory
+// https://stackoverflow.com/questions/32945410/sse2-intrinsics-comparing-unsigned-integers
 #if NP2_USE_AVX2
+#define mm256_cmpge_epu8(a, b) \
+	_mm256_cmpeq_epi8(_mm256_max_epu8((a), (b)), (a))
+#define mm256_cmple_epu8(a, b)	mm256_cmpge_epu8((b), (a))
+
 #define ZeroMemory_32x1(buffer) do { \
 	const __m256i zero = _mm256_setzero_si256();						\
 	_mm256_store_si256((__m256i *)(buffer), zero);						\
@@ -178,6 +182,10 @@
 #endif
 
 #if NP2_USE_SSE2
+#define mm_cmpge_epu8(a, b) \
+	_mm_cmpeq_epi8(_mm_max_epu8((a), (b)), (a))
+#define mm_cmple_epu8(a, b)		mm_cmpge_epu8((b), (a))
+
 #define ZeroMemory_16x2(buffer) do { \
 	const __m128 zero = _mm_setzero_ps();						\
 	_mm_store_ps((float *)(buffer), zero);						\
@@ -228,6 +236,12 @@ static inline uint32_t loadbe_u32(const void *ptr) NP2_noexcept {
 #endif
 }
 
+#if defined(__GNUC__)
+#define andn_u32(a, b)	__andn_u32((a), (b))
+#else
+#define andn_u32(a, b)	_andn_u32((a), (b))
+#endif
+
 #define bit_zero_high_u32(x, index)	_bzhi_u32((x), (index))			// BMI2
 //#define bit_zero_high_u32(x, index)	_bextr_u32((x), 0, (index))		// BMI1
 #else
@@ -236,20 +250,28 @@ static inline uint32_t loadbe_u32(const void *ptr) NP2_noexcept {
 	return bswap32(loadle_u32(ptr));
 }
 
+static inline uint32_t andn_u32(uint32_t a, uint32_t b) NP2_noexcept {
+	return (~a) & b;
+}
+
 static inline uint32_t bit_zero_high_u32(uint32_t x, uint32_t index) NP2_noexcept {
 	return x & ((1U << index) - 1);
 }
 #endif
 
 #if NP2_TARGET_ARM
-static inline uint8_t bittest(const uint32_t *addr, uint32_t index) NP2_noexcept {
-	return (*addr >> index) & 1;
+static inline bool bittest(const uint32_t *addr, uint32_t index) NP2_noexcept {
+	return (*addr >> index) & true;
 }
 #else
-static inline uint8_t bittest(const uint32_t *addr, uint32_t index) NP2_noexcept {
+static inline bool bittest(const uint32_t *addr, uint32_t index) NP2_noexcept {
 	return _bittest((const long *)addr, index);
 }
 #endif
+
+static inline bool BitTestEx(const uint32_t *start, uint32_t value) NP2_noexcept {
+	return bittest(start + (value >> 5), value & 31);
+}
 
 #if defined(__cplusplus)
 namespace np2 {

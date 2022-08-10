@@ -8,6 +8,7 @@
 
 namespace Lexilla {
 
+// same as EncodingFamily in Document.h
 enum class EncodingType { eightBit, unicode, dbcs };
 
 class LexAccessor {
@@ -24,16 +25,16 @@ class LexAccessor {
 		slopSize = bufferSize / 8,
 	};
 	char buf[bufferSize + 1];
-	Sci_Position startPos;
-	Sci_Position endPos;
+	Sci_Position startPos = 0;
+	Sci_Position endPos = 0;
 	//const int codePage;
 	//const int documentVersion;
 	const EncodingType encodingType;
 	const Sci_Position lenDoc;
 	unsigned char styleBuf[bufferSize];
-	Sci_Position validLen;
-	Sci_PositionU startSeg;
-	Sci_Position startPosStyling;
+	Sci_Position validLen = 0;
+	Sci_PositionU startSeg = 0;
+	Sci_Position startPosStyling = 0;
 
 	void Fill(Sci_Position position) noexcept {
 		Sci_Position m = lenDoc - bufferSize;
@@ -54,14 +55,11 @@ class LexAccessor {
 
 public:
 	explicit LexAccessor(Scintilla::IDocument *pAccess_) noexcept :
-		pAccess(pAccess_), startPos(0), endPos(0),
+		pAccess(pAccess_),
 		//codePage(pAccess->CodePage()),
 		//documentVersion(pAccess->Version()),
 		encodingType(EncodingTypeForCodePage(pAccess->CodePage())),
-		lenDoc(pAccess->Length()),
-		validLen(0),
-		startSeg(0),
-		startPosStyling(0) {
+		lenDoc(pAccess->Length()) {
 		// Prevent warnings by static analyzers about uninitialized buf and styleBuf.
 		buf[0] = 0;
 		styleBuf[0] = 0;
@@ -75,8 +73,18 @@ public:
 	constexpr Scintilla::IDocument *MultiByteAccess() const noexcept {
 		return pAccess;
 	}
-	int GetCharacterAndWidth(Sci_Position position, Sci_Position *pWidth) const noexcept {
+	Sci_Position GetRelativePosition(Sci_Position positionStart, Sci_Position characterOffset) const noexcept {
+		return pAccess->GetRelativePosition(positionStart, characterOffset);
+	}
+	int GetCharacterAndWidth(Sci_Position position, Sci_Position *pWidth = nullptr) const noexcept {
 		return pAccess->GetCharacterAndWidth(position, pWidth);
+	}
+	int GetCharacterAt(Sci_Position position) const noexcept {
+		return pAccess->GetCharacterAndWidth(position, nullptr);
+	}
+	Scintilla::CharacterClass GetCharacterClass(unsigned int character) const noexcept {
+		// NOTE: '_' is classified as word in CharClassify::SetDefaultCharClasses()
+		return pAccess->GetCharacterClass(character);
 	}
 
 	/** Safe version of operator[], returning a defined value for invalid position. */
@@ -136,8 +144,13 @@ public:
 	unsigned char StyleAt(Sci_Position position) const noexcept {
 		return pAccess->StyleAt(position);
 	}
+	unsigned char StyleIndexAt(Sci_Position position) const noexcept {
+		return pAccess->StyleAt(position);
+	}
 	// only used in Colourise() or Lex() function, validLen is always zero in Fold() function.
-	unsigned char StyleAtEx(Sci_Position position) const noexcept {
+	// Return style value from buffer when in buffer, else retrieve from document.
+	// This is faster and can avoid calls to Flush() as that may be expensive.
+	unsigned char BufferStyleAt(Sci_Position position) const noexcept {
 		const Sci_Position index = position - startPosStyling;
 		if (index >= 0 && index < validLen) {
 			return styleBuf[index];
@@ -205,7 +218,7 @@ public:
 			if (validLen + len >= bufferSize) {
 				Flush();
 			}
-			const unsigned char attr = static_cast<unsigned char>(chAttr);
+			const auto attr = static_cast<unsigned char>(chAttr);
 			if (validLen + len >= bufferSize) {
 				// Too big for buffer so send directly
 				pAccess->SetStyleFor(len, attr);
@@ -248,9 +261,9 @@ constexpr bool IsWhiteSpace(int ch) noexcept {
 	return (ch == ' ') || ((ch >= 0x09) && (ch <= 0x0d));
 }
 
-bool IsLexCommentLine(Sci_Line line, LexAccessor &styler, int style) noexcept;
+bool IsLexCommentLine(LexAccessor &styler, Sci_Line line, int style) noexcept;
 
-inline bool IsBackslashLine(Sci_Line line, LexAccessor &styler) noexcept {
+inline bool IsBackslashLine(LexAccessor &styler, Sci_Line line) noexcept {
 #if 1
 	const Sci_Position pos = styler.LineStart(line + 1) - 1;
 	return (pos >= 2) && (styler[pos] == '\n')
@@ -261,11 +274,11 @@ inline bool IsBackslashLine(Sci_Line line, LexAccessor &styler) noexcept {
 #endif
 }
 
-bool IsLexLineStartsWith(Sci_Line line, LexAccessor &styler, const char *word, bool matchCase, int style) noexcept;
+bool IsLexLineStartsWith(LexAccessor &styler, Sci_Line line, const char *word, bool matchCase, int style) noexcept;
 
-Sci_Position LexLineSkipSpaceTab(Sci_Line line, LexAccessor &styler) noexcept;
+Sci_Position LexLineSkipSpaceTab(LexAccessor &styler, Sci_Line line) noexcept;
 
-inline Sci_Position LexSkipSpaceTab(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler) noexcept {
+inline Sci_Position LexSkipSpaceTab(LexAccessor &styler, Sci_Position startPos, Sci_Position endPos) noexcept {
 	for (; startPos < endPos; startPos++) {
 		const char ch = styler.SafeGetCharAt(startPos);
 		if (!(ch == ' ' || ch == '\t')) {
@@ -275,19 +288,19 @@ inline Sci_Position LexSkipSpaceTab(Sci_Position startPos, Sci_Position endPos, 
 	return startPos;
 }
 
-Sci_Position LexSkipWhiteSpace(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler) noexcept;
-Sci_Position LexSkipWhiteSpace(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler, bool IsStreamCommentStyle(int) noexcept) noexcept;
-Sci_Position LexSkipWhiteSpace(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler,
+Sci_Position LexSkipWhiteSpace(LexAccessor &styler, Sci_Position startPos, Sci_Position endPos) noexcept;
+Sci_Position LexSkipWhiteSpace(LexAccessor &styler, Sci_Position startPos, Sci_Position endPos, bool IsStreamCommentStyle(int) noexcept) noexcept;
+Sci_Position LexSkipWhiteSpace(LexAccessor &styler, Sci_Position startPos, Sci_Position endPos,
 	bool IsStreamCommentStyle(int), const CharacterSet &charSet) noexcept;
 bool IsLexSpaceToEOL(LexAccessor &styler, Sci_Position startPos) noexcept;
 bool IsLexEmptyLine(LexAccessor &styler, Sci_Line line) noexcept;
 
-Sci_PositionU LexGetRange(Sci_Position startPos, LexAccessor &styler, bool IsWordChar(int) noexcept, char *s, Sci_PositionU len) noexcept;
-Sci_PositionU LexGetRangeLowered(Sci_Position startPos, LexAccessor &styler, bool IsWordChar(int) noexcept, char *s, Sci_PositionU len) noexcept;
-Sci_PositionU LexGetRange(Sci_Position startPos, LexAccessor &styler, const CharacterSet &charSet, char *s, Sci_PositionU len) noexcept;
-Sci_PositionU LexGetRangeLowered(Sci_Position startPos, LexAccessor &styler, const CharacterSet &charSet, char *s, Sci_PositionU len) noexcept;
+Sci_PositionU LexGetRange(LexAccessor &styler, Sci_Position startPos, bool IsWordChar(int) noexcept, char *s, Sci_PositionU len) noexcept;
+Sci_PositionU LexGetRangeLowered(LexAccessor &styler, Sci_Position startPos, bool IsWordChar(int) noexcept, char *s, Sci_PositionU len) noexcept;
+Sci_PositionU LexGetRange(LexAccessor &styler, Sci_Position startPos, const CharacterSet &charSet, char *s, Sci_PositionU len) noexcept;
+Sci_PositionU LexGetRangeLowered(LexAccessor &styler, Sci_Position startPos, const CharacterSet &charSet, char *s, Sci_PositionU len) noexcept;
 
-inline unsigned char LexGetPrevChar(Sci_Position endPos, LexAccessor &styler) noexcept {
+inline unsigned char LexGetPrevChar(LexAccessor &styler, Sci_Position endPos) noexcept {
 	do {
 		--endPos;
 		const unsigned char ch = styler.SafeGetCharAt(endPos);
@@ -297,7 +310,7 @@ inline unsigned char LexGetPrevChar(Sci_Position endPos, LexAccessor &styler) no
 	} while (true);
 }
 
-inline unsigned char LexGetNextChar(Sci_Position startPos, LexAccessor &styler) noexcept {
+inline unsigned char LexGetNextChar(LexAccessor &styler, Sci_Position startPos) noexcept {
 	do {
 		const unsigned char ch = styler.SafeGetCharAt(startPos);
 		if (!IsWhiteSpace(ch)) {
@@ -307,7 +320,7 @@ inline unsigned char LexGetNextChar(Sci_Position startPos, LexAccessor &styler) 
 	} while (true);
 }
 
-inline unsigned char LexGetNextChar(Sci_Position startPos, Sci_Position endPos, LexAccessor &styler) noexcept {
+inline unsigned char LexGetNextChar(LexAccessor &styler, Sci_Position startPos, Sci_Position endPos) noexcept {
 	for (; startPos < endPos; startPos++) {
 		const unsigned char ch = styler[startPos];
 		if (!IsWhiteSpace(ch)) {
@@ -315,6 +328,19 @@ inline unsigned char LexGetNextChar(Sci_Position startPos, Sci_Position endPos, 
 		}
 	}
 	return '\0';
+}
+
+inline int GetMatchedDelimiterCount(LexAccessor &styler, Sci_PositionU pos, int delimiter) noexcept {
+	int count = 1;
+	while (true) {
+		const uint8_t ch = styler.SafeGetCharAt(++pos);
+		if (ch == delimiter) {
+			++count;
+		} else {
+			break;
+		}
+	}
+	return count;
 }
 
 void BacktrackToStart(const LexAccessor &styler, int stateMask, Sci_PositionU &startPos, Sci_Position &lengthDoc, int &initStyle) noexcept;

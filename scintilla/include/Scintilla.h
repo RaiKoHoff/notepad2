@@ -57,11 +57,11 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_CLEARDOCUMENTSTYLE 2005
 #define SCI_GETLENGTH 2006
 #define SCI_GETCHARAT 2007
-#define SCI_GETCHARACTERANDWIDTH 2038
-#define SCI_ISAUTOCOMPLETIONWORDCHARACTER 2039
+#define SCI_GETCHARACTERANDWIDTH 2067
+#define SCI_GETCHARACTERCLASS 2068
 #define SCI_GETCURRENTPOS 2008
 #define SCI_GETANCHOR 2009
-#define SCI_GETSTYLEAT 2010
+#define SCI_GETSTYLEINDEXAT 2038
 #define SCI_REDO 2011
 #define SCI_SETUNDOCOLLECTION 2012
 #define SCI_SELECTALL 2013
@@ -204,8 +204,8 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_SETMARGINS 2252
 #define SCI_GETMARGINS 2253
 #define STYLE_DEFAULT 0
-#define STYLE_LINENUMBER 32
-#define STYLE_HOTSPOT 33
+#define STYLE_LINK 32
+#define STYLE_LINENUMBER 33
 #define STYLE_BRACELIGHT 34
 #define STYLE_BRACEBAD 35
 #define STYLE_CONTROLCHAR 36
@@ -248,7 +248,8 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_STYLESETEOLFILLED 2057
 #define SCI_STYLERESETDEFAULT 2058
 #define SCI_STYLESETUNDERLINE 2059
-#define SCI_STYLESETSTRIKE 2474
+#define SCI_STYLESETSTRIKE 2041
+#define SCI_STYLESETOVERLINE 2042
 #define SC_CASE_MIXED 0
 #define SC_CASE_UPPER 1
 #define SC_CASE_LOWER 2
@@ -464,8 +465,8 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCFIND_REGEXP 0x00200000
 #define SCFIND_POSIX 0x00400000
 #define SCFIND_CXX11REGEX 0x00800000
-#define SCI_FINDTEXT 2150
-#define SCI_FORMATRANGE 2151
+#define SCI_FINDTEXTFULL 2196
+#define SCI_FORMATRANGEFULL 2777
 #define SCI_GETFIRSTVISIBLELINE 2152
 #define SCI_GETLINE 2153
 #define SCI_GETLINECOUNT 2154
@@ -477,7 +478,7 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_GETMODIFY 2159
 #define SCI_SETSEL 2160
 #define SCI_GETSELTEXT 2161
-#define SCI_GETTEXTRANGE 2162
+#define SCI_GETTEXTRANGEFULL 2039
 #define SCI_HIDESELECTION 2163
 #define SCI_POINTXFROMPOSITION 2164
 #define SCI_POINTYFROMPOSITION 2165
@@ -1090,6 +1091,7 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SC_SUPPORTS_FRACTIONAL_STROKE_WIDTH 2
 #define SC_SUPPORTS_TRANSLUCENT_STROKE 3
 #define SC_SUPPORTS_PIXEL_MODIFICATION 4
+#define SC_SUPPORTS_THREAD_SAFE_MEASURE_WIDTHS 5
 #define SCI_SUPPORTSFEATURE 2750
 #define SC_LINECHARACTERINDEX_NONE 0
 #define SC_LINECHARACTERINDEX_UTF32 1
@@ -1106,8 +1108,6 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_COLOURISE 4003
 #define SCI_SETPROPERTY 4004
 #define KEYWORDSET_MAX 15
-#define KEYWORDSET_INDEXMASK 31
-#define KEYWORDSET_TOLOWER 32
 #define SCI_SETKEYWORDS 4005
 #define SCI_GETPROPERTY 4008
 #define SCI_GETPROPERTYEXPANDED 4009
@@ -1252,20 +1252,20 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
  * CHARRANGE, TEXTRANGE, FINDTEXTEX, FORMATRANGE, and NMHDR structs.
  * So older code that treats Scintilla as a RichEdit will work. */
 
-struct Sci_CharacterRange {
+struct Sci_CharacterRangeFull {
 	Sci_Position cpMin;
 	Sci_Position cpMax;
 };
 
-struct Sci_TextRange {
-	struct Sci_CharacterRange chrg;
+struct Sci_TextRangeFull {
+	struct Sci_CharacterRangeFull chrg;
 	char *lpstrText;
 };
 
-struct Sci_TextToFind {
-	struct Sci_CharacterRange chrg;
+struct Sci_TextToFindFull {
+	struct Sci_CharacterRangeFull chrg;
 	const char *lpstrText;
-	struct Sci_CharacterRange chrgText;
+	struct Sci_CharacterRangeFull chrgText;
 };
 
 typedef void *Sci_SurfaceID;
@@ -1280,12 +1280,12 @@ struct Sci_Rectangle {
 /* This structure is used in printing and requires some of the graphics types
  * from Platform.h.  Not needed by most client code. */
 
-struct Sci_RangeToFormat {
+struct Sci_RangeToFormatFull {
 	Sci_SurfaceID hdc;
 	Sci_SurfaceID hdcTarget;
 	struct Sci_Rectangle rc;
 	struct Sci_Rectangle rcPage;
-	struct Sci_CharacterRange chrg;
+	struct Sci_CharacterRangeFull chrg;
 };
 
 #ifndef __cplusplus

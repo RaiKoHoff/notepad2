@@ -5,6 +5,12 @@
 #if defined(__cplusplus)
 #undef NULL
 #define NULL	nullptr
+#else
+//#include <stdbool.h>
+typedef _Bool	bool;
+#define false	0
+#define true	1
+#define nullptr	NULL
 #endif
 
 #ifndef NP2_noexcept
@@ -19,6 +25,29 @@
 #define NP2_unreachable()	__builtin_unreachable()
 #else
 #define NP2_unreachable()	__assume(0)
+#endif
+
+#if defined(__clang__)
+#define NP2_assume(expr)	__builtin_assume(expr)
+#elif defined(_MSC_VER)
+#define NP2_assume(expr)	__assume(expr)
+#elif defined(__GNUC__)
+#define NP2_assume(expr)	__extension__({		\
+	if (!(expr)) {								\
+		__builtin_unreachable();				\
+	}											\
+	1;											\
+	})
+#else
+#define NP2_assume(expr)
+#endif
+
+#if defined(__cplusplus)
+#define NP2_static_assert(expr)		static_assert(expr)
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#define NP2_static_assert(expr)		_Static_assert(expr, #expr)
+#else
+#define NP2_static_assert(expr)
 #endif
 
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__cplusplus)

@@ -38,7 +38,6 @@
 
 #include "CharacterSet.h"
 //#include "CharacterCategory.h"
-//#include "GraphemeBreak.h"
 #include "Position.h"
 #include "SplitVector.h"
 #include "Partitioning.h"
@@ -79,7 +78,7 @@ void LexInterface::Colourise(Sci::Position start, Sci::Position end) {
 
 		int styleStart = 0;
 		if (start > 0)
-			styleStart = pdoc->StyleAt(start - 1);
+			styleStart = pdoc->StyleIndexAt(start - 1);
 
 		if (len > 0) {
 			instance->Lex(start, len, styleStart, pdoc);
@@ -119,17 +118,14 @@ void ActionDuration::AddSample(Sci::Position numberActions, double durationOfAct
 	//	durationOfActions, numberActions, durationOne, duration_, duration, minDuration, maxDuration);
 }
 
-double ActionDuration::Duration() const noexcept {
-	return duration;
-}
-
-Sci::Position ActionDuration::ActionsInAllowedTime(double secondsAllowed) const noexcept {
-	const Sci::Position actions = std::clamp<Sci::Position>(static_cast<Sci::Position>(secondsAllowed / duration), 8, 0x10000);
+int ActionDuration::ActionsInAllowedTime(double secondsAllowed) const noexcept {
+	const int actions = std::clamp(static_cast<int>(secondsAllowed / duration), 8, 0x10000);
 	return actions * unitBytes;
 }
 
 Document::Document(DocumentOption options) :
-	cb(!FlagSet(options, DocumentOption::StylesNone), FlagSet(options, DocumentOption::TextLarge)) {
+	cb(!FlagSet(options, DocumentOption::StylesNone), FlagSet(options, DocumentOption::TextLarge)),
+	durationStyleOneUnit(1e-6) {
 	refCount = 0;
 #ifdef _WIN32
 	eolMode = EndOfLine::CrLf;
@@ -1128,7 +1124,7 @@ size_t Document::SafeSegment(const char *text, size_t lengthSegment, EncodingFam
 
 		it = end;
 		if (encodingFamily != EncodingFamily::eightBit && ccPrev == CharacterClass::word) {
-#if 1
+#if 0
 			// for UTF-8 go back to the start of last character.
 			for (int trail = 0; trail < UTF8MaxBytes - 1 && UTF8IsTrailByte(*it); trail++) {
 				--it;
@@ -1144,7 +1140,7 @@ size_t Document::SafeSegment(const char *text, size_t lengthSegment, EncodingFam
 				GraphemeBreakProperty prev = GraphemeBreakProperty::Sentinel;
 				do {
 					const int character = UnicodeFromUTF8(reinterpret_cast<const unsigned char *>(it));
-					const GraphemeBreakProperty current = GetGraphemeBreakProperty(character);
+					const GraphemeBreakProperty current = CharClassify::GetGraphemeBreakProperty(character);
 					if (IsGraphemeClusterBoundary(prev, current)) {
 						return it - text;
 					}
@@ -1588,6 +1584,9 @@ Sci::Position Document::GetColumn(Sci::Position pos) noexcept {
 				return column;
 			} else if (ch == '\n') {
 				return column;
+			} else if (UTF8IsAscii(ch)) {
+				column++;
+				i++;
 			} else if (i >= Length()) {
 				return column;
 			} else {
@@ -1612,7 +1611,7 @@ Sci::Position Document::CountCharacters(Sci::Position startPos, Sci::Position en
 }
 
 void Document::CountCharactersAndColumns(sptr_t lParam) const noexcept {
-	TextToFind *ft = reinterpret_cast<TextToFind *>(lParam);
+	TextToFindFull *ft = reinterpret_cast<TextToFindFull *>(lParam);
 	const Sci::Position startPos = ft->chrg.cpMin;
 	const Sci::Position endPos = ft->chrg.cpMax;
 	Sci::Position count = ft->chrgText.cpMin;
@@ -1668,6 +1667,9 @@ Sci::Position Document::FindColumn(Sci::Line line, Sci::Position column) noexcep
 				return position;
 			} else if (ch == '\n') {
 				return position;
+			} else if (UTF8IsAscii(ch)) {
+				columnCurrent++;
+				position++;
 			} else {
 				columnCurrent++;
 				position = NextPosition(position, 1);
@@ -1797,7 +1799,7 @@ Sci::Position Document::ParaDown(Sci::Position pos) const noexcept {
 		return LineEnd(line - 1);
 }
 
-CharacterClass Document::WordCharacterClass(unsigned int ch) const noexcept {
+CharacterClass SCI_METHOD Document::GetCharacterClass(unsigned int ch) const noexcept {
 	if (dbcsCodePage && !IsASCIICharacter(ch)) {
 		if (CpUtf8 == dbcsCodePage) {
 			return CharClassify::ClassifyCharacter(ch);
@@ -1825,10 +1827,10 @@ Sci::Position Document::ExtendWordSelect(Sci::Position pos, int delta, bool only
 				return MovePositionOutsideChar(pos, delta, true);
 			}
 		}
-		//const int style = StyleAt(pos);
+		//const int style = StyleIndexAt(pos);
 		while (pos > 0) {
 			const CharacterExtracted ce = CharacterBefore(pos);
-			if (/*StyleAt(pos - 1) != style || */WordCharacterClass(ce.character) != ccStart)
+			if (/*StyleIndexAt(pos - 1) != style || */WordCharacterClass(ce.character) != ccStart)
 				break;
 			pos -= ce.widthBytes;
 		}
@@ -1843,10 +1845,10 @@ Sci::Position Document::ExtendWordSelect(Sci::Position pos, int delta, bool only
 				return MovePositionOutsideChar(pos, delta, true);
 			}
 		}
-		//const int style = StyleAt(pos - 1);
+		//const int style = StyleIndexAt(pos - 1);
 		while (pos < Length()) {
 			const CharacterExtracted ce = CharacterAfter(pos);
-			if (/*StyleAt(pos) != style || */WordCharacterClass(ce.character) != ccStart)
+			if (/*StyleIndexAt(pos) != style || */WordCharacterClass(ce.character) != ccStart)
 				break;
 			pos += ce.widthBytes;
 		}
@@ -1949,8 +1951,7 @@ Sci::Position Document::NextWordEnd(Sci::Position pos, int delta) const noexcept
 namespace {
 
 constexpr bool IsWordEdge(CharacterClass cc, CharacterClass ccNext) noexcept {
-	return (cc != ccNext)
-		&& (cc == CharacterClass::word || cc == CharacterClass::punctuation || cc == CharacterClass::cjkWord);
+	return (cc != ccNext) && (cc >= CharacterClass::punctuation);
 }
 
 }
@@ -2539,6 +2540,9 @@ int Document::AnnotationLines(Sci::Line line) const noexcept {
 }
 
 void Document::AnnotationClearAll() {
+	if (Annotations()->Empty()) {
+		return;
+	}
 	const Sci::Line maxEditorLine = LinesTotal();
 	for (Sci::Line l = 0; l < maxEditorLine; l++) {
 		AnnotationSetText(l, nullptr);
@@ -2572,9 +2576,13 @@ void Document::EOLAnnotationSetStyle(Sci::Line line, int style) {
 }
 
 void Document::EOLAnnotationClearAll() {
+	if (EOLAnnotations()->Empty()) {
+		return;
+	}
 	const Sci::Line maxEditorLine = LinesTotal();
-	for (Sci::Line l = 0; l < maxEditorLine; l++)
+	for (Sci::Line l = 0; l < maxEditorLine; l++) {
 		EOLAnnotationSetText(l, nullptr);
+	}
 	// Free remaining data
 	EOLAnnotations()->ClearAll();
 }
@@ -2645,8 +2653,8 @@ void Document::NotifyModified(DocModification mh) {
 }
 
 bool Document::IsWordPartSeparator(unsigned int ch) const noexcept {
-	const CharacterClass cc = WordCharacterClass(ch);
-	return (cc == CharacterClass::word || cc == CharacterClass::cjkWord) && IsPunctuation(ch);
+	// can be simplified to `return ch == '_';`
+	return (ch < 0x80) && (charClass.GetClass(static_cast<uint8_t>(ch)) == CharacterClass::word) && IsPunctuation(ch);
 }
 
 Sci::Position Document::WordPartLeft(Sci::Position pos) const noexcept {
@@ -3015,8 +3023,6 @@ public:
 
 	explicit UTF8Iterator(const Document *doc_ = nullptr, Sci::Position position_ = 0) noexcept :
 		doc(doc_), position(position_), characterIndex(0), lenBytes(0), lenCharacters(0), buffered{} {
-		buffered[0] = 0;
-		buffered[1] = 0;
 		if (doc) {
 			ReadCharacter();
 		}

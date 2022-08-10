@@ -14,6 +14,9 @@ enum {
 	dvRelease4 = 2,
 };
 
+// moved from CharClassify.h
+enum class CharacterClass { space, newLine, punctuation, word, cjkWord };
+
 class IDocument {
 public:
 	virtual int SCI_METHOD Version() const noexcept = 0;
@@ -40,6 +43,7 @@ public:
 	virtual Sci_Position SCI_METHOD LineEnd(Sci_Line line) const noexcept = 0;
 	virtual Sci_Position SCI_METHOD GetRelativePosition(Sci_Position positionStart, Sci_Position characterOffset) const noexcept = 0;
 	virtual int SCI_METHOD GetCharacterAndWidth(Sci_Position position, Sci_Position *pWidth) const noexcept = 0;
+	virtual CharacterClass SCI_METHOD GetCharacterClass(unsigned int character) const noexcept = 0;
 };
 
 enum {
@@ -55,7 +59,7 @@ public:
 	virtual const char * SCI_METHOD DescribeProperty(const char *name) const = 0;
 	virtual Sci_Position SCI_METHOD PropertySet(const char *key, const char *val) = 0;
 	virtual const char * SCI_METHOD DescribeWordListSets() const noexcept = 0;
-	virtual Sci_Position SCI_METHOD WordListSet(int n, bool toLower, const char *wl) = 0;
+	virtual Sci_Position SCI_METHOD WordListSet(int n, int attribute, const char *wl) = 0;
 	virtual void SCI_METHOD Lex(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, IDocument *pAccess) = 0;
 	virtual void SCI_METHOD Fold(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, IDocument *pAccess) = 0;
 	virtual void * SCI_METHOD PrivateCall(int operation, void *pointer) = 0;

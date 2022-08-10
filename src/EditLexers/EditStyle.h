@@ -20,6 +20,7 @@
 #define NP2STYLE_Bookmark				63218
 #define NP2STYLE_CallTip				63219
 #define NP2STYLE_CodeFolding			63220
+#define NP2STYLE_Link					63221
 
 #define NP2STYLE_Default				63226
 #define NP2STYLE_Comment				63227
@@ -62,18 +63,6 @@
 #define NP2STYLE_ASPTag					63272
 #define NP2STYLE_PHPTag					63273
 
-#define NP2STYLE_PHPDefault				63281
-#define NP2STYLE_PHPComment				63282
-#define NP2STYLE_PHPKeyword				63283
-#define NP2STYLE_PHPString				63284
-#define NP2STYLE_PHPHeredocString		63285
-#define NP2STYLE_PHPNowdocString		63286
-#define NP2STYLE_PHPNumber				63287
-#define NP2STYLE_PHPOperator			63288
-#define NP2STYLE_PHPVariable			63289
-#define NP2STYLE_PHPStringVariable		63290
-#define NP2STYLE_PHPComplexVariable		63291
-
 #define NP2STYLE_JSDefault				63301
 #define NP2STYLE_JSComment				63302
 #define NP2STYLE_JSKeyword				63303
@@ -94,13 +83,14 @@
 #define NP2STYLE_TagClass				63401
 #define NP2STYLE_TagId					63402
 #define NP2STYLE_TagAttribute			63403
-#define NP2STYLE_PseudoClassElement		63404
+#define NP2STYLE_PseudoClass			63404
 #define NP2STYLE_UnknownPseudoClass		63405
-#define NP2STYLE_CSSProperty			63406
+#define NP2STYLE_PseudoElement			63406
 #define NP2STYLE_UnknownProperty		63407
-#define NP2STYLE_GroupRule				63408
+#define NP2STYLE_AtRule					63408
 #define NP2STYLE_Value					63409
 #define NP2STYLE_Important				63410
+#define NP2STYLE_UnknownPseudoElement	63411
 
 #define NP2STYLE_Class					63420
 #define NP2STYLE_Structure				63421
@@ -200,7 +190,24 @@
 #define NP2STYLE_Section				63611
 #define NP2STYLE_Assignment				63612
 #define NP2STYLE_DefaultValue			63613
-
+#define NP2STYLE_Header1				63614
+#define NP2STYLE_Header2				63615
+#define NP2STYLE_Header3				63616
+#define NP2STYLE_Header4				63617
+#define NP2STYLE_Header5				63618
+#define NP2STYLE_Header6				63619
+#define NP2STYLE_HorizontalRule			63620
+#define NP2STYLE_BlockQuote				63621
+#define NP2STYLE_OrderedList			63622
+#define NP2STYLE_UnorderedList			63623
+#define NP2STYLE_TaskList				63624
+#define NP2STYLE_CodeBlock				63625
+#define NP2STYLE_InlineCode				63626
+#define NP2STYLE_Emphasis				63627
+#define NP2STYLE_Strong					63628
+#define NP2STYLE_Strikethrough			63629
+#define NP2STYLE_Emoji					63630
+#define NP2STYLE_Delimiter				63631
 #define NP2STYLE_DoubleQuotedString		63632
 #define NP2STYLE_SingleQuotedString		63633
 #define NP2STYLE_Key					63634
@@ -208,12 +215,18 @@
 #define NP2STYLE_Table					63636
 #define NP2STYLE_Pair					63637
 #define NP2STYLE_Tuple					63638
-
+#define NP2STYLE_LinkText				63639
+#define NP2STYLE_DelimiterRow			63640
 #define NP2STYLE_SourceDestination		63641
 #define NP2STYLE_PositionSetting		63642
 #define NP2STYLE_LineAddition			63643
 #define NP2STYLE_LineRemoval			63644
 #define NP2STYLE_LineChange				63645
+#define NP2STYLE_ExampleList			63646
+#define NP2STYLE_DisplayMath			63647
+#define NP2STYLE_InlineMath				63648
+#define NP2STYLE_Superscript			63649
+#define NP2STYLE_Subscript				63650
 
 #define NP2STYLE_CPUInstruction			63651
 #define NP2STYLE_FPUInstruction			63652
@@ -222,7 +235,7 @@
 #define NP2STYLE_InternalFilter			63655
 #define NP2STYLE_ExternalFilter			63656
 #define NP2STYLE_File					63657
-#define NP2STYLE_Link					63658
+#define NP2STYLE_DefinitionList			63658
 #define NP2STYLE_Money					63659
 #define NP2STYLE_Issue					63660
 #define NP2STYLE_MagicMethod			63661
@@ -262,5 +275,5 @@
 #define NP2STYLE_Callback				63695
 #define NP2STYLE_Target					63696
 #define NP2STYLE_Rule					63697
-#define NP2STYLE_BlobHex				63698
+#define NP2STYLE_Citation				63698
 #define NP2STYLE_BitField				63699

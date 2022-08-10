@@ -33,6 +33,20 @@ def GenerateC0ControlCharacterMask(excludeSeparator):
 	s = '0x' + s + 'U'
 	print('C0 Control Character:', s, bin(value))
 
+def GenerateDefaultWordCharSet():
+	table = [0] * 8
+	for c in range(256):
+		ch = chr(c)
+		if c >= 0x80 or ch == '_' or ch.isalnum():
+			# table[c // 32] |= (1 << (c % 32))
+			table[c >> 5] |= (1 << (c & 31))
+
+	lines = [', '.join(f'0x{c:08x}U' for c in table[:4])]
+	lines.append(', '.join(f'0x{c:08x}U' for c in table[4:]))
+	print('DefaultWordCharSet:')
+	print('\n'.join(lines))
+
 if __name__ == '__main__':
 	GenerateBraceMatchTable()
 	GenerateC0ControlCharacterMask(True)
+	GenerateDefaultWordCharSet()

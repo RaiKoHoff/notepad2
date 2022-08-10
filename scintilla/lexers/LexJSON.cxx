@@ -36,7 +36,7 @@ enum {
 };
 
 void ColouriseJSONDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
-	const bool fold = styler.GetPropertyInt("fold", 1) & true;
+	const bool fold = styler.GetPropertyBool("fold");
 
 	int state = initStyle;
 	uint8_t chNext = styler[startPos];
@@ -105,7 +105,7 @@ void ColouriseJSONDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				buf[wordLen] = '\0';
 				if (keywordLists[0]->InList(buf)) {
 					styler.ColorTo(i, SCE_JSON_KEYWORD);
-				} else if (ch == ':' || chNext == ':' || LexGetNextChar(i + 1, styler) == ':') {
+				} else if (ch == ':' || chNext == ':' || LexGetNextChar(styler, i + 1) == ':') {
 					styler.ColorTo(i, SCE_JSON_PROPERTYNAME);
 				}
 				state = SCE_JSON_DEFAULT;
@@ -118,15 +118,15 @@ void ColouriseJSONDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_JSON_IDENTIFIER:
 			if (!(kJsonCharClass[ch] & JsonMask_Identifier)) {
-				if (ch == ':' || chNext == ':' || LexGetNextChar(i + 1, styler) == ':') {
+				if (ch == ':' || chNext == ':' || LexGetNextChar(styler, i + 1) == ':') {
 					styler.ColorTo(i, SCE_JSON_PROPERTYNAME);
 				}
 				state = SCE_JSON_DEFAULT;
 			}
 			break;
 
-		case SCE_JSON_STRING:
-		case SCE_JSON_CHARACTER:
+		case SCE_JSON_STRING_DQ:
+		case SCE_JSON_STRING_SQ:
 			if (i == lineEndPos) { // atLineEnd
 				if (lineContinuation) {
 					lineContinuation = false;
@@ -155,11 +155,11 @@ void ColouriseJSONDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					}
 
 					chNext = styler.SafeGetCharAt(i + 1);
-					styler.ColorTo(i + 1, SCE_JSON_ESCAPESEQUENCE);
+					styler.ColorTo(i + 1, SCE_JSON_ESCAPECHAR);
 					continue;
 				}
-			} else if ((state == SCE_JSON_STRING && ch == '\"') || (state == SCE_JSON_CHARACTER && ch == '\'')) {
-				if (chNext == ':' || LexGetNextChar(i + 1, styler) == ':') {
+			} else if ((state == SCE_JSON_STRING_DQ && ch == '\"') || (state == SCE_JSON_STRING_SQ && ch == '\'')) {
+				if (chNext == ':' || LexGetNextChar(styler, i + 1) == ':') {
 					styler.ColorTo(i + 1, SCE_JSON_PROPERTYNAME);
 				} else {
 					styler.ColorTo(i + 1, state);

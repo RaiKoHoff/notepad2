@@ -84,6 +84,9 @@
     <ClCompile Include="..\..\scintilla\lexers\LexCSS.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexD.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\scintilla\lexers\LexDart.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
@@ -150,6 +153,9 @@
     <ClCompile Include="..\..\scintilla\lexers\LexMakefile.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexMarkdown.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\scintilla\lexers\LexMatlab.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
@@ -163,6 +169,9 @@
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\lexers\LexPerl.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexPHP.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\lexers\LexPowerShell.cxx">
@@ -238,9 +247,6 @@
       <Filter>Scintilla\lexlib</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\lexlib\LexerModule.cxx">
-      <Filter>Scintilla\lexlib</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\scintilla\lexlib\LexerSimple.cxx">
       <Filter>Scintilla\lexlib</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\lexlib\PropSetSimple.cxx">
@@ -501,6 +507,9 @@
     <ClCompile Include="..\..\src\EditLexers\stlMake.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\EditLexers\stlMarkdown.c">
+      <Filter>Source Files\EditLexers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlMATLAB.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
@@ -550,6 +559,9 @@
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlTcl.c">
+      <Filter>Source Files\EditLexers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\EditLexers\stlTexinfo.c">
       <Filter>Source Files\EditLexers</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\EditLexers\stlTOML.c">
@@ -629,6 +641,9 @@
     <ClInclude Include="..\..\scintilla\lexlib\DefaultLexer.h">
       <Filter>Scintilla\lexlib</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\scintilla\lexlib\DocUtils.h">
+      <Filter>Scintilla\lexlib</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\scintilla\lexlib\LexAccessor.h">
       <Filter>Scintilla\lexlib</Filter>
     </ClInclude>
@@ -636,9 +651,6 @@
       <Filter>Scintilla\lexlib</Filter>
     </ClInclude>
     <ClInclude Include="..\..\scintilla\lexlib\LexerModule.h">
-      <Filter>Scintilla\lexlib</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\scintilla\lexlib\LexerSimple.h">
       <Filter>Scintilla\lexlib</Filter>
     </ClInclude>
     <ClInclude Include="..\..\scintilla\lexlib\LexerUtils.h">

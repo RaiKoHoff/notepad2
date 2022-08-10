@@ -415,7 +415,7 @@ void InitInstance(HINSTANCE hInstance, int nCmdShow) {
 	hwndMain = CreateWindowEx(
 				   0,
 				   WC_METAPATH,
-				   L"metapath",
+				   WC_METAPATH,
 				   WS_METAPATH,
 				   wi.x,
 				   wi.y,
@@ -525,6 +525,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 
 	// update colors of DirList manually
 	case WM_SYSCOLORCHANGE: {
+		SendMessage(hwndToolbar, WM_SYSCOLORCHANGE, wParam, lParam);
 		const LRESULT lret = DefWindowProc(hwnd, umsg, wParam, lParam);
 
 		if (HasFilter()) {
@@ -742,7 +743,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 		HWND box = FindWindow(L"#32770", NULL);
 		HWND parent = GetParent(box);
 		// MessageBox belongs to us.
-		if (parent == (HWND)wParam || parent == hwndMain) {
+		if (parent == (HWND)wParam || parent == hwnd) {
 			CenterDlgInParentEx(box, parent);
 			SnapToDefaultButton(box);
 		}
@@ -1576,9 +1577,9 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			DLITEM dli;
 			dli.mask = DLI_FILENAME;
 			DirList_GetItem(hwndDirList, -1, &dli);
-			OpenContainingFolder(hwndMain, dli.szFileName, TRUE);
+			OpenContainingFolder(hwnd, dli.szFileName, TRUE);
 		} else {
-			OpenContainingFolder(hwndMain, szCurDir, FALSE);
+			OpenContainingFolder(hwnd, szCurDir, FALSE);
 		}
 	}
 	break;
@@ -1786,20 +1787,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		if (LOWORD(wParam) == IDM_POP_COPY_FILENAME) {
 			path = PathFindFileName(path);
 		}
-
-		HGLOBAL hData = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE,
-							sizeof(WCHAR) * (lstrlen(path) + 1));
-		LPWSTR pData = (LPWSTR)GlobalLock(hData);
-		lstrcpy(pData, path);
-		GlobalUnlock(hData);
-
-		if (OpenClipboard(hwnd)) {
-			EmptyClipboard();
-			SetClipboardData(CF_UNICODETEXT, hData);
-			CloseClipboard();
-		} else {
-			GlobalFree(hData);
-		}
+		SetClipData(hwnd, path);
 	}
 	break;
 
@@ -1864,7 +1852,7 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 						}
 
 						SetCurrentDirectory(szDir);
-						SendWMCommand(hwndMain, IDM_VIEW_UPDATE);
+						SendWMCommand(hwnd, IDM_VIEW_UPDATE);
 						if (!DirList_SelectItem(hwndDirList, NULL, szFullPath)) {
 							ListView_EnsureVisible(hwndDirList, 0, FALSE);
 						}
@@ -2710,12 +2698,12 @@ void SaveSettings(BOOL bSaveSettingsNow) {
 	if (iStartupDir == 1) {
 		IniSectionSetString(pIniSection, L"MRUDirectory", szCurDir);
 	}
-	PathRelativeToApp(tchFavoritesDir, wchTmp, FALSE, TRUE, flagPortableMyDocs);
+	PathRelativeToApp(tchFavoritesDir, wchTmp, FILE_ATTRIBUTE_DIRECTORY, TRUE, flagPortableMyDocs);
 	IniSectionSetString(pIniSection, L"Favorites", wchTmp);
-	PathRelativeToApp(szQuickview, wchTmp, FALSE, TRUE, flagPortableMyDocs);
+	PathRelativeToApp(szQuickview, wchTmp, FILE_ATTRIBUTE_DIRECTORY, TRUE, flagPortableMyDocs);
 	IniSectionSetString(pIniSection, L"Quikview.exe", wchTmp);
 	IniSectionSetStringEx(pIniSection, L"QuikviewParams", szQuickviewParams, L"");
-	PathRelativeToApp(tchOpenWithDir, wchTmp, FALSE, TRUE, flagPortableMyDocs);
+	PathRelativeToApp(tchOpenWithDir, wchTmp, FILE_ATTRIBUTE_DIRECTORY, TRUE, flagPortableMyDocs);
 	IniSectionSetString(pIniSection, L"OpenWithDir", wchTmp);
 	IniSectionSetIntEx(pIniSection, L"FillMask", dwFillMask, DL_ALLOBJECTS);
 	IniSectionSetIntEx(pIniSection, L"SortOptions", nSortFlags, DS_NAME);
@@ -3047,9 +3035,8 @@ BOOL CheckIniFile(LPWSTR lpszFile, LPCWSTR lpszModule) {
 			if (S_OK == SHGetKnownFolderPath(rfidList[i], KF_FLAG_DEFAULT, NULL, &pszPath))
 #endif
 			{
-				lstrcpy(tchBuild, pszPath);
+				PathCombine(tchBuild, pszPath, WC_NOTEPAD2);
 				CoTaskMemFree(pszPath);
-				PathAppend(tchBuild, WC_NOTEPAD2);
 				PathAppend(tchBuild, tchFileExpanded);
 				if (PathIsFile(tchBuild)) {
 					lstrcpy(lpszFile, tchBuild);
@@ -3507,7 +3494,7 @@ void ShowNotifyIcon(HWND hwnd, BOOL bAdd) {
 	nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
 	nid.uCallbackMessage = APPM_TRAYMESSAGE;
 	nid.hIcon = hIcon;
-	lstrcpy(nid.szTip, L"metapath");
+	lstrcpy(nid.szTip, WC_METAPATH);
 
 	if (bAdd) {
 		Shell_NotifyIcon(NIM_ADD, &nid);
@@ -3567,7 +3554,7 @@ void LoadLaunchSetings(void) {
 		iTargetApplicationMode = 1;
 		lstrcpy(szTargetApplication, L"Notepad2.exe");
 		StrCpyExW(szTargetApplicationParams, L"");
-		lstrcpy(szTargetApplicationWndClass, L"Notepad2");
+		lstrcpy(szTargetApplicationWndClass, WC_NOTEPAD2);
 		StrCpyExW(szDDEMsg, L"");
 		StrCpyExW(szDDEApp, L"");
 		StrCpyExW(szDDETopic, L"");

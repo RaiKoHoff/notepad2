@@ -49,7 +49,7 @@ using namespace Lexilla;
 #define BASH_CMD_DELIM			5
 
 // state constants for nested delimiter pairs, used by
-// SCE_SH_STRING and SCE_SH_BACKTICKS processing
+// SCE_SH_STRING_DQ and SCE_SH_BACKTICKS processing
 #define BASH_DELIM_LITERAL		0
 #define BASH_DELIM_STRING		1
 #define BASH_DELIM_CSTRING		2
@@ -293,9 +293,9 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 		// handle line continuation, updates per-line stored state
 		if (sc.atLineStart) {
 			ln = styler.GetLine(sc.currentPos);
-			if (sc.state == SCE_SH_STRING
+			if (sc.state == SCE_SH_STRING_DQ
 				|| sc.state == SCE_SH_BACKTICKS
-				|| sc.state == SCE_SH_CHARACTER
+				|| sc.state == SCE_SH_STRING_SQ
 				|| sc.state == SCE_SH_HERE_Q
 				|| sc.state == SCE_SH_COMMENTLINE
 				|| sc.state == SCE_SH_PARAM) {
@@ -454,7 +454,7 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 			sc.SetState(SCE_SH_DEFAULT);
 			break;
 		case SCE_SH_COMMENTLINE:
-			if (sc.atLineEnd && sc.chPrev != '\\') {
+			if (sc.MatchLineEnd() && sc.chPrev != '\\') {
 				sc.SetState(SCE_SH_DEFAULT);
 			}
 			break;
@@ -523,13 +523,13 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 			if (sc.atLineStart) {
 				sc.SetState(SCE_SH_HERE_Q);
 				int prefixws = 0;
-				while (sc.ch == '\t' && !sc.atLineEnd) {	// tabulation prefix
+				while (sc.ch == '\t' && !sc.MatchLineEnd()) {	// tabulation prefix
 					sc.Forward();
 					prefixws++;
 				}
 				if (prefixws > 0)
 					sc.SetState(SCE_SH_HERE_Q);
-				while (!sc.atLineEnd) {
+				while (!sc.MatchLineEnd()) {
 					sc.Forward();
 				}
 				char s[HERE_DELIM_MAX];
@@ -563,7 +563,7 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 				}
 			}
 			break;
-		case SCE_SH_STRING:	// delimited styles, can nest
+		case SCE_SH_STRING_DQ:	// delimited styles, can nest
 		case SCE_SH_BACKTICKS:
 			if (sc.ch == '\\' && QuoteStack.Up != '\\') {
 				if (QuoteStack.Style != BASH_DELIM_LITERAL)
@@ -624,7 +624,7 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 				Quote.Count++;
 			}
 			break;
-		case SCE_SH_CHARACTER: // singly-quoted strings
+		case SCE_SH_STRING_SQ: // singly-quoted strings
 			if (sc.ch == Quote.Down) {
 				Quote.Count--;
 				if (Quote.Count == 0) {
@@ -635,7 +635,7 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 		}
 
 		// Must check end of HereDoc state 1 before default state is handled
-		if (HereDoc.State == 1 && sc.atLineEnd) {
+		if (HereDoc.State == 1 && sc.MatchLineEnd()) {
 			// Begin of here-doc (the line after the here-doc delimiter):
 			// Lexically, the here-doc starts from the next line after the >>, but the
 			// first line of here-doc seem to follow the style of the last EOL sequence
@@ -715,10 +715,10 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 					}
 				}
 			} else if (sc.ch == '\"') {
-				sc.SetState(SCE_SH_STRING);
+				sc.SetState(SCE_SH_STRING_DQ);
 				QuoteStack.Start(sc.ch, BASH_DELIM_STRING);
 			} else if (sc.ch == '\'') {
-				sc.SetState(SCE_SH_CHARACTER);
+				sc.SetState(SCE_SH_STRING_SQ);
 				Quote.Start(sc.ch);
 			} else if (sc.ch == '`') {
 				sc.SetState(SCE_SH_BACKTICKS);
@@ -734,10 +734,10 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 					sc.ChangeState(SCE_SH_PARAM);
 					Quote.Start(sc.ch);
 				} else if (sc.ch == '\'') {
-					sc.ChangeState(SCE_SH_STRING);
+					sc.ChangeState(SCE_SH_STRING_DQ);
 					QuoteStack.Start(sc.ch, BASH_DELIM_CSTRING);
 				} else if (sc.ch == '"') {
-					sc.ChangeState(SCE_SH_STRING);
+					sc.ChangeState(SCE_SH_STRING_DQ);
 					QuoteStack.Start(sc.ch, BASH_DELIM_LSTRING);
 				} else if (sc.ch == '(') {
 					sc.ChangeState(SCE_SH_BACKTICKS);
@@ -835,10 +835,10 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 	sc.Complete();
 }
 
-#define IsCommentLine(line)	IsLexCommentLine(line, styler, SCE_SH_COMMENTLINE)
+#define IsCommentLine(line)	IsLexCommentLine(styler, line, SCE_SH_COMMENTLINE)
 
 void FoldBashDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWordList, Accessor &styler) {
-	const bool isCShell = styler.GetPropertyInt("lexer.bash.csh") != 0;
+	const bool isCShell = styler.GetPropertyBool("lexer.lang");
 
 	const Sci_PositionU endPos = startPos + length;
 	int skipHereCh = 0;

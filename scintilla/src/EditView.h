@@ -33,15 +33,11 @@ enum class DrawPhase {
 	all = 0x1FF
 };
 
-enum LayoutLineOption {
-	WholeLine = 0,
-	AutoUpdate = 1,
-	ManualUpdate = 2,
-	KeepPosition = 3,
+enum class LayoutLineOption {
+	AutoUpdate,
+	ManualUpdate,
+	KeepPosition,
 };
-
-// from DrawPhase::back to DrawPhase::carets
-constexpr int MaxDrawPhaseCount = 9;
 
 bool ValidStyledText(const ViewStyle &vs, size_t styleOffset, const StyledText &st) noexcept;
 int WidestLineWidth(Surface *surface, const ViewStyle &vs, int styleOffset, const StyledText &st);
@@ -122,8 +118,8 @@ public:
 	void RefreshPixMaps(Surface *surfaceWindow, const ViewStyle &vsDraw);
 
 	LineLayout *RetrieveLineLayout(Sci::Line lineNumber, const EditModel &model);
-	int LayoutLine(const EditModel &model, Surface *surface, const ViewStyle &vstyle,
-		LineLayout *ll, int width, LayoutLineOption option);
+	uint64_t LayoutLine(const EditModel &model, Surface *surface, const ViewStyle &vstyle,
+		LineLayout *ll, int width, LayoutLineOption option, int posInLine = 0);
 
 	static void UpdateBidiData(const EditModel &model, const ViewStyle &vstyle, LineLayout *ll);
 
@@ -162,7 +158,7 @@ public:
 		const ViewStyle &vsDraw);
 	void SCICALL FillLineRemainder(Surface *surface, const EditModel &model, const ViewStyle &vsDraw, const LineLayout *ll,
 		Sci::Line line, PRectangle rcArea, int subLine) const;
-	Sci::Position FormatRange(bool draw, const Scintilla::RangeToFormat *pfr, Surface *surface, Surface *surfaceMeasure,
+	Sci::Position SCICALL FormatRange(bool draw, CharacterRangeFull chrg, Scintilla::Rectangle rc, Surface *surface, Surface *surfaceMeasure,
 		const EditModel &model, const ViewStyle &vs);
 };
 

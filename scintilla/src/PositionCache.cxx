@@ -23,6 +23,11 @@
 #include <iterator>
 #include <memory>
 
+#include <windows.h>
+#ifndef _WIN32_WINNT_VISTA
+#define _WIN32_WINNT_VISTA	0x0600
+#endif
+
 #include "ScintillaTypes.h"
 #include "ScintillaMessages.h"
 #include "ILoader.h"
@@ -55,6 +60,7 @@
 #include "UniConversion.h"
 #include "Selection.h"
 #include "PositionCache.h"
+#include "EditModel.h"
 
 using namespace Scintilla;
 using namespace Scintilla::Internal;
@@ -65,18 +71,19 @@ void BidiData::Resize(size_t maxLineLength_) {
 }
 
 LineLayout::LineLayout(Sci::Line lineNumber_, int maxLineLength_) :
-	lenLineStarts(0),
 	lineNumber(lineNumber_),
+	lenLineStarts(0),
 	maxLineLength(-1),
+	lastSegmentEnd(0),
 	numCharsInLine(0),
 	numCharsBeforeEOL(0),
-	lastSegmentEnd(0),
 	validity(ValidLevel::invalid),
 	xHighlightGuide(0),
 	highlightColumn(false),
 	containsCaret(false),
 	bracePreviousStyles{},
 	edgeColumn(0),
+	caretPosition(0),
 	widthLine(wrapWidthInfinite),
 	lines(1),
 	wrapIndent(0) {
@@ -363,7 +370,7 @@ XYPOSITION ScreenLine::TabPositionAfter(XYPOSITION xPosition) const noexcept {
 	return (std::floor((xPosition + TabWidthMinimumPixels()) / TabWidth()) + 1) * TabWidth();
 }
 
-LineLayoutCache::LineLayoutCache() :
+LineLayoutCache::LineLayoutCache() noexcept:
 	lastCaretSlot(SIZE_MAX),
 	level(LineCache::None),
 	allInvalidated(false), styleClock(-1) {
@@ -565,7 +572,7 @@ LineLayout *LineLayoutCache::Retrieve(Sci::Line lineNumber, Sci::Line lineCaret,
 
 	size_t pos = 0;
 	LineLayout *ret = nullptr;
-	const int useLongCache = maxChars >> (10 + 8); // 1024*256
+	const int useLongCache = maxChars >> (20 + 1); // 2MiB
 	if (useLongCache) {
 		for (const auto &ll : longCache) {
 			if (ll->LineNumber() == lineNumber) {
@@ -762,31 +769,41 @@ void BreakFinder::Insert(Sci::Position val) {
 	}
 }
 
-BreakFinder::BreakFinder(const LineLayout *ll_, const Selection *psel, Range lineRange_, Sci::Position posLineStart_,
-	XYPOSITION xStart, BreakFor breakFor, const Document *pdoc_, const SpecialRepresentations *preprs_, const ViewStyle *pvsDraw) :
+BreakFinder::BreakFinder(const LineLayout *ll_, const Selection *psel, Range lineRange, Sci::Position posLineStart,
+	XYPOSITION xStart, BreakFor breakFor, const EditModel &model, const ViewStyle *pvsDraw, uint32_t posInLine) :
 	ll(ll_),
-	lineRange(lineRange_),
-	posLineStart(posLineStart_),
-	nextBreak(static_cast<int>(lineRange_.start)),
+	nextBreak(static_cast<int>(lineRange.start)),
 	subBreak(-1),
+	endPos(static_cast<int>(lineRange.end)),
+	stopPos(endPos),
 	saeCurrentPos(0),
 	saeNext(0),
-	pdoc(pdoc_),
-	encodingFamily(pdoc_->CodePageFamily()),
-	preprs(preprs_) {
+	pdoc(model.pdoc),
+	encodingFamily(pdoc->CodePageFamily()),
+	reprs(model.reprs) {
 
 	// Search for first visible break
 	// First find the first visible character
-	if (xStart > 0.0f)
+	if (xStart > 0.0f) {
+		const int startPos = nextBreak;
 		nextBreak = ll->FindBefore(xStart, lineRange);
-	// Now back to a style break
-	while ((nextBreak > lineRange.start) && (ll->styles[nextBreak] == ll->styles[nextBreak - 1])) {
-		nextBreak--;
+		// Now back to a style break
+		while ((nextBreak > startPos) && (ll->styles[nextBreak] == ll->styles[nextBreak - 1])) {
+			nextBreak--;
+		}
+	}
+
+	currentPos = nextBreak;
+	if (breakFor == BreakFor::Layout && posInLine < static_cast<uint32_t>(stopPos)) {
+		posInLine = std::max(posInLine, currentPos + model.maxParallelLayoutLength);
+		if (posInLine < static_cast<uint32_t>(stopPos)) {
+			stopPos = static_cast<int>(posInLine);
+		}
 	}
 
 	if (FlagSet(breakFor, BreakFor::Selection)) {
 		const SelectionPosition posStart(posLineStart);
-		const SelectionPosition posEnd(posLineStart + lineRange.end);
+		const SelectionPosition posEnd(posLineStart + endPos);
 		const SelectionSegment segmentLine(posStart, posEnd);
 		for (size_t r = 0; r < psel->Count(); r++) {
 			const SelectionSegment portion = psel->Range(r).Intersect(segmentLine);
@@ -817,7 +834,7 @@ BreakFinder::BreakFinder(const LineLayout *ll_, const Selection *psel, Range lin
 		for (const auto *const deco : pdoc->decorations->View()) {
 			if (pvsDraw->indicators[deco->Indicator()].OverridesTextFore()) {
 				Sci::Position startPos = deco->EndRun(posLineStart);
-				while (startPos < (posLineStart + lineRange.end)) {
+				while (startPos < (posLineStart + endPos)) {
 					Insert(startPos - posLineStart);
 					startPos = deco->EndRun(startPos);
 				}
@@ -825,7 +842,7 @@ BreakFinder::BreakFinder(const LineLayout *ll_, const Selection *psel, Range lin
 		}
 	}
 	Insert(ll->edgeColumn);
-	Insert(lineRange.end);
+	Insert(endPos);
 	saeNext = (!selAndEdge.empty()) ? selAndEdge[0] : -1;
 }
 
@@ -835,31 +852,31 @@ TextSegment BreakFinder::Next() {
 	if (subBreak < 0) {
 		const int prev = nextBreak;
 		const Representation *repr = nullptr;
-		while (nextBreak < lineRange.end) {
+		while (nextBreak < endPos) {
 			int charWidth = 1;
 			const char * const chars = &ll->chars[nextBreak];
 			const unsigned char ch = chars[0];
 			if (!UTF8IsAscii(ch) && encodingFamily != EncodingFamily::eightBit) {
 				if (encodingFamily == EncodingFamily::unicode) {
-					charWidth = UTF8DrawBytes(chars, lineRange.end - nextBreak);
+					charWidth = UTF8DrawBytes(chars, endPos - nextBreak);
 				} else {
-					charWidth = pdoc->DBCSDrawBytes(chars, lineRange.end - nextBreak);
+					charWidth = pdoc->DBCSDrawBytes(chars, endPos - nextBreak);
 				}
 			}
 			repr = nullptr;
-			if (preprs->MayContains(ch)) {
+			if (reprs.MayContains(ch)) {
 				// Special case \r\n line ends if there is a representation
-				if (ch == '\r' && preprs->ContainsCrLf() && chars[1] == '\n') {
+				if (ch == '\r' && reprs.ContainsCrLf() && chars[1] == '\n') {
 					charWidth = 2;
 				}
-				repr = preprs->GetRepresentation(std::string_view(chars, charWidth));
+				repr = reprs.GetRepresentation(std::string_view(chars, charWidth));
 			}
 			if (((nextBreak > 0) && (ll->styles[nextBreak] != ll->styles[nextBreak - 1])) ||
 				repr ||
 				(nextBreak == saeNext)) {
-				while ((nextBreak >= saeNext) && (saeNext < lineRange.end)) {
+				while ((nextBreak >= saeNext) && (saeNext < endPos)) {
 					saeCurrentPos++;
-					saeNext = static_cast<int>((saeCurrentPos < selAndEdge.size()) ? selAndEdge[saeCurrentPos] : lineRange.end);
+					saeNext = static_cast<int>((saeCurrentPos < selAndEdge.size()) ? selAndEdge[saeCurrentPos] : endPos);
 				}
 				if ((nextBreak > prev) || repr) {
 					// Have a segment to report
@@ -876,7 +893,8 @@ TextSegment BreakFinder::Next() {
 
 		const int lengthSegment = nextBreak - prev;
 		if (lengthSegment < lengthStartSubdivision) {
-			return TextSegment(prev, lengthSegment, repr);
+			currentPos = nextBreak;
+			return {prev, lengthSegment, repr};
 		}
 		subBreak = prev;
 	}
@@ -893,69 +911,36 @@ TextSegment BreakFinder::Next() {
 	} else {
 		subBreak = -1;
 	}
-	return TextSegment(startSegment, lengthSegment);
+	currentPos += lengthSegment;
+	return {startSegment, lengthSegment, nullptr};
 }
 
-bool BreakFinder::More() const noexcept {
-	return (subBreak >= 0) || (nextBreak < lineRange.end);
-}
-
-PositionCacheEntry::PositionCacheEntry() noexcept :
-	styleNumber(0), len(0), clock(0) {
-}
-
-// Copy constructor not currently used, but needed for being element in std::vector.
-PositionCacheEntry::PositionCacheEntry(const PositionCacheEntry &other) :
-	styleNumber(other.styleNumber), len(other.len), clock(other.clock) {
-	if (other.positions) {
-		const size_t lenData = len + (len / sizeof(XYPOSITION)) + 1;
-		positions = std::make_unique<XYPOSITION[]>(lenData);
-		memcpy(positions.get(), other.positions.get(), lenData * sizeof(XYPOSITION));
-	}
-}
-
-void PositionCacheEntry::Set(uint16_t styleNumber_, std::string_view sv,
-	const XYPOSITION *positions_, uint32_t clock_) {
+void PositionCacheEntry::Set(uint16_t styleNumber_, size_t length, std::unique_ptr<XYPOSITION[]> &positions_, uint32_t clock_) noexcept {
 	styleNumber = styleNumber_;
-	len = static_cast<uint16_t>(sv.length());
-	clock = clock_;
-	if (sv.data() && positions_) {
-		positions = std::make_unique<XYPOSITION[]>(len + (len / sizeof(XYPOSITION)) + 1);
-		for (unsigned int i = 0; i < len; i++) {
-			positions[i] = positions_[i];
-		}
-		memcpy(&positions[len], sv.data(), sv.length());
-	} else {
-		positions.reset();
-	}
-}
-
-PositionCacheEntry::~PositionCacheEntry() {
-	Clear();
+	clock = static_cast<uint16_t>(clock_);
+	len = static_cast<uint32_t>(length);
+	positions.swap(positions_);
 }
 
 void PositionCacheEntry::Clear() noexcept {
-	positions.reset();
 	styleNumber = 0;
-	len = 0;
 	clock = 0;
+	len = 0;
+	positions.reset();
 }
 
 bool PositionCacheEntry::Retrieve(uint16_t styleNumber_, std::string_view sv, XYPOSITION *positions_) const noexcept {
 	if ((styleNumber == styleNumber_) && (len == sv.length()) &&
-		(memcmp(&positions[len], sv.data(), sv.length()) == 0)) {
-		for (unsigned int i = 0; i < len; i++) {
-			positions_[i] = positions[i];
-		}
+		(memcmp(&positions[sv.length()], sv.data(), sv.length()) == 0)) {
+		memcpy(positions_, &positions[0], sv.length()*sizeof(XYPOSITION));
 		return true;
-	} else {
-		return false;
 	}
+	return false;
 }
 
 size_t PositionCacheEntry::Hash(uint16_t styleNumber_, std::string_view sv) noexcept {
 	const size_t h1 = std::hash<std::string_view>{}(sv);
-	const size_t h2 = std::hash<uint16_t>{}(styleNumber_);
+	const size_t h2 = std::hash<uint8_t>{}(styleNumber_ & 0xff);
 	return h1 ^ (h2 << 1);
 }
 
@@ -969,15 +954,10 @@ void PositionCacheEntry::ResetClock() noexcept {
 	}
 }
 
-#define PositionCacheHashSizeUsePowerOfTwo	1
 PositionCache::PositionCache() {
 	clock = 1;
-#if PositionCacheHashSizeUsePowerOfTwo
-	pces.resize(2048);
-#else
-	pces.resize(2039);
-#endif
 	allClear = true;
+	pces.resize(1024);
 }
 
 void PositionCache::Clear() noexcept {
@@ -992,29 +972,76 @@ void PositionCache::Clear() noexcept {
 
 void PositionCache::SetSize(size_t size_) {
 	Clear();
-	if (size_ != pces.size()) {
-#if PositionCacheHashSizeUsePowerOfTwo
-		if (size_ & (size_ - 1)) {
-			size_ = NextPowerOfTwo(size_);
-		}
-#endif
-		pces.resize(size_);
+	if (size_ & (size_ - 1)) {
+		size_ = NextPowerOfTwo(size_);
 	}
+	pces.resize(size_);
 }
 
 size_t PositionCache::GetSize() const noexcept {
 	return pces.size();
 }
 
-void PositionCache::MeasureWidths(Surface *surface, const ViewStyle &vstyle, uint16_t styleNumber,
-	std::string_view sv, XYPOSITION *positions) {
-	const Style &style = vstyle.styles[styleNumber];
-	if (style.monospaceASCII && AllGraphicASCII(sv)) {
-#if PLAT_MACOSX
-		const XYPOSITION characterWidth = style.monospaceCharacterWidth;
+namespace {
+// std::shared_mutex
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+SRWLOCK cacheLock = SRWLOCK_INIT;
+struct CacheWriteLock {
+	CacheWriteLock() noexcept  {
+		AcquireSRWLockExclusive(&cacheLock);
+	}
+	~CacheWriteLock() {
+		ReleaseSRWLockExclusive(&cacheLock);
+	}
+};
+
+// https://stackoverflow.com/questions/13206414/why-slim-reader-writer-exclusive-lock-outperformance-the-shared-one
+#if 0
+struct CacheReadLock {
+	CacheReadLock() noexcept  {
+		AcquireSRWLockShared(&cacheLock);
+	}
+	~CacheReadLock() {
+		ReleaseSRWLockShared(&cacheLock);
+	}
+};
 #else
-		const XYPOSITION characterWidth = style.aveCharWidth;
+using CacheReadLock = CacheWriteLock;
 #endif
+
+#else
+struct CriticalSection {
+	CRITICAL_SECTION section;
+	CriticalSection() noexcept {
+		InitializeCriticalSectionAndSpinCount(&section, 4);
+	}
+	void lock() noexcept {
+		EnterCriticalSection(&section);
+	}
+	void unlock() noexcept {
+		LeaveCriticalSection(&section);
+	}
+	~CriticalSection() {
+		DeleteCriticalSection(&section);
+	}
+};
+
+CriticalSection cacheLock;
+struct CacheWriteLock {
+	CacheWriteLock() noexcept  {
+		cacheLock.lock();
+	}
+	~CacheWriteLock() {
+		cacheLock.unlock();
+	}
+};
+using CacheReadLock = CacheWriteLock;
+#endif
+}
+
+void PositionCache::MeasureWidths(Surface *surface, const Style &style, uint16_t styleNumber, std::string_view sv, XYPOSITION *positions) {
+	if (style.monospaceASCII && AllGraphicASCII(sv)) {
+		const XYPOSITION characterWidth = style.aveCharWidth;
 		const size_t length = sv.length();
 #if NP2_USE_SSE2
 		if (length >= 2) {
@@ -1044,11 +1071,7 @@ void PositionCache::MeasureWidths(Surface *surface, const ViewStyle &vstyle, uin
 
 #ifdef MeasureWidthsUseEastAsianWidth
 	if (style.monospaceASCII) {
-#if PLAT_MACOSX
-		const XYPOSITION characterWidth = style.monospaceCharacterWidth;
-#else
 		const XYPOSITION characterWidth = style.aveCharWidth;
-#endif
 		XYPOSITION *ptr = positions;
 		XYPOSITION lastPos = 0;
 		for (auto it = sv.begin(); it != sv.end();) {
@@ -1073,44 +1096,48 @@ void PositionCache::MeasureWidths(Surface *surface, const ViewStyle &vstyle, uin
 	}
 #endif // MeasureWidthsUseEastAsianWidth
 
-	size_t probe = pces.size();	// Out of bounds
-	if ((sv.length() < 64)) {
+	PositionCacheEntry *entry = nullptr;
+	PositionCacheEntry *entry2 = nullptr;
+	constexpr size_t maxLength = (512 - 16)/(sizeof(XYPOSITION) + 1);
+	if (sv.length() <= maxLength) {
 		// Only store short strings in the cache so it doesn't churn with
 		// long comments with only a single comment.
-#if PositionCacheHashSizeUsePowerOfTwo
-		const size_t mask = probe - 1;
-#else
-		const size_t modulo = probe;
-#endif
+
 		// Two way associative: try two probe positions.
 		const size_t hashValue = PositionCacheEntry::Hash(styleNumber, sv);
-#if PositionCacheHashSizeUsePowerOfTwo
-		probe = hashValue & mask;
-#else
-		probe = hashValue % modulo;
-#endif
-		if (pces[probe].Retrieve(styleNumber, sv, positions)) {
+		const size_t mask = pces.size() - 1;
+		const size_t probe = hashValue & mask;
+		entry = &pces[probe];
+
+		const CacheReadLock readLock;
+		if (entry->Retrieve(styleNumber, sv, positions)) {
 			return;
 		}
-#if PositionCacheHashSizeUsePowerOfTwo
+
 		const size_t probe2 = (hashValue * 37) & mask;
-#else
-		const size_t probe2 = (hashValue * 37) % modulo;
-#endif
-		if (pces[probe2].Retrieve(styleNumber, sv, positions)) {
+		entry2 = &pces[probe2];
+		if (entry2->Retrieve(styleNumber, sv, positions)) {
 			return;
-		}
-		// Not found. Choose the oldest of the two slots to replace
-		if (pces[probe].NewerThan(pces[probe2])) {
-			probe = probe2;
 		}
 	}
 
 	surface->MeasureWidths(style.font.get(), sv, positions);
-	if (probe < pces.size()) {
+	if (entry) {
+		// constructed here to reduce lock time
+		const size_t length = sv.length();
+		std::unique_ptr<XYPOSITION[]> positions_{new XYPOSITION[length + AlignUp(length, sizeof(XYPOSITION))/sizeof(XYPOSITION)]};
+		memcpy(&positions_[0], positions, length*sizeof(XYPOSITION));
+		memcpy(&positions_[length], sv.data(), length);
+
 		// Store into cache
+		const CacheWriteLock writeLock;
+		// Choose the oldest of the two slots to replace
+		if (entry->NewerThan(*entry2)) {
+			entry = entry2;
+		}
+
 		clock++;
-		if (clock > 60000) {
+		if (clock > UINT16_MAX) {
 			// Since there are only 16 bits for the clock, wrap it round and
 			// reset all cache entries so none get stuck with a high clock.
 			for (PositionCacheEntry &pce : pces) {
@@ -1119,6 +1146,6 @@ void PositionCache::MeasureWidths(Surface *surface, const ViewStyle &vstyle, uin
 			clock = 2;
 		}
 		allClear = false;
-		pces[probe].Set(styleNumber, sv, positions, clock);
+		entry->Set(styleNumber, length, positions_, clock);
 	}
 }

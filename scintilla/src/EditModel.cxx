@@ -60,7 +60,7 @@ using namespace Scintilla::Internal;
 Caret::Caret() noexcept :
 	active(false), on(false), period(500) {}
 
-EditModel::EditModel() : braces{} {
+EditModel::EditModel() : durationWrapOneUnit(0.01 / 64), durationWrapOneThread(0.01 / 16) {
 	inOverstrike = false;
 	trackLineWidth = false;
 	xOffset = 0;
@@ -83,7 +83,12 @@ EditModel::EditModel() : braces{} {
 	pdoc = new Document(DocumentOption::StylesNone);
 	pdoc->AddRef();
 	pcs = ContractionStateCreate(pdoc->IsLarge());
+
+	SYSTEM_INFO info;
+	GetNativeSystemInfo(&info);
+	hardwareConcurrency = info.dwNumberOfProcessors;
 	idleTaskTimer = CreateWaitableTimer(nullptr, true, nullptr);
+	UpdateParallelLayoutThreshold();
 }
 
 EditModel::~EditModel() {
@@ -97,8 +102,8 @@ bool EditModel::BidirectionalEnabled() const noexcept {
 		(CpUtf8 == pdoc->dbcsCodePage);
 }
 
-bool EditModel::BidirectionalR2L() const noexcept {
-	return bidirectional == Bidirectional::R2L;
+SurfaceMode EditModel::CurrentSurfaceMode() const noexcept {
+	return { pdoc->dbcsCodePage, BidirectionalR2L() };
 }
 
 void EditModel::SetDefaultFoldDisplayText(const char *text) {
@@ -135,4 +140,10 @@ void EditModel::SetIdleTaskTime(uint32_t milliseconds) const noexcept {
 
 bool EditModel::IdleTaskTimeExpired() const noexcept {
 	return WaitForSingleObject(idleTaskTimer, 0) == WAIT_OBJECT_0;
+}
+
+void EditModel::UpdateParallelLayoutThreshold() noexcept {
+	minParallelLayoutLength = durationWrapOneThread.ActionsInAllowedTime(0.01);
+	const uint32_t idleLength = durationWrapOneUnit.ActionsInAllowedTime(0.2);
+	maxParallelLayoutLength = std::max(minParallelLayoutLength*hardwareConcurrency, idleLength);
 }
