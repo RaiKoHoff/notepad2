@@ -421,7 +421,7 @@ void ScintillaBase::AutoCompleteCompleted(char ch, CompletionMethods completionM
 
 	NotificationData scn = {};
 	scn.nmhdr.code = listType > 0 ?  Notification::UserListSelection : Notification::AutoCSelection;
-	scn.ch = ch;
+	scn.ch = static_cast<uint8_t>(ch);
 	scn.listCompletionMethod = completionMethod;
 	scn.wParam = listType;
 	scn.listType = listType;
@@ -492,18 +492,13 @@ void ScintillaBase::CallTipShow(Point pt, NotificationPosition notifyPos, const 
 	if (wMargin.Created()) {
 		pt = pt + GetVisibleOriginInMain();
 	}
+	AutoSurface surfaceMeasure(this);
 	PRectangle rc = ct.CallTipStart(sel.MainCaret(), pt,
 		vs.lineHeight,
 		defn,
-		style.fontName,
-		style.sizeZoomed,
-		CodePage(),
-		style.characterSet,
-		vs.technology,
-		vs.localeName.c_str(),
-		wMain);
-	// If the call-tip window would be out of the client
-	// space
+		surfaceMeasure,
+		style.font);
+	// If the call-tip window would be out of the client space
 	const PRectangle rcClient = GetClientRectangle();
 	const int offset = vs.lineHeight + static_cast<int>(rc.Height());
 	// adjust so it displays above the text.
@@ -601,7 +596,7 @@ public:
 	void SetLexer(int language); //! removed in Scintilla 5
 
 	const char *DescribeWordListSets() const noexcept;
-	void SetWordList(int n, bool toLower, const char *wl);
+	void SetWordList(int n, int attribute, const char *wl);
 
 	int GetIdentifier() const noexcept;
 	const char *GetName() const noexcept;
@@ -666,9 +661,9 @@ const char *LexState::DescribeWordListSets() const noexcept {
 	}
 }
 
-void LexState::SetWordList(int n, bool toLower, const char *wl) {
+void LexState::SetWordList(int n, int attribute, const char *wl) {
 	if (instance) {
-		const Sci_Position firstModification = instance->WordListSet(n, toLower, wl);
+		const Sci_Position firstModification = instance->WordListSet(n, attribute, wl);
 		if (firstModification >= 0) {
 			pdoc->ModifiedAt(firstModification);
 		}
@@ -1128,8 +1123,8 @@ sptr_t ScintillaBase::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		return DocumentLexState()->PropGetInt(ConstCharPtrFromUPtr(wParam), static_cast<int>(lParam));
 
 	case Message::SetKeyWords:
-		DocumentLexState()->SetWordList(static_cast<int>(wParam & KEYWORDSET_INDEXMASK),
-			(wParam & KEYWORDSET_TOLOWER) != 0, ConstCharPtrFromSPtr(lParam));
+		DocumentLexState()->SetWordList(wParam & 0xff,
+			static_cast<int>(wParam >> 8), ConstCharPtrFromSPtr(lParam));
 		break;
 
 	case Message::GetLexerLanguage:

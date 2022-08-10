@@ -22,7 +22,9 @@
 
 using namespace Lexilla;
 
-static constexpr bool IsTexiSpec(int ch) noexcept {
+namespace {
+
+constexpr bool IsTexiSpec(int ch) noexcept {
 	return ch == '@' || ch == '{' || ch == '}' ||
 		ch == '*' || ch == '/' || ch == '-' ||
 		ch == ':' || ch == '.' || ch == '?' || ch == '?' ||
@@ -30,8 +32,8 @@ static constexpr bool IsTexiSpec(int ch) noexcept {
 }
 
 #define MAX_WORD_LENGTH	31
-static void ColouriseTexiDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler) {
-	const bool fold = styler.GetPropertyInt("fold", 1) != 0;
+void ColouriseTexiDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler) {
+	const bool fold = styler.GetPropertyBool("fold");
 	//const WordList &keywords = *keywordLists[0]; // command
 	const WordList &keywords2 = *keywordLists[1];// fold
 	//const WordList &keywords3 = *keywordLists[2];// condition
@@ -167,6 +169,8 @@ static void ColouriseTexiDoc(Sci_PositionU startPos, Sci_Position length, int in
 
 	// Colourise remaining document
 	styler.ColorTo(endPos, state);
+}
+
 }
 
 LexerModule lmTexinfo(SCLEX_TEXINFO, ColouriseTexiDoc, "texi");

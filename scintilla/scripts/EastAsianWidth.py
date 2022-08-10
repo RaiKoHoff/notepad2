@@ -1,12 +1,12 @@
 # https://www.unicode.org/reports/tr41/
 # https://www.unicode.org/reports/tr11/
-# https://www.unicode.org/Public/UCD/latest/ucd/EastAsianWidth.txt
 
 from FileGenerator import Regenerate
 from MultiStageTable import *
 from UnicodeData import *
 
 def updateEastAsianWidthTable(filename):
+	# https://www.unicode.org/Public/UCD/latest/ucd/EastAsianWidth.txt
 	version, propertyList = readUnicodePropertyFile('EastAsianWidth.txt')
 	# https://www.unicode.org/reports/tr11/#Recommendations
 	widthMap = {
@@ -45,9 +45,9 @@ def updateEastAsianWidthTable(filename):
 
 	config = {
 		'tableName': 'EastAsianWidthIndex',
-		'function': f"""int GetEastAsianWidth(uint32_t ch) noexcept {{
+		'function': f"""bool GetEastAsianWidth(uint32_t ch) noexcept {{
 	if (ch < {minCh} || ch > {maxCh}) {{
-		return 0;
+		return false;
 	}}
 	const uint32_t lower = ch & 31;
 	ch >>= 5;

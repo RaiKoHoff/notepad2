@@ -29,22 +29,24 @@
 
 using namespace Lexilla;
 
+namespace {
+
 // Internal state, highlighted as number
 #define SCE_B_FILENUMBER	(SCE_B_DEFAULT + 100)
 
 #define LexCharAt(pos)	styler.SafeGetCharAt(pos)
 
-static constexpr bool IsTypeCharacter(int ch) noexcept {
+constexpr bool IsTypeCharacter(int ch) noexcept {
 	return ch == '%' || ch == '&' || ch == '@' || ch == '!' || ch == '#' || ch == '$';
 }
 
-static constexpr bool IsVBNumberPrefix(int ch) noexcept {
+constexpr bool IsVBNumberPrefix(int ch) noexcept {
 	return ch == 'h' || ch == 'H'	// Hexadecimal
 		|| ch == 'o' || ch == 'O'	// Octal
 		|| ch == 'b' || ch == 'B';	// Binary
 }
 
-static constexpr bool IsVBNumber(int ch, int chPrev) noexcept {
+constexpr bool IsVBNumber(int ch, int chPrev) noexcept {
 	return IsHexDigit(ch)|| ch == '_'
 		|| (ch == '.' && chPrev != '.')
 		|| ((ch == '+' || ch == '-') && (chPrev == 'E' || chPrev == 'e'))
@@ -55,7 +57,7 @@ static constexpr bool IsVBNumber(int ch, int chPrev) noexcept {
 		|| (ch == '&' && IsHexDigit(chPrev));
 }
 
-/*static const char * const vbWordListDesc[] = {
+/*const char * const vbWordListDesc[] = {
 	"Keyword",
 	"Type keyword"
 	"Unused keyword",
@@ -65,12 +67,12 @@ static constexpr bool IsVBNumber(int ch, int chPrev) noexcept {
 	0
 };*/
 
-static constexpr bool IsSpaceEquiv(int state) noexcept {
+constexpr bool IsSpaceEquiv(int state) noexcept {
 	// including SCE_B_DEFAULT, SCE_B_COMMENT
 	return (state <= SCE_B_COMMENT);
 }
 
-static void ColouriseVBDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler, bool vbScriptSyntax) {
+void ColouriseVBDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler, bool vbScriptSyntax) {
 	const WordList &keywords = *keywordLists[0];
 	const WordList &keywords2 = *keywordLists[1];
 	const WordList &keywords3 = *keywordLists[2];
@@ -93,10 +95,13 @@ static void ColouriseVBDoc(Sci_PositionU startPos, Sci_Position length, int init
 			visibleChars = 0;
 		}
 
-		if (sc.state == SCE_B_OPERATOR) {
+		switch (sc.state) {
+		case SCE_B_OPERATOR:
 			sc.SetState(SCE_B_DEFAULT);
-		} else if (sc.state == SCE_B_IDENTIFIER) {
-			if (!(iswordstart(sc.ch))) {
+			break;
+
+		case SCE_B_IDENTIFIER:
+			if (!iswordstart(sc.ch)) {
 				// In Basic (except VBScript), a variable name or a function name
 				// can end with a special character indicating the type of the value
 				// held or returned.
@@ -143,11 +148,15 @@ static void ColouriseVBDoc(Sci_PositionU startPos, Sci_Position length, int init
 						sc.SetState(SCE_B_DEFAULT);
 					}
 			}
-		} else if (sc.state == SCE_B_NUMBER) {
+			break;
+
+		case SCE_B_NUMBER:
 			if (!IsVBNumber(sc.ch, sc.chPrev)) {
 				sc.SetState(SCE_B_DEFAULT);
 			}
-		} else if (sc.state == SCE_B_STRING) {
+			break;
+
+		case SCE_B_STRING:
 			// VB doubles quotes to preserve them, so just end this string
 			// state now as a following quote will start again
 			if (sc.ch == '\"') {
@@ -159,15 +168,18 @@ static void ColouriseVBDoc(Sci_PositionU startPos, Sci_Position length, int init
 					}
 					sc.ForwardSetState(SCE_B_DEFAULT);
 				}
-			} else if (sc.atLineEnd) {
-				sc.ChangeState(SCE_B_STRINGEOL);
-				sc.ForwardSetState(SCE_B_DEFAULT);
+			} else if (sc.atLineStart) {
+				sc.SetState(SCE_B_DEFAULT);
 			}
-		} else if (sc.state == SCE_B_COMMENT) {
+			break;
+
+		case SCE_B_COMMENT:
 			if (sc.atLineStart) {
 				sc.SetState(SCE_B_DEFAULT);
 			}
-		} else if (sc.state == SCE_B_FILENUMBER) {
+			break;
+
+		case SCE_B_FILENUMBER:
 			if (IsADigit(sc.ch)) {
 				fileNbDigits++;
 				if (fileNbDigits > 3) {
@@ -188,13 +200,15 @@ static void ColouriseVBDoc(Sci_PositionU startPos, Sci_Position length, int init
 			if (sc.state != SCE_B_FILENUMBER) {
 				fileNbDigits = 0;
 			}
-		} else if (sc.state == SCE_B_DATE) {
-			if (sc.atLineEnd) {
-				sc.ChangeState(SCE_B_STRINGEOL);
+			break;
+
+		case SCE_B_DATE:
+			if (sc.ch == '#') {
 				sc.ForwardSetState(SCE_B_DEFAULT);
-			} else if (sc.ch == '#') {
-				sc.ForwardSetState(SCE_B_DEFAULT);
+			} else if (sc.atLineStart) {
+				sc.SetState(SCE_B_DEFAULT);
 			}
+			break;
 		}
 
 		if (sc.state == SCE_B_DEFAULT) {
@@ -230,16 +244,16 @@ static void ColouriseVBDoc(Sci_PositionU startPos, Sci_Position length, int init
 	sc.Complete();
 }
 
-static bool VBLineStartsWith(Sci_Line line, Accessor &styler, const char* word) noexcept {
-	const Sci_Position pos = LexLineSkipSpaceTab(line, styler);
+bool VBLineStartsWith(LexAccessor &styler, Sci_Line line, const char* word) noexcept {
+	const Sci_Position pos = LexLineSkipSpaceTab(styler, line);
 	return (styler.StyleAt(pos) == SCE_B_KEYWORD) && (styler.MatchIgnoreCase(pos, word));
 }
-static bool VBMatchNextWord(Sci_Position startPos, Sci_Position endPos, Accessor &styler, const char *word) noexcept {
-	const Sci_Position pos = LexSkipSpaceTab(startPos, endPos, styler);
+bool VBMatchNextWord(LexAccessor &styler, Sci_Position startPos, Sci_Position endPos, const char *word) noexcept {
+	const Sci_Position pos = LexSkipSpaceTab(styler, startPos, endPos);
 	return isspacechar(LexCharAt(pos + static_cast<int>(strlen(word))))
 		&& styler.MatchIgnoreCase(pos, word);
 }
-static bool IsVBProperty(Sci_Line line, Sci_Position startPos, Accessor &styler) noexcept {
+bool IsVBProperty(LexAccessor &styler, Sci_Line line, Sci_Position startPos) noexcept {
 	const Sci_Position endPos = styler.LineStart(line + 1) - 1;
 	for (Sci_Position i = startPos; i < endPos; i++) {
 		if (styler.StyleAt(i) == SCE_B_OPERATOR && LexCharAt(i) == '(')
@@ -247,13 +261,13 @@ static bool IsVBProperty(Sci_Line line, Sci_Position startPos, Accessor &styler)
 	}
 	return false;
 }
-static bool IsVBSome(Sci_Line line, int kind, Accessor &styler) noexcept {
+bool IsVBSome(LexAccessor &styler, Sci_Line line, int kind) noexcept {
 	if (line < 0) {
 		return false;
 	}
 	const Sci_Position startPos = styler.LineStart(line);
 	const Sci_Position endPos = styler.LineStart(line + 1) - 1;
-	Sci_Position pos = LexSkipSpaceTab(startPos, endPos, styler);
+	Sci_Position pos = LexSkipSpaceTab(styler, startPos, endPos);
 	int stl = styler.StyleAt(pos);
 	if (stl == SCE_B_KEYWORD) {
 		if (styler.MatchIgnoreCase(pos, "public")) {
@@ -262,11 +276,11 @@ static bool IsVBSome(Sci_Line line, int kind, Accessor &styler) noexcept {
 			pos += 7;
 		} else if (styler.MatchIgnoreCase(pos, "protected")) {
 			pos += 9;
-			pos = LexSkipSpaceTab(endPos, pos, styler);
+			pos = LexSkipSpaceTab(styler, endPos, pos);
 		}
 		if (styler.MatchIgnoreCase(pos, "friend"))
 			pos += 6;
-		pos = LexSkipSpaceTab(pos, endPos, styler);
+		pos = LexSkipSpaceTab(styler, pos, endPos);
 		stl = styler.StyleAt(pos);
 		if (stl == SCE_B_KEYWORD) {
 			return (kind == 1 && isspacechar(LexCharAt(pos + 4)) && styler.MatchIgnoreCase(pos, "type"))
@@ -276,13 +290,13 @@ static bool IsVBSome(Sci_Line line, int kind, Accessor &styler) noexcept {
 	return false;
 }
 #define VBMatch(word)			styler.MatchIgnoreCase(i, word)
-#define VBMatchNext(pos, word)	VBMatchNextWord(pos, endPos, styler, word)
-#define IsCommentLine(line)		IsLexCommentLine(line, styler, SCE_B_COMMENT)
-#define IsDimLine(line)			VBLineStartsWith(line, styler, "dim")
-#define IsConstLine(line)		IsVBSome(line, 2, styler)
-#define IsVB6Type(line)			IsVBSome(line, 1, styler)
+#define VBMatchNext(pos, word)	VBMatchNextWord(styler, pos, endPos, word)
+#define IsCommentLine(line)		IsLexCommentLine(styler, line, SCE_B_COMMENT)
+#define IsDimLine(line)			VBLineStartsWith(styler, line, "dim")
+#define IsConstLine(line)		IsVBSome(styler, line, 2)
+#define IsVB6Type(line)			IsVBSome(styler, line, 1)
 
-static void FoldVBDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
+void FoldVBDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
 	const Sci_PositionU endPos = startPos + length;
 	int visibleChars = 0;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
@@ -354,7 +368,7 @@ static void FoldVBDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 				levelNext--;
 				int chEnd = static_cast<unsigned char>(LexCharAt(i + 3));
 				if (chEnd == ' ' || chEnd == '\t') {
-					const Sci_Position pos = LexSkipSpaceTab(i + 3, endPos, styler);
+					const Sci_Position pos = LexSkipSpaceTab(styler, i + 3, endPos);
 					chEnd = static_cast<unsigned char>(LexCharAt(pos));
 					// check if End is used to terminate statement
 					if (IsAlpha(chEnd) && (VBMatchNext(pos, "function") || VBMatchNext(pos, "sub")
@@ -385,7 +399,7 @@ static void FoldVBDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 			} else if (VBMatch("then")) {
 				if (isIf) {
 					isIf = false;
-					const Sci_Position pos = LexSkipSpaceTab(i + 4, endPos, styler);
+					const Sci_Position pos = LexSkipSpaceTab(styler, i + 4, endPos);
 					const char chEnd = LexCharAt(pos);
 					if (!(chEnd == '\r' || chEnd == '\n' || chEnd == '\''))
 						levelNext--;
@@ -415,7 +429,7 @@ static void FoldVBDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 				isProperty = true;
 				if (!(isEnd || isExit)) {
 					levelNext++;
-					if (!IsVBProperty(lineCurrent, i + 8, styler)) {
+					if (!IsVBProperty(styler, lineCurrent, i + 8)) {
 						isProperty = false;
 						levelNext--;
 					}
@@ -470,12 +484,14 @@ static void FoldVBDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 	}
 }
 
-static void ColouriseVBNetDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler) {
+void ColouriseVBNetDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	ColouriseVBDoc(startPos, length, initStyle, keywordLists, styler, false);
 }
-static void ColouriseVBScriptDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler) {
+void ColouriseVBScriptDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	ColouriseVBDoc(startPos, length, initStyle, keywordLists, styler, true);
 }
 
-LexerModule lmVB(SCLEX_VB, ColouriseVBNetDoc, "vb", FoldVBDoc);
+}
+
+LexerModule lmVisualBasic(SCLEX_VISUALBASIC, ColouriseVBNetDoc, "vb", FoldVBDoc);
 LexerModule lmVBScript(SCLEX_VBSCRIPT, ColouriseVBScriptDoc, "vbscript", FoldVBDoc);

@@ -21,11 +21,9 @@ static KEYWORDLIST Keywords_HTML = {{
 "marquee menu menuitem multicol nextid nobr noembed noframes plaintext rb rtc spacer strike tt xmp "
 
 , // 1 JavaScript
-"Infinity NaN arguments async await break case catch class const continue debugger default delete do else extends "
-"false finally for function globalThis if in instanceof let new null return static super switch "
+"Infinity NaN arguments async await break case catch class const continue debugger default delete do else export extends "
+"false finally for function globalThis if import in instanceof let new null return static super switch "
 "this throw true try typeof undefined var void while with yield "
-"enum implements interface package private protected public "
-"__dirname __filename as export exports from import module require "
 
 , // 2 VBScript
 "Alias And As Attribute Begin Boolean ByRef Byte ByVal Call Case Class Compare Const Continue "
@@ -39,23 +37,7 @@ static KEYWORDLIST Keywords_HTML = {{
 NULL
 
 , // 4 PHP
-"abstract and as break callable case catch class clone const continue declare default "
-"do else elseif enddeclare endfor endforeach endif endswitch endwhile extends final "
-"finally for foreach function global goto if implements instanceof insteadof interface "
-"namespace new or parent private protected public return self static switch throw trait "
-"try use var while xor yield "
-"array bool boolean real double float int integer object string " // cast
-"null true false NULL TRUE FALSE NAN " // literal
-"define defined die echo empty eval exit include include_once isset list print "
-"require require_once unset __halt_compiler "
-// magic method
-"__autoload __call __callStatic __clone __construct __destruct __get __invoke __isset "
-"__set __set_state __sleep __toString __unset __wakeup "
-// basic class/interface
-"Traversable Iterator IteratorAggregate ArrayAccess Serializable Closure Generator "
-"stdClass Exception ErrorException Directory php_user_filter DateTime "
-//
-"__CLASS__ __DIR__ __FILE__ __FUNCTION__ __LINE__ __METHOD__ __NAMESPACE__ __TRAIT__ "
+NULL
 
 , // 5 SGML/DTD
 "doctype DOCTYPE PUBLIC SYSTEM "
@@ -68,15 +50,15 @@ NULL
 , // 6 Attribute
 // Attribute
 "abbr accept accept-charset accesskey action allow allowfullscreen allowpaymentrequest alt as async autocapitalize autocomplete autofocus autoplay "
-"border challenge charset checked cite class cols colspan command content "
+"blocking border challenge charset checked cite class cols colspan command content "
 "contenteditable contextmenu controls coords crossorigin data datetime decoding default "
 "defer dir dirname disabled download draggable dropzone enctype enterkeyhint for form formaction "
 "formenctype formmethod formnovalidate formtarget headers height hidden inputmode high href hreflang "
-"http-equiv icon id imagesrcset imagesizes integrity is ismap itemid itemprop itemref itemscope itemtype "
+"http-equiv icon id imagesrcset imagesizes inert integrity is ismap itemid itemprop itemref itemscope itemtype "
 "keytype kind label lang list loading longdesc loop low nonce minlength manifest max "
 "maxlength media mediagroup method min multiple muted name nomodule novalidate open "
 "optimum pattern placeholder playsinline poster preload radiogroup readonly referrerpolicy rel required "
-"rev reversed rows rowspan sandbox sizes spellcheck scope scoped seamless selected shape size span "
+"rev reversed rows rowspan sandbox sizes spellcheck scope scoped seamless selected shape size slot span "
 "src srcdoc srclang srcset start step style tabindex target title translate type "
 "typemustmatch usemap value width wrap "
 
@@ -98,7 +80,8 @@ NULL
 "urn valign valuetype version vlink vspace "
 
 , // 7 Event Handler
-"onaddtrack onabort onafterprint onauxclick onbeforeprint onbeforeunload onblur oncancel oncanplay oncanplaythrough onchange onclick onclose "
+"onaddtrack onabort onafterprint onauxclick onbeforematch onbeforeprint onbeforeunload onblur "
+"oncancel oncanplay oncanplaythrough onchange onclick onclose "
 "oncontextmenu oncopy oncuechange oncut ondblclick ondrag ondragend ondragenter ondragexit ondragleave "
 "ondragover ondragstart ondrop ondurationchange onemptied onended onerror onenter onexit "
 "onformchange onforminput onmessage onmessageerror onpopstate onreadystatechange onredo onresize onundo "
@@ -161,22 +144,9 @@ static EDITSTYLE Styles_HTML[] = {
 	{ SCE_H_DEFAULT, NP2StyleX_HTMLElementText, L"" },
 	{ MULTI_STYLE(SCE_H_XMLSTART, SCE_H_XMLEND, SCE_H_SGML_COMMAND, 0), NP2StyleX_XMLIdentifier, L"bold; fore:#881280" },
 	{ MULTI_STYLE(SCE_H_SGML_DEFAULT, SCE_H_SGML_BLOCK_DEFAULT, 0, 0), NP2StyleX_XMLSGML, L"fore:#881280" },
-	{ SCE_H_CDATA, NP2StyleX_XMLCDATA, L"fore:#646464" },
+	{ SCE_H_CDATA, NP2StyleX_XMLCDATA, L"back:#C5C5C5; eolfilled" },
 	{ MULTI_STYLE(SCE_H_ASP, SCE_H_ASPAT, 0, 0), NP2StyleX_ASPTag, L"bold; fore:#8B008B" },
 	{ SCE_H_QUESTION, NP2StyleX_PHPTag, L"bold; fore:#8B008B" },
-
-	// PHP
-	{ SCE_HPHP_DEFAULT, NP2StyleX_PHPDefault, L"" },
-	{ SCE_HPHP_WORD, NP2StyleX_PHPKeyword, L"bold; fore:#FF8000" },
-	{ MULTI_STYLE(SCE_HPHP_COMMENT, SCE_HPHP_COMMENTLINE, 0, 0), NP2StyleX_PHPComment, L"fore:#608060" },
-	{ MULTI_STYLE(SCE_HPHP_HSTRING, SCE_HPHP_SIMPLESTRING, 0, 0), NP2StyleX_PHPString, L"fore:#008000" },
-	{ SCE_HPHP_HEREDOC, NP2StyleX_PHPHeredocString, L"fore:#648000" },
-	{ SCE_HPHP_NOWDOC, NP2StyleX_PHPNowdocString, L"fore:#A46000" },
-	{ SCE_HPHP_NUMBER, NP2StyleX_PHPNumber, L"fore:#FF0000" },
-	{ SCE_HPHP_OPERATOR, NP2StyleX_PHPOperator, L"fore:#B000B0" },
-	{ SCE_HPHP_VARIABLE, NP2StyleX_PHPVariable, L"italic; fore:#003CE6" },
-	{ SCE_HPHP_HSTRING_VARIABLE, NP2StyleX_PHPStringVariable, L"fore:#000080" },
-	{ SCE_HPHP_COMPLEX_VARIABLE, NP2StyleX_PHPComplexVariable, L"fore:#000080" },
 
 	// JavaScript
 	{ MULTI_STYLE(SCE_HJ_START, SCE_HJ_DEFAULT, SCE_HJA_START, SCE_HJA_DEFAULT), NP2StyleX_JSDefault, L"" },
@@ -197,22 +167,26 @@ static EDITSTYLE Styles_HTML[] = {
 	{ MULTI_STYLE(SCE_HB_STRING, SCE_HB_STRINGEOL, SCE_HBA_STRING, SCE_HBA_STRINGEOL), NP2StyleX_VBSString, L"fore:#008000" },
 	{ MULTI_STYLE(SCE_HB_NUMBER, SCE_HBA_NUMBER, 0, 0), NP2StyleX_VBSNumber, L"fore:#FF0000" },
 	{ MULTI_STYLE(SCE_HB_OPERATOR, SCE_HBA_OPERATOR, 0, 0), NP2StyleX_VBSOperator, L"fore:#B000B0" },
-
-	// Python
-	//{ MULTI_STYLE(SCE_HP_START, SCE_HP_DEFAULT, SCE_HPA_START, SCE_HPA_DEFAULT), EDITSTYLE_HOLE(L"Python Default"), L"" },
-	//{ MULTI_STYLE(SCE_HP_WORD, SCE_HPA_WORD, 0, 0), EDITSTYLE_HOLE(L"Python Keyword"), L"" },
-	//{ MULTI_STYLE(SCE_HP_CLASSNAME, SCE_HPA_CLASSNAME, 0, 0), EDITSTYLE_HOLE(L"Python Class"), L"" },
-	//{ MULTI_STYLE(SCE_HP_DEFNAME, SCE_HPA_DEFNAME, 0, 0), EDITSTYLE_HOLE(L"Python Function Define"), L"" },
-	//{ MULTI_STYLE(SCE_HP_COMMENTLINE, SCE_HPA_COMMENTLINE, 0, 0), EDITSTYLE_HOLE(L"Python Comment"), L"" },
-	//{ MULTI_STYLE(SCE_HP_STRING, SCE_HP_CHARACTER, SCE_HPA_STRING, SCE_HPA_CHARACTER), EDITSTYLE_HOLE(L"Python String"), L"" },
-	//{ MULTI_STYLE(SCE_HP_TRIPLE, SCE_HP_TRIPLEDOUBLE, SCE_HPA_TRIPLE, SCE_HPA_TRIPLEDOUBLE), EDITSTYLE_HOLE(L"Python Triple Quoted String"), L"" },
-	//{ MULTI_STYLE(SCE_HP_NUMBER, SCE_HPA_NUMBER, 0, 0), EDITSTYLE_HOLE(L"Python Number"), L"" },
-	//{ MULTI_STYLE(SCE_HP_OPERATOR, SCE_HPA_OPERATOR, 0, 0), EDITSTYLE_HOLE(L"Python Operator"), L"" },
 };
 
 EDITLEXER lexHTML = {
 	SCLEX_HTML, NP2LEX_HTML,
-	SCHEME_SETTINGS_SPACE_2,
+//Settings++Autogenerated -- start of section automatically generated
+	{
+		LexerAttr_TabAsSpaces |
+		LexerAttr_NoGlobalTabSettings,
+		TAB_WIDTH_2, INDENT_WIDTH_2,
+		(1 << 0) | (1 << 1) | (1 << 2) | (1 << 3), // level1, level2, level13, level4
+		0,
+		'\\', 0, 0,
+		0,
+		0, 0,
+		0, 0
+		, KeywordAttr32(1, KeywordAttr_NoAutoComp) // JavaScript
+		| KeywordAttr32(2, KeywordAttr_MakeLower | KeywordAttr_NoAutoComp) // VBScript
+		| KeywordAttr64(8, KeywordAttr_NoLexer) // value
+	},
+//Settings--Autogenerated -- end of section automatically generated
 	EDITLEXER_HOLE(L"Web Source Code", Styles_HTML),
 	L"html; htm; shtml; xhtml; asp; aspx; jsp; mht; htd; htt; hta; htc; cfm; tpl; jd",
 	&Keywords_HTML,

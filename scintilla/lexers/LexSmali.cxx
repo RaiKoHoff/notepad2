@@ -21,26 +21,28 @@
 
 using namespace Lexilla;
 
-static constexpr bool IsSmaliOp(int ch) noexcept {
+namespace {
+
+constexpr bool IsSmaliOp(int ch) noexcept {
 	return ch == ';' || ch == '{' || ch == '}' || ch == '(' || ch == ')' || ch == '='
 		|| ch == ',' || ch == '<' || ch == '>' || ch == '+' || ch == '-' || ch == ':' || ch == '.'
 		|| ch == '/' || ch == '&' || ch == '|' || ch == '^' || ch == '!' || ch == '~' || ch == '*' || ch == '%';
 }
-static constexpr bool IsDelimiter(int ch) noexcept {
+constexpr bool IsDelimiter(int ch) noexcept {
 	return ch != '/' && ch != '$' && (IsASpace(ch) || IsSmaliOp(ch));
 }
-static constexpr bool IsSmaliWordChar(int ch) noexcept {
+constexpr bool IsSmaliWordChar(int ch) noexcept {
 	return iswordstart(ch) || ch == '-';
 }
-static constexpr bool IsSmaliWordCharX(int ch) noexcept {
+constexpr bool IsSmaliWordCharX(int ch) noexcept {
 	return iswordchar(ch) || ch == '-';
 }
 
-static constexpr bool IsOpcodeChar(int ch) noexcept {
+constexpr bool IsOpcodeChar(int ch) noexcept {
 	return ch == '_' || ch == '-' || IsAlpha(ch);
 }
 
-static constexpr bool IsJavaTypeChar(int ch) noexcept {
+constexpr bool IsJavaTypeChar(int ch) noexcept {
 	return ch == 'V'	// void
 		|| ch == 'Z'	// boolean
 		|| ch == 'B'	// byte
@@ -53,7 +55,7 @@ static constexpr bool IsJavaTypeChar(int ch) noexcept {
 		|| ch == 'L'	// object
 		|| ch == '[';	// array
 }
-static bool IsJavaType(int ch, int chPrev, int chNext) noexcept {
+bool IsJavaType(int ch, int chPrev, int chNext) noexcept {
 	if (chPrev == 'L' || chPrev == '>' || chPrev == '/' || chPrev == '.')
 		return false;
 	if (ch == '[')
@@ -73,7 +75,7 @@ static bool IsJavaType(int ch, int chPrev, int chNext) noexcept {
 #define kWordType_Method	3
 
 #define MAX_WORD_LENGTH	31
-static void ColouriseSmaliDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler) {
+void ColouriseSmaliDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	const WordList &keywords = *keywordLists[0];
 	//const WordList &kwInstruction = *keywordLists[10];
 
@@ -308,19 +310,19 @@ static void ColouriseSmaliDoc(Sci_PositionU startPos, Sci_Position length, int i
 	styler.ColorTo(endPos, state);
 }
 
-#define IsCommentLine(line)		IsLexCommentLine(line, styler, SCE_SMALI_COMMENTLINE)
-static inline bool IsFoldWord(const char *word) noexcept {
+#define IsCommentLine(line)		IsLexCommentLine(styler, line, SCE_SMALI_COMMENTLINE)
+inline bool IsFoldWord(const char *word) noexcept {
 	return StrEqualsAny(word, "method", "annotation", "subannotation", "packed-switch", "sparse-switch", "array-data")
 		// not used in Smali and Jasmin or javap
 		|| StrEqualsAny(word, "tableswitch", "lookupswitch", "constant-pool", "attribute");
 }
 // field/parameter with annotation?
-static bool IsAnnotationLine(Sci_Line line, Accessor &styler) noexcept {
+bool IsAnnotationLine(LexAccessor &styler, Sci_Line line) noexcept {
 	Sci_Line scan_line = 10;
 	while (scan_line-- > 0) {
 		const Sci_Position startPos = styler.LineStart(line);
 		const Sci_Position endPos = styler.LineStart(line + 1) - 1;
-		const Sci_Position pos = LexSkipSpaceTab(startPos, endPos, styler);
+		const Sci_Position pos = LexSkipSpaceTab(styler, startPos, endPos);
 		if (styler[pos] == '.') {
 			return styler.StyleAt(pos) == SCE_SMALI_DIRECTIVE && styler[pos + 1] == 'a';
 		}
@@ -329,7 +331,7 @@ static bool IsAnnotationLine(Sci_Line line, Accessor &styler) noexcept {
 	return false;
 }
 
-static void FoldSmaliDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
+void FoldSmaliDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
 	const Sci_PositionU endPos = startPos + length;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
@@ -355,8 +357,8 @@ static void FoldSmaliDoc(Sci_PositionU startPos, Sci_Position length, int initSt
 
 		if (iswordchar(ch) && style == SCE_SMALI_DIRECTIVE && stylePrev != SCE_SMALI_DIRECTIVE) {
 			char buf[MAX_WORD_LENGTH + 1];
-			LexGetRange(i, styler, IsSmaliWordCharX, buf, sizeof(buf));
-			if (buf[0] == '.' && (IsFoldWord(buf + 1) || (StrEqual(buf + 1,"field") && IsAnnotationLine(lineCurrent + 1, styler)))) {
+			LexGetRange(styler, i, IsSmaliWordCharX, buf, sizeof(buf));
+			if (buf[0] == '.' && (IsFoldWord(buf + 1) || (StrEqual(buf + 1,"field") && IsAnnotationLine(styler, lineCurrent + 1)))) {
 				levelNext++;
 			} else if (buf[0] != '.' && (IsFoldWord(buf) || StrEqual(buf, "field"))) {
 				levelNext--;
@@ -375,6 +377,8 @@ static void FoldSmaliDoc(Sci_PositionU startPos, Sci_Position length, int initSt
 			levelCurrent = levelNext;
 		}
 	}
+}
+
 }
 
 LexerModule lmSmali(SCLEX_SMALI, ColouriseSmaliDoc, "smali", FoldSmaliDoc);

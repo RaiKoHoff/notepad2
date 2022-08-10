@@ -296,14 +296,13 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 
 	// Wrapping support
 	WrapPending wrapPending;
-	ActionDuration durationWrapOneUnit;
 
 	Editor();
 	// ~Editor() in public section
 	virtual void Initialise() noexcept = 0;
 	virtual void Finalise() noexcept;
 
-	void InvalidateStyleData();
+	void InvalidateStyleData() noexcept;
 	void InvalidateStyleRedraw();
 	void RefreshStyleData();
 	void SetRepresentations();
@@ -406,7 +405,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 
 	bool Wrapping() const noexcept;
 	void NeedWrapping(Sci::Line docLineStart = 0, Sci::Line docLineEnd = WrapPending::lineLarge, bool invalidate = true) noexcept;
-	bool WrapOneLine(Surface *surface, Sci::Line lineToWrap);
+	bool WrapOneLine(Surface *surface, Sci::Position positionInsert);
 	enum class WrapScope {
 		wsAll, wsVisible, wsIdle
 	};
@@ -417,7 +416,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	void SCICALL PaintSelMargin(Surface *surfaceWindow, PRectangle rc);
 	void RefreshPixMaps(Surface *surfaceWindow);
 	void SCICALL Paint(Surface *surfaceWindow, PRectangle rcArea);
-	Sci::Position FormatRange(bool draw, const Scintilla::RangeToFormat *pfr);
+	Sci::Position FormatRange(Scintilla::Message iMessage, Scintilla::uptr_t wParam, Scintilla::sptr_t lParam);
 	long TextWidth(Scintilla::uptr_t style, const char *text);
 
 	virtual void SetVerticalScrollPos() = 0;
@@ -528,7 +527,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	void Indent(bool forwards);
 
 	virtual std::unique_ptr<CaseFolder> CaseFolderForEncoding();
-	Sci::Position FindText(Scintilla::uptr_t wParam, Scintilla::sptr_t lParam);
+	Sci::Position FindTextFull(Scintilla::uptr_t wParam, Scintilla::sptr_t lParam);
 	void SearchAnchor() noexcept;
 	Sci::Position SearchText(Scintilla::Message iMessage, Scintilla::uptr_t wParam, Scintilla::sptr_t lParam);
 	Sci::Position SearchInTarget(const char *text, Sci::Position length);
@@ -625,6 +624,8 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	}
 	virtual std::string UTF8FromEncoded(std::string_view encoded) const = 0;
 	virtual std::string EncodedFromUTF8(std::string_view utf8) const = 0;
+	std::unique_ptr<Surface> CreateMeasurementSurface() const;
+	std::unique_ptr<Surface> CreateDrawingSurface(SurfaceID sid, bool printing = false) const;
 
 	Sci::Line WrapCount(Sci::Line line);
 	void AddStyledText(const char *buffer, Sci::Position appendLength);
@@ -719,22 +720,13 @@ public:
  * A smart pointer class to ensure Surfaces are set up and deleted correctly.
  */
 class AutoSurface {
-private:
-	std::unique_ptr<Surface> surf;
+	const std::unique_ptr<Surface> surf;
 public:
-	AutoSurface(const Editor *ed) {
-		if (ed->wMain.GetID()) {
-			surf = Surface::Allocate(ed->technology);
-			surf->Init(ed->wMain.GetID());
-			surf->SetMode(SurfaceMode(ed->CodePage(), ed->BidirectionalR2L()));
-		}
+	explicit AutoSurface(const Editor *ed):
+		surf{ed->CreateMeasurementSurface()} {
 	}
-	AutoSurface(SurfaceID sid, const Editor *ed, std::optional<Scintilla::Technology> technology = {}, bool printing = false) {
-		if (ed->wMain.GetID()) {
-			surf = Surface::Allocate(technology ? *technology : ed->technology);
-			surf->Init(sid, ed->wMain.GetID(), printing);
-			surf->SetMode(SurfaceMode(ed->CodePage(), ed->BidirectionalR2L()));
-		}
+	AutoSurface(SurfaceID sid, const Editor *ed, bool printing = false):
+		surf{ed->CreateDrawingSurface(sid, printing)} {
 	}
 	// Deleted so AutoSurface objects can not be copied.
 	AutoSurface(const AutoSurface &) = delete;

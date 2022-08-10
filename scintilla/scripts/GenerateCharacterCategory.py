@@ -10,25 +10,25 @@ from FileGenerator import Regenerate
 from MultiStageTable import *
 from UnicodeData import *
 
-class CharClassify(IntEnum):
-	ccSpace = 0
-	ccNewLine = 1
-	ccWord = 2
-	ccPunctuation = 3
-	ccCJKWord = 4
+class CharacterClass(IntEnum):
+	Space = 0
+	NewLine = 1
+	Punctuation = 2
+	Word = 3
+	CJKWord = 4
 
-CharClassifyOrder = [CharClassify.ccCJKWord, CharClassify.ccWord, CharClassify.ccPunctuation, CharClassify.ccNewLine]
-def prefCharClassify(values):
-	for value in CharClassifyOrder:
+CharacterClassOrder = [CharacterClass.CJKWord, CharacterClass.Word, CharacterClass.Punctuation, CharacterClass.NewLine]
+def GetPreferredCharacterClass(values):
+	for value in CharacterClassOrder:
 		if value in values:
 			return value
 	# Cn
-	return CharClassify.ccSpace
+	return CharacterClass.Space
 
 # https://en.wikipedia.org/wiki/Unicode_character_property
 # Document::WordCharacterClass()
 CharClassifyMap = {
-	CharClassify.ccSpace: [
+	CharacterClass.Space: [
 		'Zs',
 		# Other
 		'Cc',
@@ -37,11 +37,11 @@ CharClassifyMap = {
 		'Co',
 		'Cn',
 	],
-	CharClassify.ccNewLine: [
+	CharacterClass.NewLine: [
 		'Zl',
 		'Zp',
 	],
-	CharClassify.ccWord: [
+	CharacterClass.Word: [
 		# Letter
 		'Lu',
 		'Ll',
@@ -57,7 +57,7 @@ CharClassifyMap = {
 		'Mc',
 		'Me',
 	],
-	CharClassify.ccPunctuation: [
+	CharacterClass.Punctuation: [
 		# Punctuation
 		'Pc',
 		'Pd',
@@ -74,10 +74,10 @@ CharClassifyMap = {
 	],
 }
 
-ClassifyMap = {}
+CategoryClassifyMap = {}
 for key, items in CharClassifyMap.items():
 	for category in items:
-		ClassifyMap[category] = key
+		CategoryClassifyMap[category] = key
 
 
 # https://en.wikipedia.org/wiki/Private_Use_Areas
@@ -155,7 +155,7 @@ def findCategories(filename):
 	return [v[2:] for v in values]
 
 def isCJKCharacter(category, ch):
-	if category not in CharClassifyMap[CharClassify.ccWord]:
+	if category not in CharClassifyMap[CharacterClass.Word]:
 		return False
 
 	for block in CJKBlockList:
@@ -166,6 +166,19 @@ def isCJKCharacter(category, ch):
 
 def bytesToHex(b):
 	return ''.join(f'\\x{ch:02X}' for ch in b)
+
+SBCSCodePageList = [
+	('cp1250', 1250, 'Central European (Windows-1250)'),
+	('cp1251', 1251, 'Cyrillic (Windows-1251)'),
+	('cp1252', 1252, 'Western European (Windows-1252)'),
+	('cp1253', 1253, 'Greek (Windows-1253)'),
+	('cp1254', 1254, 'Turkish (Windows-1254)'),
+	('cp1255', 1255, 'Hebrew (Windows-1255)'),
+	('cp1256', 1256, 'Arabic (Windows-1256)'),
+	('cp1257', 1257, 'Baltic (Windows-1257)'),
+	('cp1258', 1258, 'Vietnamese (Windows-1258)'),
+	('cp874', 874, 'Thai (Windows-874)'),
+]
 
 def buildFoldDisplayEllipsis():
 	# Interpunct https://en.wikipedia.org/wiki/Interpunct
@@ -211,45 +224,26 @@ def buildFoldDisplayEllipsis():
 		output.append(f'\t\treturn "{key}";')
 	output.append("\t}")
 
-	encodingList = [
-		('cp1250', 1250, 'Central European (Windows-1250)'),
-		('cp1251', 1251, 'Cyrillic (Windows-1251)'),
-		('cp1252', 1252, 'Western European (Windows-1252)'),
-		('cp1253', 1253, 'Greek (Windows-1253)'),
-		('cp1254', 1254, 'Turkish (Windows-1254)'),
-		('cp1255', 1255, 'Hebrew (Windows-1255)'),
-		('cp1256', 1256, 'Arabic (Windows-1256)'),
-		('cp1257', 1257, 'Baltic (Windows-1257)'),
-		('cp1258', 1258, 'Vietnamese (Windows-1258)'),
-		('cp874', 874, 'Thai (Windows-874)'),
-	]
-
 	result = {}
-	fallback = []
-	for encoding, codepage, comment in encodingList:
+	for encoding, codepage, comment in SBCSCodePageList:
 		try:
 			value = defaultText.encode(encoding)
 			value = bytesToHex(value)
+			result[codepage] = value
 		except UnicodeEncodeError:
-			fallback.append((codepage, comment))
-			continue
+			pass
 
-		values = result.setdefault(value, [])
-		values.append((codepage, comment))
-
-	fallback.append(('default', ''))
-	result[fallbackText] = fallback
+	assert len(set(result.values())) == 1
+	assert len(result) == len(SBCSCodePageList) - 1
+	assert 874 not in result
 
 	output.append("\t// SBCS")
-	output.append("\tswitch (acp) {")
-	for key, values in result.items():
-		for codepage, comment in values:
-			if codepage == 'default':
-				output.append("\tdefault:")
-			else:
-				output.append(f"\tcase {codepage}: // {comment}")
-		output.append(f'\t\treturn "{key}";')
-	output.append("\t}")
+	lines = f'''cpEdit = acp - 1250;
+if (cpEdit <= 1258 - 1250) {{
+	return "{result[1250]}";
+}}
+return "{fallbackText}";'''.splitlines()
+	output.extend('\t' + line for line in lines)
 	output.append("}")
 
 	return output
@@ -266,7 +260,7 @@ def getCharClassify(decode, ch):
 		# undefined, treat as Cn, Not assigned
 		category = 'Cn'
 
-	cc = ClassifyMap[category]
+	cc = CategoryClassifyMap[category]
 	return int(cc)
 
 def buildCharClassify(cp):
@@ -281,35 +275,15 @@ def buildCharClassify(cp):
 		ch -= 128
 		output[ch >> 2] |= value << (2 * (ch & 3))
 
-	s = ''.join('%02X' % ch for ch in output)
-	return s, output
+	return output
 
 def buildANSICharClassifyTable(filename):
-	encodingList = [
-		('cp1250', 1250, 'Central European (Windows-1250)'),
-		('cp1251', 1251, 'Cyrillic (Windows-1251)'),
-		('cp1252', 1252, 'Western European (Windows-1252)'),
-		('cp1253', 1253, 'Greek (Windows-1253)'),
-		('cp1254', 1254, 'Turkish (Windows-1254)'),
-		('cp1255', 1255, 'Hebrew (Windows-1255)'),
-		('cp1256', 1256, 'Arabic (Windows-1256)'),
-		('cp1257', 1257, 'Baltic (Windows-1257)'),
-		('cp1258', 1258, 'Vietnamese (Windows-1258)'),
-		('cp874', 874, 'Thai (Windows-874)'),
-	]
-
 	result = {}
 	offset = 0
-	for encoding, codepage, comment in encodingList:
-		s, m = buildCharClassify(encoding)
-		if not s:
-			continue
-
-		if s not in result:
-			result[s] = { 'data': m, 'offset': offset, 'codepage': [(codepage, comment)]}
-			offset += len(m)
-		else:
-			result[s]['codepage'].append((codepage, comment))
+	for encoding, codepage, comment in SBCSCodePageList:
+		data = buildCharClassify(encoding)
+		result[codepage] = { 'data': data, 'offset': offset, 'codepage': [(codepage, comment)]}
+		offset += len(data)
 
 	output = [f"// Created with Python {platform.python_version()}, Unicode {unicodedata.unidata_version}"]
 	output.append("static const uint8_t ANSICharClassifyTable[] = {")
@@ -321,23 +295,25 @@ def buildANSICharClassifyTable(filename):
 	output.append("};")
 	output.append("")
 
-	output.append("static const uint8_t* GetANSICharClassifyTable(UINT cp, int *length) {")
-	output.append("\tswitch (cp) {")
-	for item in result.values():
-		for page in item['codepage']:
-			output.append(f"\tcase {page[0]}: // {page[1]}")
-		output.append(f"\t\treturn ANSICharClassifyTable + {item['offset']};")
-	output.append("\tdefault:")
-	output.append("\t\t*length = 0;")
-	output.append("\t\treturn NULL;")
-	output.append("\t}")
+	output.append("static inline const uint8_t* GetANSICharClassifyTable(UINT acp, int *length) {")
+	lines = f"""const UINT diff = acp - 1250;
+if (diff <= 1258 - 1250) {{
+	return ANSICharClassifyTable + diff*32;
+}}
+if (acp == 874) {{
+	return ANSICharClassifyTable + {result[874]['offset']};
+}}
+*length = 0;
+return NULL;
+""".splitlines()
+	output.extend('\t' + line for line in lines)
 	output.append("}")
 
 	output.append("")
 	ellipsis = buildFoldDisplayEllipsis()
 	output.extend(ellipsis)
 
-	print('ANSICharClassifyTable:', len(result), len(encodingList))
+	print('ANSICharClassifyTable:', len(result), len(SBCSCodePageList))
 	Regenerate(filename, "//", output)
 
 def updateCharClassifyTable(filename, headfile):
@@ -345,9 +321,9 @@ def updateCharClassifyTable(filename, headfile):
 	for ch in range(UnicodeCharacterCount):
 		uch = chr(ch)
 		category = unicodedata.category(uch)
-		value = ClassifyMap[category]
+		value = CategoryClassifyMap[category]
 		if isCJKCharacter(category, ch):
-			value = CharClassify.ccCJKWord
+			value = CharacterClass.CJKWord
 		indexTable[ch] = int(value)
 
 	output = [f"// Created with Python {platform.python_version()}, Unicode {unicodedata.unidata_version}"]
@@ -356,7 +332,7 @@ def updateCharClassifyTable(filename, headfile):
 	valueBit, totalBit, data = runLengthEncode('CharClassify Unicode BMP', indexTable[:BMPCharacterCharacterCount])
 	assert valueBit == 3
 	assert totalBit == 16
-	output.append(f'const uint16_t CharClassifyRLE_BMP[] = {{')
+	output.append('const uint16_t CharClassifyRLE_BMP[] = {')
 	output.extend(dumpArray(data, 20))
 	output.append("};")
 	output.append("")
@@ -404,7 +380,7 @@ def updateCharacterCategoryTable(filename):
 	assert valueBit == 5
 	output.append("#if CharacterCategoryUseRangeList")
 	output.append("const int catRanges[] = {")
-	output.extend(f"{value}," for value in rangeList)
+	#output.extend(f"{value}," for value in rangeList)
 	output.append("};")
 	output.append("")
 	output.append("#else")
@@ -425,7 +401,7 @@ def updateCharacterCategoryTable(filename):
 	assert valueBit == 5
 	assert totalBit == 16
 	output.append("")
-	output.append(f'const uint16_t CatTableRLE_BMP[] = {{')
+	output.append('const uint16_t CatTableRLE_BMP[] = {')
 	output.extend(dumpArray(data, 20))
 	output.append("};")
 
@@ -447,15 +423,15 @@ def getDBCSCharClassify(decode, ch, isReservedOrUDC=None):
 		ch = ord(uch[0])
 		# treat PUA in DBCS as word instead of punctuation or space
 		if isCJKCharacter(category, ch) or (category == 'Co' and isPrivateChar(ch)):
-			return int(CharClassify.ccCJKWord)
+			return int(CharacterClass.CJKWord)
 	else:
 		# treat reserved or user-defined characters as word
 		if isReservedOrUDC and isReservedOrUDC(ch, buf):
-			return int(CharClassify.ccCJKWord)
+			return int(CharacterClass.CJKWord)
 		# undefined, treat as Cn, Not assigned
 		category = 'Cn'
 
-	cc = ClassifyMap[category]
+	cc = CategoryClassifyMap[category]
 	return int(cc)
 
 def makeDBCSCharClassifyTable(output, encodingList, isReservedOrUDC=None):
@@ -472,7 +448,7 @@ def makeDBCSCharClassifyTable(output, encodingList, isReservedOrUDC=None):
 
 	indexTable = [0] * DBCSCharacterCount
 	for ch in range(DBCSCharacterCount):
-		indexTable[ch] = int(prefCharClassify(result[ch]))
+		indexTable[ch] = int(GetPreferredCharacterClass(result[ch]))
 
 	suffix = '_' + encodingList[0].upper()
 	head = 'CharClassify' + suffix
@@ -493,13 +469,13 @@ def makeDBCSCharClassifyTable(output, encodingList, isReservedOrUDC=None):
 	if False:
 		config = {
 			'tableName': 'CharClassifyTable' + suffix,
-			'function': f"""CharClassify::cc ClassifyCharacter{suffix}(uint32_t ch) noexcept {{
+			'function': f"""CharacterClass ClassifyCharacter{suffix}(uint32_t ch) noexcept {{
 	if (ch > maxDBCSCharacter) {{
 		// Cn
-		return CharClassify::ccSpace;
+		return CharacterClass::space;
 	}}
 	""",
-			'returnType': 'CharClassify::cc'
+			'returnType': 'CharacterClass'
 		}
 
 		table, function = buildMultiStageTable(head, indexTable, config)

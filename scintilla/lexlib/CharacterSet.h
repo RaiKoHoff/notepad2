@@ -141,6 +141,10 @@ constexpr bool IsSpaceOrTab(int ch) noexcept {
 	return ch == ' ' || ch == '\t';
 }
 
+constexpr int GetTabIndentCount(int indentCount) noexcept {
+	return (indentCount + 4) & ~3;
+}
+
 constexpr bool IsControlCharacter(unsigned char ch) noexcept {
 	// iscntrl() returns true for lots of characters > 127 which are displayable,
 	// currently only check C0 control characters.
@@ -170,6 +174,16 @@ constexpr bool IsHexDigit(int ch) noexcept {
 	return (ch >= '0' && ch <= '9')
 		|| (ch >= 'A' && ch <= 'F')
 		|| (ch >= 'a' && ch <= 'f');
+}
+
+constexpr bool IsLowerHex(int ch) noexcept {
+	return (ch >= '0' && ch <= '9')
+		|| (ch >= 'a' && ch <= 'f');
+}
+
+constexpr bool IsUpperHex(int ch) noexcept {
+	return (ch >= '0' && ch <= '9')
+		|| (ch >= 'A' && ch <= 'F');
 }
 
 constexpr bool IsOctalDigit(int ch) noexcept {
@@ -323,7 +337,16 @@ constexpr bool IsCommentTagPrev(int chPrev) noexcept {
 	return chPrev <= 32 || AnyOf(chPrev, '/', '*', '!');
 }
 
+constexpr bool IsSchemeNameChar(int ch) noexcept {
+	return IsAlphaNumeric(ch) || ch == '+' || ch == '-' || ch == '.';
+}
+
+constexpr bool IsDomainNameChar(int ch) noexcept {
+	return IsIdentifierChar(ch) || ch == '-';
+}
+
 constexpr bool IsInvalidUrlChar(int ch) noexcept {
+	// TODO: https://url.spec.whatwg.org/ and https://www.rfc-editor.org/rfc/rfc3986
 	return ch <= 32 || AnyOf(ch, '"', '<', '>', '\\', '^', '`', '{', '|', '}', 127);
 }
 
@@ -359,5 +382,14 @@ constexpr T MakeLowerCase(T ch) noexcept {
 #define CompareCaseInsensitive		_stricmp
 #define CompareNCaseInsensitive		_strnicmp
 #endif
+
+inline void ToLowerCase(char *s) noexcept {
+	while (*s) {
+		if (*s >= 'A' && *s <= 'Z') {
+			*s += 'a' - 'A';
+		}
+		++s;
+	}
+}
 
 }

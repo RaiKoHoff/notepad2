@@ -170,8 +170,6 @@ public:
 struct SurfaceMode final {
 	int codePage = 0;
 	bool bidiR2L = false;
-	constexpr SurfaceMode() = default;
-	constexpr explicit SurfaceMode(int codePage_, bool bidiR2L_) noexcept : codePage(codePage_), bidiR2L(bidiR2L_) {}
 };
 
 /**
@@ -192,6 +190,7 @@ public:
 	virtual std::unique_ptr<Surface> AllocatePixMap(int width, int height) = 0;
 
 	virtual void SetMode(SurfaceMode mode) noexcept = 0;
+	virtual void SetRenderingParams(void *defaultRenderingParams, void *customRenderingParams) noexcept = 0;
 
 	enum class Ends {
 		semiCircles = 0x0,

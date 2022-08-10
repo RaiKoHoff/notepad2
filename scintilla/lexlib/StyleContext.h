@@ -51,21 +51,7 @@ public:
 	Sci_Position width = 1;
 	Sci_Position widthNext = 1;
 
-	StyleContext(Sci_PositionU startPos, Sci_PositionU length,
-		int initStyle, LexAccessor &styler_) noexcept :
-	styler(styler_),
-	endPos(styler.StyleEndPos(startPos, length)),
-	currentLine(styler.GetLine(startPos)),
-	lineDocEnd(styler.GetLine(styler.Length())),
-	multiByteAccess(styler.Encoding() == EncodingType::dbcs),
-	state(initStyle) {
-		styler.StartAt(startPos);
-		styler.StartSegment(startPos);
-		//lineEnd = styler.LineEnd(currentLine);
-		lineStartNext = styler.LineStart(currentLine + 1);
-		atLineStart = static_cast<Sci_PositionU>(styler.LineStart(currentLine)) == startPos;
-		SeekTo(startPos);
-	}
+	StyleContext(Sci_PositionU startPos, Sci_PositionU length, int initStyle, LexAccessor &styler_) noexcept;
 	// Deleted so StyleContext objects can not be copied.
 	StyleContext(const StyleContext &) = delete;
 	StyleContext(StyleContext &&) = delete;
@@ -160,7 +146,7 @@ public:
 			}
 			const Sci_Position diffRelative = n - offsetRelative;
 			const Sci_Position posNew = styler.GetRelativePosition(posRelative, diffRelative);
-			const int chReturn = styler.GetCharacterAndWidth(posNew, nullptr);
+			const int chReturn = styler.GetCharacterAt(posNew);
 			posRelative = posNew;
 			currentPosLastRelative = currentPos;
 			offsetRelative = n;
@@ -229,16 +215,18 @@ public:
 	}
 
 	void SeekTo(Sci_PositionU startPos) noexcept {
+		assert(startPos < lineStartNext && startPos >= static_cast<Sci_PositionU>(styler.LineStart(currentLine)));
 		currentPos = startPos;
 		chPrev = 0;
 		if (!multiByteAccess) {
 			ch = static_cast<unsigned char>(styler[startPos]);
 			chNext = static_cast<unsigned char>(styler.SafeGetCharAt(startPos + 1));
 		} else {
-			ch =  styler.GetCharacterAndWidth(startPos, &widthNext);
+			ch = styler.GetCharacterAndWidth(startPos, &widthNext);
 			width = widthNext;
 			chNext = styler.GetCharacterAndWidth(startPos + width, &widthNext);
 		}
+		//atLineStart = static_cast<Sci_PositionU>(styler.LineStart(currentLine)) == startPos;
 		atLineEnd = startPos >= lineStartNext - (currentLine < lineDocEnd);
 	}
 
@@ -246,15 +234,24 @@ public:
 		SeekTo(styler.GetStartSegment());
 	}
 
-	void BackTo(Sci_PositionU startPos) {
-		assert(startPos < styler.GetStartSegment());
-		styler.Flush();
-		styler.StartAt(startPos);
-		styler.StartSegment(startPos);
+	[[nodiscard]] bool BackTo(Sci_PositionU startPos) {
+		assert(startPos <= styler.GetStartSegment());
+		if (startPos < styler.GetStartSegment()) {
+			styler.Flush();
+			styler.StartAt(startPos);
+			styler.StartSegment(startPos);
+		}
+
+		const Sci_Line previousLine = currentLine;
+		currentLine = styler.GetLine(startPos);
+		//lineEnd = styler.LineEnd(currentLine);
+		lineStartNext = styler.LineStart(currentLine + 1);
 		SeekTo(startPos);
+		return previousLine != currentLine;
 	}
 
 	void Advance(Sci_Position nb) noexcept {
+		assert(nb >= 0 && currentPos + nb < lineStartNext);
 		if (nb) {
 			SeekTo(currentPos + nb);
 		}
@@ -279,23 +276,28 @@ public:
 		if (!IsWhiteSpace(chNext)) {
 			return chNext;
 		}
-		return LexGetNextChar(currentPos + 2, styler);
+		// currentPos + width + widthNext
+		return LexGetNextChar(styler, currentPos + 2);
 	}
 
 	int GetLineNextChar(bool ignoreCurrent = false) const noexcept {
 		if (!ignoreCurrent && !IsWhiteSpace(ch)) {
 			return ch;
 		}
+		// currentPos + width for Unicode line ending
 		if (currentPos + 1 == lineStartNext) {
 			return '\0';
 		}
 		if (!IsWhiteSpace(chNext)) {
 			return chNext;
 		}
-		return LexGetNextChar(currentPos + 2, lineStartNext, styler);
+		// currentPos + width + widthNext
+		return LexGetNextChar(styler, currentPos + 2, lineStartNext);
 	}
 };
 
 bool HighlightTaskMarker(StyleContext &sc, int &visibleChars, int visibleCharsBefore, int markerStyle);
+
+bool IsCppInDefine(LexAccessor &styler, Sci_Position currentPos) noexcept;
 
 }

@@ -7,15 +7,15 @@
 #include <cstdlib>
 #include <vector>
 
-#include "include/VectorISA.h"
-#include "include/GraphicUtils.h"
+#include "../include/VectorISA.h"
+#include "../include/GraphicUtils.h"
 #if defined(_MSC_VER)
 #pragma comment(lib, "gdi32.lib")
 #endif
 
-// cl /EHsc /std:c++17 /DNDEBUG /Ox /Ot /FAcs /GS- /GR- /Gv /W4 /arch:AVX2 GraphicTest.cpp
-// clang-cl /EHsc /std:c++17 /DNDEBUG /Ox /Ot /FA /GS- /GR- /Gv /W4 -march=x86-64-v3 GraphicTest.cpp
-// g++ -S -std=gnu++17 -DNDEBUG -O3 -fno-rtti -Wall -Wextra -march=x86-64-v3 GraphicTest.cpp
+// cl /EHsc /std:c++20 /DNDEBUG /Ox /Ot /FAcs /GS- /GR- /Gv /W4 /arch:AVX2 GraphicTest.cpp
+// clang-cl /EHsc /std:c++20 /DNDEBUG /Ox /Ot /FA /GS- /GR- /Gv /W4 -march=x86-64-v3 GraphicTest.cpp
+// g++ -S -std=gnu++20 -DNDEBUG -O3 -fno-rtti -Wall -Wextra -march=x86-64-v3 GraphicTest.cpp
 
 struct ColourRGBA {
 	uint32_t color;

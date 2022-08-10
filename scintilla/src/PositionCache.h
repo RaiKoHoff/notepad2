@@ -46,18 +46,18 @@ class LineLayout final {
 private:
 	friend class LineLayoutCache;
 	std::unique_ptr<int[]> lineStarts;
-	int lenLineStarts;
 	/// Drawing is only performed for @a maxLineLength characters on each line.
 	const Sci::Line lineNumber;
+	int lenLineStarts;
 public:
 	enum {
 		wrapWidthInfinite = 0x7ffffff
 	};
 
 	int maxLineLength;
+	int lastSegmentEnd;
 	int numCharsInLine;
 	int numCharsBeforeEOL;
-	int lastSegmentEnd;
 	enum class ValidLevel {
 		invalid, checkTextAndStyle, positions, lines
 	} validity;
@@ -66,6 +66,7 @@ public:
 	bool containsCaret;
 	unsigned char bracePreviousStyles[2];
 	int edgeColumn;
+	int caretPosition;
 	std::unique_ptr<char[]> chars;
 	std::unique_ptr<unsigned char[]> styles;
 	std::unique_ptr<XYPOSITION[]> positions;
@@ -156,7 +157,7 @@ private:
 	int styleClock;
 	void AllocateForLevel(Sci::Line linesOnScreen, Sci::Line linesInDoc);
 public:
-	LineLayoutCache();
+	LineLayoutCache() noexcept;
 	// Deleted so LineLayoutCache objects can not be copied.
 	LineLayoutCache(const LineLayoutCache &) = delete;
 	LineLayoutCache(LineLayoutCache &&) = delete;
@@ -174,20 +175,12 @@ public:
 };
 
 class PositionCacheEntry {
-	uint16_t styleNumber;
-	uint16_t len;
-	uint32_t clock;
+	uint16_t styleNumber = 0;
+	uint16_t clock = 0;
+	uint32_t len = 0;
 	std::unique_ptr<XYPOSITION[]> positions;
 public:
-	PositionCacheEntry() noexcept;
-	// Copy constructor not currently used, but needed for being element in std::vector.
-	PositionCacheEntry(const PositionCacheEntry &);
-	PositionCacheEntry(PositionCacheEntry &&) noexcept = default;
-	// Deleted so PositionCacheEntry objects can not be assigned.
-	void operator=(const PositionCacheEntry &) = delete;
-	void operator=(PositionCacheEntry &&) = delete;
-	~PositionCacheEntry();
-	void Set(uint16_t styleNumber_, std::string_view sv, const XYPOSITION *positions_, uint32_t clock_);
+	void Set(uint16_t styleNumber_, size_t length, std::unique_ptr<XYPOSITION[]> &positions_, uint32_t clock_) noexcept;
 	void Clear() noexcept;
 	bool Retrieve(uint16_t styleNumber_, std::string_view sv, XYPOSITION *positions_) const noexcept;
 	static size_t Hash(uint16_t styleNumber_, std::string_view sv) noexcept;
@@ -197,12 +190,19 @@ public:
 
 class Representation {
 public:
-	static constexpr size_t maxLength = 200;
-	std::string stringRep;
-	RepresentationAppearance appearance;
+	// for Unicode control or format characters in hex code form
+	static constexpr size_t maxLength = 7;
+	char stringRep[maxLength + 1]{};
+	size_t length;
+	RepresentationAppearance appearance = RepresentationAppearance::Blob;
 	ColourRGBA colour;
-	explicit Representation(std::string_view value="", RepresentationAppearance appearance_= RepresentationAppearance::Blob) :
-		stringRep(value), appearance(appearance_) {}
+	explicit Representation(std::string_view value) noexcept {
+		memcpy(stringRep, value.data(), value.length());
+		length = value.length();
+	}
+	std::string_view GetStringRep() const noexcept {
+		return {stringRep, length};
+	}
 };
 
 class SpecialRepresentations {
@@ -232,29 +232,30 @@ public:
 };
 
 struct TextSegment {
-	int start;
-	int length;
-	const Representation *representation;
-	TextSegment(int start_ = 0, int length_ = 0, const Representation *representation_ = nullptr) noexcept :
-		start(start_), length(length_), representation(representation_) {}
+	const int start;
+	const int length;
+	const Representation * const representation;
 	int end() const noexcept {
 		return start + length;
 	}
 };
 
+class EditModel;
+
 // Class to break a line of text into shorter runs at sensible places.
 class BreakFinder {
 	const LineLayout *ll;
-	Range lineRange;
-	Sci::Position posLineStart;
 	int nextBreak;
 	int subBreak;
+	const int endPos;
+	int stopPos;
+	int currentPos;
 	std::vector<int> selAndEdge;
 	unsigned int saeCurrentPos;
 	int saeNext;
 	const Document *pdoc;
 	const EncodingFamily encodingFamily;
-	const SpecialRepresentations *preprs;
+	const SpecialRepresentations &reprs;
 	void Insert(Sci::Position val);
 public:
 	// If a whole run is longer than lengthStartSubdivision then subdivide
@@ -271,9 +272,10 @@ public:
 		Selection = 1,
 		Foreground = 2,
 		ForegroundAndSelection = 3,
+		Layout = 4,
 	};
-	BreakFinder(const LineLayout *ll_, const Selection *psel, Range lineRange_, Sci::Position posLineStart_,
-		XYPOSITION xStart, BreakFor breakFor, const Document *pdoc_, const SpecialRepresentations *preprs_, const ViewStyle *pvsDraw);
+	BreakFinder(const LineLayout *ll_, const Selection *psel, Range lineRange, Sci::Position posLineStart,
+		XYPOSITION xStart, BreakFor breakFor, const EditModel &model, const ViewStyle *pvsDraw, uint32_t posInLine);
 	// Deleted so BreakFinder objects can not be copied.
 	BreakFinder(const BreakFinder &) = delete;
 	BreakFinder(BreakFinder &&) = delete;
@@ -281,7 +283,12 @@ public:
 	void operator=(BreakFinder &&) = delete;
 	~BreakFinder();
 	TextSegment Next();
-	bool More() const noexcept;
+	bool More() const noexcept {
+		return currentPos < stopPos;
+	}
+	int CurrentPos() const noexcept {
+		return currentPos;
+	}
 };
 
 class PositionCache {
@@ -293,8 +300,7 @@ public:
 	void Clear() noexcept;
 	void SetSize(size_t size_);
 	size_t GetSize() const noexcept;
-	void MeasureWidths(Surface *surface, const ViewStyle &vstyle, uint16_t styleNumber,
-		std::string_view sv, XYPOSITION *positions);
+	void MeasureWidths(Surface *surface, const Style &style, uint16_t styleNumber, std::string_view sv, XYPOSITION *positions);
 };
 
 }

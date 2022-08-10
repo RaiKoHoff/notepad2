@@ -249,7 +249,7 @@ BEGIN
 				MENUITEM "가타카나를 히라가나로(&H)",		IDM_EDIT_MAP_HIRAGANA
 				MENUITEM "히라가나를 가타카나로(&K)",		IDM_EDIT_MAP_KATAKANA
 				MENUITEM SEPARATOR
-				MENUITEM "Korean Han&ja to Hangul",		        IDM_EDIT_MAP_HANJA_HANGUL
+				MENUITEM "한국어 한자를 한글로(&J)",		        IDM_EDIT_MAP_HANJA_HANGUL
 				MENUITEM "한글을 풀어쓰기로(&G)",		IDM_EDIT_MAP_HANGUL_DECOMPOSITION
 				MENUITEM SEPARATOR
 				MENUITEM "벵골 문자를 라틴 문자로(&B)",					IDM_EDIT_MAP_BENGALI_LATIN
@@ -296,6 +296,7 @@ BEGIN
 				MENUITEM "ISS\t대칭 교환 금지(&Y)",		IDM_INSERT_UNICODE_ISS
 				MENUITEM "AAFS\t아랍어 양식 형성 활성화(&F)",		IDM_INSERT_UNICODE_AAFS
 				MENUITEM "IAFS\t아랍어 양식 형성 금지(&H)",		IDM_INSERT_UNICODE_IAFS
+				MENUITEM "ALM\t아랍어 문자 표시(&A)",		        IDM_INSERT_UNICODE_ALM
 				MENUITEM "RS\t기록 구분 (블록 구분)(&B)", IDM_INSERT_UNICODE_RS
 				MENUITEM "US\t단위 구분 (세그먼트 구분)(&S)", IDM_INSERT_UNICODE_US
 				MENUITEM "LS\t줄 구분(&I)",						IDM_INSERT_UNICODE_LS
@@ -502,10 +503,10 @@ BEGIN
 		END
 		POPUP "CSS 스타일 시트(&H)"
 		BEGIN
-			MENUITEM "&CSS",						IDM_LEXER_CSS
-			MENUITEM "&Sassy CSS",					IDM_LEXER_SCSS
-			MENUITEM "&Less CSS",					IDM_LEXER_LESS
-			MENUITEM "&HSS",						IDM_LEXER_HSS
+			MENUITEM "CSS 스타일 시트(&C)",			IDM_LEXER_CSS
+			MENUITEM "SCSS 스타일 시트(&S)",			IDM_LEXER_SCSS
+			MENUITEM "Less 스타일 시트(&L)",			IDM_LEXER_LESS
+			MENUITEM "HSS 스타일 시트(&H)",			IDM_LEXER_HSS
 		END
 		POPUP "웹 소스 코드(&W)"
 		BEGIN
@@ -516,6 +517,12 @@ BEGIN
 			MENUITEM "ASP.NET (VB.NET)(&V)",			IDM_LEXER_ASPX_VB
 			MENUITEM "ASP (VB스크립트)(&B)",				IDM_LEXER_ASP_VBS
 			MENUITEM "ASP (J스크립트)(&S)",				IDM_LEXER_ASP_JS
+		END
+		POPUP "Mark&down"
+		BEGIN
+			MENUITEM "Git&Hub GFM",					IDM_LEXER_MARKDOWN_GITHUB
+			MENUITEM "Git&Lab GFM",					IDM_LEXER_MARKDOWN_GITLAB
+			MENUITEM "&Pandoc",						IDM_LEXER_MARKDOWN_PANDOC
 		END
 		POPUP "수학(&M)"
 		BEGIN
@@ -581,7 +588,12 @@ BEGIN
 		MENUITEM "자동 완성 설정(&A)...",	IDM_VIEW_AUTOCOMPLETION_SETTINGS
 		MENUITEM "대소문자 무시 자동 완성(&G)",	IDM_VIEW_AUTOCOMPLETION_IGNORECASE
 		MENUITEM "LaTeX 입력 방법 활성화(&X)",		IDM_SET_LATEX_INPUT_METHOD
-		MENUITEM "줄 선택 모드 사용(&M)",		IDM_SET_LINE_SELECTION_MODE
+		POPUP "줄 선택 모드 사용(&M)"
+		BEGIN
+			MENUITEM "없음(&N)",						IDM_LINE_SELECTION_MODE_NONE
+			MENUITEM "Visual Studio(&V)",				IDM_LINE_SELECTION_MODE_VS
+			MENUITEM "정상(&M)",						IDM_LINE_SELECTION_MODE_NORMAL
+		END
 		MENUITEM SEPARATOR
 		POPUP "외형(&E)"
 		BEGIN
@@ -640,7 +652,7 @@ BEGIN
 		MENUITEM SEPARATOR
 		MENUITEM "단일 파일 인스턴스(&F)",			IDM_VIEW_SINGLEFILEINSTANCE
 		MENUITEM "파일 변경 알림(&C)...\tAlt+F5",	IDM_VIEW_CHANGENOTIFY
-		MENUITEM "A&utoSave Settings...",			IDM_SET_FILE_AUTOSAVE
+		MENUITEM "자동 저장 설정(&U)...",			IDM_SET_FILE_AUTOSAVE
 		POPUP "추가 Esc 키 기능(&K)"
 		BEGIN
 			MENUITEM "없음(&N)",						IDM_VIEW_NOESCFUNC
@@ -983,7 +995,8 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_NOFAILCREATE | WS_POPUP | WS
 CAPTION "Notepad2"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
-    DEFPUSHBUTTON   "확인",IDOK,198,123,50,14
+    DEFPUSHBUTTON   "확인",IDOK,142,123,50,14
+    PUSHBUTTON      "복사",IDC_COPY_BUILD_INFO,198,123,50,14
     ICON            IDR_MAINWND,IDC_STATIC,7,7,20,20
     LTEXT           "",IDC_VERSION,45,7,200,8
     LTEXT           "",IDC_BUILD_INFO,45,18,200,16
@@ -993,15 +1006,15 @@ BEGIN
     LTEXT           "Copyright © 2010-2017 XhmikosR and all contributors.",IDC_STATIC,45,60,200,8
     LTEXT           "",IDC_MOD_PAGE_TEXT,45,68,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_MOD_PAGE_LINK,"SysLink",WS_TABSTOP,45,68,200,10
-    LTEXT           "Copyright © 2011-2021 Zufu Liu and all contributors.",IDC_STATIC,45,80,200,8
+    LTEXT           "Copyright © 2011-2022 Zufu Liu and all contributors.",IDC_STATIC,45,80,200,8
     LTEXT           "",IDC_NEW_PAGE_TEXT,45,80,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_NEW_PAGE_LINK,"SysLink",WS_TABSTOP,45,88,200,10
-    LTEXT           "Florian Balmer에게 연락:",IDC_STATIC,45,100,140,8
-    LTEXT           "",IDC_EMAIL_TEXT,45,108,140,8,NOT WS_VISIBLE | WS_DISABLED
-    CONTROL         "",IDC_EMAIL_LINK,"SysLink",WS_TABSTOP,45,108,140,10
-    LTEXT           "Scintilla 웹 사이트 방문:",IDC_STATIC,45,120,140,8
-    LTEXT           "",IDC_SCI_PAGE_TEXT,45,128,140,8,NOT WS_VISIBLE | WS_DISABLED
-    CONTROL         "",IDC_SCI_PAGE_LINK,"SysLink",WS_TABSTOP,45,128,140,10
+    LTEXT           "Florian Balmer에게 연락:",IDC_STATIC,45,100,94,8
+    LTEXT           "",IDC_EMAIL_TEXT,45,108,94,8,NOT WS_VISIBLE | WS_DISABLED
+    CONTROL         "",IDC_EMAIL_LINK,"SysLink",WS_TABSTOP,45,108,94,10
+    LTEXT           "Scintilla 웹 사이트 방문:",IDC_STATIC,45,120,94,8
+    LTEXT           "",IDC_SCI_PAGE_TEXT,45,128,94,8,NOT WS_VISIBLE | WS_DISABLED
+    CONTROL         "",IDC_SCI_PAGE_LINK,"SysLink",WS_TABSTOP,45,128,94,10
 END
 
 IDD_FIND DIALOGEX 0, 0, 317, 112
@@ -1585,17 +1598,17 @@ END
 
 IDD_AUTOSAVE DIALOGEX 0, 0, 184, 81
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "AutoSave Settings"
+CAPTION "자동 저장 설정"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
-    AUTOCHECKBOX    "Enable AutoSave.",IDC_AUTOSAVE_ENABLE,7,7,170,10,WS_GROUP | WS_TABSTOP
-    LTEXT           "AutoSave period (in second):",IDC_STATIC,14,19,120,10,SS_RIGHT
+    AUTOCHECKBOX    "자동 저장 사용함",IDC_AUTOSAVE_ENABLE,7,7,170,10,WS_GROUP | WS_TABSTOP
+    LTEXT           "자동 저장 기간 (초):",IDC_STATIC,14,19,120,10,SS_RIGHT
     EDITTEXT        IDC_AUTOSAVE_PERIOD,140,17,30,12,ES_AUTOHSCROLL
-    AUTOCHECKBOX    "Save backup on system suspend.",IDC_AUTOSAVE_SUSPEND,7,31,170,10,WS_GROUP | WS_TABSTOP
-    AUTOCHECKBOX    "Save backup on system shutdown.",IDC_AUTOSAVE_SHUTDOWN,7,43,170,10,WS_TABSTOP
-    PUSHBUTTON      "Open Folder",IDC_AUTOSAVE_OPENFOLDER,7,60,60,14
-    DEFPUSHBUTTON   "OK",IDOK,71,60,50,14
-    PUSHBUTTON      "Cancel",IDCANCEL,127,60,50,14
+    AUTOCHECKBOX    "시스템 일시 중단 시 백업 저장",IDC_AUTOSAVE_SUSPEND,7,31,170,10,WS_GROUP | WS_TABSTOP
+    AUTOCHECKBOX    "시스템 종료 시 백업 저장",IDC_AUTOSAVE_SHUTDOWN,7,43,170,10,WS_TABSTOP
+    PUSHBUTTON      "폴더 열기",IDC_AUTOSAVE_OPENFOLDER,7,60,60,14
+    DEFPUSHBUTTON   "확인",IDOK,71,60,50,14
+    PUSHBUTTON      "취소",IDCANCEL,127,60,50,14
 END
 
 
@@ -2151,8 +2164,8 @@ BEGIN
 	IDS_CUSTOMIZE_SCHEMES_HELP		"확장자는 세미콜론(;)으로 구분되어야 합니다.\r\n\
 \r\n\
 스타일 형식:\r\n\
-\tfont:Name; size:[+|-]nn.mm; weight:nnn; bold; italic; underline; strike;\r\n\
-\tcharset:dd; locale:Name; case:[Upper|Lower|Camel];\r\n\
+\tfont:Name; size:[+|-]nn.mm; weight:nnn; bold; italic;\r\n\
+\tunderline; strike; overline; charset:dd; locale:Name;\r\n\
 \tfore:#RRGGBB; back:#RRGGBB; alpha:aa; outline:aa; eolfilled;\r\n\
 \r\n\
 스타일 속성은 복사/붙여넣기, 또는 끌어서 놓기로 복사할 수 있습니다.\r\n\
@@ -2197,6 +2210,7 @@ BEGIN
 	NP2STYLE_Bookmark				"책갈피"
 	NP2STYLE_CallTip				"호출팁"
 	NP2STYLE_CodeFolding			"코드 접기"
+	NP2STYLE_Link					"링크"
 
 	NP2STYLE_Default				"기본값"
 END

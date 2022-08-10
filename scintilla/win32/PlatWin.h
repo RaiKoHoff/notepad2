@@ -27,21 +27,16 @@
 #define USER_DEFAULT_SCREEN_DPI		96
 #endif
 
-#if !defined(DISABLE_D2D)
-#define USE_D2D		1
-#endif
-
-#if defined(USE_D2D)
-#if defined(_MSC_BUILD) && (VER_PRODUCTVERSION_W <= _WIN32_WINNT_WIN7)
+#if defined(_MSC_BUILD) && (_WIN32_WINNT < _WIN32_WINNT_VISTA)
 #pragma warning(push)
 #pragma warning(disable: 4458)
+// Win32 XP v141_xp toolset with Windows 7 SDK.
 // d2d1helper.h(677,19): warning C4458:  declaration of 'a' hides class member
 #endif
 #include <d2d1.h>
 #include <dwrite.h>
-#if defined(_MSC_BUILD) && (VER_PRODUCTVERSION_W <= _WIN32_WINNT_WIN7)
+#if defined(_MSC_BUILD) && (_WIN32_WINNT < _WIN32_WINNT_VISTA)
 #pragma warning(pop)
-#endif
 #endif
 
 // force compile C as CPP
@@ -194,26 +189,16 @@ inline UINT DpiForWindow(WindowID wid) noexcept {
 HCURSOR LoadReverseArrowCursor(UINT dpi) noexcept;
 
 constexpr BYTE Win32MapFontQuality(FontQuality extraFontFlag) noexcept {
-	switch (extraFontFlag & FontQuality::QualityMask) {
-
-	case FontQuality::QualityNonAntialiased:
-		return NONANTIALIASED_QUALITY;
-
-	case FontQuality::QualityAntialiased:
-		return ANTIALIASED_QUALITY;
-
-	case FontQuality::QualityLcdOptimized:
-		return CLEARTYPE_QUALITY;
-
-	default:
-		return DEFAULT_QUALITY;
-	}
+	constexpr UINT mask = (DEFAULT_QUALITY << static_cast<int>(FontQuality::QualityDefault))
+		| (NONANTIALIASED_QUALITY << (4 *static_cast<int>(FontQuality::QualityNonAntialiased)))
+		| (ANTIALIASED_QUALITY << (4 * static_cast<int>(FontQuality::QualityAntialiased)))
+		| (CLEARTYPE_QUALITY << (4 * static_cast<int>(FontQuality::QualityLcdOptimized)))
+		;
+	return static_cast<BYTE>((mask >> (4*static_cast<int>(extraFontFlag & FontQuality::QualityMask))) & 15);
 }
 
-#if defined(USE_D2D)
 extern bool LoadD2D() noexcept;
 extern ID2D1Factory *pD2DFactory;
 extern IDWriteFactory *pIDWriteFactory;
-#endif
 
 }
