@@ -50,7 +50,7 @@ def UpdateFile(filename, updated):
         newOrChanged = "New"
     with open(filename, "w", encoding="utf-8", newline='') as outfile:
         outfile.write(updated)
-    print(newOrChanged, filename)
+    print("%s:0: %s" % (filename, newOrChanged))
 
 # Automatically generated sections contain start and end comments,
 # a definition line and the results.
@@ -228,9 +228,9 @@ def FindSectionInList(lines, markers):
                 end = i
                 state = 3
     # Check that section was found
-    if start == -1:
+    if start < 0:
         raise Exception("Could not find start marker(s) |" + markers[0] + "|" + markers[1] + "|")
-    if end == -1:
+    if end < 0:
         raise Exception("Could not find end marker " + markers[2])
     return slice(start, end)
 

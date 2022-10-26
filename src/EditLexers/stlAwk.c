@@ -12,14 +12,14 @@ static KEYWORDLIST Keywords_Awk = {{
 
 , // 2 built-in function
 "and( asort( asorti( atan2( bindtextdomain( close( compl( cos( dcgettext( dcngettext( exp( fflush( gensub( gsub( "
-"index( int( isarray( length( log( lshift( match( mktime( or( patsplit( rand( rshift( "
+"index( int( isarray( length( log( lshift( match( mkbool( mktime( or( patsplit( rand( rshift( "
 "sin( split( sprintf( sqrt( srand( strftime( strtonum( sub( substr( system( systime( tolower( toupper( typeof( xor( "
 
 , // 3 library function
 "adequate_math_precision( assert( beginfile( bits2str( chr( cliff_rand( ctime( disable_assigns( "
 "endfile( endgrent( endpwent( "
-"getgrent( getgrgid( getgrnam( getgruser( getlocaltime( getopt( getpwent( getpwnam( getpwuid( intdiv0( join( ord( "
-"process_array( quicksort( quicksort_swap( readfile( rewind( round( shell_quote( walk_array( zerofile( "
+"getgrent( getgrgid( getgrnam( getgruser( getlocaltime( getopt( getpwent( getpwnam( getpwuid( intdiv0( isnumeric( join( "
+"ord( process_array( quicksort( quicksort_swap( readfile( rewind( round( shell_quote( walk_array( zerofile( "
 
 , // 4 misc
 "AWKBUFSIZE AWKLIBPATH AWKPATH AWKREADFUNC AWK_HASH "
@@ -43,13 +43,13 @@ static EDITSTYLE Styles_Awk[] = {
 	{ SCE_AWK_FUNCTION, NP2StyleX_Function, L"fore:#A46000" },
 	{ SCE_AWK_BUILTIN_FUNCTION, NP2StyleX_BuiltInFunction, L"fore:#0080C0" },
 	{ SCE_AWK_BUILTIN_VARIABLE, NP2StyleX_PredefinedVariable, L"fore:#B000B0" },
+	{ SCE_AWK_VARIABLE, NP2StyleX_Variable, L"fore:#CC3300" },
 	{ SCE_AWK_COMMENTLINE, NP2StyleX_Comment, L"fore:#608060" },
 	{ SCE_AWK_STRING, NP2StyleX_String, L"fore:#008000" },
 	{ SCE_AWK_ESCAPECHAR, NP2StyleX_EscapeSequence, L"fore:#0080C0" },
 	{ SCE_AWK_FORMAT_SPECIFIER, NP2StyleX_FormatSpecifier, L"fore:#7C5AF3" },
 	{ SCE_AWK_REGEX, NP2StyleX_Regex, L"fore:#006633; back:#FFF1A8" },
 	{ SCE_AWK_NUMBER, NP2StyleX_Number, L"fore:#FF0000" },
-	{ SCE_AWK_VARIABLE, NP2StyleX_Variable, L"fore:#CC3300" },
 	{ MULTI_STYLE(SCE_AWK_OPERATOR, SCE_AWK_OPERATOR_PF, 0, 0), NP2StyleX_Operator, L"fore:#B000B0" },
 };
 

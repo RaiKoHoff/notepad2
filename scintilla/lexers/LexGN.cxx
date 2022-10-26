@@ -77,12 +77,12 @@ void ColouriseGNDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 			if (!IsIdentifierChar(sc.ch)) {
 				char s[128];
 				sc.GetCurrent(s, sizeof(s));
-				if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+				if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 					sc.ChangeState(SCE_GN_KEYWORD);
 				} else if (sc.GetDocNextChar() == '(') {
-					const bool builtin = keywordLists[KeywordIndex_Function]->InListPrefixed(s, '(');
+					const bool builtin = keywordLists[KeywordIndex_Function].InListPrefixed(s, '(');
 					sc.ChangeState(builtin ? SCE_GN_BUILTIN_FUNCTION : SCE_GN_FUNCTION);
-				} else if (keywordLists[KeywordIndex_PredefinedVariable]->InList(s)) {
+				} else if (keywordLists[KeywordIndex_PredefinedVariable].InList(s)) {
 					sc.ChangeState(SCE_GN_BUILTIN_VARIABLE);
 				}
 				sc.SetState(SCE_GN_DEFAULT);
@@ -90,7 +90,9 @@ void ColouriseGNDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 			break;
 
 		case SCE_GN_STRING:
-			if (escSeq.resetEscapeState(sc)) {
+			if (sc.atLineStart) {
+				sc.SetState(SCE_GN_DEFAULT);
+			} else if (escSeq.resetEscapeState(sc)) {
 				sc.SetState(SCE_GN_ESCAPECHAR);
 				sc.Forward((escSeq.digitsLeft == 1)? 1 : 2);
 			} else if (sc.ch == ':' || sc.ch == '*') {
@@ -110,8 +112,6 @@ void ColouriseGNDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyl
 				sc.Forward();
 			} else if (sc.ch == '\"') {
 				sc.ForwardSetState(SCE_GN_DEFAULT);
-			} else if (sc.atLineStart) {
-				sc.SetState(SCE_GN_DEFAULT);
 			}
 			break;
 

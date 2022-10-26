@@ -129,7 +129,7 @@ enum class KeywordType {
 };
 
 constexpr bool IsUnicodeEscape(int ch, int chNext) noexcept {
-	return ch == '\\' && (chNext | 0x20) == 'u';
+	return ch == '\\' && UnsafeLower(chNext) == 'u';
 }
 
 constexpr bool IsCsIdentifierStart(int ch, int chNext) noexcept {
@@ -138,6 +138,14 @@ constexpr bool IsCsIdentifierStart(int ch, int chNext) noexcept {
 
 constexpr bool IsCsIdentifierChar(int ch, int chNext) noexcept {
 	return IsIdentifierCharEx(ch) || IsUnicodeEscape(ch, chNext);
+}
+
+constexpr bool IsXmlCommentTagChar(int ch) noexcept {
+	return IsIdentifierChar(ch) || ch == '-' || ch ==':';
+}
+
+constexpr bool PreferArrayIndex(int ch) noexcept {
+	return ch == ')' || ch == ']' || IsIdentifierCharEx(ch);
 }
 
 constexpr bool IsSpaceEquiv(int state) noexcept {
@@ -221,8 +229,7 @@ void ColouriseCSharpDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 		stringDelimiterCount = (lineState >> 4) & 0xff;
 		stringInterpolatorCount = (lineState >> 12) & 0xff;
 		parenCount = lineState >> 20;
-	}
-	if (startPos == 0 && sc.Match('#', '!')) {
+	} else if (startPos == 0 && sc.Match('#', '!')) {
 		// Shell Shebang at beginning of file
 		sc.SetState(SCE_CSHARP_COMMENTLINE);
 		sc.Forward();
@@ -250,7 +257,7 @@ void ColouriseCSharpDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 				switch (ppKind) {
 				case PreprocessorKind::None:
 					if (s[0] != '@') {
-						if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+						if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 							sc.ChangeState(SCE_CSHARP_WORD);
 							if (StrEqual(s, "using")) {
 								if (visibleChars == sc.LengthCurrent()) {
@@ -281,19 +288,19 @@ void ColouriseCSharpDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 									kwType = KeywordType::None;
 								}
 							}
-						} else if (keywordLists[KeywordIndex_Type]->InList(s) || keywordLists[KeywordIndex_ValaType]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_Type].InList(s) || keywordLists[KeywordIndex_ValaType].InList(s)) {
 							sc.ChangeState(SCE_CSHARP_WORD2);
-						} else if (keywordLists[KeywordIndex_Class]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_Class].InList(s)) {
 							sc.ChangeState(SCE_CSHARP_CLASS);
-						} else if (keywordLists[KeywordIndex_Struct]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_Struct].InList(s)) {
 							sc.ChangeState(SCE_CSHARP_STRUCT);
-						} else if (keywordLists[KeywordIndex_Interface]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_Interface].InList(s)) {
 							sc.ChangeState(SCE_CSHARP_INTERFACE);
-						} else if (keywordLists[KeywordIndex_Enumeration]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_Enumeration].InList(s)) {
 							sc.ChangeState(SCE_CSHARP_ENUM);
-						} else if (keywordLists[KeywordIndex_Attribute]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_Attribute].InList(s)) {
 							sc.ChangeState(SCE_CSHARP_ATTRIBUTE);
-						} else if (keywordLists[KeywordIndex_Constant]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_Constant].InList(s)) {
 							sc.ChangeState(SCE_CSHARP_CONSTANT);
 						}
 					}
@@ -409,15 +416,6 @@ void ColouriseCSharpDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 
 		case SCE_CSHARP_COMMENTLINEDOC:
 		case SCE_CSHARP_COMMENTBLOCKDOC:
-			if (docTagState != DocTagState::None) {
-				if (sc.Match('/', '>') || sc.ch == '>') {
-					docTagState = DocTagState::None;
-					const int state = sc.state;
-					sc.SetState(SCE_CSHARP_COMMENTTAG_XML);
-					sc.Forward((sc.ch == '/') ? 2 : 1);
-					sc.SetState(state);
-				}
-			}
 			if (sc.state == SCE_CSHARP_COMMENTLINEDOC) {
 				if (sc.atLineStart) {
 					sc.SetState(SCE_CSHARP_DEFAULT);
@@ -427,6 +425,15 @@ void ColouriseCSharpDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 				sc.Forward();
 				sc.ForwardSetState(SCE_CSHARP_DEFAULT);
 				break;
+			}
+			if (docTagState != DocTagState::None) {
+				if (sc.Match('/', '>') || sc.ch == '>') {
+					docTagState = DocTagState::None;
+					const int state = sc.state;
+					sc.SetState(SCE_CSHARP_COMMENTTAG_XML);
+					sc.Forward((sc.ch == '/') ? 2 : 1);
+					sc.SetState(state);
+				}
 			}
 			if (docTagState == DocTagState::None) {
 				if (sc.ch == '<') {
@@ -447,7 +454,7 @@ void ColouriseCSharpDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 			break;
 
 		case SCE_CSHARP_COMMENTTAG_XML:
-			if (!(IsIdentifierChar(sc.ch) || sc.ch == '-' || sc.ch == ':')) {
+			if (!IsXmlCommentTagChar(sc.ch)) {
 				sc.SetState(escSeq.outerState);
 				continue;
 			}
@@ -507,7 +514,7 @@ void ColouriseCSharpDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 						}
 					}
 					if (handled) {
-						if (sc.chNext == '8' && (sc.ch | 0x20) == 'u') {
+						if (sc.chNext == '8' && UnsafeLower(sc.ch) == 'u') {
 							sc.Forward(2); // C# 11 UTF-8 string literal
 						}
 						sc.SetState(SCE_CSHARP_DEFAULT);
@@ -734,14 +741,14 @@ void ColouriseCSharpDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 					}
 				} else {
 					if (kwType == KeywordType::None && sc.ch == '[') {
-						if (visibleChars == 0 || !(chPrevNonWhite == ')' || chPrevNonWhite == ']' || IsIdentifierCharEx(chPrevNonWhite))) {
+						if (visibleChars == 0 || !PreferArrayIndex(chPrevNonWhite)) {
 							kwType = KeywordType::Attribute;
 						}
 					} else if (kwType == KeywordType::Attribute && (sc.ch == '(' || sc.ch == ']')) {
 						kwType = KeywordType::None;
 					}
 				}
-				sc.SetState(interpolating ? SCE_CSHARP_OPERATOR2 : SCE_CSHARP_OPERATOR);
+				sc.SetState(SCE_CSHARP_OPERATOR);
 			}
 		}
 
@@ -865,7 +872,7 @@ void FoldCSharpDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle
 
 		case SCE_CSHARP_PREPROCESSOR:
 			if (wordLen < MaxFoldWordLength) {
-				buf[wordLen++] = MakeLowerCase(styler[i]);
+				buf[wordLen++] = styler[i];
 			}
 			if (styleNext != style) {
 				buf[wordLen] = '\0';

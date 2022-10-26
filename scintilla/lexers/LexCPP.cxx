@@ -1,6 +1,6 @@
 // This file is part of Notepad2.
 // See License.txt for details about distribution and modification.
-//! Lexer for C/C++, Rescouce Script, Objective C/C++, Scala, IDL/ODL
+//! Lexer for C/C++, Rescouce Script, Objective C/C++, IDL/ODL
 
 #include <cassert>
 #include <cstring>
@@ -27,23 +27,34 @@ namespace {
 #define		LEX_CPP		0	// C/C++
 #define		LEX_RC		1	// Resouce Script
 #define		LEX_OBJC	2	// Objective C/C++
-#define		LEX_SCALA	3	// Scala Script
 
-constexpr bool HasPreprocessor(int lex) noexcept { // #[space]preprocessor
-	return lex == LEX_CPP || lex == LEX_RC || lex == LEX_OBJC;
-}
-constexpr bool HasAnotation(int lex) noexcept { // @anotation
-	return lex == LEX_SCALA;
-}
-constexpr bool HasTripleVerbatim(int lex) noexcept {
-	return lex == LEX_SCALA;
-}
-constexpr bool HasXML(int lex) noexcept {
-	return lex == LEX_SCALA;
-}
-constexpr bool SquareBraceAfterType(int lex) noexcept {
-	return lex == LEX_SCALA;
-}
+struct EscapeSequence {
+	int outerState = SCE_C_DEFAULT;
+	int digitsLeft = 0;
+	bool hex = false;
+	bool brace = false;
+
+	// highlight any character as escape sequence.
+	void resetEscapeState(int state, int chNext) noexcept {
+		outerState = state;
+		digitsLeft = 1;
+		hex = true;
+		brace = false;
+		if (chNext == 'x' || chNext == 'u') {
+			digitsLeft = 5;
+		} else if (chNext == 'U') {
+			digitsLeft = 9;
+		} else if (IsOctalDigit(chNext)) {
+			digitsLeft = 3;
+			hex = false;
+		}
+	}
+	bool atEscapeEnd(int ch) noexcept {
+		--digitsLeft;
+		return digitsLeft <= 0 || !IsOctalOrHex(ch, hex);
+	}
+};
+
 constexpr bool Use2ndKeyword(int lex) noexcept {
 	return lex == LEX_OBJC;
 }
@@ -54,9 +65,6 @@ constexpr bool IsSpaceEquiv(int state) noexcept {
 	// including SCE_C_DEFAULT, SCE_C_COMMENT, SCE_C_COMMENTLINE
 	// SCE_C_COMMENTDOC, SCE_C_COMMENTLINEDOC, SCE_C_COMMENTDOC_TAG, SCE_C_COMMENTDOC_TAG_XML
 	return (state < SCE_C_IDENTIFIER);
-}
-constexpr bool IsEscapeChar(int ch) noexcept {
-	return ch == '\\' || ch == '\'' || ch == '\"';
 }
 
 /*const char* const cppWordLists[] = {
@@ -89,21 +97,21 @@ constexpr bool IsEscapeChar(int ch) noexcept {
 #define DOC_TAG_CLOSE_XML	4	/// </param>
 
 void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler) {
-	const WordList &keywords = *keywordLists[0];
-	const WordList &keywords2 = *keywordLists[1];
-	const WordList &keywords3 = *keywordLists[2];
-	const WordList &keywords4 = *keywordLists[3];
+	const WordList &keywords = keywordLists[0];
+	const WordList &keywords2 = keywordLists[1];
+	const WordList &keywords3 = keywordLists[2];
+	const WordList &keywords4 = keywordLists[3];
 	// global
-	const WordList &kwAttribute = *keywordLists[4];
-	const WordList &kwClass = *keywordLists[5];
-	const WordList &kwInterface = *keywordLists[6];
-	const WordList &kwEnumeration = *keywordLists[7];
-	const WordList &kwConstant = *keywordLists[8];
+	const WordList &kwAttribute = keywordLists[4];
+	const WordList &kwClass = keywordLists[5];
+	const WordList &kwInterface = keywordLists[6];
+	const WordList &kwEnumeration = keywordLists[7];
+	const WordList &kwConstant = keywordLists[8];
 	// 2nd
-	const WordList &kw2ndKeyword = *keywordLists[9];
-	const WordList &kw2ndKeyword2 = *keywordLists[10];
-	const WordList &kwAsmInstruction = *keywordLists[11];
-	const WordList &kwAsmRegister = *keywordLists[12];
+	const WordList &kw2ndKeyword = keywordLists[9];
+	const WordList &kw2ndKeyword2 = keywordLists[10];
+	const WordList &kwAsmInstruction = keywordLists[11];
+	const WordList &kwAsmRegister = keywordLists[12];
 
 	static bool isObjCSource = false;
 	const int lexType = styler.GetPropertyInt("lexer.lang", LEX_CPP);
@@ -114,9 +122,7 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 	int numCBrace = (curLineState >> 18) & 0x3F;
 	int numSBrace = (curLineState >> 13) & 0x1F;
 	int numRBrace = (curLineState >> 8) & 0x1F;
-	int curNcLevel = (curLineState >> 4) & 0x0F;
-	int numDTSBrace = (curLineState) & 0x0F;
-#define MakeState() ((lineState << 24)|(numCBrace << 18)|(numSBrace << 13)|(numRBrace << 8)|(curNcLevel << 4)|numDTSBrace)
+#define MakeState() ((lineState << 24)|(numCBrace << 18)|(numSBrace << 13)|(numRBrace << 8))
 #define UpdateLineState()	styler.SetLineState(lineCurrent, MakeState())
 #define UpdateCurLineState() lineCurrent = styler.GetLine(sc.currentPos); \
 								styler.SetLineState(lineCurrent, MakeState())
@@ -137,6 +143,7 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 	bool isIncludePreprocessor = false;
 	bool isMessagePreprocessor = false;
 	bool isAssignStmt = false;
+	EscapeSequence escSeq;
 
 	if (initStyle == SCE_C_COMMENTLINE || initStyle == SCE_C_COMMENTLINEDOC || initStyle == SCE_C_PREPROCESSOR) {
 		// Set continuationLine if last character of previous line is '\'
@@ -233,7 +240,7 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 						lastPPDefineWord = 0;
 				} else if ((lineState & LEX_BLOCK_MASK_ASM) && kwAsmInstruction.InList(s)) {
 					sc.ChangeState(SCE_C_ASM_INSTRUCTION);
-					lastWordWasGoto = MakeLowerCase(s[0]) == 'j';
+					lastWordWasGoto = UnsafeLower(s[0]) == 'j';
 				} else if ((lineState & LEX_BLOCK_MASK_ASM) && kwAsmRegister.InList(s)) {
 					sc.ChangeState(SCE_C_ASM_REGISTER);
 				} else if (((s[0] == '#' || s[0] == '!') && keywords3.InList(s + 1))
@@ -246,7 +253,7 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 						if (s[0] == '#')
 							ppw = s + 1;
 						isPragmaPreprocessor = StrEqualsAny(ppw, "pragma", "line");
-						isIncludePreprocessor = StrStartsWith(ppw, "include") || StrEqualsAny(ppw, "import", "using");
+						isIncludePreprocessor = StrStartsWith(ppw, "include") || StrEqualsAny(ppw, "import", "using", "embed");
 						isMessagePreprocessor = StrEqualsAny(ppw, "error", "warning", "message", "region", "endregion");
 						if (StrEqual(ppw, "define")) {
 							lineState |= LEX_BLOCK_MASK_DEFINE;
@@ -278,10 +285,6 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 						lastWordWasAttr = StrEqualsAny(s, "__declspec", "__attribute__");
 				} else if (keywords2.InList(s)) {
 					sc.ChangeState(SCE_C_WORD2);
-				} else if (s[0] == '@' && HasAnotation(lexType)) {
-					sc.ChangeState(SCE_C_DIRECTIVE);
-					while (iswordchar(sc.ch))
-						sc.Forward();
 				} else if (s[0] == '@' && keywords4.InList(s + 1)) {
 					sc.ChangeState(SCE_C_DIRECTIVE);
 					if (lexType == LEX_CPP || lexType == LEX_OBJC || isObjCSource) {
@@ -365,8 +368,6 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 								}
 							}
 						} else if (ch == ')' || ch == '>' || ch == '*') {
-							is_class = true;
-						} else if (ch == ']' && SquareBraceAfterType(lexType)) {
 							is_class = true;
 						}
 					}
@@ -483,8 +484,16 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 		case SCE_C_CHARACTER:
 			if (sc.atLineEnd) {
 				sc.ChangeState(SCE_C_STRINGEOL);
-			} else if (sc.ch == '\\' && IsEscapeChar(sc.chNext)) {
-				sc.Forward();
+			} else if (sc.ch == '\\') {
+				if (!IsEOLChar(sc.chNext)) {
+					escSeq.resetEscapeState(sc.state, sc.chNext);
+					sc.SetState(SCE_C_ESCAPECHAR);
+					sc.Forward();
+					if (sc.chNext == '{' && AnyOf(sc.ch, 'o', 'x', 'u')) {
+						escSeq.brace = true;
+						escSeq.digitsLeft = 9;
+					}
+				}
 			} else if (sc.ch == '\'') {
 				sc.ForwardSetState(SCE_C_DEFAULT);
 			}
@@ -505,11 +514,36 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 			} else if (isMessagePreprocessor && sc.atLineEnd) {
 				sc.ChangeState(SCE_C_STRINGEOL);
 				isMessagePreprocessor = false;
-			} else if (sc.ch == '\\' && IsEscapeChar(sc.chNext)) {
-				sc.Forward();
+			} else if (sc.ch == '\\') {
+				if (isIncludePreprocessor) {
+					sc.Forward();
+				} else if (!IsEOLChar(sc.chNext)) {
+					escSeq.resetEscapeState(sc.state, sc.chNext);
+					sc.SetState(SCE_C_ESCAPECHAR);
+					sc.Forward();
+					if (sc.chNext == '{' && AnyOf(sc.ch, 'o', 'x', 'u')) {
+						escSeq.brace = true;
+						escSeq.digitsLeft = 9;
+					}
+				}
 			} else if (sc.ch == '\"') {
-				outerStyle = SCE_C_DEFAULT;
-				sc.ForwardSetState(SCE_C_DEFAULT);
+				if (lexType == LEX_RC && sc.chNext == '\"') {
+					escSeq.resetEscapeState(sc.state, sc.chNext);
+					sc.SetState(SCE_C_ESCAPECHAR);
+					sc.Forward();
+				} else {
+					outerStyle = SCE_C_DEFAULT;
+					sc.ForwardSetState(SCE_C_DEFAULT);
+				}
+			}
+			break;
+		case SCE_C_ESCAPECHAR:
+			if (escSeq.atEscapeEnd(sc.ch)) {
+				if (escSeq.brace && sc.ch == '}') {
+					sc.Forward();
+				}
+				sc.SetState(escSeq.outerState);
+				continue;
 			}
 			break;
 		case SCE_C_STRINGRAW:
@@ -532,15 +566,6 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 				if (rawEnd) {
 					sc.ForwardSetState(SCE_C_DEFAULT);
 				}
-			}
-			break;
-
-		case SCE_C_TRIPLEVERBATIM:
-			if (sc.ch == '\\' && IsEscapeChar(sc.chNext)) {
-				sc.Forward();
-			} else if (sc.Match('"', '"', '"')) {
-				sc.Advance(2);
-				sc.ForwardSetState(SCE_C_DEFAULT);
 			}
 			break;
 
@@ -567,31 +592,11 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 				sc.SetState(SCE_C_DEFAULT);
 			}
 			break;
-			//
-		case SCE_C_XML_TAG:	// Scala
-				if (sc.Match('<', '/') || sc.Match('/', '>')) {
-					if (curNcLevel > 0)
-						--curNcLevel;
-					sc.Forward();
-					if (curNcLevel == 0) {
-						while (sc.ch != '>') {
-							sc.Forward();
-						}
-						sc.ForwardSetState(SCE_C_DEFAULT);
-					}
-				} else if (sc.ch == '<' && sc.chNext != '/') {
-					++curNcLevel;
-					sc.Forward();
-				}
-				break;
 		}
 
 		// Determine if a new state should be entered.
 			if (sc.state == SCE_C_DEFAULT) {
-					if (HasTripleVerbatim(lexType) && sc.Match('"', '"', '"')) {
-						sc.SetState(SCE_C_TRIPLEVERBATIM);
-						sc.Advance(2);
-					} else if (sc.ch == '/' && (sc.chNext == '/' || sc.chNext == '*')) {
+					if (sc.ch == '/' && (sc.chNext == '/' || sc.chNext == '*')) {
 						const int chNext = sc.chNext;
 						sc.SetState((chNext == '/') ? SCE_C_COMMENTLINE : SCE_C_COMMENT);
 						sc.Forward(2);
@@ -634,11 +639,8 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 						//isMessagePreprocessor = false;
 						sc.SetState(SCE_C_STRING);
 					} else if (sc.ch == '\'') {
-						if (lexType == LEX_SCALA && !(sc.chNext == '\\' || (sc.chNext != '\'' && sc.GetRelative(2) == '\'')))
-							sc.SetState(SCE_C_OPERATOR);
-						else
-							sc.SetState(SCE_C_CHARACTER);
-					} else if (HasPreprocessor(lexType) && sc.ch == '#') {
+						sc.SetState(SCE_C_CHARACTER);
+					} else if (sc.ch == '#') {
 						if (lineState & LEX_BLOCK_MASK_DEFINE) {
 							sc.SetState(SCE_C_OPERATOR);
 							if (sc.chNext == '#' || sc.chNext == '@') {
@@ -664,13 +666,7 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 						if (sc.chNext == '.')
 							sc.Forward();
 					} else if (sc.ch == '<') {
-						if (HasXML(lexType) && chPrevNonWhite == '=') {
-							sc.SetState(SCE_C_XML_TAG);
-							if (sc.chNext != '/') {
-								++curNcLevel;
-							}
-							sc.Forward();
-						} else if (isIncludePreprocessor) {
+						if (isIncludePreprocessor) {
 							sc.SetState(SCE_C_STRING);
 						} else {
 							sc.SetState(SCE_C_OPERATOR);
@@ -852,7 +848,7 @@ bool IsOpenBraceLine(LexAccessor &styler, Sci_Line line) noexcept {
 	Sci_Position pos = LexSkipSpaceTab(styler, startPos, endPos);
 	char ch = styler[pos];
 	int stl = styler.StyleAt(pos);
-	if (IsEOLChar(ch) || IsSpaceEquiv(stl) || (stl == SCE_C_PREPROCESSOR || stl == SCE_C_XML_TAG))
+	if (IsEOLChar(ch) || IsSpaceEquiv(stl) || (stl == SCE_C_PREPROCESSOR))
 		return false;
 	while (endPos >= pos && isspacechar(styler[endPos]))
 		endPos--;
@@ -882,7 +878,6 @@ bool IsOpenBraceLine(LexAccessor &styler, Sci_Line line) noexcept {
 
 void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
 	const int lexType = styler.GetPropertyInt("lexer.lang", LEX_CPP);
-	const bool hasPreprocessor = HasPreprocessor(lexType);
 
 	const Sci_PositionU endPos = startPos + length;
 	int visibleChars = 0;
@@ -921,18 +916,11 @@ void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lexe
 				}
 			}
 		}
-		if (style == SCE_C_TRIPLEVERBATIM) {
-			if (stylePrev != style) {
-				levelNext++;
-			} else if (styleNext != style) {
-				levelNext--;
-			}
-		}
 
 		if (atEOL && IsUsingLine(lineCurrent)) {
 			levelNext += IsUsingLine(lineCurrent + 1) - IsUsingLine(lineCurrent - 1);
 		}
-		if (hasPreprocessor && atEOL) {
+		if (atEOL) {
 			if (IsIncludeLine(lineCurrent)) {
 				levelNext += IsIncludeLine(lineCurrent + 1) - IsIncludeLine(lineCurrent - 1);
 			}
@@ -950,11 +938,11 @@ void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lexe
 		if (atEOL && !IsStreamCommentStyle(style) && !IsStreamCommentStyle(styleEOL)) {
 			levelNext += IsBackslashLine(styler, lineCurrent) - IsBackslashLine(styler, lineCurrent - 1);
 		}
-		if (atEOL && !(hasPreprocessor && IsCppInDefine(styler, i)) && IsOpenBraceLine(styler, lineCurrent + 1)) {
+		if (atEOL && !(IsCppInDefine(styler, i)) && IsOpenBraceLine(styler, lineCurrent + 1)) {
 			levelNext++;
 		}
 
-		if (hasPreprocessor && ch == '#' && style == SCE_C_PREPROCESSOR) {
+		if (ch == '#' && style == SCE_C_PREPROCESSOR) {
 			Sci_Position pos = LexSkipSpaceTab(styler, i + 1, endPos);
 			if (styler.Match(pos, "if") || styler.Match(pos, "region")) {
 				levelNext++;
@@ -987,7 +975,7 @@ void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lexe
 			}
 		}
 
-		if (style == SCE_C_OPERATOR && !(hasPreprocessor && IsCppInDefine(styler, i))) {
+		if (style == SCE_C_OPERATOR && !(IsCppInDefine(styler, i))) {
 			// maybe failed in multi-line define section, MFC's afx.h is a example
 			if (ch == '{' && !(lineCurrent > 0 && visibleChars == 0 && IsOpenBraceLine(styler, lineCurrent))) {
 				levelNext++;
@@ -1013,13 +1001,6 @@ void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lexe
 					levelNext--;
 				}
 			}
-		}
-
-		if (style == SCE_C_XML_TAG) {
-			if (styler.Match(i, "</") || styler.Match(i, "/>") || styler.Match(i, "?>"))
-				levelNext--;
-			else if (ch == '<' && chNext != '/')
-				levelNext++;
 		}
 
 		if (visibleChars == 0 && !isspacechar(ch))

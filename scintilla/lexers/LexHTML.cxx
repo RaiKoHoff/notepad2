@@ -239,6 +239,7 @@ int classifyTagHTML(Sci_PositionU start, Sci_PositionU end,
 			if (!isSelfClose)
 				chAttr = SCE_H_SCRIPT;
 		} else if (!isXml && StrEqual(tag, "comment")) {
+			// IE only comment tag
 			chAttr = SCE_H_COMMENT;
 		}
 	}
@@ -343,12 +344,12 @@ constexpr bool IsOKBeforeJSRE(int ch) noexcept {
 
 void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists,
                                   Accessor &styler, bool isXml) {
-	const WordList &keywordsTag = *keywordLists[0];
-	const WordList &keywordsJS = *keywordLists[1];
-	const WordList &keywordsVBS = *keywordLists[2];
-	const WordList &keywordsSGML = *keywordLists[5]; // SGML (DTD)
-	const WordList &keywordsAttr = *keywordLists[6];
-	const WordList &keywordsEvent = *keywordLists[7];
+	const WordList &keywordsTag = keywordLists[0];
+	const WordList &keywordsJS = keywordLists[1];
+	const WordList &keywordsVBS = keywordLists[2];
+	const WordList &keywordsSGML = keywordLists[5]; // SGML (DTD)
+	const WordList &keywordsAttr = keywordLists[6];
+	const WordList &keywordsEvent = keywordLists[7];
 
 	styler.StartAt(startPos);
 	int StateToPrint = initStyle;
@@ -433,7 +434,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 
 	int levelPrev = styler.LevelAt(lineCurrent) & SC_FOLDLEVELNUMBERMASK;
 	int levelCurrent = levelPrev;
-	int lineStartVisibleChars = 0;
 
 	int chPrev = ' ';
 	int ch = ' ';
@@ -470,10 +470,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			chPrev = ' ';
 			i += 1;
 			continue;
-		}
-
-		if (!IsASpace(ch)) {
-			lineStartVisibleChars++;
 		}
 
 		// decide what is the current state to print (depending of the script tag)
@@ -534,7 +530,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			                    ((beforePreProc & 0xFF) << 12) |
 			                    ((isLanguageType ? 1 : 0) << 20));
 			lineCurrent++;
-			lineStartVisibleChars = 0;
 		}
 
 		// generic end of script processing
@@ -559,15 +554,12 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				break;
 			default :
 				// check if the closing tag is a script tag
-				if (const char *tag =
-						(state == SCE_HJ_COMMENTLINE || isXml) ? "script" :
-						((state == SCE_H_COMMENT) ? "comment" : nullptr)) {
-					Sci_Position j = i + 2;
-					char chr;
-					do {
-						chr = *tag++;
-					} while (chr != 0 && chr == MakeLowerCase(styler.SafeGetCharAt(j++)));
-					if (chr != 0) break;
+				{
+					const bool match = (state == SCE_HJ_COMMENTLINE || isXml) ? styler.MatchLowerCase(i + 2, "script")
+						: ((state == SCE_H_COMMENT) ? styler.MatchLowerCase(i + 2, "comment") : true);
+					if (!match) {
+						break;
+					}
 				}
 				// closing tag of the script (it's a closing HTML tag anyway)
 				styler.ColorTo(i, StateToPrint);
@@ -592,7 +584,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 		         (chNext == '?') &&
 				 !IsScriptCommentState(state)) {
  			beforeLanguage = scriptLanguage;
-			scriptLanguage = segIsScriptingIndicator(styler, i + 2, i + 7, isXml ? eScriptXML : eScriptNone);
+			scriptLanguage = segIsScriptingIndicator(styler, i + 2, i + 7, eScriptXML);
 			if ((isStringState(state) || (state==SCE_H_COMMENT))) continue;
 			styler.ColorTo(i, StateToPrint);
 			beforePreProc = state;

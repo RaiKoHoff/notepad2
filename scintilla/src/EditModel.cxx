@@ -17,7 +17,6 @@
 #include <string_view>
 #include <vector>
 #include <map>
-#include <set>
 #include <optional>
 #include <algorithm>
 #include <memory>
@@ -130,6 +129,10 @@ const char *EditModel::GetFoldDisplayText(Sci::Line lineDoc, bool partialLine) c
 InSelection EditModel::LineEndInSelection(Sci::Line lineDoc) const noexcept {
 	const Sci::Position posAfterLineEnd = pdoc->LineStart(lineDoc + 1);
 	return sel.InSelectionForEOL(posAfterLineEnd);
+}
+
+MarkerMask EditModel::GetMark(Sci::Line line) const noexcept {
+	return pdoc->GetMark(line, FlagSet(changeHistoryOption, ChangeHistoryOption::Markers));
 }
 
 void EditModel::SetIdleTaskTime(uint32_t milliseconds) const noexcept {

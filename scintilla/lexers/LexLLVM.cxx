@@ -132,16 +132,16 @@ void ColouriseLLVMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					char s[128];
 					sc.GetCurrent(s, sizeof(s));
 					kwType = KeywordType::None;
-					if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+					if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 						state = SCE_LLVM_WORD;
-					} else if (keywordLists[KeywordIndex_Type]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Type].InList(s)) {
 						state = SCE_LLVM_WORD2;
 						if (StrEqual(s, "label")) {
 							kwType = KeywordType::Label;
 						}
-					} else if (keywordLists[KeywordIndex_Attribute]->InListPrefixed(s, '(')) {
+					} else if (keywordLists[KeywordIndex_Attribute].InListPrefixed(s, '(')) {
 						state = SCE_LLVM_ATTRIBUTE;
-					} else if (keywordLists[KeywordIndex_Instruction]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Instruction].InList(s)) {
 						state = SCE_LLVM_INSTRUCTION;
 					} else if (sc.ch == ':' && visibleChars == sc.LengthCurrent()) {
 						state = SCE_LLVM_LABEL;
@@ -154,9 +154,7 @@ void ColouriseLLVMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_LLVM_QUOTED_VARIABLE:
 		case SCE_LLVM_QUOTED_GLOBAL_VARIABLE:
-			if (sc.ch == '\\' && !IsEOLChar(sc.chNext)) {
-				sc.Forward();
-			} else if (sc.ch == '\"' || sc.atLineStart) {
+			if (sc.ch == '\"' || sc.atLineStart) {
 				if (sc.ch == '\"') {
 					sc.Forward();
 				}
@@ -165,6 +163,8 @@ void ColouriseLLVMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				sc.ChangeState(state);
 				sc.SetState(SCE_LLVM_DEFAULT);
 				kwType = KeywordType::None;
+			} else if (sc.ch == '\\' && !IsEOLChar(sc.chNext)) {
+				sc.Forward();
 			}
 			break;
 

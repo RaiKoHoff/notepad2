@@ -29,10 +29,15 @@ namespace {
 struct EscapeSequence {
 	int outerState = SCE_DART_DEFAULT;
 	int digitsLeft = 0;
+	bool brace = false;
 
-	// highlight any character as escape sequence, no highlight for hex in '\u{hex}'.
+	// highlight any character as escape sequence.
 	bool resetEscapeState(int state, int chNext) noexcept {
+		if (IsEOLChar(chNext)) {
+			return false;
+		}
 		outerState = state;
+		brace = false;
 		digitsLeft = (chNext == 'x')? 3 : ((chNext == 'u') ? 5 : 1);
 		return true;
 	}
@@ -109,8 +114,7 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 		if (lineState) {
 			UnpackLineState(lineState, nestedState);
 		}
-	}
-	if (startPos == 0 && sc.Match('#', '!')) {
+	} else if (startPos == 0 && sc.Match('#', '!')) {
 		// Shell Shebang at beginning of file
 		sc.SetState(SCE_DART_COMMENTLINE);
 		sc.Forward();
@@ -154,7 +158,7 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				case SCE_DART_IDENTIFIER: {
 					char s[128];
 					sc.GetCurrent(s, sizeof(s));
-					if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+					if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 						sc.ChangeState(SCE_DART_WORD);
 						if (StrEqualsAny(s, "import", "part")) {
 							if (visibleChars == sc.LengthCurrent()) {
@@ -175,11 +179,11 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 								kwType = KeywordType::None;
 							}
 						}
-					} else if (keywordLists[KeywordIndex_Type]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Type].InList(s)) {
 						sc.ChangeState(SCE_DART_WORD2);
-					} else if (keywordLists[KeywordIndex_Class]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Class].InList(s)) {
 						sc.ChangeState(SCE_DART_CLASS);
-					} else if (keywordLists[KeywordIndex_Enumeration]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Enumeration].InList(s)) {
 						sc.ChangeState(SCE_DART_ENUM);
 					} else if (sc.ch == ':') {
 						if (visibleChars == sc.LengthCurrent()) {
@@ -283,6 +287,11 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				if (escSeq.resetEscapeState(sc.state, sc.chNext)) {
 					sc.SetState(SCE_DART_ESCAPECHAR);
 					sc.Forward();
+					if (sc.Match('u', '{')) {
+						escSeq.brace = true;
+						escSeq.digitsLeft = 7; // Unicode code point
+						sc.Forward();
+					}
 				}
 			} else if (sc.ch == '$') {
 				if (sc.chNext == '{') {
@@ -304,6 +313,9 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_DART_ESCAPECHAR:
 			if (escSeq.atEscapeEnd(sc.ch)) {
+				if (escSeq.brace && sc.ch == '}') {
+					sc.Forward();
+				}
 				sc.SetState(escSeq.outerState);
 				continue;
 			}
@@ -371,13 +383,15 @@ void ColouriseDartDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				}
 				sc.SetState(SCE_DART_IDENTIFIER);
 			} else if (isoperator(sc.ch)) {
-				const bool interpolating = !nestedState.empty();
-				sc.SetState(interpolating ? SCE_DART_OPERATOR2 : SCE_DART_OPERATOR);
-				if (interpolating) {
+				sc.SetState(SCE_DART_OPERATOR);
+				if (!nestedState.empty()) {
 					if (sc.ch == '{') {
 						nestedState.push_back(SCE_DART_DEFAULT);
 					} else if (sc.ch == '}') {
 						const int outerState = TakeAndPop(nestedState);
+						if (outerState != SCE_DART_DEFAULT) {
+							sc.ChangeState(SCE_DART_OPERATOR2);
+						}
 						sc.ForwardSetState(outerState);
 						continue;
 					}

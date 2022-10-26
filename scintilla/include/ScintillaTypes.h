@@ -84,10 +84,15 @@ enum class MarkerSymbol {
 	RgbaImage = 30,
 	Bookmark = 31,
 	VerticalBookmark = 32,
+	Bar = 33,
 	Character = 10000,
 };
 
 enum class MarkerOutline {
+	HistoryRevertedToOrigin = 21,
+	HistorySaved = 22,
+	HistoryModified = 23,
+	HistoryRevertedToModified = 24,
 	FolderEnd = 25,
 	FolderOpenMid = 26,
 	FolderMidTail = 27,
@@ -213,13 +218,22 @@ enum class IndicatorStyle {
 	PointCharacter = 19,
 	Gradient = 20,
 	GradientCentre = 21,
+	PointTop = 22,
 };
 
 enum class IndicatorNumbers {
 	Container = 8,
 	Ime = 32,
 	ImeMax = 35,
-	Max = 35,
+	HistoryRevertedToOriginInsertion = 36,
+	HistoryRevertedToOriginDeletion = 37,
+	HistorySavedInsertion = 38,
+	HistorySavedDeletion = 39,
+	HistoryModifiedInsertion = 40,
+	HistoryModifiedDeletion = 41,
+	HistoryRevertedToModifiedInsertion = 42,
+	HistoryRevertedToModifiedDeletion = 43,
+	Max = 43,
 };
 
 enum class IndicValue {
@@ -263,6 +277,13 @@ enum class FindOption {
 	Cxx11RegEx = 0x00800000,
 };
 
+enum class ChangeHistoryOption {
+	Disabled = 0,
+	Enabled = 1,
+	Markers = 2,
+	Indicators = 4,
+};
+
 enum class NotificationPosition {
 	Bottomright = 0,
 	Center = 1,
@@ -286,6 +307,7 @@ enum class FoldAction {
 	Contract = 0,
 	Expand = 1,
 	Toggle = 2,
+	ContractEveryLevel = 4,
 };
 
 enum class AutomaticFold {
@@ -722,11 +744,11 @@ constexpr int LevelNumber(FoldLevel level) noexcept {
 }
 
 constexpr bool LevelIsHeader(FoldLevel level) noexcept {
-	return (level & FoldLevel::HeaderFlag) == FoldLevel::HeaderFlag;
+	return (level & FoldLevel::HeaderFlag) != FoldLevel::None;
 }
 
 constexpr bool LevelIsWhitespace(FoldLevel level) noexcept {
-	return (level & FoldLevel::WhiteFlag) == FoldLevel::WhiteFlag;
+	return (level & FoldLevel::WhiteFlag) != FoldLevel::None;
 }
 
 // Functions to manipulate fields from a FoldFlag
@@ -810,6 +832,15 @@ constexpr KeyMod operator|(KeyMod a, KeyMod b) noexcept {
 
 constexpr KeyMod operator&(KeyMod a, KeyMod b) noexcept {
 	return static_cast<KeyMod>(static_cast<int>(a) & static_cast<int>(b));
+}
+
+constexpr KeyMod ModifierFlags(bool shift, bool ctrl, bool alt, bool meta = false, bool super = false) noexcept {
+	return
+		(shift ? KeyMod::Shift : KeyMod::Norm) |
+		(ctrl ? KeyMod::Ctrl : KeyMod::Norm) |
+		(alt ? KeyMod::Alt : KeyMod::Norm) |
+		(meta ? KeyMod::Meta : KeyMod::Norm) |
+		(super ? KeyMod::Super : KeyMod::Norm);
 }
 
 // Test if an enum class value has some bit flag(s) of test set.

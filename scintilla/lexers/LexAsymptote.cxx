@@ -27,7 +27,7 @@ namespace {
 struct EscapeSequence {
 	int outerState = SCE_ASY_DEFAULT;
 	int digitsLeft = 0;
-	int numBase = 0;
+	bool hex = false;
 
 	// highlight any character as escape sequence.
 	bool resetEscapeState(int state, int chNext) noexcept {
@@ -38,16 +38,16 @@ struct EscapeSequence {
 		digitsLeft = 1;
 		if (IsOctalDigit(chNext)) {
 			digitsLeft = 3;
-			numBase = 8;
-		} else if (chNext == 'x' || chNext == 'X') {
+			hex = false;
+		} else if (UnsafeLower(chNext) == 'x') {
 			digitsLeft = 3;
-			numBase = 16;
+			hex = true;
 		}
 		return true;
 	}
 	bool atEscapeEnd(int ch) noexcept {
 		--digitsLeft;
-		return digitsLeft <= 0 || !IsADigit(ch, numBase);
+		return digitsLeft <= 0 || !IsOctalOrHex(ch, hex);
 	}
 };
 
@@ -103,7 +103,7 @@ void ColouriseAsyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			if (!IsIdentifierChar(sc.ch)) {
 				char s[128];
 				sc.GetCurrent(s, sizeof(s));
-				if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+				if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 					sc.ChangeState(SCE_ASY_WORD);
 					if (StrEqualsAny(s, "import", "include")) {
 						lineStateLineType = AsymptoteLineStateMaskImport;
@@ -112,11 +112,11 @@ void ColouriseAsyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 					} else if (StrEqual(s, "return")) {
 						kwType = KeywordType::Return;
 					}
-				} else if (keywordLists[KeywordIndex_Type]->InList(s)) {
+				} else if (keywordLists[KeywordIndex_Type].InList(s)) {
 					sc.ChangeState(SCE_ASY_TYPE);
-				} else if (kwType == KeywordType::Struct || keywordLists[KeywordIndex_Struct]->InList(s)) {
+				} else if (kwType == KeywordType::Struct || keywordLists[KeywordIndex_Struct].InList(s)) {
 					sc.ChangeState(SCE_ASY_STRUCT);
-				} else if (keywordLists[KeywordIndex_Constant]->InList(s)) {
+				} else if (keywordLists[KeywordIndex_Constant].InList(s)) {
 					sc.ChangeState(SCE_ASY_CONSTANT);
 				} else if (sc.ch != '.') {
 					const int chNext = sc.GetDocNextChar();

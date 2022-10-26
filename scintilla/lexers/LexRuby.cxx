@@ -140,7 +140,7 @@ int ClassifyWordRb(Sci_PositionU start, Sci_PositionU end, char ch, char chNext,
 				style = SCE_RB_IDENTIFIER;
 			}
 		}
-	} else if (keywordLists[KeywordIndex_Keyword]->InList(s) && ((start == 0) || !followsDot(start - 1, styler))) {
+	} else if (keywordLists[KeywordIndex_Keyword].InList(s) && ((start == 0) || !followsDot(start - 1, styler))) {
 		if (keywordIsAmbiguous(s) && keywordIsModifier(s, start, styler)) {
 
 			// Demoted keywords are colored as keywords,
@@ -160,17 +160,17 @@ int ClassifyWordRb(Sci_PositionU start, Sci_PositionU end, char ch, char chNext,
 		}
 	} else {
 		if (IsUpperCase(s[0])) {
-			if (keywordLists[KeywordIndex_PredefinedConstant]->InList(s)) {
+			if (keywordLists[KeywordIndex_PredefinedConstant].InList(s)) {
 				chAttr = SCE_RB_BUILTIN_CONSTANT;
-			} else if ((ch == ':' && chNext == ':') || keywordLists[KeywordIndex_Module]->InList(s)) {
+			} else if ((ch == ':' && chNext == ':') || keywordLists[KeywordIndex_Module].InList(s)) {
 				// module::class::name
 				chAttr = SCE_RB_LIKE_MODULE;
-			} else if ((ch == '.' && chNext == 'n') || keywordLists[KeywordIndex_Class]->InList(s)) {
+			} else if ((ch == '.' && chNext == 'n') || keywordLists[KeywordIndex_Class].InList(s)) {
 				// Class.new
 				chAttr = SCE_RB_LIKE_CLASS;
 			}
 		} else if (IsLowerCase(s[0]) || s[0] == '_') {
-			if (keywordLists[KeywordIndex_BuiltinFunction]->InList(s)) {
+			if (keywordLists[KeywordIndex_BuiltinFunction].InList(s)) {
 				chAttr = SCE_RB_BUILTIN_FUNCTION;
 			}
 		}
@@ -1144,7 +1144,7 @@ void ColouriseRbDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, 
 					switch (word_style) {
 					case SCE_RB_WORD:
 						afterDef = StrEqual(prevWord, "def");
-						preferRE = !IsLowerCase(prevWord[0]) || keywordLists[KeywordIndex_Regex]->InList(prevWord);
+						preferRE = !IsLowerCase(prevWord[0]) || keywordLists[KeywordIndex_Regex].InList(prevWord);
 						break;
 
 					case SCE_RB_WORD_DEMOTED:
@@ -1513,9 +1513,6 @@ bool keywordIsModifier(const char *word, Sci_Position pos, Accessor &styler) {
 		return keywordDoStartsLoop(pos, styler);
 	}
 
-	char ch;
-	char chPrev;
-	char chPrev2;
 	int style = SCE_RB_DEFAULT;
 	Sci_Line lineStart = styler.GetLine(pos);
 	Sci_Position lineStartPosn = styler.LineStart(lineStart);
@@ -1523,15 +1520,13 @@ bool keywordIsModifier(const char *word, Sci_Position pos, Accessor &styler) {
 	// position. But first move lineStartPosn back behind any
 	// continuations immediately above word.
 	while (lineStartPosn > 0) {
-		ch = styler[lineStartPosn - 1];
+		const char ch = styler[lineStartPosn - 1];
 		if (ch == '\n' || ch == '\r') {
-			chPrev = styler.SafeGetCharAt(lineStartPosn - 2);
-			chPrev2 = styler.SafeGetCharAt(lineStartPosn - 3);
-			lineStart = styler.GetLine(lineStartPosn - 1);
+			const char chPrev = styler.SafeGetCharAt(lineStartPosn - 2);
+			const char chPrev2 = styler.SafeGetCharAt(lineStartPosn - 3);
 			// If we find a continuation line, include it in our analysis.
-			if (chPrev == '\\') {
-				lineStartPosn = styler.LineStart(lineStart);
-			} else if (ch == '\n' && chPrev == '\r' && chPrev2 == '\\') {
+			if (chPrev == '\\' || (ch == '\n' && chPrev == '\r' && chPrev2 == '\\')) {
+				lineStart = styler.GetLine(lineStartPosn - 1);
 				lineStartPosn = styler.LineStart(lineStart);
 			} else {
 				break;
@@ -1545,7 +1540,8 @@ bool keywordIsModifier(const char *word, Sci_Position pos, Accessor &styler) {
 	while (--pos >= lineStartPosn) {
 		style = styler.StyleAt(pos);
 		if (style == SCE_RB_DEFAULT) {
-			if (IsASpaceOrTab(ch = styler[pos])) {
+			const char ch = styler[pos];
+			if (IsASpaceOrTab(ch)) {
 				//continue
 			} else if (ch == '\r' || ch == '\n') {
 				// Scintilla's LineStart() and GetLine() routines aren't
@@ -1554,8 +1550,8 @@ bool keywordIsModifier(const char *word, Sci_Position pos, Accessor &styler) {
 
 				// Also, lineStartPosn may have been moved to more than one
 				// line above word's line while pushing past continuations.
-				chPrev = styler.SafeGetCharAt(pos - 1);
-				chPrev2 = styler.SafeGetCharAt(pos - 2);
+				const char chPrev = styler.SafeGetCharAt(pos - 1);
+				const char chPrev2 = styler.SafeGetCharAt(pos - 2);
 				if (chPrev == '\\') {
 					pos -= 1;	 // gloss over the "\\"
 					//continue
@@ -1602,7 +1598,7 @@ bool keywordIsModifier(const char *word, Sci_Position pos, Accessor &styler) {
 	// usually it's a block assignment, like
 	// a << if x then y else z
 
-	ch = styler[pos];
+	const char ch = styler[pos];
 	switch (ch) {
 	case ')':
 	case ']':
@@ -1627,8 +1623,8 @@ bool keywordDoStartsLoop(Sci_Position pos, Accessor &styler) {
 	while (--pos >= lineStartPosn) {
 		const int style = styler.StyleAt(pos);
 		if (style == SCE_RB_DEFAULT) {
-			char ch;
-			if ((ch = styler[pos]) == '\r' || ch == '\n') {
+			const char ch = styler[pos];
+			if (ch == '\r' || ch == '\n') {
 				// Scintilla's LineStart() and GetLine() routines aren't
 				// platform-independent, so if we have text prepared with
 				// a different system we can't rely on it.
@@ -1782,7 +1778,7 @@ void FoldRbDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lexer
 			} else if (StrEqual(prevWord, "def")) {
 				levelCurrent++;
 				method_definition = MethodDefinition::Define;
-			} else if (keywordLists[KeywordIndex_CodeFolding]->InList(prevWord)) {
+			} else if (keywordLists[KeywordIndex_CodeFolding].InList(prevWord)) {
 				levelCurrent++;
 			}
 		} else if (style == SCE_RB_HERE_DELIM) {

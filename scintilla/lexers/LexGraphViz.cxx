@@ -102,7 +102,7 @@ void ColouriseGraphVizDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int in
 					} else {
 						char s[16];
 						sc.GetCurrent(s, sizeof(s));
-						if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+						if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 							sc.ChangeState(SCE_GRAPHVIZ_WORD);
 						}
 					}
@@ -112,15 +112,15 @@ void ColouriseGraphVizDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int in
 			break;
 
 		case SCE_GRAPHVIZ_STRING:
-			if (sc.ch == '\\') {
+			if (sc.atLineStart) {
+				sc.SetState(SCE_GRAPHVIZ_DEFAULT);
+			} else if (sc.ch == '\\') {
 				if (IsEscapeSequence(sc.chNext)) {
 					sc.SetState(SCE_GRAPHVIZ_ESCAPECHAR);
 				}
 				sc.Forward();
 			} else if (sc.ch == '\"') {
 				sc.ForwardSetState(SCE_GRAPHVIZ_DEFAULT);
-			} else if (sc.atLineStart) {
-				sc.SetState(SCE_GRAPHVIZ_DEFAULT);
 			}
 			break;
 

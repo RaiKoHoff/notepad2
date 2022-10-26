@@ -630,6 +630,18 @@ bool ScintillaCall::StyleGetCheckMonospaced(int style) {
 	return Call(Message::StyleGetCheckMonospaced, style);
 }
 
+void ScintillaCall::StyleSetInvisibleRepresentation(int style, const char *representation) {
+	CallString(Message::StyleSetInvisibleRepresentation, style, representation);
+}
+
+int ScintillaCall::StyleGetInvisibleRepresentation(int style, char *representation) {
+	return static_cast<int>(CallPointer(Message::StyleGetInvisibleRepresentation, style, representation));
+}
+
+std::string ScintillaCall::StyleGetInvisibleRepresentation(int style) {
+	return CallReturnString(Message::StyleGetInvisibleRepresentation, style);
+}
+
 void ScintillaCall::SetElementColour(Scintilla::Element element, ColourAlpha colourElement) {
 	Call(Message::SetElementColour, static_cast<uintptr_t>(element), colourElement);
 }
@@ -820,10 +832,6 @@ void ScintillaCall::SetLineState(Line line, int state) {
 
 int ScintillaCall::LineState(Line line) {
 	return static_cast<int>(Call(Message::GetLineState, line));
-}
-
-int ScintillaCall::MaxLineState() {
-	return static_cast<int>(Call(Message::GetMaxLineState));
 }
 
 int ScintillaCall::CaretLineFrame() {
@@ -1090,6 +1098,14 @@ Position ScintillaCall::FormatRangeFull(bool draw, void *fr) {
 	return CallPointer(Message::FormatRangeFull, draw, fr);
 }
 
+void ScintillaCall::SetChangeHistory(Scintilla::ChangeHistoryOption changeHistory) {
+	Call(Message::SetChangeHistory, static_cast<uintptr_t>(changeHistory));
+}
+
+ChangeHistoryOption ScintillaCall::ChangeHistory() {
+	return static_cast<Scintilla::ChangeHistoryOption>(Call(Message::GetChangeHistory));
+}
+
 Line ScintillaCall::FirstVisibleLine() {
 	return Call(Message::GetFirstVisibleLine);
 }
@@ -1148,6 +1164,10 @@ Position ScintillaCall::GetTextRangeFull(void *tr) {
 
 void ScintillaCall::HideSelection(bool hide) {
 	Call(Message::HideSelection, hide);
+}
+
+bool ScintillaCall::SelectionHidden() {
+	return Call(Message::GetSelectionHidden);
 }
 
 int ScintillaCall::PointXFromPosition(Position pos) {

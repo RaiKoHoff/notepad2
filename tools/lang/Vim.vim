@@ -1,4 +1,5 @@
-" Vim Reference Manual 8.1
+" Vim Reference Manual 9.0
+" https://www.vim.org/
 " https://vimhelp.org/
 " Expression evaluation
 " https://vimhelp.org/eval.txt.html#eval.txt
@@ -46,6 +47,12 @@ endtry
 " Automatic commands
 au autocmd
 
+" https://vimhelp.org/vim9.txt.html#vim9.txt
+def
+enddef
+var final true false null
+import export
+
 "! commands			===========================================================
 echo
 echon
@@ -54,6 +61,8 @@ echom echomsg
 echoe echoerr
 exe exec execute
 finish
+
+vim9 vim9cmd vim9script
 
 " Setting options
 " https://vimhelp.org/options.txt.html#options.txt

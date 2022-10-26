@@ -189,7 +189,7 @@ void ColouriseGroovyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 							sc.ChangeState(SCE_GROOVY_ANNOTATION);
 							continue;
 						}
-					} else if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 						const bool demoted = chBefore == '.' || chBefore == '&';
 						sc.ChangeState(demoted ? SCE_GROOVY_WORD_DEMOTED : SCE_GROOVY_WORD);
 						if (!demoted) {
@@ -219,15 +219,15 @@ void ColouriseGroovyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 								}
 							}
 						}
-					} else if (keywordLists[KeywordIndex_Type]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Type].InList(s)) {
 						sc.ChangeState(SCE_GROOVY_WORD2);
-					} else if (keywordLists[KeywordIndex_Class]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Class].InList(s)) {
 						sc.ChangeState(SCE_GROOVY_CLASS);
-					} else if (keywordLists[KeywordIndex_Interface]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Interface].InList(s)) {
 						sc.ChangeState(SCE_GROOVY_INTERFACE);
-					} else if (keywordLists[KeywordIndex_Enumeration]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Enumeration].InList(s)) {
 						sc.ChangeState(SCE_GROOVY_ENUM);
-					} else if (keywordLists[KeywordIndex_Constant]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Constant].InList(s)) {
 						sc.ChangeState(SCE_GROOVY_CONSTANT);
 					} else if (sc.ch == ':') {
 						if (sc.chNext == ':') {
@@ -522,13 +522,15 @@ void ColouriseGroovyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int init
 						: ((sc.chNext == 'i') ? SCE_GROOVY_IDENTIFIER : SCE_GROOVY_ANNOTATION));
 				sc.SetState(state);
 			} else if (isoperator(sc.ch)) {
-				const bool interpolating = !nestedState.empty();
-				sc.SetState(interpolating ? SCE_GROOVY_OPERATOR2 : SCE_GROOVY_OPERATOR);
-				if (interpolating) {
+				sc.SetState(SCE_GROOVY_OPERATOR);
+				if (!nestedState.empty()) {
 					if (sc.ch == '{') {
 						nestedState.push_back(SCE_GROOVY_DEFAULT);
 					} else if (sc.ch == '}') {
 						const int outerState = TakeAndPop(nestedState);
+						if (outerState != SCE_GROOVY_DEFAULT) {
+							sc.ChangeState(SCE_GROOVY_OPERATOR2);
+						}
 						sc.ForwardSetState(outerState);
 						continue;
 					}

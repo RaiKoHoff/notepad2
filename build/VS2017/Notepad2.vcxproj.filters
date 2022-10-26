@@ -195,6 +195,9 @@
     <ClCompile Include="..\..\scintilla\lexers\LexRust.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\scintilla\lexers\LexScala.cxx">
+      <Filter>Scintilla\lexers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\scintilla\lexers\LexSmali.cxx">
       <Filter>Scintilla\lexers</Filter>
     </ClCompile>
@@ -271,6 +274,9 @@
       <Filter>Scintilla\src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\src\CellBuffer.cxx">
+      <Filter>Scintilla\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\scintilla\src\ChangeHistory.cxx">
       <Filter>Scintilla\src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\scintilla\src\CharClassify.cxx">
@@ -693,6 +699,9 @@
       <Filter>Scintilla\src</Filter>
     </ClInclude>
     <ClInclude Include="..\..\scintilla\src\CellBuffer.h">
+      <Filter>Scintilla\src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\scintilla\src\ChangeHistory.h">
       <Filter>Scintilla\src</Filter>
     </ClInclude>
     <ClInclude Include="..\..\scintilla\src\CharClassify.h">

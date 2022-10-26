@@ -38,11 +38,11 @@ typedef struct EDITFINDREPLACE {
 	char	szReplaceUTF8[512 * kMaxMultiByteCount];
 	HWND	hwnd;
 	UINT	fuFlags;
-	BOOL	bTransformBS;
-	BOOL	bFindClose;
-	BOOL	bReplaceClose;
-	BOOL	bNoFindWrap;
-	BOOL	bWildcardSearch;
+	bool	bTransformBS;
+	bool	bFindClose;
+	bool	bReplaceClose;
+	bool	bNoFindWrap;
+	bool	bWildcardSearch;
 } EDITFINDREPLACE, *LPEDITFINDREPLACE;
 
 typedef const EDITFINDREPLACE * LPCEDITFINDREPLACE;
@@ -110,22 +110,26 @@ static inline void EditSetEmptyText(void) {
 	EditSetNewText("", 0, 1);
 }
 
-BOOL	EditConvertText(UINT cpSource, UINT cpDest, BOOL bSetSavePoint);
+bool	EditConvertText(UINT cpSource, UINT cpDest, bool bSetSavePoint);
 void	EditConvertToLargeMode(void);
 void	EditReplaceDocument(HANDLE pdoc);
 
 char*	EditGetClipboardText(HWND hwnd); // LocalFree()
-BOOL	EditCopyAppend(HWND hwnd);
+bool	EditCopyAppend(HWND hwnd);
 
 static inline int GetScintillaEOLMode(int mode) {
-	const int mask = SC_EOL_CRLF | (SC_EOL_LF << 2) | (SC_EOL_CR << 4);
+	const UINT mask = (SC_EOL_CRLF << 2*0) | (SC_EOL_LF << 2*1) | (SC_EOL_CR << 2*2);
+	return (mask >> (mode << 1)) & 3;
+}
+static inline int GetSettingsEOLMode(int mode) {
+	const UINT mask = (0 << 2*SC_EOL_CRLF) | (1 << 2*SC_EOL_LF) | (2 << 2*SC_EOL_CR);
 	return (mask >> (mode << 1)) & 3;
 }
 
 struct EditFileIOStatus;
 void 	EditDetectEOLMode(LPCSTR lpData, DWORD cbData, struct EditFileIOStatus *status);
-BOOL	EditLoadFile(LPWSTR pszFile, struct EditFileIOStatus *status);
-BOOL	EditSaveFile(HWND hwnd, LPCWSTR pszFile, int saveFlag, struct EditFileIOStatus *status);
+bool	EditLoadFile(LPWSTR pszFile, struct EditFileIOStatus *status);
+bool	EditSaveFile(HWND hwnd, LPCWSTR pszFile, int saveFlag, struct EditFileIOStatus *status);
 
 void	EditInvertCase(void);
 void	EditMapTextCase(int menu);
@@ -141,24 +145,24 @@ void	EditChar2Hex(void);
 void	EditHex2Char(void);
 void	EditShowHex(void);
 void	EditConvertNumRadix(int radix);
-void	EditModifyNumber(BOOL bIncrease);
+void	EditModifyNumber(bool bIncrease);
 
-void	EditTabsToSpaces(int nTabWidth, BOOL bOnlyIndentingWS);
-void	EditSpacesToTabs(int nTabWidth, BOOL bOnlyIndentingWS);
+void	EditTabsToSpaces(int nTabWidth, bool bOnlyIndentingWS);
+void	EditSpacesToTabs(int nTabWidth, bool bOnlyIndentingWS);
 
 void	EditMoveUp(void);
 void	EditMoveDown(void);
 void	EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend);
 void	EditAlignText(EditAlignMode nMode);
 void	EditEncloseSelection(LPCWSTR pwszOpen, LPCWSTR pwszClose);
-void	EditToggleLineComments(LPCWSTR pwszComment, BOOL bInsertAtStart);
-void	EditPadWithSpaces(BOOL bSkipEmpty, BOOL bNoUndoGroup);
+void	EditToggleLineComments(LPCWSTR pwszComment, bool bInsertAtStart);
+void	EditPadWithSpaces(bool bSkipEmpty, bool bNoUndoGroup);
 void	EditStripFirstCharacter(void);
 void	EditStripLastCharacter(void);
-void	EditStripTrailingBlanks(HWND hwnd, BOOL bIgnoreSelection);
-void	EditStripLeadingBlanks(HWND hwnd, BOOL bIgnoreSelection);
+void	EditStripTrailingBlanks(HWND hwnd, bool bIgnoreSelection);
+void	EditStripLeadingBlanks(HWND hwnd, bool bIgnoreSelection);
 void	EditCompressSpaces(void);
-void	EditRemoveBlankLines(BOOL bMerge);
+void	EditRemoveBlankLines(bool bMerge);
 void	EditWrapToColumn(int nColumn/*, int nTabWidth*/);
 void	EditJoinLinesEx(void);
 void	EditSortLines(EditSortFlag iSortFlags);
@@ -171,26 +175,26 @@ void	EditEnsureConsistentLineEndings(void);
 void	EditGetExcerpt(LPWSTR lpszExcerpt, DWORD cchExcerpt);
 
 void	EditSelectWord(void);
-void	EditSelectLines(BOOL currentBlock, BOOL lineSelection);
-HWND	EditFindReplaceDlg(HWND hwnd, LPEDITFINDREPLACE lpefr, BOOL bReplace);
-void	EditFindNext(LPCEDITFINDREPLACE lpefr, BOOL fExtendSelection);
-void	EditFindPrev(LPCEDITFINDREPLACE lpefr, BOOL fExtendSelection);
-void	EditFindAll(LPCEDITFINDREPLACE lpefr, BOOL selectAll);
-BOOL	EditReplace(HWND hwnd, LPCEDITFINDREPLACE lpefr);
-BOOL	EditReplaceAll(HWND hwnd, LPCEDITFINDREPLACE lpefr, BOOL bShowInfo);
-BOOL	EditReplaceAllInSelection(HWND hwnd, LPCEDITFINDREPLACE lpefr, BOOL bShowInfo);
-BOOL	EditLineNumDlg(HWND hwnd);
+void	EditSelectLines(bool currentBlock, bool lineSelection);
+HWND	EditFindReplaceDlg(HWND hwnd, LPEDITFINDREPLACE lpefr, bool bReplace);
+void	EditFindNext(LPCEDITFINDREPLACE lpefr, bool fExtendSelection);
+void	EditFindPrev(LPCEDITFINDREPLACE lpefr, bool fExtendSelection);
+void	EditFindAll(LPCEDITFINDREPLACE lpefr, bool selectAll);
+bool	EditReplace(HWND hwnd, LPCEDITFINDREPLACE lpefr);
+bool	EditReplaceAll(HWND hwnd, LPCEDITFINDREPLACE lpefr, bool bShowInfo);
+bool	EditReplaceAllInSelection(HWND hwnd, LPCEDITFINDREPLACE lpefr, bool bShowInfo);
+bool	EditLineNumDlg(HWND hwnd);
 void	EditModifyLinesDlg(HWND hwnd);
 void	EditEncloseSelectionDlg(HWND hwnd);
 void	EditInsertTagDlg(HWND hwnd);
-void	EditInsertDateTime(BOOL bShort);
+void	EditInsertDateTime(bool bShort);
 void	EditUpdateTimestampMatchTemplate(HWND hwnd);
 void	EditInsertUnicodeControlCharacter(int menu);
-void	EditShowUnicodeControlCharacter(BOOL bShow);
-BOOL	EditSortDlg(HWND hwnd, EditSortFlag *piSortFlags);
-BOOL	EditAlignDlg(HWND hwnd, EditAlignMode *piAlignMode);
+void	EditShowUnicodeControlCharacter(bool bShow);
+bool	EditSortDlg(HWND hwnd, EditSortFlag *piSortFlags);
+bool	EditAlignDlg(HWND hwnd, EditAlignMode *piAlignMode);
 void	EditSelectionAction(int action);
-void	TryBrowseFile(HWND hwnd, LPCWSTR pszFile, BOOL bWarn);
+void	TryBrowseFile(HWND hwnd, LPCWSTR pszFile, bool bWarn);
 
 typedef enum OpenSelectionType {
 	OpenSelectionType_None,
@@ -206,7 +210,7 @@ void EditOpenSelection(OpenSelectionType type);
 extern "C" {
 #endif
 
-BOOL	EditPrint(HWND hwnd, LPCWSTR pszDocTitle);
+bool	EditPrint(HWND hwnd, LPCWSTR pszDocTitle);
 void	EditPrintSetup(HWND hwnd);
 
 #ifdef __cplusplus
@@ -230,9 +234,9 @@ enum {
 };
 
 typedef struct EditMarkAllStatus {
-	BOOL pending;
-	BOOL ignoreSelectionUpdate;
-	BOOL bookmarkForFindAll;
+	bool pending;
+	bool ignoreSelectionUpdate;
+	bool bookmarkForFindAll;
 	int findFlag;
 	int incrementSize;			// increment search size
 	Sci_Position iSelCount;		// length for pszText
@@ -249,9 +253,9 @@ void EditMarkAll_ClearEx(int findFlag, Sci_Position iSelCount, LPSTR pszText);
 NP2_inline void EditMarkAll_Clear(void) {
 	EditMarkAll_ClearEx(0, 0, NULL);
 }
-BOOL EditMarkAll_Start(BOOL bChanged, int findFlag, Sci_Position iSelCount, LPSTR pszText);
-BOOL EditMarkAll_Continue(EditMarkAllStatus *status, HANDLE timer);
-BOOL EditMarkAll(BOOL bChanged, BOOL matchCase, BOOL wholeWord, BOOL bookmark);
+void EditMarkAll_Start(BOOL bChanged, int findFlag, Sci_Position iSelCount, LPSTR pszText);
+void EditMarkAll_Continue(EditMarkAllStatus *status, HANDLE timer);
+void EditMarkAll(BOOL bChanged, bool matchCase, bool wholeWord, bool bookmark);
 void EditToggleBookmarkAt(Sci_Position iPos);
 void EditBookmarkSelectAll(void);
 
@@ -297,14 +301,14 @@ enum {
 #define MIN_AUTO_COMPLETION_NUMBER_LENGTH		0
 
 typedef struct EditAutoCompletionConfig {
-	BOOL bIndentText;
-	BOOL bCloseTags;
-	BOOL bCompleteWord;
-	BOOL bScanWordsInDocument;
+	bool bIndentText;
+	bool bCloseTags;
+	bool bCompleteWord;
+	bool bScanWordsInDocument;
 	UINT dwScanWordsTimeout;
-	BOOL bEnglistIMEModeOnly;
-	BOOL bIgnoreCase;
-	BOOL bLaTeXInputMethod;
+	bool bEnglistIMEModeOnly;
+	bool bIgnoreCase;
+	bool bLaTeXInputMethod;
 	UINT iVisibleItemCount;
 	int iMinWordLength;
 	int iMinNumberLength;
@@ -326,8 +330,8 @@ enum {
 void	EditCompleteUpdateConfig(void);
 bool	IsDocWordChar(uint32_t ch);
 bool	IsAutoCompletionWordCharacter(uint32_t ch);
-void	EditCompleteWord(int iCondition, BOOL autoInsert);
-BOOL	EditIsOpenBraceMatched(Sci_Position pos, Sci_Position startPos);
+void	EditCompleteWord(int iCondition, bool autoInsert);
+bool	EditIsOpenBraceMatched(Sci_Position pos, Sci_Position startPos);
 void	EditAutoCloseBraceQuote(int ch);
 void	EditAutoCloseXMLTag(void);
 void	EditAutoIndent(void);
@@ -357,6 +361,8 @@ void	EditShowCallTips(Sci_Position position);
 #define CPI_UTF8					6
 #define CPI_UTF8SIGN				7
 #define CPI_UTF7					8
+// global default encoding
+#define CPI_GLOBAL_DEFAULT			CPI_UTF8
 
 #define MAX_ENCODING_LABEL_SIZE		32
 // MultiByteToWideChar() and WideCharToMultiByte() uses int as length.
@@ -422,12 +428,12 @@ static inline BOOL GetLegacyOEMCP(UINT *oemcp) {
 }
 
 // 932 Shift-JIS, 936 GBK, 949 UHC, 950 Big5, 1361 Johab
-static inline BOOL IsDBCSCodePage(UINT page) {
+static inline bool IsDBCSCodePage(UINT page) {
 	return page == 932 || page == 936 || page == 949 || page == 950 || page == 1361;
 }
 
 // dwFlags must be 0 for MultiByteToWideChar() and WideCharToMultiByte()
-static inline BOOL IsZeroFlagsCodePage(UINT page) {
+static inline bool IsZeroFlagsCodePage(UINT page) {
 	return page == CP_UTF8
 		|| page == CP_UTF7
 		|| page == 54936	// GB18030
@@ -444,47 +450,47 @@ static inline BOOL IsZeroFlagsCodePage(UINT page) {
 
 // in EditEncoding.c
 extern NP2ENCODING mEncoding[];
-static inline BOOL Encoding_IsUnicode(int iEncoding) {
+static inline bool Encoding_IsUnicode(int iEncoding) {
 	return iEncoding == CPI_UNICODEBOM
 		|| iEncoding == CPI_UNICODEBEBOM
 		|| iEncoding == CPI_UNICODE
 		|| iEncoding == CPI_UNICODEBE;
 }
 
-static inline BOOL Encoding_IsUTF8(int iEncoding) {
+static inline bool Encoding_IsUTF8(int iEncoding) {
 	return iEncoding == CPI_UTF8
 		|| iEncoding == CPI_UTF8SIGN;
 }
 
 void	Encoding_ReleaseResources(void);
-BOOL	EditSetNewEncoding(int iEncoding, int iNewEncoding, BOOL bNoUI, BOOL bSetSavePoint);
-void	EditOnCodePageChanged(UINT oldCodePage, BOOL showControlCharacter, LPEDITFINDREPLACE lpefr);
+bool	EditSetNewEncoding(int iEncoding, int iNewEncoding, BOOL bNoUI, bool bSetSavePoint);
+void	EditOnCodePageChanged(UINT oldCodePage, bool showControlCharacter, LPEDITFINDREPLACE lpefr);
 const char* GetFoldDisplayEllipsis(UINT cpEdit, UINT acp);
 void	Encoding_InitDefaults(void);
-int 	Encoding_MapIniSetting(BOOL bLoad, UINT iSetting);
+int 	Encoding_MapIniSetting(bool bLoad, UINT iSetting);
 void	Encoding_GetLabel(int iEncoding);
 int 	Encoding_Match(LPCWSTR pwszTest);
 int 	Encoding_MatchA(LPCSTR pchTest);
-BOOL	Encoding_IsValid(int iEncoding);
+bool	Encoding_IsValid(int iEncoding);
 int		Encoding_GetIndex(UINT codePage);
 int		Encoding_GetAnsiIndex(void);
-void	Encoding_AddToTreeView(HWND hwnd, int idSel, BOOL bRecodeOnly);
-BOOL	Encoding_GetFromTreeView(HWND hwnd, int *pidEncoding, BOOL bQuiet);
+void	Encoding_AddToTreeView(HWND hwnd, int idSel, bool bRecodeOnly);
+bool	Encoding_GetFromTreeView(HWND hwnd, int *pidEncoding, bool bQuiet);
 #if 0
-void	Encoding_AddToListView(HWND hwnd, int idSel, BOOL bRecodeOnly);
-BOOL	Encoding_GetFromListView(HWND hwnd, int *pidEncoding);
-void	Encoding_AddToComboboxEx(HWND hwnd, int idSel, BOOL bRecodeOnly);
-BOOL	Encoding_GetFromComboboxEx(HWND hwnd, int *pidEncoding);
+void	Encoding_AddToListView(HWND hwnd, int idSel, bool bRecodeOnly);
+bool	Encoding_GetFromListView(HWND hwnd, int *pidEncoding);
+void	Encoding_AddToComboboxEx(HWND hwnd, int idSel, bool bRecodeOnly);
+bool	Encoding_GetFromComboboxEx(HWND hwnd, int *pidEncoding);
 #endif
 
 UINT	CodePageFromCharSet(UINT uCharSet);
-BOOL	IsUTF8(const char *pTest, DWORD nLength);
-BOOL	IsUTF7(const char *pTest, DWORD nLength);
+bool	IsUTF8(const char *pTest, DWORD nLength);
+bool	IsUTF7(const char *pTest, DWORD nLength);
 
 #define BOM_UTF8		0xBFBBEF
 #define BOM_UTF16LE		0xFEFF
 #define BOM_UTF16BE		0xFFFE
-static inline BOOL IsUTF8Signature(const char *p) {
+static inline bool IsUTF8Signature(const char *p) {
 	//return p[0] == '\xEF' && p[1] == '\xBB' && p[2] == '\xBF';
 	return (*((const UINT *)p) & 0xFFFFFF) == BOM_UTF8;
 }
@@ -516,24 +522,24 @@ bool IsStringCaseSensitiveA(LPCSTR pszText);
 typedef struct EditTabSettings {
 	int 	globalTabWidth;
 	int 	globalIndentWidth;
-	BOOL	globalTabsAsSpaces;
-	BOOL	bTabIndents;
-	BOOL	bBackspaceUnindents;
-	BOOL	bDetectIndentation;
+	bool	globalTabsAsSpaces;
+	bool	bTabIndents;
+	bool	bBackspaceUnindents;
+	bool	bDetectIndentation;
 
 	int		schemeTabWidth;
 	int		schemeIndentWidth;
-	BOOL	schemeTabsAsSpaces;
-	BOOL	schemeUseGlobalTabSettings;
+	bool	schemeTabsAsSpaces;
+	bool	schemeUseGlobalTabSettings;
 } EditTabSettings;
 
 typedef struct FILEVARS {
 	int 	mask;
 	int 	iTabWidth;
 	int 	iIndentWidth;
-	BOOL	bTabsAsSpaces;
-	BOOL	bTabIndents;
-	BOOL	fWordWrap;
+	bool	bTabsAsSpaces;
+	bool	bTabIndents;
+	bool	fWordWrap;
 	int 	iLongLinesLimit;
 	int 	iEncoding;
 	char	tchEncoding[32];
@@ -546,16 +552,16 @@ void	EditSetWrapStartIndent(int tabWidth, int indentWidth);
 void	EditSetWrapIndentMode(int tabWidth, int indentWidth);
 void	FileVars_Init(LPCSTR lpData, DWORD cbData, LPFILEVARS lpfv);
 void	FileVars_Apply(LPFILEVARS lpfv);
-BOOL	FileVars_ParseInt(LPCSTR pszData, LPCSTR pszName, int *piValue);
-BOOL	FileVars_ParseStr(LPCSTR pszData, LPCSTR pszName, char *pszValue, int cchValue);
+bool	FileVars_ParseInt(LPCSTR pszData, LPCSTR pszName, int *piValue);
+bool	FileVars_ParseStr(LPCSTR pszData, LPCSTR pszName, char *pszValue, int cchValue);
 static inline int FileVars_GetEncoding(LPCFILEVARS lpfv) {
 	return (lpfv->mask & FV_ENCODING) ? lpfv->iEncoding : CPI_NONE;
 }
 
 typedef enum {
-	FOLD_ACTION_FOLD	= 0, // SC_FOLDACTION_CONTRACT
-	FOLD_ACTION_EXPAND	= 1, // SC_FOLDACTION_EXPAND
-	FOLD_ACTION_SNIFF	= 2, // SC_FOLDACTION_TOGGLE
+	FOLD_ACTION_FOLD	= SC_FOLDACTION_CONTRACT,
+	FOLD_ACTION_EXPAND	= SC_FOLDACTION_EXPAND,
+	FOLD_ACTION_SNIFF	= SC_FOLDACTION_TOGGLE,
 } FOLD_ACTION;
 
 void FoldExpandRange(Sci_Line lineStart, Sci_Line lineEnd);

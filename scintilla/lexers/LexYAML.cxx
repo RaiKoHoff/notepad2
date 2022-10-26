@@ -45,7 +45,7 @@ struct EscapeSequence {
 
 constexpr bool IsYAMLFlowIndicator(int ch) noexcept {
 	// c-flow-indicator
-	return ch == ',' || ch == '[' || ch == ']' || ch == '{' || ch == '}';
+	return ch == ',' || AnyOf<'[', ']', '{', '}'>(ch);
 }
 
 constexpr bool IsYAMLOperator(int ch, int braceCount) noexcept {
@@ -234,7 +234,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_YAML_IDENTIFIER:
 			if (!IsAlpha(sc.ch)) {
-				if (IsYAMLText(sc, braceCount, keywordLists[0])) {
+				if (IsYAMLText(sc, braceCount, &keywordLists[0])) {
 					continue;
 				}
 			}
@@ -294,7 +294,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			break;
 
 		case SCE_YAML_STRING_DQ:
-			if (sc.ch == '\\') {
+			if (sc.ch == '\\' && !IsEOLChar(sc.chNext)) {
 				escSeq.resetEscapeState(sc.chNext);
 				sc.SetState(SCE_YAML_ESCAPECHAR);
 				sc.Forward();

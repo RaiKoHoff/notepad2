@@ -115,6 +115,45 @@ constexpr void AnyOf([[maybe_unused]] T *t, [[maybe_unused]] Args... args) noexc
 template <typename T, typename... Args>
 constexpr void AnyOf([[maybe_unused]] const T *t, [[maybe_unused]] Args... args) noexcept {}
 
+template <typename T>
+constexpr bool IsPowerOfTwo(T value) noexcept {
+	return (value & (value - 1)) == 0;
+}
+
+template <char ch0, char ch1, typename T>
+constexpr bool AnyOf(T ch) noexcept {
+	// [chr(ch) for ch in range(256) if ((ch - ord('E')) & ~0x20) == 0] ['E', 'e']
+	static_assert(IsPowerOfTwo(ch1 - ch0));
+	if constexpr ((ch1 - ch0) <= 1) {
+		return ch >= ch0 && ch <= ch1;
+	} else {
+		return ((ch - ch0) & ~(ch1 - ch0)) == 0;
+	}
+}
+
+template <char ch0, char ch1, char ch2, char ch3, typename T>
+constexpr bool AnyOf(T ch) noexcept {
+	// [chr(ch) for ch in range(256) if ((ch - ord('E')) & ~0x21) == 0] ['E', 'F', 'e', 'f']
+	static_assert(IsPowerOfTwo(ch1 - ch0) && IsPowerOfTwo(ch2 - ch0) && (ch1 - ch0) == (ch3 - ch2));
+	return ((ch - ch0) & ~((ch1 - ch0) | (ch2 - ch0))) == 0;
+}
+
+template <typename T>
+constexpr T UnsafeLower(T ch) noexcept {
+	// [(ch, chr(ch | 0x20)) for ch in range(0, 32) if chr(ch | 0x20) != chr(ch).lower()]
+	// [(chr(ch), chr(ch | 0x20)) for ch in range(32, 128) if chr(ch | 0x20) != chr(ch).lower()]
+	// [('@', '`'), ('[', '{'), ('\\', '|'), (']', '}'), ('^', '~'), ('_', '\x7f')]
+	return ch | 0x20;
+}
+
+template <typename T>
+constexpr T UnsafeUpper(T ch) noexcept {
+	// [(chr(ch), ch & ~0x20) for ch in range(0, 64) if chr(ch & ~0x20) != chr(ch).upper()]
+	// [(chr(ch), chr(ch & ~0x20)) for ch in range(64, 128) if chr(ch & ~0x20) != chr(ch).upper()]
+	// [('`', '@'), ('{', '['), ('|', '\\'), ('}', ']'), ('~', '^'), ('\x7f', '_')]
+	return ch & ~0x20;
+}
+
 constexpr bool Between(int value, int lower, int high) noexcept {
 	return value >= lower && value <= high;
 }
@@ -190,12 +229,17 @@ constexpr bool IsOctalDigit(int ch) noexcept {
 	return ch >= '0' && ch <= '7';
 }
 
-constexpr bool IsADigit(int ch, int base) noexcept {
+constexpr bool IsOctalOrHex(int ch, bool hex) noexcept {
+	const unsigned diff = ch - '0';
+	return diff < 8 || (hex && (diff < 10 || Between(UnsafeLower(ch), 'a', 'f')));
+}
+
+constexpr bool IsADigitEx(int ch, int base) noexcept {
 	if (base <= 10) {
 		return (ch >= '0' && ch < '0' + base);
 	}
 	return (ch >= '0' && ch <= '9')
-		|| Between(ch | 0x20, 'a', 'a' + base - 10);
+		|| Between(UnsafeLower(ch), 'a', 'a' + base - 10);
 }
 
 constexpr bool IsNumberStart(int ch, int chNext) noexcept {
@@ -221,10 +265,15 @@ constexpr bool IsFloatExponent(int ch, int chNext) noexcept {
 		&& (chNext == '+' || chNext == '-' || IsADigit(chNext));
 }
 
-constexpr bool IsFloatExponent(int base, int ch, int chNext) noexcept {
+constexpr bool IsFloatExponentEx(int base, int ch, int chNext) noexcept {
 	return ((base == 10 && (ch == 'e' || ch == 'E'))
 		|| (base == 16 && (ch == 'p' || ch == 'P')))
 		&& (chNext == '+' || chNext == '-' || IsADigit(chNext));
+}
+
+constexpr bool IsFloatExponent(int chPrev, int ch, int chNext) noexcept {
+	return (chPrev == 'e' || chPrev == 'E')
+		&& (ch == '+' || ch == '-') && IsADigit(chNext);
 }
 
 //[[deprecated]]
@@ -386,7 +435,7 @@ constexpr T MakeLowerCase(T ch) noexcept {
 inline void ToLowerCase(char *s) noexcept {
 	while (*s) {
 		if (*s >= 'A' && *s <= 'Z') {
-			*s += 'a' - 'A';
+			*s |= 'a' - 'A';
 		}
 		++s;
 	}

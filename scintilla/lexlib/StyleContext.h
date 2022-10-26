@@ -161,7 +161,7 @@ public:
 	}
 	bool MatchLineEnd() const noexcept {
 		//return currentPos == lineEnd;
-		return atLineEnd;
+		return ch == '\n' || ch == '\r'; //! Unicode line ending not supported
 	}
 #if 0
 	[[deprecated]]
@@ -206,6 +206,7 @@ public:
 		return true;
 	}
 	bool MatchIgnoreCase(const char *s) const noexcept;
+	bool MatchLowerCase(const char *s) const noexcept;
 
 	void GetCurrent(char *s, Sci_PositionU len) const noexcept {
 		styler.GetRange(styler.GetStartSegment(), currentPos, s, len);
@@ -260,6 +261,16 @@ public:
 	bool LineEndsWith(char ch0) const noexcept {
 		return chPrev == static_cast<unsigned char>(ch0)
 			|| (chPrev == '\r' && ch == '\n' && currentPos >= 2 && ch0 == styler[currentPos - 2]);
+	}
+
+	int GetCharAfterNext() const noexcept {
+		//return GetRelativeCharacter(2);
+		const Sci_Position pos = currentPos + 1; // currentPos + width
+		Sci_Position widthNext_ = widthNext;
+		if (chNext >= 0x80 && styler.Encoding() == EncodingType::unicode) {
+			styler.GetCharacterAndWidth(pos, &widthNext_);
+		}
+		return static_cast<unsigned char>(styler.SafeGetCharAt(pos + widthNext_));
 	}
 
 	int GetLineLastChar() const noexcept {

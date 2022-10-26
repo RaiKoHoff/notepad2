@@ -24,16 +24,20 @@ using namespace Lexilla;
 
 namespace {
 
+// https://dlang.org/spec/lex.html#string_literals
 struct EscapeSequence {
 	int outerState = SCE_D_DEFAULT;
 	int digitsLeft = 0;
-	int numBase = 0;
+	bool hex = false;
 
 	// highlight any character as escape sequence, no highlight for '\&NamedCharacterEntity;'.
-	void resetEscapeState(int state, int chNext) noexcept {
+	bool resetEscapeState(int state, int chNext) noexcept {
+		if (IsEOLChar(chNext)) {
+			return false;
+		}
 		outerState = state;
 		digitsLeft = 1;
-		numBase = 16;
+		hex = true;
 		if (chNext == 'U') {
 			digitsLeft = 9;
 		} else if (chNext == 'u') {
@@ -42,12 +46,13 @@ struct EscapeSequence {
 			digitsLeft = 3;
 		} else if (IsOctalDigit(chNext)) {
 			digitsLeft = 3;
-			numBase = 8;
+			hex = false;
 		}
+		return true;
 	}
 	bool atEscapeEnd(int ch) noexcept {
 		--digitsLeft;
-		return digitsLeft <= 0 || !IsADigit(ch, numBase);
+		return digitsLeft <= 0 || !IsOctalOrHex(ch, hex);
 	}
 };
 
@@ -246,9 +251,10 @@ inline Sci_Position CheckFormatSpecifier(const StyleContext &sc, LexAccessor &st
 bool HandleInnerStringStyle(StyleContext &sc, EscapeSequence &escSeq, bool &insideUrl) {
 	if (sc.ch == '\\') {
 		if (!(sc.state == SCE_D_RAWSTRING || sc.state == SCE_D_STRING_BT)) {
-			escSeq.resetEscapeState(sc.state, sc.chNext);
-			sc.SetState(SCE_D_ESCAPECHAR);
-			sc.Forward();
+			if (escSeq.resetEscapeState(sc.state, sc.chNext)) {
+				sc.SetState(SCE_D_ESCAPECHAR);
+				sc.Forward();
+			}
 		}
 	} else if (sc.ch == '%') {
 		const Sci_Position length = CheckFormatSpecifier(sc, sc.styler, insideUrl);
@@ -305,8 +311,7 @@ void ColouriseDDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle
 		*/
 		asmState = static_cast<InlineAssembler>((lineState >> 3) & 3);
 		nestedLevel = (lineState >> 8) & 0xff;
-	}
-	if (startPos == 0 && sc.Match('#', '!')) {
+	} else if (startPos == 0 && sc.Match('#', '!')) {
 		// Shell Shebang at beginning of file
 		sc.SetState(SCE_D_COMMENTLINE);
 		sc.Forward();
@@ -332,7 +337,7 @@ void ColouriseDDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle
 				if (sc.state == SCE_D_IDENTIFIER) {
 					char s[128];
 					sc.GetCurrent(s, sizeof(s));
-					if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+					if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 						sc.ChangeState(SCE_D_WORD);
 						if (asmState == InlineAssembler::None) {
 							if (StrEqual(s, "import")) {
@@ -363,26 +368,26 @@ void ColouriseDDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle
 								}
 							}
 						}
-					} else if (keywordLists[KeywordIndex_Type]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Type].InList(s)) {
 						sc.ChangeState(SCE_D_WORD2);
-					} else if (keywordLists[KeywordIndex_Class]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Class].InList(s)) {
 						sc.ChangeState(SCE_D_CLASS);
-					} else if (keywordLists[KeywordIndex_Struct]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Struct].InList(s)) {
 						sc.ChangeState(SCE_D_STRUCT);
-					} else if (keywordLists[KeywordIndex_Union]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Union].InList(s)) {
 						sc.ChangeState(SCE_D_UNION);
-					} else if (keywordLists[KeywordIndex_Interface]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Interface].InList(s)) {
 						sc.ChangeState(SCE_D_INTERFACE);
-					} else if (sc.ch == '!' && keywordLists[KeywordIndex_Trait]->InList(s)) {
+					} else if (sc.ch == '!' && keywordLists[KeywordIndex_Trait].InList(s)) {
 						sc.ChangeState(SCE_D_TRAIT);
-					} else if (keywordLists[KeywordIndex_Enumeration]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Enumeration].InList(s)) {
 						sc.ChangeState(SCE_D_ENUM);
-					} else if (keywordLists[KeywordIndex_Constant]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Constant].InList(s)) {
 						sc.ChangeState(SCE_D_CONSTANT);
 					} else if (asmState == InlineAssembler::X86) {
-						if (keywordLists[KeywordIndex_AsmKeyword]->InList(s)) {
+						if (keywordLists[KeywordIndex_AsmKeyword].InList(s)) {
 							sc.ChangeState(SCE_D_WORD);
-						} else if (keywordLists[KeywordIndex_AsmRegister]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_AsmRegister].InList(s)) {
 							sc.ChangeState(SCE_D_ASM_REGISTER);
 						} else if (visibleChars == sc.LengthCurrent() || AnyOf(chBefore, ';', ':', '{')) {
 							sc.ChangeState((sc.ch == ':')? SCE_D_LABEL : SCE_D_ASM_INSTRUCTION);
@@ -462,14 +467,15 @@ void ColouriseDDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle
 			break;
 
 		case SCE_D_CHARACTER:
-			if (sc.ch == '\'') {
-				sc.ForwardSetState(SCE_D_DEFAULT);
-			} else if (sc.ch == '\\' && !IsEOLChar(sc.chNext)) {
-				escSeq.resetEscapeState(sc.state, sc.chNext);
-				sc.SetState(SCE_D_ESCAPECHAR);
-				sc.Forward();
-			} else if (sc.atLineStart) {
+			if (sc.atLineStart) {
 				sc.SetState(SCE_D_DEFAULT);
+			} else if (sc.ch == '\'') {
+				sc.ForwardSetState(SCE_D_DEFAULT);
+			} else if (sc.ch == '\\') {
+				if (escSeq.resetEscapeState(sc.state, sc.chNext)) {
+					sc.SetState(SCE_D_ESCAPECHAR);
+					sc.Forward();
+				}
 			}
 			break;
 

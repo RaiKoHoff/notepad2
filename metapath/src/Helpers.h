@@ -38,11 +38,11 @@ NP2_inline int validate_i(int x, int lower, int upper, int defaultValue) {
 	return (x < lower || x > upper) ? defaultValue : x;
 }
 
-NP2_inline BOOL StrIsEmpty(LPCWSTR s) {
+NP2_inline bool StrIsEmpty(LPCWSTR s) {
 	return s == NULL || *s == L'\0';
 }
 
-NP2_inline BOOL StrNotEmpty(LPCWSTR s) {
+NP2_inline bool StrNotEmpty(LPCWSTR s) {
 	return s != NULL && *s != L'\0';
 }
 
@@ -54,21 +54,21 @@ NP2_inline int ToLowerA(int ch) {
 	return (ch >= 'A' && ch <= 'Z') ? (ch - 'A' + 'a') : ch;
 }
 
-NP2_inline BOOL StrEqual(LPCWSTR s1, LPCWSTR s2) {
+NP2_inline bool StrEqual(LPCWSTR s1, LPCWSTR s2) {
 	return wcscmp(s1, s2) == 0;
 }
 
-NP2_inline BOOL StrCaseEqual(LPCWSTR s1, LPCWSTR s2) {
+NP2_inline bool StrCaseEqual(LPCWSTR s1, LPCWSTR s2) {
 	return _wcsicmp(s1, s2) == 0;
 }
 
-#define StrCpyExW(s, t)						memcpy((s), (t), sizeof(WCHAR)*COUNTOF(t))
-#define StrEqualExW(s, t)					(memcmp((s), (t), sizeof(WCHAR)*COUNTOF(t)) == 0)
-#define StrHasPrefix(s, prefix)				(memcmp((s), (prefix), sizeof(WCHAR)*CSTRLEN(prefix)) == 0)
+#define StrCpyExW(s, t)						memcpy((s), (t), STRSIZE(t))
+#define StrEqualExW(s, t)					(memcmp((s), (t), STRSIZE(t)) == 0)
+#define StrHasPrefix(s, prefix)				(memcmp((s), (prefix), STRSIZE(prefix) - sizeof(WCHAR)) == 0)
 #define StrHasPrefixCase(s, prefix)			(_wcsnicmp((s), (prefix), CSTRLEN(prefix)) == 0)
 #define StrHasPrefixCaseEx(s, prefix, len)	(_wcsnicmp((s), (prefix), (len)) == 0)
 
-NP2_inline BOOL CRTStrToInt(LPCWSTR str, int *value) {
+NP2_inline bool CRTStrToInt(LPCWSTR str, int *value) {
 	LPWSTR end;
 	*value = (int)wcstol(str, &end, 10);
 	return str != end;
@@ -86,27 +86,27 @@ extern DWORD g_uWinVer;
 // https://docs.microsoft.com/en-us/windows/win32/sysinfo/operating-system-version
 
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
-#define IsVistaAndAbove()	TRUE
+#define IsVistaAndAbove()	true
 #else
 #define IsVistaAndAbove()	(g_uWinVer >= _WIN32_WINNT_VISTA)
 #endif
 #if _WIN32_WINNT >= _WIN32_WINNT_WIN7
-#define IsWin7AndAbove()	TRUE
+#define IsWin7AndAbove()	true
 #else
 #define IsWin7AndAbove()	(g_uWinVer >= _WIN32_WINNT_WIN7)
 #endif
 #if _WIN32_WINNT >= _WIN32_WINNT_WIN8
-#define IsWin8AndAbove()	TRUE
+#define IsWin8AndAbove()	true
 #else
 #define IsWin8AndAbove()	(g_uWinVer >= _WIN32_WINNT_WIN8)
 #endif
 #if _WIN32_WINNT >= _WIN32_WINNT_WINBLUE
-#define IsWin8p1AndAbove()	TRUE
+#define IsWin8p1AndAbove()	true
 #else
 #define IsWin8p1AndAbove()	(g_uWinVer >= _WIN32_WINNT_WINBLUE)
 #endif
 #if _WIN32_WINNT >= _WIN32_WINNT_WIN10
-#define IsWin10AndAbove()	TRUE
+#define IsWin10AndAbove()	true
 #else
 #define IsWin10AndAbove()	(g_uWinVer >= _WIN32_WINNT_WIN10)
 #endif
@@ -157,13 +157,13 @@ extern WCHAR szIniFile[MAX_PATH];
 #define IniSetString(lpSection, lpName, lpString) \
 	WritePrivateProfileString(lpSection, lpName, lpString, szIniFile)
 
-void IniClearSectionEx(LPCWSTR lpSection, LPCWSTR lpszIniFile, BOOL bDelete);
-#define IniClearSection(lpSection)			IniClearSectionEx((lpSection), szIniFile, FALSE)
-#define IniDeleteSection(lpSection) 		IniClearSectionEx((lpSection), szIniFile, TRUE)
+void IniClearSectionEx(LPCWSTR lpSection, LPCWSTR lpszIniFile, bool bDelete);
+#define IniClearSection(lpSection)			IniClearSectionEx((lpSection), szIniFile, false)
+#define IniDeleteSection(lpSection) 		IniClearSectionEx((lpSection), szIniFile, true)
 
-void IniClearAllSectionEx(LPCWSTR lpszPrefix, LPCWSTR lpszIniFile, BOOL bDelete);
-#define IniClearAllSection(lpszPrefix)		IniClearAllSectionEx((lpszPrefix), szIniFile, FALSE)
-#define IniDeleteAllSection(lpszPrefix)		IniClearAllSectionEx((lpszPrefix), szIniFile, TRUE)
+void IniClearAllSectionEx(LPCWSTR lpszPrefix, LPCWSTR lpszIniFile, bool bDelete);
+#define IniClearAllSection(lpszPrefix)		IniClearAllSectionEx((lpszPrefix), szIniFile, false)
+#define IniDeleteAllSection(lpszPrefix)		IniClearAllSectionEx((lpszPrefix), szIniFile, true)
 
 NP2_inline void IniSetInt(LPCWSTR lpSection, LPCWSTR lpName, int i) {
 	WCHAR tch[16];
@@ -171,7 +171,7 @@ NP2_inline void IniSetInt(LPCWSTR lpSection, LPCWSTR lpName, int i) {
 	IniSetString(lpSection, lpName, tch);
 }
 
-NP2_inline void IniSetBool(LPCWSTR lpSection, LPCWSTR lpName, BOOL b) {
+NP2_inline void IniSetBool(LPCWSTR lpSection, LPCWSTR lpName, bool b) {
 	IniSetString(lpSection, lpName, (b ? L"1" : L"0"));
 }
 
@@ -183,7 +183,7 @@ NP2_inline void IniSetIntEx(LPCWSTR lpSection, LPCWSTR lpName, int i, int iDefau
 	}
 }
 
-NP2_inline void IniSetBoolEx(LPCWSTR lpSection, LPCWSTR lpName, BOOL b, BOOL bDefault) {
+NP2_inline void IniSetBoolEx(LPCWSTR lpSection, LPCWSTR lpName, bool b, bool bDefault) {
 	IniSetString(lpSection, lpName, (b == bDefault) ? NULL : (b ? L"1" : L"0"));
 }
 
@@ -235,12 +235,12 @@ NP2_inline void IniSectionClear(IniSection *section) {
 	section->head = NULL;
 }
 
-NP2_inline BOOL IniSectionIsEmpty(const IniSection *section) {
+NP2_inline bool IniSectionIsEmpty(const IniSection *section) {
 	return section->count == 0;
 }
 
-BOOL IniSectionParseArray(IniSection *section, LPWSTR lpCachedIniSection);
-BOOL IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection);
+bool IniSectionParseArray(IniSection *section, LPWSTR lpCachedIniSection);
+bool IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection);
 LPCWSTR IniSectionUnsafeGetValue(IniSection *section, LPCWSTR key, int keyLen);
 
 NP2_inline LPCWSTR IniSectionGetValueImpl(IniSection *section, LPCWSTR key, int keyLen) {
@@ -249,7 +249,7 @@ NP2_inline LPCWSTR IniSectionGetValueImpl(IniSection *section, LPCWSTR key, int 
 
 void IniSectionGetStringImpl(IniSection *section, LPCWSTR key, int keyLen, LPCWSTR lpDefault, LPWSTR lpReturnedString, int cchReturnedString);
 int IniSectionGetIntImpl(IniSection *section, LPCWSTR key, int keyLen, int iDefault);
-BOOL IniSectionGetBoolImpl(IniSection *section, LPCWSTR key, int keyLen, BOOL bDefault);
+bool IniSectionGetBoolImpl(IniSection *section, LPCWSTR key, int keyLen, bool bDefault);
 
 #define IniSectionGetValue(section, key) \
 	IniSectionGetValueImpl(section, key, CSTRLEN(key))
@@ -268,7 +268,7 @@ NP2_inline int IniSectionGetIntEx(IniSection *section, LPCWSTR key, int iDefault
 	return IniSectionGetIntImpl(section, key, 0, iDefault);
 }
 
-NP2_inline BOOL IniSectionGetBoolEx(IniSection *section, LPCWSTR key, BOOL bDefault) {
+NP2_inline bool IniSectionGetBoolEx(IniSection *section, LPCWSTR key, bool bDefault) {
 	return IniSectionGetBoolImpl(section, key, 0, bDefault);
 }
 
@@ -288,7 +288,7 @@ NP2_inline void IniSectionSetInt(IniSectionOnSave *section, LPCWSTR key, int i) 
 	IniSectionSetString(section, key, tch);
 }
 
-NP2_inline void IniSectionSetBool(IniSectionOnSave *section, LPCWSTR key, BOOL b) {
+NP2_inline void IniSectionSetBool(IniSectionOnSave *section, LPCWSTR key, bool b) {
 	IniSectionSetString(section, key, (b ? L"1" : L"0"));
 }
 
@@ -304,7 +304,7 @@ NP2_inline void IniSectionSetIntEx(IniSectionOnSave *section, LPCWSTR key, int i
 	}
 }
 
-NP2_inline void IniSectionSetBoolEx(IniSectionOnSave *section, LPCWSTR key, BOOL b, BOOL bDefault) {
+NP2_inline void IniSectionSetBoolEx(IniSectionOnSave *section, LPCWSTR key, bool b, bool bDefault) {
 	if (b != bDefault) {
 		IniSectionSetString(section, key, (b ? L"1" : L"0"));
 	}
@@ -327,7 +327,7 @@ LSTATUS Registry_DeleteTree(HKEY hKey, LPCWSTR lpSubKey);
 #endif
 
 
-NP2_inline BOOL KeyboardIsKeyDown(int key) {
+NP2_inline bool KeyboardIsKeyDown(int key) {
 	return (GetKeyState(key) & 0x8000) != 0;
 }
 
@@ -352,20 +352,19 @@ void BackgroundWorker_Destroy(BackgroundWorker *worker);
 	(WaitForSingleObject((worker)->eventCancel, 0) != WAIT_OBJECT_0)
 
 HRESULT PrivateSetCurrentProcessExplicitAppUserModelID(PCWSTR AppID);
-BOOL IsElevated(void);
-BOOL ExeNameFromWnd(HWND hwnd, LPWSTR szExeName, int cchExeName);
-//BOOL Is32bitExe(LPCWSTR lpszExeName);
+bool IsElevated(void);
+bool ExeNameFromWnd(HWND hwnd, LPWSTR szExeName, DWORD cchExeName);
+//bool Is32bitExe(LPCWSTR lpszExeName);
 
 #define SetExplorerTheme(hwnd)		SetWindowTheme((hwnd), L"Explorer", NULL)
 #define SetListViewTheme(hwnd)		SetWindowTheme((hwnd), L"Listview", NULL)
 
-BOOL FindUserResourcePath(LPCWSTR path, LPWSTR outPath);
+bool FindUserResourcePath(LPCWSTR path, LPWSTR outPath);
 HBITMAP LoadBitmapFile(LPCWSTR path);
-BOOL BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest);
-BOOL BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha);
-BOOL BitmapGrayScale(HBITMAP hbmp);
+bool BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest);
+bool BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha);
+bool BitmapGrayScale(HBITMAP hbmp);
 
-BOOL SetWindowPathTitle(HWND hwnd, LPCWSTR lpszFile);
 void CenterDlgInParentEx(HWND hDlg, HWND hParent);
 NP2_inline void CenterDlgInParent(HWND hDlg) {
 	CenterDlgInParentEx(hDlg, GetParent(hDlg));
@@ -396,8 +395,8 @@ void ResizeDlgCtl(HWND hwndDlg, int nCtlId, int dx, int dy);
 void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, WORD wBmpId);
 void DeleteBitmapButton(HWND hwnd, int nCtlId);
 void SetClipData(HWND hwnd, LPCWSTR pszData);
-void SetWindowTransparentMode(HWND hwnd, BOOL bTransparentMode, int iOpacityLevel);
-void SetWindowLayoutRTL(HWND hwnd, BOOL bRTL);
+void SetWindowTransparentMode(HWND hwnd, bool bTransparentMode, int iOpacityLevel);
+void SetWindowLayoutRTL(HWND hwnd, bool bRTL);
 
 #define SendWMCommandEx(hwnd, id, extra)	SendMessage(hwnd, WM_COMMAND, MAKEWPARAM((id), (extra)), 0)
 #define SendWMCommand(hwnd, id)				SendWMCommandEx(hwnd, (id), 1)
@@ -433,7 +432,7 @@ LRESULT SendWMSize(HWND hwnd);
 #define IsButtonChecked(hwnd, uId)	(IsDlgButtonChecked(hwnd, (uId)) == BST_CHECKED)
 
 HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName);
-NP2_inline BOOL IsChineseTraditionalSubLang(LANGID subLang) {
+NP2_inline bool IsChineseTraditionalSubLang(LANGID subLang) {
 	return subLang == SUBLANG_CHINESE_TRADITIONAL
 		|| subLang == SUBLANG_CHINESE_HONGKONG
 		|| subLang == SUBLANG_CHINESE_MACAU;
@@ -454,18 +453,18 @@ NP2_inline BOOL IsChineseTraditionalSubLang(LANGID subLang) {
 		wsprintf((lpOutput), (lpFormat), __VA_ARGS__);			\
 	} while (0)
 
-NP2_inline BOOL PathIsFile(LPCWSTR pszPath) {
+NP2_inline bool PathIsFile(LPCWSTR pszPath) {
 	// note: INVALID_FILE_ATTRIBUTES is -1.
 	return (GetFileAttributes(pszPath) & FILE_ATTRIBUTE_DIRECTORY) == 0;
 }
 
-NP2_inline BOOL PathIsSymbolicLink(LPCWSTR pszPath) {
+NP2_inline bool PathIsSymbolicLink(LPCWSTR pszPath) {
 	// assume file exists, no check for INVALID_FILE_ATTRIBUTES.
 	return (GetFileAttributes(pszPath) & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
 }
 
 // https://docs.microsoft.com/en-us/windows/win32/intl/handling-sorting-in-your-applications#sort-strings-ordinally
-NP2_inline BOOL PathEqual(LPCWSTR pszPath1, LPCWSTR pszPath2) {
+NP2_inline bool PathEqual(LPCWSTR pszPath1, LPCWSTR pszPath2) {
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 	// the function maps case using the operating system uppercasing table
 	return CompareStringOrdinal(pszPath1, -1, pszPath2, -1, TRUE) == CSTR_EQUAL;
@@ -475,7 +474,7 @@ NP2_inline BOOL PathEqual(LPCWSTR pszPath1, LPCWSTR pszPath2) {
 }
 
 // similar to realpath() and std::filesystem::canonical()
-BOOL PathGetRealPath(HANDLE hFile, LPCWSTR lpszSrc, LPWSTR lpszDest);
+bool PathGetRealPath(HANDLE hFile, LPCWSTR lpszSrc, LPWSTR lpszDest);
 NP2_inline void GetProgramRealPath(LPWSTR tchModule, DWORD nSize) {
 	GetModuleFileName(NULL, tchModule, nSize);
 	// for symbolic link, module path is link's path not target's.
@@ -484,11 +483,11 @@ NP2_inline void GetProgramRealPath(LPWSTR tchModule, DWORD nSize) {
 	}
 }
 
-void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, DWORD dwAttrTo, BOOL bUnexpandEnv, BOOL bUnexpandMyDocs);
-void PathAbsoluteFromApp(LPCWSTR lpszSrc, LPWSTR lpszDest, BOOL bExpandEnv);
-BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath);
-BOOL PathCreateLnk(LPCWSTR pszLnkDir, LPCWSTR pszPath);
-void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, BOOL bSelect);
+void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, DWORD dwAttrTo, bool bUnexpandEnv, bool bUnexpandMyDocs);
+void PathAbsoluteFromApp(LPCWSTR lpszSrc, LPWSTR lpszDest, bool bExpandEnv);
+bool PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath);
+bool PathCreateLnk(LPCWSTR pszLnkDir, LPCWSTR pszPath);
+void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, bool bSelect);
 
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 #if defined(__cplusplus)
@@ -506,20 +505,20 @@ NP2_inline void TrimString(LPWSTR lpString) {
 	StrTrim(lpString, L" ");
 }
 
-BOOL ExtractFirstArgument(LPCWSTR lpArgs, LPWSTR lpArg1, LPWSTR lpArg2);
+bool ExtractFirstArgument(LPCWSTR lpArgs, LPWSTR lpArg1, LPWSTR lpArg2);
 void PrepareFilterStr(LPWSTR lpFilter);
 void StrTab2Space(LPWSTR lpsz);
-BOOL PathFixBackslashes(LPWSTR lpsz);
+bool PathFixBackslashes(LPWSTR lpsz);
 void ExpandEnvironmentStringsEx(LPWSTR lpSrc, DWORD dwSrc);
-BOOL SearchPathEx(LPCWSTR lpFileName, DWORD nBufferLength, LPWSTR lpBuffer);
-void FormatNumberStr(LPWSTR lpNumberStr);
+bool SearchPathEx(LPCWSTR lpFileName, DWORD nBufferLength, LPWSTR lpBuffer);
+void FormatNumber(LPWSTR lpNumberStr, int value);
 
 void GetDefaultFavoritesDir(LPWSTR lpFavDir, int cchFavDir);
 void GetDefaultOpenWithDir(LPWSTR lpOpenWithDir, int cchOpenWithDir);
 
 HDROP CreateDropHandle(LPCWSTR lpFileName);
 
-BOOL ExecDDECommand(LPCWSTR lpszCmdLine, LPCWSTR lpszDDEMsg, LPCWSTR lpszDDEApp, LPCWSTR lpszDDETopic);
+bool ExecDDECommand(LPCWSTR lpszCmdLine, LPCWSTR lpszDDEMsg, LPCWSTR lpszDDEApp, LPCWSTR lpszDDETopic);
 
 //==== History Functions ======================================================
 #define HISTORY_ITEMS 50
@@ -533,11 +532,11 @@ typedef const HISTORY *LCPHISTORY;
 
 void History_Init(PHISTORY ph);
 void History_Uninit(PHISTORY ph);
-BOOL History_Add(PHISTORY ph, LPCWSTR pszNew);
-BOOL History_Forward(PHISTORY ph, LPWSTR pszItem, int cItem);
-BOOL History_Back(PHISTORY ph, LPWSTR pszItem, int cItem);
-BOOL History_CanForward(LCPHISTORY ph);
-BOOL History_CanBack(LCPHISTORY ph);
+bool History_Add(PHISTORY ph, LPCWSTR pszNew);
+bool History_Forward(PHISTORY ph, LPWSTR pszItem, int cItem);
+bool History_Back(PHISTORY ph, LPWSTR pszItem, int cItem);
+bool History_CanForward(LCPHISTORY ph);
+bool History_CanBack(LCPHISTORY ph);
 void History_UpdateToolbar(LCPHISTORY ph, HWND hwnd, int cmdBack, int cmdForward);
 
 //==== MRU Functions ==========================================================
@@ -563,15 +562,15 @@ typedef const MRULIST *LPCMRULIST;
 
 LPMRULIST MRU_Create(LPCWSTR pszRegKey, int iFlags, int iSize);
 void MRU_Destroy(LPMRULIST pmru);
-BOOL MRU_Add(LPMRULIST pmru, LPCWSTR pszNew);
-BOOL MRU_Delete(LPMRULIST pmru, int iIndex);
+bool MRU_Add(LPMRULIST pmru, LPCWSTR pszNew);
+bool MRU_Delete(LPMRULIST pmru, int iIndex);
 void MRU_Empty(LPMRULIST pmru);
 int MRU_Enum(LPCMRULIST pmru, int iIndex, LPWSTR pszItem, int cchItem);
 NP2_inline int MRU_GetCount(LPCMRULIST pmru) {
 	return MRU_Enum(pmru, 0, NULL, 0);
 }
-BOOL MRU_Load(LPMRULIST pmru);
-BOOL MRU_Save(LPCMRULIST pmru);
+bool MRU_Load(LPMRULIST pmru);
+bool MRU_Save(LPCMRULIST pmru);
 void MRU_LoadToCombobox(HWND hwnd, LPCWSTR pszKey);
 void MRU_AddOneItem(LPCWSTR pszKey, LPCWSTR pszNewItem);
 void MRU_ClearCombobox(HWND hwnd, LPCWSTR pszKey);
@@ -594,7 +593,7 @@ typedef struct {
 #pragma pack(pop)
 #endif
 
-BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize);
+bool GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize);
 DLGTEMPLATE *LoadThemedDialogTemplate(LPCWSTR lpDialogTemplateID, HINSTANCE hInstance);
 #define ThemedDialogBox(hInstance, lpTemplate, hWndParent, lpDialogFunc) \
 	ThemedDialogBoxParam(hInstance, lpTemplate, hWndParent, lpDialogFunc, 0)
@@ -604,6 +603,6 @@ INT_PTR ThemedDialogBoxParam(HINSTANCE hInstance, LPCWSTR lpTemplate, HWND hWndP
 UINT_PTR CALLBACK OpenSaveFileDlgHookProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 //==== MinimizeToTray Functions - see comments in Helpers.c ===================
-BOOL GetDoAnimateMinimize(void);
+bool GetDoAnimateMinimize(void);
 void MinimizeWndToTray(HWND hwnd);
 void RestoreWndFromTray(HWND hwnd);

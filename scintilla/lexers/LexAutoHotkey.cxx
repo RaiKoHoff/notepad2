@@ -343,7 +343,7 @@ void ColouriseAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 				sc.GetCurrentLowered(s, sizeof(s));
 				if (sc.state == SCE_AHK_IDENTIFIER) {
 					const int chNext = sc.GetLineNextChar();
-					if (keywordLists[KeywordIndex_Keyword]->InList(s)
+					if (keywordLists[KeywordIndex_Keyword].InList(s)
 						|| (kwType == KeywordType::Keyword && StrEqualsAny(s, "files", "parse", "read", "reg"))) {
 						sc.ChangeState(SCE_AHK_KEYWORD);
 						kwType = KeywordType::None;
@@ -356,15 +356,15 @@ void ColouriseAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 								kwType = KeywordType::Class;
 							}
 						}
-					} else if (kwType == KeywordType::Class || keywordLists[KeywordIndex_Object]->InList(s)) {
+					} else if (kwType == KeywordType::Class || keywordLists[KeywordIndex_Object].InList(s)) {
 						sc.ChangeState(SCE_AHK_CLASS);
-					} else if (keywordLists[KeywordIndex_BuiltinVariable]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_BuiltinVariable].InList(s)) {
 						sc.ChangeState(SCE_AHK_BUILTIN_VARIABLE);
-					} else if (keywordLists[KeywordIndex_Function]->InListPrefixed(s, '(')) {
+					} else if (keywordLists[KeywordIndex_Function].InListPrefixed(s, '(')) {
 						sc.ChangeState(SCE_AHK_BUILTIN_FUNCTION);
 					} else if (chNext == '(') {
 						sc.ChangeState(SCE_AHK_FUNCTION);
-					} else if (keywordLists[KeywordIndex_Key]->InList(s) || IsSpecialKey(s, sc.LengthCurrent())) {
+					} else if (keywordLists[KeywordIndex_Key].InList(s) || IsSpecialKey(s, sc.LengthCurrent())) {
 						sc.ChangeState(SCE_AHK_KEY);
 					} else if (sc.ch == ':') {
 						if (sc.chNext != '=' && visibleChars == sc.LengthCurrent()) {
@@ -423,14 +423,15 @@ void ColouriseAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 
 		case SCE_AHK_STRING_SQ:
 		case SCE_AHK_STRING_DQ:
-			if (sc.ch == '`' && !IsEOLChar(sc.chNext)) {
+			if (sc.atLineStart) {
+				sc.SetState(SCE_AHK_DEFAULT);
+			} else if (sc.ch == '`' && !IsEOLChar(sc.chNext)) {
 				const int state = sc.state;
 				sc.SetState(SCE_AHK_ESCAPECHAR);
 				sc.Forward();
 				sc.ForwardSetState(state);
 				continue;
-			}
-			if (sc.ch == '%' && IsIdentifierCharEx(sc.chNext)) {
+			} else if (sc.ch == '%' && IsIdentifierCharEx(sc.chNext)) {
 				outerStyle = sc.state;
 				sc.SetState(SCE_AHK_DYNAMIC_VARIABLE);
 			} else if (sc.ch == '{' || sc.ch == '}') {
@@ -446,14 +447,12 @@ void ColouriseAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 					continue;
 				}
 				sc.ForwardSetState(SCE_AHK_DEFAULT);
-			} else if (sc.atLineStart) {
-				sc.SetState(SCE_AHK_DEFAULT);
 			}
 			break;
 
 		case SCE_AHK_SENTKEY:
 			if (!(IsIdentifierChar(sc.ch) || sc.ch == ' ')) {
-				if (sc.ch == '+' && (sc.chPrev == 'U' || sc.chPrev == 'u')) {
+				if (sc.ch == '+' && UnsafeLower(sc.chPrev) == 'u') {
 					sc.Forward();
 				} else if (sc.ch == '}') {
 					sc.ForwardSetState(outerStyle);
@@ -495,13 +494,14 @@ void ColouriseAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			break;
 
 		case SCE_AHK_HOTSTRING_VALUE:
-			if (sc.ch == '`' && !IsEOLChar(sc.chNext)) {
+			if (sc.atLineStart) {
+				sc.SetState(SCE_AHK_DEFAULT);
+			} else if (sc.ch == '`' && !IsEOLChar(sc.chNext)) {
 				sc.SetState(SCE_AHK_ESCAPECHAR);
 				sc.Forward();
 				sc.ForwardSetState(SCE_AHK_HOTSTRING_VALUE);
 				continue;
-			}
-			if (sc.ch == '{' || sc.ch == '}') {
+			} else if (sc.ch == '{' || sc.ch == '}') {
 				if (HighlightBrace(sc, outerStyle)) {
 					continue;
 				}
@@ -510,8 +510,6 @@ void ColouriseAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 				if (chNext == ';' || chNext == '\0') {
 					sc.SetState(SCE_AHK_DEFAULT);
 				}
-			} else if (sc.atLineStart) {
-				sc.SetState(SCE_AHK_DEFAULT);
 			}
 			break;
 
@@ -633,6 +631,10 @@ void ColouriseAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			break;
 
 		case SCE_AHK_SECTION_COMMENT:
+			if (sc.atLineStart) {
+				sc.SetState(outerStyle);
+				continue;
+			}
 			if (sectionState == AHKSectionState::InitQuote) {
 				if (sc.ch == '`') {
 					sc.Forward();
@@ -643,10 +645,6 @@ void ColouriseAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 					sc.ChangeState((stringQuoteChar == '\'') ? SCE_AHK_STRING_SQ : SCE_AHK_STRING_DQ);
 					break;
 				}
-			}
-			if (sc.atLineStart) {
-				sc.SetState(outerStyle);
-				continue;
 			}
 			break;
 
@@ -674,7 +672,7 @@ void ColouriseAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 						lineStateLineComment = AHKLineStateMaskLineComment;
 					}
 					sc.SetState(SCE_AHK_COMMENTLINE);
-					if (visibleChars == 0 && sc.chNext == '@' && (sc.GetRelative(2) | 0x20) == 'a') {
+					if (visibleChars == 0 && sc.chNext == '@' && styler.MatchLower(sc.currentPos + 2, 'a')) {
 						outerStyle = SCE_AHK_COMMENTLINE;
 						sc.ForwardSetState(SCE_AHK_DIRECTIVE_AT);
 					}
@@ -682,7 +680,7 @@ void ColouriseAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			} else if (sc.Match('/', '*') && visibleChars == 0) {
 				sc.SetState(SCE_AHK_COMMENTBLOCK);
 				sc.Forward();
-				if (sc.chNext == '@' && (sc.GetRelative(2) | 0x20) == 'a') {
+				if (sc.chNext == '@' && styler.MatchLower(sc.currentPos + 2, 'a')) {
 					outerStyle = SCE_AHK_COMMENTBLOCK;
 					sc.ForwardSetState(SCE_AHK_DIRECTIVE_AT);
 				}
@@ -705,7 +703,7 @@ void ColouriseAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 				sc.Advance(backPos);
 				sc.SetState(SCE_AHK_DEFAULT);
 				continue;
-			} else if (sc.ch == '0' && (sc.chNext == 'x' || sc.chNext == 'X')) {
+			} else if (sc.ch == '0' && UnsafeLower(sc.chNext) == 'x') {
 				stringQuoteChar = 16;
 				sc.SetState(SCE_AHK_NUMBER);
 				sc.Forward();

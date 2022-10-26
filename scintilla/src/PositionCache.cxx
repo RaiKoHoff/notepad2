@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <cmath>
@@ -17,7 +18,6 @@
 #include <string_view>
 #include <vector>
 #include <map>
-#include <set>
 #include <optional>
 #include <algorithm>
 #include <iterator>
@@ -97,11 +97,12 @@ LineLayout::~LineLayout() {
 void LineLayout::Resize(int maxLineLength_) {
 	if (maxLineLength_ > maxLineLength) {
 		Free();
-		chars = std::make_unique<char[]>(maxLineLength_ + 1);
-		styles = std::make_unique<unsigned char[]>(maxLineLength_ + 1);
+		const size_t lineAllocation = maxLineLength_ + 1;
+		chars = std::make_unique<char[]>(lineAllocation);
+		styles = std::make_unique<unsigned char[]>(lineAllocation);
 		// Extra position allocated as sometimes the Windows
 		// GetTextExtentExPoint API writes an extra element.
-		positions = std::make_unique<XYPOSITION[]>(maxLineLength_ + 1 + 1);
+		positions = std::make_unique<XYPOSITION[]>(lineAllocation + 1);
 		if (bidiData) {
 			bidiData->Resize(maxLineLength_);
 		}
@@ -123,6 +124,11 @@ void LineLayout::Free() noexcept {
 	positions.reset();
 	lineStarts.reset();
 	bidiData.reset();
+}
+
+void LineLayout::ClearPositions() const noexcept {
+	//std::fill_n(positions.get(), maxLineLength + 2, 0.0f);
+	memset(positions.get(), 0, (maxLineLength + 2) * sizeof(XYPOSITION));
 }
 
 void LineLayout::Invalidate(ValidLevel validity_) noexcept {
@@ -195,9 +201,10 @@ int LineLayout::SubLineFromPosition(int posInLine, PointEnd pe) const noexcept {
 	return lines - 1;
 }
 
-void LineLayout::SetLineStart(int line, int start) {
-	if ((line >= lenLineStarts) && (line != 0)) {
-		const int newMaxLines = line + 20;
+void LineLayout::AddLineStart(Sci::Position start) {
+	lines++;
+	if (lines >= lenLineStarts) {
+		const int newMaxLines = lines + 20;
 		std::unique_ptr<int[]> newLineStarts = std::make_unique<int[]>(newMaxLines);
 		if (lenLineStarts) {
 			std::copy(lineStarts.get(), lineStarts.get() + lenLineStarts, newLineStarts.get());
@@ -205,7 +212,7 @@ void LineLayout::SetLineStart(int line, int start) {
 		lineStarts = std::move(newLineStarts);
 		lenLineStarts = newMaxLines;
 	}
-	lineStarts[line] = start;
+	lineStarts[lines] = static_cast<int>(start);
 }
 
 void LineLayout::SetBracesHighlight(Range rangeLine, const Sci::Position braces[],
@@ -307,6 +314,15 @@ Point LineLayout::PointFromPosition(int posInLine, int lineHeight, PointEnd pe) 
 	return pt;
 }
 
+XYPOSITION LineLayout::XInLine(Sci::Position index) const noexcept {
+	// For positions inside line return value from positions
+	// For positions after line return last position + 1.0
+	if (index <= numCharsInLine) {
+		return positions[index];
+	}
+	return positions[numCharsInLine] + 1.0;
+}
+
 int LineLayout::EndLineStyle() const noexcept {
 	return styles[numCharsBeforeEOL > 0 ? numCharsBeforeEOL - 1 : 0];
 }
@@ -405,10 +421,6 @@ inline size_t NextPowerOfTwo(size_t x) noexcept {
 #endif
 }
 #endif
-
-constexpr size_t AlignUp(size_t value, size_t alignment) noexcept {
-	return (value + alignment - 1) & (~(alignment - 1));
-}
 
 #if 1
 // test for ASCII only since all C0 control character has special representation.
@@ -511,11 +523,11 @@ void LineLayoutCache::AllocateForLevel(Sci::Line linesOnScreen, Sci::Line linesI
 	size_t lengthForLevel = 0;
 	if (level == LineCache::Page) {
 		// see comment in Retrieve() method.
-		lengthForLevel = 1 + AlignUp(4*linesOnScreen, 64);
+		lengthForLevel = 1 + NP2_align_up(4*linesOnScreen, 64);
 	} else if (level == LineCache::Caret) {
 		lengthForLevel = 2;
 	} else if (level == LineCache::Document) {
-		lengthForLevel = AlignUp(linesInDoc, 64);
+		lengthForLevel = NP2_align_up(linesInDoc, 64);
 	}
 	if (lengthForLevel != shortCache.size()) {
 		allInvalidated = false;
@@ -915,7 +927,7 @@ TextSegment BreakFinder::Next() {
 	return {startSegment, lengthSegment, nullptr};
 }
 
-void PositionCacheEntry::Set(uint16_t styleNumber_, size_t length, std::unique_ptr<XYPOSITION[]> &positions_, uint32_t clock_) noexcept {
+void PositionCacheEntry::Set(uint16_t styleNumber_, size_t length, std::unique_ptr<char[]> &positions_, uint32_t clock_) noexcept {
 	styleNumber = styleNumber_;
 	clock = static_cast<uint16_t>(clock_);
 	len = static_cast<uint32_t>(length);
@@ -930,10 +942,12 @@ void PositionCacheEntry::Clear() noexcept {
 }
 
 bool PositionCacheEntry::Retrieve(uint16_t styleNumber_, std::string_view sv, XYPOSITION *positions_) const noexcept {
-	if ((styleNumber == styleNumber_) && (len == sv.length()) &&
-		(memcmp(&positions[sv.length()], sv.data(), sv.length()) == 0)) {
-		memcpy(positions_, &positions[0], sv.length()*sizeof(XYPOSITION));
-		return true;
+	if (styleNumber == styleNumber_ && len == sv.length()) {
+		const size_t offset = sv.length()*sizeof(XYPOSITION);
+		if (memcmp(&positions[offset], sv.data(), sv.length()) == 0) {
+			memcpy(positions_, &positions[0], offset);
+			return true;
+		}
 	}
 	return false;
 }
@@ -987,7 +1001,7 @@ namespace {
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 SRWLOCK cacheLock = SRWLOCK_INIT;
 struct CacheWriteLock {
-	CacheWriteLock() noexcept  {
+	CacheWriteLock() noexcept {
 		AcquireSRWLockExclusive(&cacheLock);
 	}
 	~CacheWriteLock() {
@@ -998,7 +1012,7 @@ struct CacheWriteLock {
 // https://stackoverflow.com/questions/13206414/why-slim-reader-writer-exclusive-lock-outperformance-the-shared-one
 #if 0
 struct CacheReadLock {
-	CacheReadLock() noexcept  {
+	CacheReadLock() noexcept {
 		AcquireSRWLockShared(&cacheLock);
 	}
 	~CacheReadLock() {
@@ -1125,9 +1139,10 @@ void PositionCache::MeasureWidths(Surface *surface, const Style &style, uint16_t
 	if (entry) {
 		// constructed here to reduce lock time
 		const size_t length = sv.length();
-		std::unique_ptr<XYPOSITION[]> positions_{new XYPOSITION[length + AlignUp(length, sizeof(XYPOSITION))/sizeof(XYPOSITION)]};
-		memcpy(&positions_[0], positions, length*sizeof(XYPOSITION));
-		memcpy(&positions_[length], sv.data(), length);
+		const size_t offset = length*sizeof(XYPOSITION);
+		std::unique_ptr<char[]> positions_{new char[offset + length]};
+		memcpy(&positions_[0], positions, offset);
+		memcpy(&positions_[offset], sv.data(), length);
 
 		// Store into cache
 		const CacheWriteLock writeLock;

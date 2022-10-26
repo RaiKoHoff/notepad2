@@ -23,12 +23,15 @@ using namespace Lexilla;
 
 namespace {
 
+// https://webassembly.github.io/spec/core/text/values.html#strings
 struct EscapeSequence {
 	int digitsLeft = 0;
+	bool brace = false;
 
-	// highlight any character as escape sequence, no highlight for hex in '\u{hex}'.
+	// highlight any character as escape sequence.
 	void resetEscapeState(int chNext) noexcept {
 		digitsLeft = 1;
+		brace = false;
 		if (IsHexDigit(chNext)) {
 			digitsLeft = 2;
 		}
@@ -94,15 +97,15 @@ void ColouriseWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			} else if (IsInvalidIdChar(sc.ch)) {
 				char s[128];
 				sc.GetCurrent(s, sizeof(s));
-				if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+				if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 					sc.ChangeState(SCE_WASM_KEYWORD);
-				} else if (keywordLists[KeywordIndex_Type]->InList(s)) {
+				} else if (keywordLists[KeywordIndex_Type].InList(s)) {
 					sc.ChangeState(SCE_WASM_TYPE);
-				} else if (keywordLists[KeywordIndex_Instruction]->InList(s)) {
+				} else if (keywordLists[KeywordIndex_Instruction].InList(s)) {
 					sc.ChangeState(SCE_WASM_INSTRUCTION);
 				} else if (prefixLen != 0 && prefixLen < sizeof(s)) {
 					s[prefixLen] = '\0';
-					if (keywordLists[KeywordIndex_Type]->InList(s)) {
+					if (keywordLists[KeywordIndex_Type].InList(s)) {
 						// instructions with type prefix
 						sc.ChangeState(SCE_WASM_INSTRUCTION);
 					}
@@ -118,10 +121,15 @@ void ColouriseWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			break;
 
 		case SCE_WASM_STRING:
-			if (sc.ch == '\\') {
+			if (sc.ch == '\\' && !IsEOLChar(sc.chNext)) {
 				escSeq.resetEscapeState(sc.chNext);
 				sc.SetState(SCE_WASM_ESCAPECHAR);
 				sc.Forward();
+				if (sc.Match('u', '{')) {
+					escSeq.brace = true;
+					escSeq.digitsLeft = 9; // Unicode code point
+					sc.Forward();
+				}
 			} else if (sc.ch == '\"') {
 				sc.ForwardSetState(SCE_WASM_DEFAULT);
 			}
@@ -129,6 +137,9 @@ void ColouriseWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_WASM_ESCAPECHAR:
 			if (escSeq.atEscapeEnd(sc.ch)) {
+				if (escSeq.brace && sc.ch == '}') {
+					sc.Forward();
+				}
 				sc.SetState(SCE_WASM_STRING);
 				continue;
 			}

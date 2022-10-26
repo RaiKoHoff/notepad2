@@ -27,7 +27,7 @@ namespace {
 struct EscapeSequence {
 	int outerState = SCE_JAVA_DEFAULT;
 	int digitsLeft = 0;
-	int numBase = 0;
+	bool hex = false;
 
 	// highlight any character as escape sequence.
 	bool resetEscapeState(int state, int chNext) noexcept {
@@ -36,18 +36,18 @@ struct EscapeSequence {
 		}
 		outerState = state;
 		digitsLeft = 1;
-		numBase = 16;
 		if (chNext == 'u') {
 			digitsLeft = 5;
+			hex = true;
 		} else if (IsOctalDigit(chNext)) {
 			digitsLeft = 3;
-			numBase = 8;
+			hex = false;
 		}
 		return true;
 	}
 	bool atEscapeEnd(int ch) noexcept {
 		--digitsLeft;
-		return digitsLeft <= 0 || !IsADigit(ch, numBase);
+		return digitsLeft <= 0 || !IsOctalOrHex(ch, hex);
 	}
 };
 
@@ -234,7 +234,7 @@ void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 							sc.ChangeState(SCE_JAVA_ANNOTATION);
 							continue;
 						}
-					} else if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 						sc.ChangeState(SCE_JAVA_WORD);
 						if (StrEqual(s, "import")) {
 							if (visibleChars == sc.LengthCurrent()) {
@@ -267,17 +267,17 @@ void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 						// the non-sealed keyword
 						sc.ChangeState(SCE_JAVA_WORD);
 						sc.Advance(CStrLen("sealed") + 1);
-					} else if (keywordLists[KeywordIndex_Type]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Type].InList(s)) {
 						sc.ChangeState(SCE_JAVA_WORD2);
-					} else if (keywordLists[KeywordIndex_Directive]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Directive].InList(s)) {
 						sc.ChangeState(SCE_JAVA_DIRECTIVE);
-					} else if (keywordLists[KeywordIndex_Class]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Class].InList(s)) {
 						sc.ChangeState(SCE_JAVA_CLASS);
-					} else if (keywordLists[KeywordIndex_Interface]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Interface].InList(s)) {
 						sc.ChangeState(SCE_JAVA_INTERFACE);
-					} else if (keywordLists[KeywordIndex_Enumeration]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Enumeration].InList(s)) {
 						sc.ChangeState(SCE_JAVA_ENUM);
-					} else if (keywordLists[KeywordIndex_Constant]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Constant].InList(s)) {
 						sc.ChangeState(SCE_JAVA_CONSTANT);
 					} else if (sc.ch == ':') {
 						if (sc.chNext == ':') {

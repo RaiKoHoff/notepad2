@@ -93,6 +93,7 @@ public:
 			Fill(position);
 			if (position < startPos || position >= endPos) {
 				// Position is outside range of document
+				//! different from official Lexilla which returns space.
 				return '\0';
 			}
 		}
@@ -118,9 +119,9 @@ public:
 		return encodingType;
 	}
 
-	bool MatchAny(Sci_Position pos, char ch0, char ch1) noexcept {
+	bool MatchLower(Sci_Position pos, char ch0) noexcept {
 		const char ch = SafeGetCharAt(pos);
-		return ch == ch0 || ch == ch1;
+		return (ch | 0x20) == ch0;
 	}
 
 	bool Match(Sci_Position pos, const char *s) noexcept {
@@ -132,6 +133,7 @@ public:
 		return true;
 	}
 	bool MatchIgnoreCase(Sci_Position pos, const char *s) noexcept;
+	bool MatchLowerCase(Sci_Position pos, const char *s) noexcept;
 
 	// Get first len - 1 characters in range [startPos_, endPos_).
 	void GetRange(Sci_PositionU startPos_, Sci_PositionU endPos_, char *s, Sci_PositionU len) noexcept;

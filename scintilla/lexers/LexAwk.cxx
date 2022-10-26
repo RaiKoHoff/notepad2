@@ -26,23 +26,23 @@ namespace {
 
 struct EscapeSequence {
 	int digitsLeft = 0;
-	int numBase = 0;
+	bool hex = false;
 
 	// highlight any character as escape sequence.
 	// https://www.gnu.org/software/gawk/manual/html_node/Escape-Sequences.html
 	void resetEscapeState(int chNext) noexcept {
 		digitsLeft = 1;
-		numBase = 16;
 		if (chNext == 'x') {
 			digitsLeft = 3;
+			hex = true;
 		} else if (IsOctalDigit(chNext)) {
 			digitsLeft = 3;
-			numBase = 8;
+			hex = false;
 		}
 	}
 	bool atEscapeEnd(int ch) noexcept {
 		--digitsLeft;
-		return digitsLeft <= 0 || !IsADigit(ch, numBase);
+		return digitsLeft <= 0 || !IsOctalOrHex(ch, hex);
 	}
 };
 
@@ -239,7 +239,7 @@ void ColouriseAwkDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 				if (sc.state == SCE_AWK_IDENTIFIER) {
 					char s[128];
 					sc.GetCurrent(s, sizeof(s));
-					if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+					if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 						sc.ChangeState(SCE_AWK_WORD);
 						if (visibleChars == sc.LengthCurrent()) {
 							if (StrEqual(s, "@include")) {
@@ -248,9 +248,9 @@ void ColouriseAwkDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 								kwType = KeywordType::Function;
 							}
 						}
-					} else if (keywordLists[KeywordIndex_PredefinedVariable]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_PredefinedVariable].InList(s)) {
 						sc.ChangeState(SCE_AWK_BUILTIN_VARIABLE);
-					} else if (keywordLists[KeywordIndex_BuiltinFunction]->InListPrefixed(s, '(')) {
+					} else if (keywordLists[KeywordIndex_BuiltinFunction].InListPrefixed(s, '(')) {
 						sc.ChangeState(SCE_AWK_BUILTIN_FUNCTION);
 					} else {
 						const int chNext = sc.GetLineNextChar();
@@ -269,6 +269,14 @@ void ColouriseAwkDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			break;
 
 		case SCE_AWK_STRING:
+			if (sc.atLineStart) {
+				if (lineContinuation) {
+					lineContinuation = 0;
+				} else {
+					sc.SetState(SCE_AWK_DEFAULT);
+					break;
+				}
+			}
 			if (sc.ch == '\\') {
 				if (IsEOLChar(sc.chNext)) {
 					lineContinuation = AwkLineStateLineContinuation;
@@ -276,12 +284,6 @@ void ColouriseAwkDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 					escSeq.resetEscapeState(sc.chNext);
 					sc.SetState(SCE_AWK_ESCAPECHAR);
 					sc.Forward();
-				}
-			} else if (sc.atLineStart) {
-				if (lineContinuation) {
-					lineContinuation = 0;
-				} else {
-					sc.SetState(SCE_AWK_DEFAULT);
 				}
 			} else if (sc.ch == '%') {
 				const Sci_Position length = CheckFormatSpecifier(sc, styler, insideUrl);
@@ -308,17 +310,19 @@ void ColouriseAwkDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			break;
 
 		case SCE_AWK_REGEX:
+			if (sc.atLineStart) {
+				if (lineContinuation) {
+					lineContinuation = 0;
+				} else {
+					sc.SetState(SCE_AWK_DEFAULT);
+					break;
+				}
+			}
 			if (sc.ch == '\\') {
 				if (IsEOLChar(sc.chNext)) {
 					lineContinuation = AwkLineStateLineContinuation;
 				} else {
 					sc.Forward();
-				}
-			} else if (sc.atLineStart) {
-				if (lineContinuation) {
-					lineContinuation = 0;
-				} else {
-					sc.SetState(SCE_AWK_DEFAULT);
 				}
 			} else if (sc.ch == '[' || sc.ch == ']') {
 				insideRegexRange = sc.ch == '[';

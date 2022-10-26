@@ -14,7 +14,7 @@ static KEYWORDLIST Keywords_CPP = {{
 "private protected public reinterpret_cast static_assert static_cast template "
 "this thread_local throw true try typeid typename using virtual "
 "override final "
-"_Pragma defined __has_include __has_include_next __has_attribute __has_c_attribute __has_cpp_attribute "
+"_Pragma defined __has_include __has_include_next __has_embed __has_attribute __has_c_attribute __has_cpp_attribute "
 "and and_eq bitand bitor compl not not_eq or or_eq xor xor_eq "
 "concept requires audit axiom "
 "import module " "co_await co_return co_yield "
@@ -25,7 +25,7 @@ static KEYWORDLIST Keywords_CPP = {{
 // COM
 "interface "
 // GCC
-"typeof __typeof__ __alignof__ __label__ __asm__ __thread __attribute__ __volatile__ __restrict__ __inline__ __extension__ "
+"typeof typeof_unqual __typeof__ __alignof__ __label__ __asm__ __thread __attribute__ __volatile__ __restrict__ __inline__ __extension__ "
 // clang Objective-C/C++
 "__nonnull __nullable __covariant __kindof nullable nonnull "
 // Intel
@@ -40,10 +40,11 @@ static KEYWORDLIST Keywords_CPP = {{
 , // 1 Type Keyword
 "__auto_type auto char double float int long short signed unsigned void "
 "bool char8_t char16_t char32_t wchar_t nullptr_t nothrow_t "
-"_Bool complex _Complex _Imaginary imaginary "
+"_BitInt _Bool complex _Complex _Imaginary imaginary "
 "__w64 __wchar_t __int8 __int16 __int32 __int64 __m64 __m128 __m128d __m128i __m256 __m256d __m256i __m512 __m512d __m512i __mmask8 __mmask16 __mmask32 __mmask64 __int3264 __ptr32 __ptr64 __sptr __uptr "
 "__int128 __float80 __float128 __fp16 __complex__ __real__ __imag__ __complex128 _Decimal32 _Decimal64 _Decimal128 decimal32 decimal64 decimal128 "
-"int128 qfloat "
+"int128 qfloat __int128_t __uint128_t "
+"_Float16 _Float32 _Float64 _Float128 float16_t float32_t float64_t float128_t bfloat16_t "
 
 // errno.h
 "errno_t "
@@ -84,7 +85,7 @@ static KEYWORDLIST Keywords_CPP = {{
 "byte "
 
 , // 2 Preprocessor
-" if elif else endif ifdef elifdef ifndef elifndef define undef include include_next import using pragma line error warning warn message "
+" if elif else endif ifdef elifdef ifndef elifndef define undef embed include include_next import using pragma line error warning warn message "
 "region endregion sccs ident assert unassert "
 
 , // 3 Directive: Objective C/C++
@@ -100,7 +101,7 @@ static KEYWORDLIST Keywords_CPP = {{
 "aligned alloc_size returns_twice noinline noclone always_inline flatten pure nothrow sentinel format format_arg no_instrument_function no_split_stack section constructor destructor used unused deprecated weak malloc alias ifunc warn_unused_result nonnull gnu_inline externally_visible hot cold artificial error warning cleanup common nocommon mode packed shared tls_model vector_size const "
 "__aligned__ __alloc_size__ __noreturn__ __returns_twice__ __noinline__ __noclone__ __always_inline__ __flatten__ __pure__ __nothrow__ __sentinel__ __format__ __format_arg__ __no_instrument_function__ __no_split_stack__ __section__ __constructor__ __destructor__ __used__ __unused__ __deprecated__ __weak__ __malloc__ __alias__ __ifunc__ __warn_unused_result__ __nonnull__ __gnu_inline__ __externally_visible__ __hot__ __cold__ __artificial__ __error__ __warning__ __cleanup__ __common__ __nocommon__ __mode__ __packed__ __shared__ __tls_model__ __vector_size__ __const__ "
 "cdecl stdcall __cdecl__ __stdcall__ __deprecated__ __dllexport__ __dllimport__ __naked__ __noinline__ __noreturn__ __nothrow__ __selectany__ "
-"may_alias __may_alias__ visibility __visibility__"
+"may_alias __may_alias__ visibility __visibility__ "
 // C++11, 14, 17, 20
 "assert carries_dependency fallthrough ensures expects maybe_unused likely unlikely no_unique_address nodiscard optimize_for_synchronized "
 
@@ -819,7 +820,7 @@ static KEYWORDLIST Keywords_CPP = {{
 "NSLog() "
 
 , // 15 Code Snippet
-"_Pragma() defined() comment() __has_include() __has_include_next() __has_attribute() "
+"_Pragma() defined() comment() __has_include() __has_include_next() __has_embed() __has_attribute() __has_c_attribute() __has_cpp_attribute() "
 "sizeof() for^() if^() switch^() while^() catch^() else^if^() else^{} "
 "alignas() alignof() delete[] decltype() noexcept() typeid() typeof() static_assert() requires() "
 "static_cast<> const_cast<> dynamic_cast<> reinterpret_cast<> "
@@ -886,6 +887,7 @@ static EDITSTYLE Styles_CPP[] = {
 	{ SCE_C_COMMENTDOC_TAG, NP2StyleX_DocCommentTag, L"fore:#408080" },
 	{ MULTI_STYLE(SCE_C_STRING, SCE_C_CHARACTER, SCE_C_STRINGEOL, 0), NP2StyleX_String, L"fore:#008000" },
 	{ SCE_C_STRINGRAW, NP2StyleX_RawString, L"fore:#E24000" },
+	{ SCE_C_ESCAPECHAR, NP2StyleX_EscapeSequence, L"fore:#0080C0" },
 	{ SCE_C_LABEL, NP2StyleX_Label, L"back:#FFC040" },
 	{ SCE_C_NUMBER, NP2StyleX_Number, L"fore:#FF0000" },
 	{ SCE_C_OPERATOR, NP2StyleX_Operator, L"fore:#B000B0" },
@@ -904,7 +906,7 @@ EDITLEXER lexCPP = {
 		TAB_WIDTH_4, INDENT_WIDTH_4,
 		(1 << 0) | (1 << 1) | (1 << 2) | (1 << 3), // preprocessor, namespace, class, method
 		0,
-		'\\', 0, 0,
+		'\\', SCE_C_ESCAPECHAR, 0,
 		0,
 		SCE_C_CHARACTER, SCE_C_NUMBER,
 		SCE_C_OPERATOR, 0

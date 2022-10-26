@@ -17,7 +17,6 @@
 #include <string_view>
 #include <vector>
 #include <map>
-#include <set>
 #include <optional>
 #include <algorithm>
 #include <memory>
@@ -229,7 +228,7 @@ void ScintillaBase::ListNotify(ListBoxEvent *plbe) {
 }
 
 void ScintillaBase::AutoCompleteInsert(Sci::Position startPos, Sci::Position removeLen, const char *text, Sci::Position textLen) {
-	UndoGroup ug(pdoc);
+	const UndoGroup ug(pdoc);
 	if (multiAutoCMode == MultiAutoComplete::Once) {
 		pdoc->DeleteChars(startPos, removeLen);
 		const Sci::Position lengthInserted = pdoc->InsertString(startPos, text, textLen);
@@ -364,14 +363,14 @@ void ScintillaBase::AutoCompleteMove(int delta) {
 }
 
 void ScintillaBase::AutoCompleteMoveToCurrentWord() {
-	std::string wordCurrent = RangeText(ac.posStart - ac.startLen, sel.MainCaret());
+	const std::string wordCurrent = RangeText(ac.posStart - ac.startLen, sel.MainCaret());
 	ac.Select(wordCurrent.c_str());
 }
 
 void ScintillaBase::AutoCompleteSelection() {
 	const int item = ac.GetSelection();
 	std::string selected;
-	if (item != -1) {
+	if (item >= 0) {
 		selected = ac.GetValue(item);
 	}
 
@@ -411,7 +410,7 @@ void ScintillaBase::AutoCompleteCharacterDeleted() {
 
 void ScintillaBase::AutoCompleteCompleted(char ch, CompletionMethods completionMethod) {
 	const int item = ac.GetSelection();
-	if (item == -1) {
+	if (item < 0) {
 		AutoCompleteCancel();
 		return;
 	}
@@ -460,7 +459,7 @@ int ScintillaBase::AutoCompleteGetCurrent() const noexcept {
 int ScintillaBase::AutoCompleteGetCurrentText(char *buffer) const {
 	if (ac.Active()) {
 		const int item = ac.GetSelection();
-		if (item != -1) {
+		if (item >= 0) {
 			const std::string selected = ac.GetValue(item);
 			if (buffer != nullptr)
 				memcpy(buffer, selected.c_str(), selected.length() + 1);
@@ -492,7 +491,7 @@ void ScintillaBase::CallTipShow(Point pt, NotificationPosition notifyPos, const 
 	if (wMargin.Created()) {
 		pt = pt + GetVisibleOriginInMain();
 	}
-	AutoSurface surfaceMeasure(this);
+	const AutoSurface surfaceMeasure(this);
 	PRectangle rc = ct.CallTipStart(sel.MainCaret(), pt,
 		vs.lineHeight,
 		defn,
@@ -869,10 +868,6 @@ void ScintillaBase::NotifyStyleToNeeded(Sci::Position endStyleNeeded) {
 	Editor::NotifyStyleToNeeded(endStyleNeeded);
 }
 
-void ScintillaBase::NotifyLexerChanged(Document *, void *) {
-	vs.EnsureStyle(0xff);
-}
-
 sptr_t ScintillaBase::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 	switch (iMessage) {
 	case Message::AutoCShow:
@@ -1094,17 +1089,16 @@ sptr_t ScintillaBase::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		return DocumentLexState()->GetIdentifier();
 
 	case Message::Colourise:
-		// from Editor::FoldAll()
-		pdoc->EnsureStyledTo((lParam == -1) ? pdoc->Length() : lParam);
+		pdoc->EnsureStyledTo((lParam < 0) ? pdoc->LengthNoExcept() : pdoc->LineStart(pdoc->SciLineFromPosition(lParam - 1) + 1));
 #if 0
 		if (DocumentLexState()->UseContainerLexing()) {
 			pdoc->ModifiedAt(PositionFromUPtr(wParam));
-			NotifyStyleToNeeded((lParam == -1) ? pdoc->Length() : lParam);
+			NotifyStyleToNeeded((lParam < 0) ? pdoc->LengthNoExcept() : lParam);
 		} else {
 			DocumentLexState()->Colourise(PositionFromUPtr(wParam), lParam);
 		}
-#endif
 		Redraw();
+#endif
 		break;
 
 	case Message::SetProperty:

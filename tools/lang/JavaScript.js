@@ -1,7 +1,9 @@
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar
-// 2020 11.0 https://www.ecma-international.org/publications/standards/Ecma-262.htm
+// https://www.ecma-international.org/publications/standards/Ecma-262.htm
+// 2020 https://tc39.es/ecma262/2020/
 // 2021 https://tc39.es/ecma262/2021/
-// 2022 https://tc39.es/ecma262/
+// 2022 https://tc39.es/ecma262/2022/
+// 2023 https://tc39.es/ecma262/
 
 //! keywords
 async await
@@ -158,6 +160,7 @@ Object([value]) {
 	getOwnPropertyNames(O)
 	getOwnPropertySymbols(O)
 	getPrototypeOf(O)
+	hasOwn(O, P) // 2022
 	is(value1, value2)
 	isExtensible(O)
 	isFrozen(O)
@@ -215,6 +218,7 @@ Symbol([description]) {
 }
 
 Error(message) {
+	cause // 2022
 	message
 	name
 
@@ -361,6 +365,7 @@ String(value) {
 	raw(template, ...substitutions)
 	length
 	prototype:
+		at(index) // 2022
 		charAt(pos)
 		charCodeAt(pos)
 		codePointAt(pos)
@@ -434,6 +439,7 @@ Array(...items) {
 	of(...items)
 	length
 	prototype:
+		at(index) // 2022
 		concat(...arguments)
 		copyWithin(target, start [, end])
 		entries()
@@ -737,22 +743,22 @@ EventTarget() {
 	nodeType
 	nodeValue
 	ownerDocument
-	parentNode
 	parentElement
+	parentNode
 	previousSibling
 	textContent
 	appendChild(aChild)
 	cloneNode([deep])
 	compareDocumentPosition(otherNode)
 	contains(otherNode)
-	getRootNode(options)
+	getRootNode([options])
 	hasChildNodes()
 	insertBefore(newNode, referenceNode)
 	isDefaultNamespace(namespaceURI)
 	isEqualNode(otherNode)
 	isSameNode(otherNode)
-	lookupPrefix()
 	lookupNamespaceURI(prefix)
+	lookupPrefix(namespace)
 	normalize()
 	removeChild(child)
 	replaceChild(newChild, oldChild)
@@ -760,15 +766,20 @@ EventTarget() {
 
 // https://developer.mozilla.org/en-US/docs/Web/API/Element
 {
+	assignedSlot
 	attributes
+	childElementCount
+	children
 	classList
 	className
 	clientHeight
 	clientLeft
 	clientTop
 	clientWidth
+	firstElementChild
 	id
 	innerHTML
+	lastElementChild
 	localName
 	namespaceURI
 	nextElementSibling
@@ -781,10 +792,18 @@ EventTarget() {
 	scrollTop
 	scrollWidth
 	shadowRoot
-	assignedSlot
-	attachShadow(shadowRootInit)
+	slot
+	tagName
+	after(node1, node2, /* ... ,*/ nodeN)
+	animate(keyframes, options)
+	append(param1, param2, /* ... ,*/ paramN)
+	attachShadow(options)
+	before(param1, param2, /* ... ,*/ paramN)
+	closest(selectors)
 	getAttribute(attributeName)
 	getAttributeNames()
+	getAttributeNode(attrName)
+	getAttributeNodeNS(namespace, nodeName)
 	getAttributeNS(namespace, name)
 	getBoundingClientRect()
 	getClientRects()
@@ -798,11 +817,18 @@ EventTarget() {
 	insertAdjacentElement(position, element)
 	insertAdjacentHTML(position, text)
 	insertAdjacentText(position, element)
+	matches(selectorString)
+	prepend(param1, param2, /* ... ,*/ paramN)
 	querySelector(selectors)
 	querySelectorAll(selectors)
 	releasePointerCapture(pointerId)
+	remove()
 	removeAttribute(attrName)
+	removeAttributeNode(attributeNode)
 	removeAttributeNS(namespace, attrName)
+	replaceChildren(param1, param2, /* ... ,*/ paramN)
+	replaceWith(param1, param2, /* ... ,*/ paramN)
+	requestFullscreen([options])
 	scroll(x-coord, y-coord)
 	scroll(options)
 	scrollBy(x-coord, y-coord)
@@ -810,6 +836,8 @@ EventTarget() {
 	scrollTo(x-coord, y-coord)
 	scrollTo(options)
 	setAttribute(name, value)
+	setAttributeNode(attribute)
+	setAttributeNodeNS(attributeNode)
 	setAttributeNS(namespace, name, value)
 	setPointerCapture(pointerId)
 	toggleAttribute(name [, force])
@@ -817,27 +845,37 @@ EventTarget() {
 
 // https://developer.mozilla.org/en-US/docs/Web/API/Document
 Document() {
+	activeElement
 	body
 	characterSet
+	childElementCount
+	children
+	currentScript
+	defaultView
+	designMode
 	doctype
 	documentElement
 	documentURI
 	embeds
+	firstElementChild
 	fonts
 	forms
+	fullscreenElement
 	head
 	hidden
 	images
 	implementation
+	lastElementChild
 	links
+	pictureInPictureElement
+	pictureInPictureEnabled
 	plugins
+	pointerLockElement
 	scripts
 	scrollingElement
+	styleSheets
 	visibilityState
-	childElementCount
-	children
-	firstElementChild
-	lastElementChild
+
 	// Extensions
 	cookie
 	defaultView
@@ -850,57 +888,68 @@ Document() {
 	referrer
 	title
 	URL
-	activeElement
-	fullscreenElement
 	// Methods
 	adoptNode(externalNode)
+	append(param1, param2, /* ... ,*/ paramN)
 	createAttribute(name)
+	createAttributeNS(namespaceURI, qualifiedName)
 	createCDATASection(data)
 	createComment(data)
 	createDocumentFragment()
 	createElement(tagName[, options])
 	createElementNS(namespaceURI, qualifiedName[, options])
+	createExpression(xpathText, namespaceURLMapper)
 	createNodeIterator(root[, whatToShow[, filter]])
+	createNSResolver(node)
 	createProcessingInstruction(target, data)
 	createRange()
 	createTextNode(data)
-	createTreeWalker(root, whatToShow[, filter[, entityReferenceExpansion]])
+	createTreeWalker(root, whatToShow, filter)
+	evaluate(xpathExpression, contextNode, namespaceResolver, resultType, result)
+	elementFromPoint(x, y)
+	elementsFromPoint(x, y)
+	exitFullscreen()
+	exitPictureInPicture()
+	getAnimations()
+	getElementById(id)
 	getElementsByClassName(names)
+	getElementsByName(name)
 	getElementsByTagName(name)
 	getElementsByTagNameNS(namespace, name)
+	getSelection()
 	importNode(externalNode [, deep])
-	getElementById(id)
+	prepend(param1, param2, /* ... ,*/ paramN)
 	querySelector(selectors)
 	querySelectorAll(selectors)
-	createExpression(xpathText, namespaceURLMapper)
-	createNSResolver(node)
-	evaluate(xpathExpression, contextNode, namespaceResolver, resultType, result)
+	replaceChildren(param1, param2, /* ... ,*/ paramN)
 	// Extension
 	close()
-	getElementsByName(name)
 	hasFocus()
 	open()
 	write(markup)
 	writeln(line)
-	elementFromPoint(x, y)
 }
 
 // https://developer.mozilla.org/en-US/docs/Web/API/Window
 {
+	clientInformation
+	closed
 	console
 	customElements
 	crypto
+	devicePixelRatio
 	document
 	event
 	frameElement
+	fullScreen
 	frames
 	history
 	innerHeight
 	innerWidth
 	length
+	localStorage
 	location
 	locationbar
-	localStorage
 	menubar
 	name
 	navigator
@@ -926,6 +975,7 @@ Document() {
 	statusbar
 	toolbar
 	top
+	visualViewport
 	window
 	alert(message)
 	blur()
@@ -950,6 +1000,8 @@ Document() {
 	scrollBy(options)
 	scrollTo(x-coord, y-coord)
 	scrollTo(options)
+	showOpenFilePicker()
+	showSaveFilePicker()
 	stop()
 }
 
@@ -995,9 +1047,18 @@ FormData([form]) {
 	values()
 }
 
-// https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope
+Worker() {
+	postMessage(message, transfer)
+	terminate()
+}
+
+// https://developer.mozilla.org/en-US/docs/Web/API/WorkerGlobalScope
 {
+	caches
 	indexedDB
+	origin
+	scheduler
+	importScripts(path0, path1, /* ... ,*/ pathN)
 	atob(encodedData)
 	btoa(stringToEncode)
 	clearInterval(intervalID)
@@ -1007,6 +1068,7 @@ FormData([form]) {
 	queueMicrotask(function)
 	setInterval(func, delay[, param1, param2, ...])
 	setTimeout(function[, delay, param1, param2, ...])
+	reportError(throwable)
 }
 
 // https://developer.mozilla.org/en-US/docs/Web/API/Storage

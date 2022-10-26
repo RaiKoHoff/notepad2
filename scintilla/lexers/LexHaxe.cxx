@@ -26,29 +26,35 @@ using namespace Lexilla;
 
 namespace {
 
+// https://haxe.org/manual/std-String-literals.html
 struct EscapeSequence {
 	int outerState = SCE_HAXE_DEFAULT;
 	int digitsLeft = 0;
-	int numBase = 0;
+	bool hex = false;
+	bool brace = false;
 
-	// highlight any character as escape sequence, no highlight for hex in '\u{hex}'.
+	// highlight any character as escape sequence.
 	bool resetEscapeState(int state, int chNext) noexcept {
+		if (IsEOLChar(chNext)) {
+			return false;
+		}
 		outerState = state;
 		digitsLeft = 1;
-		numBase = 16;
+		hex = true;
+		brace = false;
 		if (chNext == 'u') {
 			digitsLeft = 5;
 		} else if (chNext == 'x') {
 			digitsLeft = 3;
 		} else if (IsOctalDigit(chNext)) {
 			digitsLeft = 3;
-			numBase = 8;
+			hex = false;
 		}
 		return true;
 	}
 	bool atEscapeEnd(int ch) noexcept {
 		--digitsLeft;
-		return digitsLeft <= 0 || !IsADigit(ch, numBase);
+		return digitsLeft <= 0 || !IsOctalOrHex(ch, hex);
 	}
 };
 
@@ -145,10 +151,10 @@ void ColouriseHaxeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					char s[128];
 					sc.GetCurrent(s, sizeof(s));
 					if (s[0] == '#') {
-						if (keywordLists[KeywordIndex_Preprocessor]->InList(s + 1)) {
+						if (keywordLists[KeywordIndex_Preprocessor].InList(s + 1)) {
 							sc.ChangeState(SCE_HAXE_PREPROCESSOR);
 						}
-					} else if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 						sc.ChangeState(SCE_HAXE_WORD);
 						if (StrEqual(s, "import")) {
 							if (visibleChars == sc.LengthCurrent()) {
@@ -171,13 +177,13 @@ void ColouriseHaxeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 								kwType = KeywordType::None;
 							}
 						}
-					} else if (keywordLists[KeywordIndex_Class]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Class].InList(s)) {
 						sc.ChangeState(SCE_HAXE_CLASS);
-					} else if (keywordLists[KeywordIndex_Interface]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Interface].InList(s)) {
 						sc.ChangeState(SCE_HAXE_INTERFACE);
-					} else if (keywordLists[KeywordIndex_Enumeration]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Enumeration].InList(s)) {
 						sc.ChangeState(SCE_HAXE_ENUM);
-					} else if (keywordLists[KeywordIndex_Constant]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Constant].InList(s)) {
 						sc.ChangeState(SCE_HAXE_CONSTANT);
 					} else if (sc.ch != '.') {
 						if (kwType != KeywordType::None) {
@@ -210,6 +216,11 @@ void ColouriseHaxeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				if (escSeq.resetEscapeState(sc.state, sc.chNext)) {
 					sc.SetState(SCE_HAXE_ESCAPECHAR);
 					sc.Forward();
+					if (sc.Match('u', '{')) {
+						escSeq.brace = true;
+						escSeq.digitsLeft = 7; // Unicode escape
+						sc.Forward();
+					}
 				}
 			} else if (sc.state == SCE_HAXE_STRINGSQ && sc.ch == '$') {
 				if (sc.chNext == '{') {
@@ -228,6 +239,9 @@ void ColouriseHaxeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_HAXE_ESCAPECHAR:
 			if (escSeq.atEscapeEnd(sc.ch)) {
+				if (escSeq.brace && sc.ch == '}') {
+					sc.Forward();
+				}
 				sc.SetState(escSeq.outerState);
 				continue;
 			}
@@ -314,13 +328,15 @@ void ColouriseHaxeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			} else if (sc.ch == '$' && IsIdentifierStartEx(sc.chNext)) {
 				sc.SetState(SCE_HAXE_VARIABLE);
 			} else if (isoperator(sc.ch)) {
-				const bool interpolating = !nestedState.empty();
-				sc.SetState(interpolating ? SCE_HAXE_OPERATOR2 : SCE_HAXE_OPERATOR);
-				if (interpolating) {
+				sc.SetState(SCE_HAXE_OPERATOR);
+				if (!nestedState.empty()) {
 					if (sc.ch == '{') {
 						nestedState.push_back(SCE_HAXE_DEFAULT);
 					} else if (sc.ch == '}') {
 						const int outerState = TakeAndPop(nestedState);
+						if (outerState != SCE_HAXE_DEFAULT) {
+							sc.ChangeState(SCE_HAXE_OPERATOR2);
+						}
 						sc.ForwardSetState(outerState);
 						continue;
 					}

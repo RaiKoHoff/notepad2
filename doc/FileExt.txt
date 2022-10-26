@@ -37,7 +37,7 @@ C/C++ Source
 
 	*.h.in
 
-	[ ] rs			Android RenderScript
+	[x] rs			Android RenderScript
 
 C# Source
 	cs
@@ -63,6 +63,7 @@ JavaScript
 	jse				JScript Encoded File
 	jsm				JavaScript Module
 	jsx				JavaScript with JSX
+	cjs				CommonJS Module
 	mjs				ECMAScript Module
 	qs				Qt Installer Framework Script
 
@@ -102,7 +103,10 @@ Python Script
 	empy			EmPy
 	cobra			Cobra
 	gs				GNOME Genie
+
 	bzl				Bazel BUILD file, https://docs.bazel.build/versions/main/build-ref.html
+	bazel
+	BUILD
 
 Ruby Script
 	rb
@@ -330,7 +334,7 @@ Ini Config File
 	clw
 	abnf			ABNF, https://www.ietf.org/rfc/rfc5234.txt
 
-	LLVMBuild.txt
+	[x] LLVMBuild.txt
 
 Inno Setup Script
 	iss
@@ -365,6 +369,7 @@ LaTeX File
 	ins
 	toc
 	info
+	rd				R documentation
 
 Lisp Script
 	lisp
@@ -476,6 +481,7 @@ Rust Source
 
 Scala Script
 	scala
+	sbt				Scala Build Tool
 
 Shell Script
 	sh
@@ -491,6 +497,9 @@ Shell Script
 	.bash*
 	.profile
 	mozconfig		Firefox Build Configuration
+
+	APKBUILD		Alpine Linux packaging script
+	PKGBUILD		Arch Linux packaging script
 
 Swift Source
 	swift
@@ -515,6 +524,8 @@ TOML File
 TypeScript
 	ts
 	tsx		TypeScript with JSX
+	cts		cjs
+	mts		mjs
 
 
 VBScript
@@ -523,7 +534,9 @@ VBScript
 
 Verilog HDL Source
 	v
-	vl
+	vh
+	sv				SystemVerilog
+	svh				SystemVerilog Header File
 
 VHDL Source
 	vhd
@@ -552,6 +565,7 @@ YAML Document
 	yaml
 	clang-format	clang-format Configuration File
 	clang-tidy		clang-tidy Configuration File
+	clangd			clangd Configuration File
 	mir				LLVM Machine IR, https://llvm.org/docs/MIRLangRef.html
 	apinotes		Swift API Notes
 	ifs				LLVM IFS (Interface Stubs)

@@ -88,6 +88,7 @@ public:
 	void Resize(int maxLineLength_);
 	void EnsureBidiData();
 	void Free() noexcept;
+	void ClearPositions() const noexcept;
 	void Invalidate(ValidLevel validity_) noexcept;
 	Sci::Line LineNumber() const noexcept {
 		return lineNumber;
@@ -105,13 +106,14 @@ public:
 	Range SubLineRange(int subLine, Scope scope) const noexcept;
 	bool InLine(int offset, int line) const noexcept;
 	int SubLineFromPosition(int posInLine, PointEnd pe) const noexcept;
-	void SetLineStart(int line, int start);
+	void AddLineStart(Sci::Position start);
 	void SetBracesHighlight(Range rangeLine, const Sci::Position braces[],
 		unsigned char bracesMatchStyle, int xHighlight, bool ignoreStyle) noexcept;
 	void RestoreBracesHighlight(Range rangeLine, const Sci::Position braces[], bool ignoreStyle) noexcept;
 	int SCICALL FindBefore(XYPOSITION x, Range range) const noexcept;
 	int SCICALL FindPositionFromX(XYPOSITION x, Range range, bool charPosition) const noexcept;
 	Point PointFromPosition(int posInLine, int lineHeight, PointEnd pe) const noexcept;
+	XYPOSITION XInLine(Sci::Position index) const noexcept;
 	int EndLineStyle() const noexcept;
 };
 
@@ -178,9 +180,9 @@ class PositionCacheEntry {
 	uint16_t styleNumber = 0;
 	uint16_t clock = 0;
 	uint32_t len = 0;
-	std::unique_ptr<XYPOSITION[]> positions;
+	std::unique_ptr<char[]> positions;
 public:
-	void Set(uint16_t styleNumber_, size_t length, std::unique_ptr<XYPOSITION[]> &positions_, uint32_t clock_) noexcept;
+	void Set(uint16_t styleNumber_, size_t length, std::unique_ptr<char[]> &positions_, uint32_t clock_) noexcept;
 	void Clear() noexcept;
 	bool Retrieve(uint16_t styleNumber_, std::string_view sv, XYPOSITION *positions_) const noexcept;
 	static size_t Hash(uint16_t styleNumber_, std::string_view sv) noexcept;
@@ -211,11 +213,6 @@ class SpecialRepresentations {
 	unsigned int maxKey = 0;
 	bool crlf = false;
 public:
-#if !defined(_MSC_VER) || (_MSC_VER >= 1920)
-	SpecialRepresentations() noexcept = default;
-#else
-	SpecialRepresentations() noexcept {} // for Visual C++ 2017
-#endif
 	void SetRepresentation(std::string_view charBytes, std::string_view value);
 	void SetRepresentationAppearance(std::string_view charBytes, RepresentationAppearance appearance);
 	void SetRepresentationColour(std::string_view charBytes, ColourRGBA colour);

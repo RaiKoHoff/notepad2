@@ -285,7 +285,7 @@ struct MarkdownLexer {
 	MarkdownLexer(Sci_PositionU startPos, Sci_PositionU lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler):
 		sc(startPos, lengthDoc, initStyle, styler),
 		markdown{static_cast<Markdown>(styler.GetPropertyInt("lexer.lang"))},
-		blockTagList{*keywordLists[KeywordIndex_HtmlBlockTag]} {}
+		blockTagList{keywordLists[KeywordIndex_HtmlBlockTag]} {}
 
 	void SaveOuterStyle(int style) {
 		nestedState.push_back(style);
@@ -1524,14 +1524,13 @@ int MarkdownLexer::HighlightBlockText(uint32_t lineState) {
 	case '~':
 		if (sc.ch == sc.chNext) {
 			Sci_PositionU pos = sc.currentPos;
-			int chNext = GetCharAfterDelimiter(sc.styler, pos, sc.ch);
+			const int chNext = GetCharAfterDelimiter(sc.styler, pos, sc.ch);
 			const int count = static_cast<int>(pos - sc.currentPos);
 			if (count >= 3) {
 				delimiterCount = count;
 				int style = (sc.ch == '`') ? SCE_MARKDOWN_BACKTICK_BLOCK : SCE_MARKDOWN_TILDE_BLOCK;
 				// check info string
-				chNext |= 0x20;
-				if (chNext == 'm' || chNext == 'l')  {
+				if (AnyOf<'L', 'l', 'M', 'm'>(chNext)) {
 					char info[8]{};
 					sc.styler.GetRangeLowered(pos, sc.lineStartNext, info, sizeof(info));
 					if (StrStartsWith(info, "math") || StrStartsWith(info, "latex")) {
@@ -2169,7 +2168,7 @@ void ColouriseMarkdownDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int in
 		case SCE_MARKDOWN_SHORT_SUPERSCRIPT:
 		case SCE_MARKDOWN_SHORT_SUBSCRIPT:
 			if (!IsAlphaNumeric(sc.ch)) {
-				sc.SetState( lexer.TakeOuterStyle());
+				sc.SetState(lexer.TakeOuterStyle());
 				continue;
 			}
 			break;

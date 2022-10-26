@@ -16,7 +16,6 @@
 #include <vector>
 #include <array>
 #include <map>
-#include <set>
 #include <optional>
 #include <algorithm>
 #include <memory>
@@ -39,14 +38,6 @@
 using namespace Scintilla;
 using namespace Scintilla::Internal;
 static_assert(StyleDefault == 0);
-
-MarginStyle::MarginStyle(MarginType style_, int width_, MarkerMask mask_) noexcept :
-	style(style_), width(width_), mask(mask_), sensitive(false), cursor(CursorShape::ReverseArrow) {
-}
-
-bool MarginStyle::ShowsFolding() const noexcept {
-	return (mask & MaskFolders) != 0;
-}
 
 void FontRealised::Realise(Surface &surface, int zoomLevel, Technology technology, const FontSpecification &fs, const char *localeName) {
 	PLATFORM_ASSERT(fs.fontName);
@@ -96,6 +87,49 @@ ViewStyle::ViewStyle(size_t stylesSize_):
 	indicators[0] = Indicator(IndicatorStyle::Squiggle, ColourRGBA(0, 0x7f, 0));
 	indicators[1] = Indicator(IndicatorStyle::TT, ColourRGBA(0, 0, 0xff));
 	indicators[2] = Indicator(IndicatorStyle::Plain, ColourRGBA(0xff, 0, 0));
+
+	// Reverted to origin
+	constexpr ColourRGBA revertedToOrigin(0x40, 0xA0, 0xBF);
+	// Saved
+	constexpr ColourRGBA saved(0x0, 0xA0, 0x0);
+	// Modified
+	constexpr ColourRGBA modified(0xFF, 0x80, 0x0);
+	// Reverted to change
+	constexpr ColourRGBA revertedToChange(0xA0, 0xC0, 0x0);
+
+	// Edition indicators
+	constexpr size_t indexHistory = static_cast<size_t>(IndicatorNumbers::HistoryRevertedToOriginInsertion);
+
+	indicators[indexHistory + 0] = Indicator(IndicatorStyle::CompositionThick, revertedToOrigin, false, 30, 60);
+	indicators[indexHistory + 1] = Indicator(IndicatorStyle::Point, revertedToOrigin);
+	indicators[indexHistory + 2] = Indicator(IndicatorStyle::CompositionThick, saved, false, 30, 60);
+	indicators[indexHistory + 3] = Indicator(IndicatorStyle::Point, saved);
+	indicators[indexHistory + 4] = Indicator(IndicatorStyle::CompositionThick, modified, false, 30, 60);
+	indicators[indexHistory + 5] = Indicator(IndicatorStyle::PointTop, modified);
+	indicators[indexHistory + 6] = Indicator(IndicatorStyle::CompositionThick, revertedToChange, false, 30, 60);
+	indicators[indexHistory + 7] = Indicator(IndicatorStyle::Point, revertedToChange);
+
+	// Edition markers
+	// Reverted to origin
+	constexpr size_t indexHistoryRevertedToOrigin = static_cast<size_t>(MarkerOutline::HistoryRevertedToOrigin);
+	markers[indexHistoryRevertedToOrigin].back = revertedToOrigin;
+	markers[indexHistoryRevertedToOrigin].fore = revertedToOrigin;
+	markers[indexHistoryRevertedToOrigin].markType = MarkerSymbol::Bar;
+	// Saved
+	constexpr size_t indexHistorySaved = static_cast<size_t>(MarkerOutline::HistorySaved);
+	markers[indexHistorySaved].back = saved;
+	markers[indexHistorySaved].fore = saved;
+	markers[indexHistorySaved].markType = MarkerSymbol::Bar;
+	// Modified
+	constexpr size_t indexHistoryModified = static_cast<size_t>(MarkerOutline::HistoryModified);
+	markers[indexHistoryModified].back = Platform::Chrome();
+	markers[indexHistoryModified].fore = modified;
+	markers[indexHistoryModified].markType = MarkerSymbol::Bar;
+	// Reverted to change
+	constexpr size_t indexHistoryRevertedToModified = static_cast<size_t>(MarkerOutline::HistoryRevertedToModified);
+	markers[indexHistoryRevertedToModified].back = revertedToChange;
+	markers[indexHistoryRevertedToModified].fore = revertedToChange;
+	markers[indexHistoryRevertedToModified].markType = MarkerSymbol::Bar;
 
 	nextExtendedStyle = 256;
 	// There are no image markers by default, so no need for calling CalcLargestMarkerHeight()
@@ -182,6 +216,8 @@ ViewStyle::ViewStyle(size_t stylesSize_):
 	lastSegItalicsOffset = 2;
 
 	localeName = localeNameDefault;
+	maxFontAscent = 1;
+	maxFontDescent = 1;
 }
 
 // Copy constructor only called when printing copies the screen ViewStyle so it can be
@@ -215,6 +251,7 @@ ViewStyle::ViewStyle(const ViewStyle &source) : ViewStyle(source.styles.size()) 
 	rightMarginWidth = source.rightMarginWidth;
 	maskInLine = source.maskInLine;
 	maskDrawInText = source.maskDrawInText;
+	maskDrawWrapped = source.maskDrawWrapped;
 	ms = source.ms;
 	fixedColumnWidth = source.fixedColumnWidth;
 	textStart = source.textStart;
@@ -270,6 +307,7 @@ void ViewStyle::CalculateMarginWidthAndMask() noexcept {
 		maskDefinedMarkers |= m.mask;
 	}
 	maskDrawInText = 0;
+	maskDrawWrapped = 0;
 	for (int markBit = 0; markBit < MarkerBitCount; markBit++) {
 		const MarkerMask maskBit = 1U << markBit;
 		switch (markers[markBit].markType) {
@@ -280,6 +318,9 @@ void ViewStyle::CalculateMarginWidthAndMask() noexcept {
 		case MarkerSymbol::Underline:
 			maskInLine &= ~maskBit;
 			maskDrawInText |= maskDefinedMarkers & maskBit;
+			break;
+		case MarkerSymbol::Bar:
+			maskDrawWrapped |= maskBit;
 			break;
 		default:	// Other marker types do not affect the masks
 			break;
@@ -311,6 +352,7 @@ void ViewStyle::Refresh(Surface &surface, int tabInChars) {
 			style.Copy(fr->font, fr->measurements);
 		}
 
+		FindMaxAscentDescent();
 		aveCharWidth = styles[StyleDefault].aveCharWidth;
 		spaceWidth = styles[StyleDefault].spaceWidth;
 	}
@@ -331,9 +373,8 @@ void ViewStyle::Refresh(Surface &surface, int tabInChars) {
 	indicatorsDynamic = flagDynamic;
 	indicatorsSetFore = flagSetFore;
 
-	maxAscent = 1;
-	maxDescent = 1;
-	FindMaxAscentDescent();
+	maxAscent = maxFontAscent;
+	maxDescent = maxFontDescent;
 	// Ensure reasonable values: lines less than 1 pixel high will not work
 	maxAscent = std::max(1.0, maxAscent + extraAscent);
 	maxDescent = std::max(0.0, maxDescent + extraDescent);
@@ -472,6 +513,9 @@ void ViewStyle::CalcLargestMarkerHeight() noexcept {
 		case MarkerSymbol::RgbaImage:
 			if (marker.image && marker.image->GetHeight() > largestMarkerHeight)
 				largestMarkerHeight = marker.image->GetHeight();
+			break;
+		case MarkerSymbol::Bar:
+			largestMarkerHeight = lineHeight + 2;
 			break;
 		default:	// Only images have their own natural heights
 			break;
@@ -746,12 +790,20 @@ FontRealised *ViewStyle::Find(const FontSpecification &fs) const {
 }
 
 void ViewStyle::FindMaxAscentDescent() noexcept {
-	auto ascent = maxAscent;
-	auto descent = maxDescent;
-	for (const auto &font : fonts) {
-		ascent = std::max(ascent, font.second->measurements.ascent);
-		descent = std::max(descent, font.second->measurements.descent);
+	XYPOSITION ascent = 1;
+	XYPOSITION descent = 1;
+	int index = 0;
+	for (const Style &style : styles) {
+		if (index != StyleCallTip) {
+			if (ascent < style.ascent) {
+				ascent = style.ascent;
+			}
+			if (descent < style.descent) {
+				descent = style.descent;
+			}
+		}
+		index++;
 	}
-	maxAscent = ascent;
-	maxDescent = descent;
+	maxFontAscent = ascent;
+	maxFontDescent = descent;
 }

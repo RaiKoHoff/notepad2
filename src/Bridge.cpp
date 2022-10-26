@@ -42,16 +42,16 @@ extern "C" {
 
 // Global settings...
 #if NP2_FORCE_COMPILE_C_AS_CPP
-extern int iPrintHeader;
-extern int iPrintFooter;
+extern PrintHeaderOption iPrintHeader;
+extern PrintFooterOption iPrintFooter;
 extern int iPrintColor;
 extern int iPrintZoom;
 extern RECT pageSetupMargin;
 extern HWND hwndStatus;
 extern WCHAR defaultTextFontName[LF_FACESIZE];
 #else
-extern "C" int iPrintHeader;
-extern "C" int iPrintFooter;
+extern "C" PrintHeaderOption iPrintHeader;
+extern "C" PrintFooterOption iPrintFooter;
 extern "C" int iPrintColor;
 extern "C" int iPrintZoom;
 extern "C" RECT pageSetupMargin;
@@ -86,9 +86,9 @@ static inline UINT GetLocaleMeasurement() noexcept {
 //
 // EditPrint() - Code from SciTEWin::Print()
 //
-extern "C" BOOL EditPrint(HWND hwnd, LPCWSTR pszDocTitle) {
+extern "C" bool EditPrint(HWND hwnd, LPCWSTR pszDocTitle) {
 	PRINTDLG pdlg;
-	ZeroMemory(&pdlg, sizeof(PRINTDLG));
+	memset(&pdlg, 0, sizeof(PRINTDLG));
 	pdlg.lStructSize = sizeof(PRINTDLG);
 	pdlg.hwndOwner = GetParent(hwnd);
 	pdlg.hInstance = g_hInstance;
@@ -117,7 +117,7 @@ extern "C" BOOL EditPrint(HWND hwnd, LPCWSTR pszDocTitle) {
 	}
 #endif
 	if (!PrintDlg(&pdlg)) {
-		return TRUE; // False means error...
+		return true; // False means error...
 	}
 
 	hDevMode = pdlg.hDevMode;
@@ -220,7 +220,7 @@ extern "C" BOOL EditPrint(HWND hwnd, LPCWSTR pszDocTitle) {
 	GetTextMetrics(hdc, &tm);
 	headerLineHeight = tm.tmHeight + tm.tmExternalLeading;
 
-	if (iPrintHeader == 3) {
+	if (iPrintHeader == PrintHeaderOption_LeaveBlank) {
 		headerLineHeight = 0;
 	}
 
@@ -239,11 +239,11 @@ extern "C" BOOL EditPrint(HWND hwnd, LPCWSTR pszDocTitle) {
 	GetTextMetrics(hdc, &tm);
 	footerLineHeight = tm.tmHeight + tm.tmExternalLeading;
 
-	if (iPrintFooter == 1) {
+	if (iPrintFooter == PrintFooterOption_LeaveBlank) {
 		footerLineHeight = 0;
 	}
 
-	DOCINFO di = {sizeof(DOCINFO), pszDocTitle, nullptr, nullptr, 0};
+	const DOCINFO di = {sizeof(DOCINFO), pszDocTitle, nullptr, nullptr, 0};
 	if (StartDoc(hdc, &di) < 0) {
 		DeleteDC(hdc);
 		if (fontHeader) {
@@ -252,7 +252,7 @@ extern "C" BOOL EditPrint(HWND hwnd, LPCWSTR pszDocTitle) {
 		if (fontFooter) {
 			DeleteObject(fontFooter);
 		}
-		return FALSE;
+		return false;
 	}
 
 	// Get current date...
@@ -262,7 +262,7 @@ extern "C" BOOL EditPrint(HWND hwnd, LPCWSTR pszDocTitle) {
 	GetDateFormat(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, nullptr, dateString, 256);
 
 	// Get current time...
-	if (iPrintHeader == 0) {
+	if (iPrintHeader == PrintHeaderOption_FilenameAndDateTime) {
 		WCHAR timeString[128];
 		GetTimeFormat(LOCALE_USER_DEFAULT, TIME_NOSECONDS, &st, nullptr, timeString, 128);
 		lstrcat(dateString, L" ");
@@ -318,13 +318,12 @@ extern "C" BOOL EditPrint(HWND hwnd, LPCWSTR pszDocTitle) {
 	// Show wait cursor...
 	BeginWaitCursor();
 
-	BOOL printEmpty = lengthPrinted == lengthDoc;
+	bool printEmpty = lengthPrinted == lengthDoc;
 	while (lengthPrinted < lengthDoc || printEmpty) {
-		printEmpty = FALSE;
-		const BOOL printPage = !(pdlg.Flags & PD_PAGENUMS) || (pageNum >= pdlg.nFromPage && pageNum <= pdlg.nToPage);
+		printEmpty = false;
+		const bool printPage = !(pdlg.Flags & PD_PAGENUMS) || (pageNum >= pdlg.nFromPage && pageNum <= pdlg.nToPage);
 		WCHAR tchNum[32];
-		_ltow(pageNum, tchNum, 10);
-		FormatNumberStr(tchNum);
+		FormatNumber(tchNum, pageNum);
 		WCHAR pageString[128];
 		wsprintf(pageString, tchPageFormat, tchNum);
 
@@ -350,14 +349,14 @@ extern "C" BOOL EditPrint(HWND hwnd, LPCWSTR pszDocTitle) {
 				frPrint.rc.right, frPrint.rc.top - headerLineHeight / 2
 			};
 
-			if (iPrintHeader < 3) {
+			if (iPrintHeader != PrintHeaderOption_LeaveBlank) {
 				ExtTextOut(hdc, rcw.left + 5, rcw.bottom,
 						   ETO_OPAQUE, &rcw, pszDocTitle,
 						   lstrlen(pszDocTitle), nullptr);
 			}
 
 			// Print date in header
-			if (iPrintHeader == 0 || iPrintHeader == 1) {
+			if (iPrintHeader == PrintHeaderOption_FilenameAndDateTime || iPrintHeader == PrintHeaderOption_FilenameAndDate) {
 				SIZE sizeInfo;
 				const int len = lstrlen(dateString);
 				SelectObject(hdc, fontFooter);
@@ -369,7 +368,7 @@ extern "C" BOOL EditPrint(HWND hwnd, LPCWSTR pszDocTitle) {
 			}
 
 			SetTextAlign(hdc, ta);
-			if (iPrintHeader < 3) {
+			if (iPrintHeader != PrintHeaderOption_LeaveBlank) {
 				HPEN pen = CreatePen(0, 1, RGB(0, 0, 0));
 				HPEN penOld = (HPEN)SelectObject(hdc, pen);
 				MoveToEx(hdc, frPrint.rc.left, frPrint.rc.top - headerLineHeight / 4, nullptr);
@@ -388,10 +387,10 @@ extern "C" BOOL EditPrint(HWND hwnd, LPCWSTR pszDocTitle) {
 			SetTextColor(hdc, RGB(0, 0, 0));
 			SetBkColor(hdc, RGB(255, 255, 255));
 
-			if (iPrintFooter == 0) {
+			if (iPrintFooter == PrintFooterOption_PageNumber) {
 				SelectObject(hdc, fontFooter);
 				const UINT ta = SetTextAlign(hdc, TA_TOP);
-				RECT rcw = {
+				const RECT rcw = {
 					frPrint.rc.left, frPrint.rc.bottom + footerLineHeight / 2,
 					frPrint.rc.right, frPrint.rc.bottom + footerLineHeight + footerLineHeight / 2
 				};
@@ -422,7 +421,7 @@ extern "C" BOOL EditPrint(HWND hwnd, LPCWSTR pszDocTitle) {
 		}
 	}
 
-	SciCall_FormatRangeFull(FALSE, nullptr);
+	SciCall_FormatRangeFull(false, nullptr);
 
 	EndDoc(hdc);
 	DeleteDC(hdc);
@@ -439,7 +438,7 @@ extern "C" BOOL EditPrint(HWND hwnd, LPCWSTR pszDocTitle) {
 	// Remove wait cursor...
 	EndWaitCursor();
 
-	return TRUE;
+	return true;
 }
 
 //=============================================================================
@@ -467,7 +466,7 @@ static UINT_PTR CALLBACK PageSetupHook(HWND hwnd, UINT uiMsg, WPARAM wParam, LPA
 			p1 = p2;
 		}
 
-		ComboBox_SetCurSel(hwndCtl, iPrintHeader);
+		ComboBox_SetCurSel(hwndCtl, (int)iPrintHeader);
 		ComboBox_SetExtendedUI(hwndCtl, TRUE);
 
 		// Set footer options
@@ -483,7 +482,7 @@ static UINT_PTR CALLBACK PageSetupHook(HWND hwnd, UINT uiMsg, WPARAM wParam, LPA
 			p1 = p2;
 		}
 
-		ComboBox_SetCurSel(hwndCtl, iPrintFooter);
+		ComboBox_SetCurSel(hwndCtl, (int)iPrintFooter);
 		ComboBox_SetExtendedUI(hwndCtl, TRUE);
 
 		// Set color options
@@ -517,8 +516,8 @@ static UINT_PTR CALLBACK PageSetupHook(HWND hwnd, UINT uiMsg, WPARAM wParam, LPA
 				iPrintZoom = 100;
 			}
 
-			iPrintHeader = (int)SendDlgItemMessage(hwnd, IDC_PAGESETUP_HEADER_LIST, CB_GETCURSEL, 0, 0);
-			iPrintFooter = (int)SendDlgItemMessage(hwnd, IDC_PAGESETUP_FOOTER_LIST, CB_GETCURSEL, 0, 0);
+			iPrintHeader = (PrintHeaderOption)SendDlgItemMessage(hwnd, IDC_PAGESETUP_HEADER_LIST, CB_GETCURSEL, 0, 0);
+			iPrintFooter = (PrintFooterOption)SendDlgItemMessage(hwnd, IDC_PAGESETUP_FOOTER_LIST, CB_GETCURSEL, 0, 0);
 			iPrintColor	 = (int)SendDlgItemMessage(hwnd, IDC_PAGESETUP_COLOR_MODE_LIST, CB_GETCURSEL, 0, 0);
 		}
 		break;
@@ -534,7 +533,7 @@ extern "C" void EditPrintSetup(HWND hwnd) {
 	DLGTEMPLATE *pDlgTemplate = LoadThemedDialogTemplate(MAKEINTRESOURCE(IDD_PAGESETUP), g_hInstance);
 
 	PAGESETUPDLG pdlg;
-	ZeroMemory(&pdlg, sizeof(PAGESETUPDLG));
+	memset(&pdlg, 0, sizeof(PAGESETUPDLG));
 	pdlg.lStructSize = sizeof(PAGESETUPDLG);
 	pdlg.Flags = PSD_ENABLEPAGESETUPHOOK | PSD_ENABLEPAGESETUPTEMPLATEHANDLE;
 	pdlg.lpfnPageSetupHook = PageSetupHook;
@@ -572,7 +571,7 @@ extern "C" void EditPrintSetup(HWND hwnd) {
 // EditPrintInit() - Setup default page margin if no values from registry
 //
 static void EditPrintInit() noexcept {
-	if (pageSetupMargin.left == -1 || pageSetupMargin.top == -1 || pageSetupMargin.right == -1 || pageSetupMargin.bottom == -1) {
+	if ((pageSetupMargin.left | pageSetupMargin.top | pageSetupMargin.right | pageSetupMargin.bottom) < 0) {
 		const UINT measurement = GetLocaleMeasurement();
 		if (measurement == MeasurementInternational) {
 			pageSetupMargin.left = 2000;

@@ -23,21 +23,40 @@
 #define WC_NOTEPAD2 L"Notepad2"
 #define MY_APPUSERMODELID	L"Notepad2 Text Editor"
 
+typedef enum TripleBoolean {
+	TripleBoolean_False = 0,
+	TripleBoolean_True,
+	TripleBoolean_NotSet,
+} TripleBoolean;
+
+enum {
+	ReadOnlyMode_None = 0,
+	ReadOnlyMode_Current,
+	ReadOnlyMode_AllFile,
+};
+
+typedef enum FileWatchingMode {
+	FileWatchingMode_None = 0,
+	FileWatchingMode_ShowMessage,
+	FileWatchingMode_AutoReload,
+} FileWatchingMode;
+
 //==== Data Type for WM_COPYDATA ==============================================
 #define DATA_NOTEPAD2_PARAMS 0xFB10
 typedef struct NP2PARAMS {
-	int		flagFileSpecified;
-	int		flagChangeNotify;
-	int		flagLexerSpecified;
+	bool	flagFileSpecified;
+	bool	flagReadOnlyMode;
+	bool	flagLexerSpecified;
+	bool	flagQuietCreate;
+	bool	flagTitleExcerpt;
+	bool	flagJumpTo;
+	TripleBoolean	flagChangeNotify;
 	int		iInitialLexer;
-	int		flagQuietCreate;
-	int		flagJumpTo;
 	Sci_Line		iInitialLine;
 	Sci_Position	iInitialColumn;
 	int		iSrcEncoding;
 	int		flagSetEncoding;
 	int		flagSetEOLMode;
-	int		flagTitleExcerpt;
 	WCHAR wchData;
 } NP2PARAMS, *LPNP2PARAMS;
 
@@ -67,13 +86,22 @@ typedef struct NP2PARAMS {
 #define IDP_POPUP_SUBMENU_FOLD	3
 
 //==== Statusbar ==============================================================
-#define STATUS_DOCPOS		0
-#define STATUS_LEXER		1
-#define STATUS_CODEPAGE		2
-#define STATUS_EOLMODE		3
-#define STATUS_OVRMODE		4
-#define STATUS_DOCZOOM		5
-#define STATUS_DOCSIZE		6
+enum {
+	StatusItem_Line,
+	StatusItem_Column,
+	StatusItem_Character,
+	StatusItem_Selection,
+	StatusItem_SelectedLine,
+	StatusItem_Find,
+	StatusItem_Empty,
+	StatusItem_Lexer,
+	StatusItem_Encoding,
+	StatusItem_EolMode,
+	StatusItem_OvrMode,
+	StatusItem_Zoom,
+	StatusItem_DocSize,
+	StatusItem_ItemCount,
+};
 #define STATUS_HELP			(255 | SBT_NOBORDERS)
 
 /**
@@ -84,6 +112,9 @@ typedef struct NP2PARAMS {
 //#define APPM_CHANGENOTIFYCLEAR	(WM_APP + 3)
 #define APPM_TRAYMESSAGE			(WM_APP + 4)	// callback message from system tray
 #define APPM_POST_HOTSPOTCLICK		(WM_APP + 5)
+// TODO: WM_COPYDATA is blocked by the User Interface Privilege Isolation
+// https://www.codeproject.com/tips/1017834/how-to-send-data-from-one-process-to-another-in-cs
+#define APPM_COPYDATA				(WM_APP + 6)
 
 #define ID_WATCHTIMER				0xA000	// file watch timer
 #define ID_PASTEBOARDTIMER			0xA001	// paste board timer
@@ -102,6 +133,30 @@ NP2SettingsVersion_None = 0,
 NP2SettingsVersion_V1 = 1,
 NP2SettingsVersion_Current = NP2SettingsVersion_V1,
 };
+
+typedef enum EscFunction {
+	EscFunction_None = 0,
+	EscFunction_Minimize,
+	EscFunction_Exit,
+} EscFunction;
+
+typedef enum TitlePathNameFormat {
+	TitlePathNameFormat_NameOnly = 0,
+	TitlePathNameFormat_NameFirst,
+	TitlePathNameFormat_FullPath,
+} TitlePathNameFormat;
+
+typedef enum PrintHeaderOption {
+	PrintHeaderOption_FilenameAndDateTime = 0,
+	PrintHeaderOption_FilenameAndDate,
+	PrintHeaderOption_Filename,
+	PrintHeaderOption_LeaveBlank,
+} PrintHeaderOption;
+
+typedef enum PrintFooterOption {
+	PrintFooterOption_PageNumber = 0,
+	PrintFooterOption_LeaveBlank,
+} PrintFooterOption;
 
 #define INI_SECTION_NAME_NOTEPAD2				L"Notepad2"
 #define INI_SECTION_NAME_SETTINGS				L"Settings"
@@ -127,41 +182,40 @@ extern WCHAR szCurFile[MAX_PATH + 40];
 //==== Function Declarations ==================================================
 BOOL InitApplication(HINSTANCE hInstance);
 void InitInstance(HINSTANCE hInstance, int nCmdShow);
-BOOL ActivatePrevInst(void);
-void GetRelaunchParameters(LPWSTR szParameters, LPCWSTR lpszFile, BOOL newWind, BOOL emptyWind);
-BOOL RelaunchMultiInst(void);
-BOOL RelaunchElevated(void);
+bool ActivatePrevInst(void);
+void GetRelaunchParameters(LPWSTR szParameters, LPCWSTR lpszFile, bool newWind, bool emptyWind);
+bool RelaunchMultiInst(void);
+bool RelaunchElevated(void);
 void SnapToDefaultPos(HWND hwnd);
-void ShowNotifyIcon(HWND hwnd, BOOL bAdd);
+void ShowNotifyIcon(HWND hwnd, bool bAdd);
 void SetNotifyIconTitle(HWND hwnd);
 
 void ShowNotificationA(int notifyPos, LPCSTR lpszText);
 void ShowNotificationW(int notifyPos, LPCWSTR lpszText);
 void ShowNotificationMessage(int notifyPos, UINT uidMessage, ...);
 
-void InstallFileWatching(BOOL terminate);
+void InstallFileWatching(bool terminate);
 void CALLBACK WatchTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 void CALLBACK PasteBoardTimer(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 
 void LoadSettings(void);
-void SaveSettingsNow(BOOL bOnlySaveStyle, BOOL bQuiet);
-void SaveSettings(BOOL bSaveSettingsNow);
-void SaveWindowPosition(BOOL bSaveSettingsNow, WCHAR *pIniSectionBuf);
+void SaveSettingsNow(bool bOnlySaveStyle, bool bQuiet);
+void SaveSettings(bool bSaveSettingsNow);
+void SaveWindowPosition(WCHAR *pIniSectionBuf);
 void ClearWindowPositionHistory(void);
 void ParseCommandLine(void);
 void LoadFlags(void);
 
-BOOL CheckIniFile(LPWSTR lpszFile, LPCWSTR lpszModule);
-BOOL CheckIniFileRedirect(LPWSTR lpszFile, LPCWSTR lpszModule, LPCWSTR redirectKey);
-BOOL FindIniFile(void);
-BOOL TestIniFile(void);
-BOOL CreateIniFile(LPCWSTR lpszIniFile);
+bool CheckIniFile(LPWSTR lpszFile, LPCWSTR lpszModule);
+bool CheckIniFileRedirect(LPWSTR lpszFile, LPCWSTR lpszModule, LPCWSTR redirectKey);
+bool FindIniFile(void);
+bool TestIniFile(void);
+bool CreateIniFile(LPCWSTR lpszIniFile);
 void FindExtraIniFile(LPWSTR lpszIniFile, LPCWSTR defaultName, LPCWSTR redirectKey);
 
 void UpdateWindowTitle(void);
 void UpdateStatusbar(void);
 void UpdateStatusBarCache(int item);
-void UpdateStatusBarWidth(void);
 void UpdateToolbar(void);
 void UpdateFoldMarginWidth(void);
 void UpdateLineNumberWidth(void);
@@ -181,16 +235,15 @@ typedef struct EditFileIOStatus {
 	int iEncoding;		// load output, save input
 	int iEOLMode;		// load output
 
-	BOOL bFileTooBig;	// load output
-	BOOL bUnicodeErr;	// load output
+	bool bFileTooBig;	// load output
+	bool bUnicodeErr;	// load output
+	bool bCancelDataLoss;// save output
 
 	// inconsistent line endings
-	BOOL bLineEndingsDefaultNo; // set default button to "No"
-	BOOL bInconsistent;	// load output
+	bool bLineEndingsDefaultNo; // set default button to "No"
+	bool bInconsistent;	// load output
 	Sci_Line totalLineCount; // load output, sum(linesCount) + 1
 	Sci_Line linesCount[3];	// load output: CR+LF, LF, CR
-
-	BOOL bCancelDataLoss;// save output
 } EditFileIOStatus;
 
 typedef enum FileLoadFlag {
@@ -209,11 +262,11 @@ typedef enum FileSaveFlag {
 	FileSaveFlag_EndSession = 16,
 } FileSaveFlag;
 
-BOOL FileIO(BOOL fLoad, LPWSTR pszFile, int flag, EditFileIOStatus *status);
-BOOL FileLoad(FileLoadFlag loadFlag, LPCWSTR lpszFile);
-BOOL FileSave(FileSaveFlag saveFlag);
+bool FileIO(bool fLoad, LPWSTR pszFile, int flag, EditFileIOStatus *status);
+bool FileLoad(FileLoadFlag loadFlag, LPCWSTR lpszFile);
+bool FileSave(FileSaveFlag saveFlag);
 BOOL OpenFileDlg(HWND hwnd, LPWSTR lpstrFile, int cchFile, LPCWSTR lpstrInitialDir);
-BOOL SaveFileDlg(HWND hwnd, BOOL Untitled, LPWSTR lpstrFile, int cchFile, LPCWSTR lpstrInitialDir);
+BOOL SaveFileDlg(HWND hwnd, bool Untitled, LPWSTR lpstrFile, int cchFile, LPCWSTR lpstrInitialDir);
 
 enum {
 	AutoSaveOption_None = 0,
@@ -224,9 +277,9 @@ enum {
 	AutoSaveDefaultPeriod = 5000,
 };
 
-void	AutoSave_Start(BOOL reset);
+void	AutoSave_Start(bool reset);
 void	AutoSave_Stop(BOOL keepBackup);
-void	AutoSave_DoWork(BOOL keepBackup);
+void	AutoSave_DoWork(bool keepBackup);
 LPCWSTR AutoSave_GetDefaultFolder(void);
 
 LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam);

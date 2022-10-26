@@ -32,12 +32,11 @@ typedef _Bool	bool;
 #elif defined(_MSC_VER)
 #define NP2_assume(expr)	__assume(expr)
 #elif defined(__GNUC__)
-#define NP2_assume(expr)	__extension__({		\
+#define NP2_assume(expr)	do {				\
 	if (!(expr)) {								\
 		__builtin_unreachable();				\
 	}											\
-	1;											\
-	})
+	} while (0)
 #else
 #define NP2_assume(expr)
 #endif
@@ -47,7 +46,7 @@ typedef _Bool	bool;
 #elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 #define NP2_static_assert(expr)		_Static_assert(expr, #expr)
 #else
-#define NP2_static_assert(expr)
+#define NP2_static_assert(expr)		_STATIC_ASSERT(expr)
 #endif
 
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__cplusplus)
@@ -66,6 +65,7 @@ typedef _Bool	bool;
 #define COUNTOF(ar)	_countof(ar)
 #define CSTRLEN(s)	(_countof(s) - 1)
 #endif
+#define STRSIZE(s)	(COUNTOF(s) * sizeof((s)[0]))
 
 // https://docs.microsoft.com/en-us/cpp/preprocessor/pragma-directives-and-the-pragma-keyword
 #if defined(__GNUC__) || defined(__clang__)

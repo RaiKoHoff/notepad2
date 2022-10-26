@@ -28,7 +28,7 @@ lexerList = [
 	('NP2LEX_DART', 'stlDart.c', 'LexDart.cxx', 'Dart.dart', 0, parse_dart_api_file),
 	('NP2LEX_DIFF', 'stlDefault.c', 'LexDiff.cxx', '', (0, 'Diff'), None),
 
-	('NP2LEX_FORTRAN', 'stlFortran.c', 'LexFortran.cxx', '', 0, None),
+	('NP2LEX_FORTRAN', 'stlFortran.c', 'LexFortran.cxx', 'Fortran.f', 0, parse_fortran_api_file),
 	('NP2LEX_FSHARP', 'stlFSharp.c', 'LexFSharp.cxx', '', 0, None),
 
 	('NP2LEX_GN', 'stlGN.c', 'LexGN.cxx', 'GN.gn', 0, parse_gn_api_file),
@@ -68,7 +68,7 @@ lexerList = [
 	('NP2LEX_PASCAL', 'stlPascal.c', 'LexPascal.cxx', '', 0, None),
 	('NP2LEX_PERL', 'stlPerl.c', 'LexPerl.cxx', '', 0, None),
 	('NP2LEX_PHP', 'stlPHP.c', 'LexPHP.cxx', 'PHP.php', 1, parse_php_api_file),
-	('NP2LEX_POWERSHELL', 'stlPowerShell.c', 'LexPowerShell.cxx', '', 0, None),
+	('NP2LEX_POWERSHELL', 'stlPowerShell.c', 'LexPowerShell.cxx', 'PowerShell.ps1', 0, parse_powershell_api_file),
 	('NP2LEX_PYTHON', 'stlPython.c', 'LexPython.cxx', 'Python.py', 0, parse_python_api_file),
 
 	('NP2LEX_RLANG', 'stlR.c', 'LexR.cxx', 'R.r', 0, parse_rlang_api_file),
@@ -77,7 +77,7 @@ lexerList = [
 	('NP2LEX_RUBY', 'stlRuby.c', 'LexRuby.cxx', 'Ruby.rb', 0, parse_ruby_api_file),
 	('NP2LEX_RUST', 'stlRust.c', 'LexRust.cxx', 'Rust.rs', 0, parse_rust_api_file),
 
-	('NP2LEX_SCALA', 'stlScala.c', 'LexCPP.cxx', '', 1, None),
+	('NP2LEX_SCALA', 'stlScala.c', 'LexScala.cxx', 'Scala.scala', 1, parse_scala_api_file),
 	('NP2LEX_SMALI', 'stlSmali.c', 'LexSmali.cxx', '', 0, parse_smali_api_file),
 	# TODO: SQL Dialect, https://github.com/zufuliu/notepad2/issues/31
 	('NP2LEX_SQL', 'stlSQL.c', 'LexSQL.cxx', [
@@ -95,8 +95,8 @@ lexerList = [
 	('NP2LEX_TOML', 'stlTOML.c', 'LexTOML.cxx', '', 0, parse_toml_api_file),
 
 	('NP2LEX_VBSCRIPT', 'stlVBS.c', 'LexVB.cxx', '', 0, parse_visual_basic_api_file),
-	('NP2LEX_VERILOG', 'stlVerilog.c', 'LexVerilog.cxx', '', 0, None),
-	('NP2LEX_VHDL', 'stlVHDL.c', 'LexVHDL.cxx', '', 0, None),
+	('NP2LEX_VERILOG', 'stlVerilog.c', 'LexVerilog.cxx', ['Verilog.v', 'SystemVerilog.sv'], 0, parse_verilog_api_file),
+	('NP2LEX_VHDL', 'stlVHDL.c', 'LexVHDL.cxx', 'VHDL.vhdl', 0, parse_vhdl_api_file),
 	('NP2LEX_VIM', 'stlVim.c', 'LexVim.cxx', 'Vim.vim', 0, parse_vim_api_file),
 	('NP2LEX_VISUALBASIC', 'stlVB.c', 'LexVB.cxx', '', 0, parse_visual_basic_api_file),
 

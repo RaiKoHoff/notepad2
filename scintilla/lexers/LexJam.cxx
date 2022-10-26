@@ -90,7 +90,7 @@ void ColouriseJamDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			if (!IsJamIdentifierChar(sc.ch)) {
 				char s[128];
 				sc.GetCurrent(s, sizeof(s));
-				if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+				if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 					sc.ChangeState(SCE_JAM_WORD);
 					if (StrEqualsAny(s, "import", "using", "include")) {
 						if (visibleChars == sc.LengthCurrent()) {
@@ -109,13 +109,13 @@ void ColouriseJamDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 							kwType = KeywordType::None;
 						}
 					}
-				} else if (keywordLists[KeywordIndex_Module]->InList(s)) {
+				} else if (keywordLists[KeywordIndex_Module].InList(s)) {
 					sc.ChangeState(SCE_JAM_MODULE);
-				} else if (keywordLists[KeywordIndex_Class]->InList(s)) {
+				} else if (keywordLists[KeywordIndex_Class].InList(s)) {
 					sc.ChangeState(SCE_JAM_CLASS);
-				} else if (keywordLists[KeywordIndex_BuiltinRule]->InList(s)) {
+				} else if (keywordLists[KeywordIndex_BuiltinRule].InList(s)) {
 					sc.ChangeState(SCE_JAM_RULE);
-				} else if (keywordLists[KeywordIndex_Constant]->InList(s)) {
+				} else if (keywordLists[KeywordIndex_Constant].InList(s)) {
 					sc.ChangeState(SCE_JAM_CONSTANT);
 				} else if (kwType != KeywordType::None) {
 					sc.ChangeState(static_cast<int>(kwType));
@@ -154,20 +154,19 @@ void ColouriseJamDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			break;
 
 		case SCE_JAM_STRING:
-			if (sc.ch == '\\' && IsJamEscapeChar(sc.chNext)) {
+			if (sc.atLineStart) {
+				sc.SetState(SCE_JAM_DEFAULT);
+			} else if (sc.ch == '\\' && IsJamEscapeChar(sc.chNext)) {
 				sc.SetState(SCE_JAM_ESCAPECHAR);
 				sc.Forward();
 				sc.ForwardSetState(SCE_JAM_STRING);
 				continue;
-			}
-			if (sc.Match('$', '(')) {
+			} else if (sc.Match('$', '(')) {
 				nestedState.push_back(SCE_JAM_STRING);
 				sc.SetState(SCE_JAM_OPERATOR);
 				sc.Forward();
 			} else if (sc.ch == '"') {
 				sc.ForwardSetState(SCE_JAM_DEFAULT);
-			} else if (sc.atLineStart) {
-				sc.SetState(SCE_JAM_DEFAULT);
 			}
 			break;
 		}

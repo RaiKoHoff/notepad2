@@ -14,11 +14,11 @@
 #define INDENT_WIDTH_MIN	0
 #define INDENT_WIDTH_MAX	256
 
-#define MAX_EDITSTYLE_VALUE_SIZE	256
-#define MAX_EDITLEXER_EXT_SIZE		512
-#define MAX_LEXER_STYLE_EDIT_SIZE	512
-#define MAX_EDITLEXER_NAME_SIZE		128
-#define MAX_EDITSTYLE_NAME_SIZE		128
+#define MAX_EDITSTYLE_VALUE_SIZE	128
+#define MAX_EDITLEXER_EXT_SIZE		256
+#define MAX_LEXER_STYLE_EDIT_SIZE	256
+#define MAX_EDITLEXER_NAME_SIZE		64
+#define MAX_EDITSTYLE_NAME_SIZE		64
 
 enum {
 	StyleTheme_Default = 0,
@@ -101,8 +101,8 @@ typedef struct EDITLEXER {
 	// set with EDITLEXER_HOLE() or EDITLEXER_TEXT()
 	struct {
 		uint8_t iStyleTheme;
-		uint8_t bStyleChanged;
-		uint8_t bUseDefaultCodeStyle;
+		bool bStyleChanged;
+		bool bUseDefaultCodeStyle;
 		int iFavoriteOrder;
 
 		const unsigned int iStyleCount;
@@ -135,7 +135,7 @@ typedef const EDITLEXER *LPCEDITLEXER;
 #define NP2LEX_ACTIONSCRIPT	63011	// SCLEX_JAVASCRIPT	ActionScript
 #define NP2LEX_HAXE			63012	// SCLEX_HAXE		Haxe Script
 #define NP2LEX_GROOVY		63013	// SCLEX_GROOVY		Groovy Script
-#define NP2LEX_SCALA		63014	// SCLEX_CPP		Scala Script
+#define NP2LEX_SCALA		63014	// SCLEX_SCALA		Scala Script
 #define NP2LEX_GO			63015	// SCLEX_GO			Go Source
 #define NP2LEX_GRADLE		63016	// SCLEX_GROOVY		Gradle Build Script
 

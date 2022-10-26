@@ -72,7 +72,7 @@ void DebugPrintf(const char *fmt, ...) {
 	DebugPrint(buf);
 }
 
-void IniClearSectionEx(LPCWSTR lpSection, LPCWSTR lpszIniFile, BOOL bDelete) {
+void IniClearSectionEx(LPCWSTR lpSection, LPCWSTR lpszIniFile, bool bDelete) {
 	if (StrIsEmpty(lpszIniFile)) {
 		return;
 	}
@@ -80,7 +80,7 @@ void IniClearSectionEx(LPCWSTR lpSection, LPCWSTR lpszIniFile, BOOL bDelete) {
 	WritePrivateProfileSection(lpSection, (bDelete ? NULL : L""), lpszIniFile);
 }
 
-void IniClearAllSectionEx(LPCWSTR lpszPrefix, LPCWSTR lpszIniFile, BOOL bDelete) {
+void IniClearAllSectionEx(LPCWSTR lpszPrefix, LPCWSTR lpszIniFile, bool bDelete) {
 	if (StrIsEmpty(lpszIniFile)) {
 		return;
 	}
@@ -104,10 +104,10 @@ void IniClearAllSectionEx(LPCWSTR lpszPrefix, LPCWSTR lpszIniFile, BOOL bDelete)
 //
 // Manipulation of (cached) ini file sections
 //
-BOOL IniSectionParseArray(IniSection *section, LPWSTR lpCachedIniSection, BOOL quoted) {
+bool IniSectionParseArray(IniSection *section, LPWSTR lpCachedIniSection, BOOL quoted) {
 	IniSectionClear(section);
 	if (StrIsEmpty(lpCachedIniSection)) {
-		return FALSE;
+		return false;
 	}
 
 	const int capacity = section->capacity;
@@ -137,10 +137,10 @@ BOOL IniSectionParseArray(IniSection *section, LPWSTR lpCachedIniSection, BOOL q
 	return count != 0;
 }
 
-BOOL IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection) {
+bool IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection) {
 	IniSectionClear(section);
 	if (StrIsEmpty(lpCachedIniSection)) {
-		return FALSE;
+		return false;
 	}
 
 	const int capacity = section->capacity;
@@ -163,7 +163,7 @@ BOOL IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection) {
 	} while (*p && count < capacity);
 
 	if (count == 0) {
-		return FALSE;
+		return false;
 	}
 
 	section->count = count;
@@ -178,7 +178,7 @@ BOOL IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection) {
 		section->nodeList[count - 1].next = &section->nodeList[count];
 		--count;
 	}
-	return TRUE;
+	return true;
 }
 
 LPCWSTR IniSectionUnsafeGetValue(IniSection *section, LPCWSTR key, int keyLen) {
@@ -191,7 +191,7 @@ LPCWSTR IniSectionUnsafeGetValue(IniSection *section, LPCWSTR key, int keyLen) {
 	IniKeyValueNode *prev = NULL;
 #if IniSectionImplUseSentinelNode
 	section->sentinel->hash = hash;
-	while (TRUE) {
+	while (true) {
 		if (node->hash == hash) {
 			if (node == section->sentinel) {
 				return NULL;
@@ -243,12 +243,12 @@ int IniSectionGetIntImpl(IniSection *section, LPCWSTR key, int keyLen, int iDefa
 	return iDefault;
 }
 
-BOOL IniSectionGetBoolImpl(IniSection *section, LPCWSTR key, int keyLen, BOOL bDefault) {
+bool IniSectionGetBoolImpl(IniSection *section, LPCWSTR key, int keyLen, bool bDefault) {
 	LPCWSTR value = IniSectionGetValueImpl(section, key, keyLen);
 	if (value) {
 		const UINT t = *value - L'0';
-		if (t <= 1U) {
-			return t;
+		if (t <= true) {
+			return t & true;
 		}
 	}
 	return bDefault;
@@ -296,12 +296,12 @@ LPWSTR Registry_GetString(HKEY hKey, LPCWSTR valueName) {
 LSTATUS Registry_SetString(HKEY hKey, LPCWSTR valueName, LPCWSTR lpszText) {
 	DWORD len = lstrlen(lpszText);
 	len = len ? ((len + 1)*sizeof(WCHAR)) : 0;
-	LSTATUS status = RegSetValueEx(hKey, valueName, 0, REG_SZ, (const BYTE *)lpszText, len);
+	const LSTATUS status = RegSetValueEx(hKey, valueName, 0, REG_SZ, (const BYTE *)lpszText, len);
 	return status;
 }
 
 LSTATUS Registry_SetInt(HKEY hKey, LPCWSTR valueName, DWORD value) {
-	LSTATUS status = RegSetValueEx(hKey, valueName, 0, REG_DWORD, (const BYTE *)(&value), sizeof(DWORD));
+	const LSTATUS status = RegSetValueEx(hKey, valueName, 0, REG_DWORD, (const BYTE *)(&value), sizeof(DWORD));
 	return status;
 }
 
@@ -389,7 +389,7 @@ int ParseCommaList64(LPCWSTR str, int64_t result[], int count) {
 	return index;
 }
 
-BOOL FindUserResourcePath(LPCWSTR path, LPWSTR outPath) {
+bool FindUserResourcePath(LPCWSTR path, LPWSTR outPath) {
 	// similar to CheckIniFile()
 	WCHAR tchFileExpanded[MAX_PATH];
 	ExpandEnvironmentStrings(path, tchFileExpanded, COUNTOF(tchFileExpanded));
@@ -402,7 +402,7 @@ BOOL FindUserResourcePath(LPCWSTR path, LPWSTR outPath) {
 			lstrcpy(PathFindFileName(tchBuild), tchFileExpanded);
 			if (PathIsFile(tchBuild)) {
 				lstrcpy(outPath, tchBuild);
-				return TRUE;
+				return true;
 			}
 		}
 
@@ -411,13 +411,13 @@ BOOL FindUserResourcePath(LPCWSTR path, LPWSTR outPath) {
 		lstrcpy(PathFindFileName(tchBuild), tchFileExpanded);
 		if (PathIsFile(tchBuild)) {
 			lstrcpy(outPath, tchBuild);
-			return TRUE;
+			return true;
 		}
 	} else if (PathIsFile(tchFileExpanded)) {
 		lstrcpy(outPath, tchFileExpanded);
-		return TRUE;
+		return true;
 	}
-	return FALSE;
+	return false;
 }
 
 HBITMAP LoadBitmapFile(LPCWSTR path) {
@@ -521,8 +521,8 @@ HRESULT PrivateSetCurrentProcessExplicitAppUserModelID(PCWSTR AppID) {
 //
 // IsElevated()
 //
-BOOL IsElevated(void) {
-	BOOL bIsElevated = FALSE;
+bool IsElevated(void) {
+	bool bIsElevated = false;
 	HANDLE hToken = NULL;
 
 	if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
@@ -531,7 +531,7 @@ BOOL IsElevated(void) {
 
 		if (GetTokenInformation(hToken, TokenElevation, &te, sizeof(te), &dwReturnLength)) {
 			if (dwReturnLength == sizeof(te)) {
-				bIsElevated = te.TokenIsElevated;
+				bIsElevated = te.TokenIsElevated != 0;
 			}
 		}
 		CloseHandle(hToken);
@@ -544,7 +544,7 @@ BOOL IsElevated(void) {
 // BitmapMergeAlpha()
 // Merge alpha channel into color channel
 //
-BOOL BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest) {
+bool BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest) {
 	BITMAP bmp;
 	if (GetObject(hbmp, sizeof(BITMAP), &bmp)) {
 		if (bmp.bmBitsPixel == 32) {
@@ -558,7 +558,7 @@ BOOL BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest) {
 			const __m128i i16x8Back = rgba_to_bgra_epi16x8_sse4_si32(crDest);
 			for (ULONG x = 0; x < count; x++, prgba++) {
 				__m128i i16x8Fore = unpack_color_epi16_sse4_ptr64(prgba);
-				__m128i i16x8Alpha = _mm_shufflehi_epi16(_mm_shufflelo_epi16(i16x8Fore, 0xff), 0xff);
+				const __m128i i16x8Alpha = _mm_shufflehi_epi16(_mm_shufflelo_epi16(i16x8Fore, 0xff), 0xff);
 				i16x8Fore = mm_alpha_blend_epi16(i16x8Fore, i16x8Back, i16x8Alpha);
 				const uint64_t color = pack_color_epi16_sse2_si64(i16x8Fore);
 				*prgba = color | UINT64_C(0xff000000ff000000);
@@ -572,7 +572,7 @@ BOOL BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest) {
 			const __m128i i16x4Back = rgba_to_bgra_epi16_sse2_si32(crDest);
 			for (ULONG x = 0; x < count; x++, prgba++) {
 				__m128i i16x4Fore = unpack_color_epi16_sse2_ptr32(prgba);
-				__m128i i16x4Alpha = _mm_shufflelo_epi16(i16x4Fore, 0xff);
+				const __m128i i16x4Alpha = _mm_shufflelo_epi16(i16x4Fore, 0xff);
 				i16x4Fore = mm_alpha_blend_epi16(i16x4Fore, i16x4Back, i16x4Alpha);
 				const uint32_t color = pack_color_epi16_sse2_si32(i16x4Fore);
 				*prgba = color | 0xff000000U;
@@ -597,10 +597,10 @@ BOOL BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest) {
 			//StopWatch_Stop(watch);
 			//StopWatch_ShowLog(&watch, "BitmapMergeAlpha " BitmapMergeAlpha_Tag);
 			#undef BitmapMergeAlpha_Tag
-			return TRUE;
+			return true;
 		}
 	}
-	return FALSE;
+	return false;
 }
 
 //=============================================================================
@@ -608,7 +608,7 @@ BOOL BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest) {
 // BitmapAlphaBlend()
 // Perform alpha blending to color channel only
 //
-BOOL BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha) {
+bool BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha) {
 	BITMAP bmp;
 	if (GetObject(hbmp, sizeof(BITMAP), &bmp)) {
 		if (bmp.bmBitsPixel == 32) {
@@ -623,7 +623,7 @@ BOOL BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha) {
 			const ULONG count = (bmp.bmHeight * bmp.bmWidth) / 4;
 			__m128i *prgba = (__m128i *)bmp.bmBits;
 
-			const __m256i i16x16Alpha = _mm256_broadcastw_epi16(mm_setlo_epi32(alpha));
+			const __m256i i16x16Alpha = _mm256_broadcastw_epi16(_mm_cvtsi32_si128(alpha));
 			const __m256i i16x16Back = _mm256_broadcastq_epi64(_mm_mullo_epi16(rgba_to_bgra_epi16_sse4_si32(crDest), mm_xor_alpha_epi16(_mm256_castsi256_si128(i16x16Alpha))));
 			const __m256i i16x16_0x8081 = _mm256_broadcastsi128_si256(_mm_set1_epi16(-0x8000 | 0x81));
 			for (ULONG x = 0; x < count; x++, prgba++) {
@@ -641,7 +641,7 @@ BOOL BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha) {
 			const ULONG count = (bmp.bmHeight * bmp.bmWidth) / 2;
 			uint64_t *prgba = (uint64_t *)bmp.bmBits;
 
-			const __m128i i16x8Alpha = _mm_broadcastw_epi16(mm_setlo_epi32(alpha));
+			const __m128i i16x8Alpha = _mm_broadcastw_epi16(_mm_cvtsi32_si128(alpha));
 			const __m128i i16x8Back = _mm_mullo_epi16(rgba_to_bgra_epi16x8_sse4_si32(crDest), mm_xor_alpha_epi16(i16x8Alpha));
 			for (ULONG x = 0; x < count; x++, prgba++) {
 				const __m128i origin = unpack_color_epi16_sse4_ptr64(prgba);
@@ -703,10 +703,10 @@ BOOL BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha) {
 			//StopWatch_Stop(watch);
 			//StopWatch_ShowLog(&watch, "BitmapAlphaBlend " BitmapAlphaBlend_Tag);
 			#undef BitmapAlphaBlend_Tag
-			return TRUE;
+			return true;
 		}
 	}
-	return FALSE;
+	return false;
 }
 
 //=============================================================================
@@ -714,7 +714,7 @@ BOOL BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha) {
 // BitmapGrayScale()
 // Gray scale color channel only
 //
-BOOL BitmapGrayScale(HBITMAP hbmp) {
+bool BitmapGrayScale(HBITMAP hbmp) {
 	BITMAP bmp;
 	if (GetObject(hbmp, sizeof(BITMAP), &bmp)) {
 		if (bmp.bmBitsPixel == 32) {
@@ -727,10 +727,10 @@ BOOL BitmapGrayScale(HBITMAP hbmp) {
 				gray = ((gray * 0x80) + (0xD0 * (255 ^ 0x80))) >> 8;
 				prgba[x].rgbRed = prgba[x].rgbGreen = prgba[x].rgbBlue = gray;
 			}
-			return TRUE;
+			return true;
 		}
 	}
-	return FALSE;
+	return false;
 }
 
 //=============================================================================
@@ -738,7 +738,7 @@ BOOL BitmapGrayScale(HBITMAP hbmp) {
 // VerifyContrast()
 // Check if two colors can be distinguished
 //
-BOOL VerifyContrast(COLORREF cr1, COLORREF cr2) {
+bool VerifyContrast(COLORREF cr1, COLORREF cr2) {
 #if NP2_USE_AVX2
 	__m128i i32x4Fore = unpack_color_epi32_sse4_si32(cr1);
 	__m128i i32x4Back = unpack_color_epi32_sse4_si32(cr2);
@@ -746,7 +746,7 @@ BOOL VerifyContrast(COLORREF cr1, COLORREF cr2) {
 	__m128i diff = _mm_sad_epu8(i32x4Fore, i32x4Back);
 	int value = mm_hadd_epi32_si32(diff);
 	if (value >= 400) {
-		return TRUE;
+		return true;
 	}
 
 	i32x4Fore = _mm_mullo_epi16(i32x4Fore, _mm_setr_epi32(3, 5, 1, 0));
@@ -786,7 +786,7 @@ BOOL IsFontAvailable(LPCWSTR lpszFontName) {
 	BOOL fFound = FALSE;
 
 	LOGFONT lf;
-	ZeroMemory(&lf, sizeof(lf));
+	memset(&lf, 0, sizeof(lf));
 	lstrcpyn(lf.lfFaceName, lpszFontName, LF_FACESIZE);
 	lf.lfCharSet = DEFAULT_CHARSET;
 
@@ -815,98 +815,9 @@ void SetClipData(HWND hwnd, LPCWSTR pszData) {
 
 //=============================================================================
 //
-// SetWindowTitle()
-//
-BOOL bFreezeAppTitle = FALSE;
-
-BOOL SetWindowTitle(HWND hwnd, UINT uIDAppName, BOOL bIsElevated, UINT uIDUntitled,
-					LPCWSTR lpszFile, int iFormat, BOOL bModified,
-					UINT uIDReadOnly, BOOL bReadOnly,
-					UINT uIDLocked, BOOL bLocked,
-					LPCWSTR lpszExcerpt) {
-
-	static WCHAR szCachedFile[MAX_PATH] = L"";
-	static WCHAR szCachedDisplayName[MAX_PATH] = L"";
-	static const WCHAR *pszSep = L" - ";
-	static const WCHAR *pszMod = L"* ";
-
-	if (bFreezeAppTitle) {
-		return FALSE;
-	}
-
-	WCHAR szUntitled[128];
-	WCHAR szAppName[128];
-	GetString(uIDAppName, szAppName, COUNTOF(szAppName));
-	GetString(uIDUntitled, szUntitled, COUNTOF(szUntitled));
-
-	if (bIsElevated) {
-		WCHAR szElevatedAppName[128];
-		WCHAR fmt[64];
-		FormatString(szElevatedAppName, fmt, IDS_APPTITLE_ELEVATED, szAppName);
-		lstrcpyn(szAppName, szElevatedAppName, COUNTOF(szAppName));
-	}
-
-	WCHAR szTitle[512];
-	lstrcpy(szTitle, (bModified ? pszMod : L""));
-
-	if (StrNotEmpty(lpszExcerpt)) {
-		WCHAR szExcerptQuote[256];
-		WCHAR szExcerptFmt[32];
-		FormatString(szExcerptQuote, szExcerptFmt, IDS_TITLEEXCERPT, lpszExcerpt);
-		lstrcat(szTitle, szExcerptQuote);
-	} else if (StrNotEmpty(lpszFile)) {
-		if (iFormat < 2 && !PathIsRoot(lpszFile)) {
-			if (!StrEqual(szCachedFile, lpszFile)) {
-				SHFILEINFO shfi;
-				lstrcpy(szCachedFile, lpszFile);
-				if (SHGetFileInfo2(lpszFile, 0, &shfi, sizeof(SHFILEINFO), SHGFI_DISPLAYNAME)) {
-					lstrcpy(szCachedDisplayName, shfi.szDisplayName);
-				} else {
-					lstrcpy(szCachedDisplayName, PathFindFileName(lpszFile));
-				}
-			}
-			lstrcat(szTitle, szCachedDisplayName);
-			if (iFormat == 1) {
-				WCHAR tchPath[MAX_PATH];
-				lstrcpyn(tchPath, lpszFile, COUNTOF(tchPath));
-				PathRemoveFileSpec(tchPath);
-				lstrcat(szTitle, L" [");
-				lstrcat(szTitle, tchPath);
-				lstrcat(szTitle, L"]");
-			}
-		} else {
-			lstrcat(szTitle, lpszFile);
-		}
-	} else {
-		StrCpyExW(szCachedFile, L"");
-		StrCpyExW(szCachedDisplayName, L"");
-		lstrcat(szTitle, szUntitled);
-	}
-
-	if (bReadOnly) {
-		WCHAR szReadOnly[32];
-		GetString(uIDReadOnly, szReadOnly, COUNTOF(szReadOnly));
-		lstrcat(szTitle, L" ");
-		lstrcat(szTitle, szReadOnly);
-	}
-	if (bLocked) {
-		WCHAR szLocked[32];
-		GetString(uIDLocked, szLocked, COUNTOF(szLocked));
-		lstrcat(szTitle, L" ");
-		lstrcat(szTitle, szLocked);
-	}
-
-	lstrcat(szTitle, pszSep);
-	lstrcat(szTitle, szAppName);
-
-	return SetWindowText(hwnd, szTitle);
-}
-
-//=============================================================================
-//
 // SetWindowTransparentMode()
 //
-void SetWindowTransparentMode(HWND hwnd, BOOL bTransparentMode, int iOpacityLevel) {
+void SetWindowTransparentMode(HWND hwnd, bool bTransparentMode, int iOpacityLevel) {
 	// https://docs.microsoft.com/en-us/windows/win32/winmsg/using-windows#using-layered-windows
 	DWORD exStyle = GetWindowExStyle(hwnd);
 	exStyle = bTransparentMode ? (exStyle | WS_EX_LAYERED) : (exStyle & ~WS_EX_LAYERED);
@@ -919,7 +830,7 @@ void SetWindowTransparentMode(HWND hwnd, BOOL bTransparentMode, int iOpacityLeve
 	RedrawWindow(hwnd, NULL, NULL, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
 }
 
-void SetWindowLayoutRTL(HWND hwnd, BOOL bRTL) {
+void SetWindowLayoutRTL(HWND hwnd, bool bRTL) {
 	// https://docs.microsoft.com/en-us/windows/win32/winmsg/window-features#window-layout-and-mirroring
 	DWORD exStyle = GetWindowExStyle(hwnd);
 	exStyle = bRTL ? (exStyle | WS_EX_LAYOUTRTL) : (exStyle & ~WS_EX_LAYOUTRTL);
@@ -1297,7 +1208,7 @@ static LRESULT CALLBACK MultilineEditProc(HWND hwnd, UINT umsg, WPARAM wParam, L
 		if (wParam == VK_TAB && KeyboardIsKeyDown(VK_SHIFT)) {
 			// normally focus on previous control that has the WS_TABSTOP style set.
 			// focus on next control when the ES_WANTRETURN style is set (acts as normal Tab key).
-			const BOOL previous = (GetWindowStyle(hwnd) & ES_WANTRETURN) == 0;
+			const bool previous = (GetWindowStyle(hwnd) & ES_WANTRETURN) == 0;
 			HWND hwndParent = GetParent(hwnd);
 			HWND hwndCtl = GetNextDlgTabItem(hwndParent, hwnd, previous);
 			if (hwndCtl == hwnd) {
@@ -1490,7 +1401,7 @@ int Toolbar_SetButtons(HWND hwnd, LPCWSTR lpszButtons, LPCTBBUTTON ptbb, int ctb
 
 	LPCWSTR p = lpszButtons;
 	--ctbb;
-	while (TRUE) {
+	while (true) {
 		LPWSTR end;
 		int iCmd = (int)wcstol(p, &end, 10);
 		if (p != end) {
@@ -1513,13 +1424,13 @@ int Toolbar_SetButtons(HWND hwnd, LPCWSTR lpszButtons, LPCTBBUTTON ptbb, int ctb
 //
 // IsCmdEnabled()
 //
-BOOL IsCmdEnabled(HWND hwnd, UINT uId) {
+bool IsCmdEnabled(HWND hwnd, UINT uId) {
 	HMENU hmenu = GetMenu(hwnd);
 	SendMessage(hwnd, WM_INITMENU, (WPARAM)hmenu, 0);
 	const UINT ustate = GetMenuState(hmenu, uId, MF_BYCOMMAND);
 
 	if (ustate == 0xFFFFFFFF) {
-		return TRUE;
+		return true;
 	}
 	return !(ustate & (MF_GRAYED | MF_DISABLED));
 }
@@ -1558,6 +1469,9 @@ HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName) {
 		break;
 	case LANG_KOREAN:
 		folder = L"ko";
+		break;
+	case LANG_PORTUGUESE:
+		folder = L"pt-BR";
 		break;
 	}
 
@@ -1607,10 +1521,10 @@ void GetLocaleDefaultUIFont(LANGID lang, LPWSTR lpFaceName, WORD *wSize) {
 #endif
 #endif // NP2_ENABLE_APP_LOCALIZATION_DLL
 
-BOOL PathGetRealPath(HANDLE hFile, LPCWSTR lpszSrc, LPWSTR lpszDest) {
+bool PathGetRealPath(HANDLE hFile, LPCWSTR lpszSrc, LPWSTR lpszDest) {
 	WCHAR path[8 + MAX_PATH] = L"";
 	if (IsVistaAndAbove()) {
-		const BOOL closing = hFile == NULL;
+		const bool closing = hFile == NULL;
 		if (closing) {
 			hFile = CreateFile(lpszSrc, FILE_READ_ATTRIBUTES,
 				FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
@@ -1641,7 +1555,7 @@ BOOL PathGetRealPath(HANDLE hFile, LPCWSTR lpszSrc, LPWSTR lpszDest) {
 				}
 				if (cch > 0 && cch < MAX_PATH) {
 					memcpy(lpszDest, p, (cch + 1)*sizeof(WCHAR));
-					return TRUE;
+					return true;
 				}
 			}
 		}
@@ -1661,10 +1575,10 @@ BOOL PathGetRealPath(HANDLE hFile, LPCWSTR lpszSrc, LPWSTR lpszDest) {
 		}
 		if (cch > 0 && cch < MAX_PATH) {
 			memcpy(lpszDest, p, (cch + 1)*sizeof(WCHAR));
-			return TRUE;
+			return true;
 		}
 	}
-	return FALSE;
+	return false;
 }
 
 #if _WIN32_WINNT < _WIN32_WINNT_WIN8
@@ -1709,14 +1623,14 @@ static inline BOOL PathGetFileId(HANDLE hFile, FILE_ID_INFO *fileId) {
 	return success;
 }
 
-BOOL PathEquivalent(LPCWSTR pszPath1, LPCWSTR pszPath2) {
+bool PathEquivalent(LPCWSTR pszPath1, LPCWSTR pszPath2) {
 	if (PathEqual(pszPath1, pszPath2)) {
 		// TODO: support WSL case sensitive path created by FILE_FLAG_POSIX_SEMANTICS
 		// https://devblogs.microsoft.com/commandline/per-directory-case-sensitivity-and-wsl/
-		return TRUE;
+		return true;
 	}
 
-	BOOL same = FALSE;
+	bool same = false;
 	// https://docs.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info
 	// To determine whether two open handles represent the same file,
 	// combine the identifier and the volume serial number for each file and compare them.
@@ -1746,7 +1660,7 @@ BOOL PathEquivalent(LPCWSTR pszPath1, LPCWSTR pszPath2) {
 //
 // PathRelativeToApp()
 //
-void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, DWORD dwAttrTo, BOOL bUnexpandEnv, BOOL bUnexpandMyDocs) {
+void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, DWORD dwAttrTo, bool bUnexpandEnv, bool bUnexpandMyDocs) {
 	WCHAR wchPath[MAX_PATH];
 
 	if (!PathIsRelative(lpszSrc)) {
@@ -1785,7 +1699,16 @@ void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, DWORD dwAttrTo, BOOL bU
 		}
 	}
 
-	if (!bUnexpandEnv || !PathUnExpandEnvStrings(lpszSrc, lpszDest, MAX_PATH)) {
+	if (bUnexpandEnv) {
+		if (lpszSrc == lpszDest) {
+			lstrcpyn(wchPath, lpszSrc, COUNTOF(wchPath));
+			lpszSrc = wchPath;
+		}
+		if (PathUnExpandEnvStrings(lpszSrc, lpszDest, MAX_PATH)) {
+			return;
+		}
+	}
+	if (lpszSrc != lpszDest) {
 		lstrcpy(lpszDest, lpszSrc);
 	}
 }
@@ -1794,7 +1717,7 @@ void PathRelativeToApp(LPCWSTR lpszSrc, LPWSTR lpszDest, DWORD dwAttrTo, BOOL bU
 //
 // PathAbsoluteFromApp()
 //
-void PathAbsoluteFromApp(LPCWSTR lpszSrc, LPWSTR lpszDest, BOOL bExpandEnv) {
+void PathAbsoluteFromApp(LPCWSTR lpszSrc, LPWSTR lpszDest, bool bExpandEnv) {
 	WCHAR wchPath[MAX_PATH];
 
 	if (StrHasPrefix(lpszSrc, L"%CSIDL:MYDOCUMENTS%")) {
@@ -1842,12 +1765,12 @@ void PathAbsoluteFromApp(LPCWSTR lpszSrc, LPWSTR lpszDest, BOOL bExpandEnv) {
 //
 // Manipulates: pszResPath
 //
-BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath) {
+bool PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath) {
 	if (StrIsEmpty(pszLnkFile)) {
-		return FALSE;
+		return false;
 	}
 	if (!StrCaseEqual(PathFindExtension(pszLnkFile), L".lnk")) {
-		return FALSE;
+		return false;
 	}
 
 	IShellLink *psl;
@@ -1886,10 +1809,10 @@ BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath) {
 		if (!PathCanonicalize(pszResPath, tchPath)) {
 			lstrcpy(pszResPath, tchPath);
 		}
-		return TRUE;
+		return true;
 	}
 
-	return FALSE;
+	return false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1901,9 +1824,9 @@ BOOL PathGetLnkPath(LPCWSTR pszLnkFile, LPWSTR pszResPath) {
 //
 // Manipulates:
 //
-BOOL PathCreateDeskLnk(LPCWSTR pszDocument) {
+bool PathCreateDeskLnk(LPCWSTR pszDocument) {
 	if (StrIsEmpty(pszDocument)) {
-		return TRUE;
+		return true;
 	}
 
 	// init strings
@@ -1921,12 +1844,12 @@ BOOL PathCreateDeskLnk(LPCWSTR pszDocument) {
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 	LPWSTR tchLinkDir = NULL;
 	if (S_OK != SHGetKnownFolderPath(KnownFolderId_Desktop, KF_FLAG_DEFAULT, NULL, &tchLinkDir)) {
-		return FALSE;
+		return false;
 	}
 #else
 	WCHAR tchLinkDir[MAX_PATH];
 	if (S_OK != SHGetFolderPath(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, tchLinkDir)) {
-		return FALSE;
+		return false;
 	}
 #endif
 
@@ -1942,7 +1865,7 @@ BOOL PathCreateDeskLnk(LPCWSTR pszDocument) {
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 		CoTaskMemFree(tchLinkDir);
 #endif
-		return FALSE;
+		return false;
 	}
 
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
@@ -1950,7 +1873,7 @@ BOOL PathCreateDeskLnk(LPCWSTR pszDocument) {
 #endif
 
 	IShellLink *psl;
-	BOOL bSucceeded = FALSE;
+	bool bSucceeded = false;
 #if defined(__cplusplus)
 	if (SUCCEEDED(CoCreateInstance(IID_IShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)(&psl)))) {
 		IPersistFile *ppf;
@@ -1961,7 +1884,7 @@ BOOL PathCreateDeskLnk(LPCWSTR pszDocument) {
 			psl->SetDescription(tchDescription);
 
 			if (SUCCEEDED(ppf->Save(tchLnkFileName, TRUE))) {
-				bSucceeded = TRUE;
+				bSucceeded = true;
 			}
 			ppf->Release();
 		}
@@ -1977,7 +1900,7 @@ BOOL PathCreateDeskLnk(LPCWSTR pszDocument) {
 			psl->lpVtbl->SetDescription(psl, tchDescription);
 
 			if (SUCCEEDED(ppf->lpVtbl->Save(ppf, tchLnkFileName, TRUE))) {
-				bSucceeded = TRUE;
+				bSucceeded = true;
 			}
 
 			ppf->lpVtbl->Release(ppf);
@@ -1998,9 +1921,9 @@ BOOL PathCreateDeskLnk(LPCWSTR pszDocument) {
 //
 // Manipulates:
 //
-BOOL PathCreateFavLnk(LPCWSTR pszName, LPCWSTR pszTarget, LPCWSTR pszDir) {
+bool PathCreateFavLnk(LPCWSTR pszName, LPCWSTR pszTarget, LPCWSTR pszDir) {
 	if (StrIsEmpty(pszName)) {
-		return TRUE;
+		return true;
 	}
 
 	WCHAR tchLnkFileName[MAX_PATH];
@@ -2008,11 +1931,11 @@ BOOL PathCreateFavLnk(LPCWSTR pszName, LPCWSTR pszTarget, LPCWSTR pszDir) {
 	lstrcat(tchLnkFileName, L".lnk");
 
 	if (PathIsFile(tchLnkFileName)) {
-		return FALSE;
+		return false;
 	}
 
 	IShellLink *psl;
-	BOOL bSucceeded = FALSE;
+	bool bSucceeded = false;
 #if defined(__cplusplus)
 	if (SUCCEEDED(CoCreateInstance(IID_IShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)(&psl)))) {
 		IPersistFile *ppf;
@@ -2020,7 +1943,7 @@ BOOL PathCreateFavLnk(LPCWSTR pszName, LPCWSTR pszTarget, LPCWSTR pszDir) {
 		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (void **)(&ppf)))) {
 			psl->SetPath(pszTarget);
 			if (SUCCEEDED(ppf->Save(tchLnkFileName, TRUE))) {
-				bSucceeded = TRUE;
+				bSucceeded = true;
 			}
 
 			ppf->Release();
@@ -2034,7 +1957,7 @@ BOOL PathCreateFavLnk(LPCWSTR pszName, LPCWSTR pszTarget, LPCWSTR pszDir) {
 		if (SUCCEEDED(psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void **)(&ppf)))) {
 			psl->lpVtbl->SetPath(psl, pszTarget);
 			if (SUCCEEDED(ppf->lpVtbl->Save(ppf, tchLnkFileName, TRUE))) {
-				bSucceeded = TRUE;
+				bSucceeded = true;
 			}
 
 			ppf->lpVtbl->Release(ppf);
@@ -2046,7 +1969,7 @@ BOOL PathCreateFavLnk(LPCWSTR pszName, LPCWSTR pszTarget, LPCWSTR pszDir) {
 	return bSucceeded;
 }
 
-void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, BOOL bSelect) {
+void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, bool bSelect) {
 	WCHAR wchDirectory[MAX_PATH];
 	lstrcpyn(wchDirectory, pszFile, COUNTOF(wchDirectory));
 
@@ -2058,7 +1981,7 @@ void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, BOOL bSelect) {
 	if (bSelect && dwAttributes != INVALID_FILE_ATTRIBUTES) {
 		// if pszFile is root, open the volume instead of open My Computer and select the volume
 		if ((dwAttributes & FILE_ATTRIBUTE_DIRECTORY) && PathIsRoot(pszFile)) {
-			bSelect = FALSE;
+			bSelect = false;
 		} else {
 			path = pszFile;
 		}
@@ -2082,7 +2005,7 @@ void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, BOOL bSelect) {
 			hr = SHOpenFolderAndSelectItems(pidl, 1, (LPCITEMIDLIST *)(&pidl), 0);
 #else
 			SHELLEXECUTEINFO sei;
-			ZeroMemory(&sei, sizeof(SHELLEXECUTEINFO));
+			memset(&sei, 0, sizeof(SHELLEXECUTEINFO));
 
 			sei.cbSize = sizeof(SHELLEXECUTEINFO);
 			sei.fMask = SEE_MASK_IDLIST;
@@ -2125,8 +2048,8 @@ void OpenContainingFolder(HWND hwnd, LPCWSTR pszFile, BOOL bSelect) {
 //
 // ExtractFirstArgument()
 //
-BOOL ExtractFirstArgument(LPCWSTR lpArgs, LPWSTR lpArg1, LPWSTR lpArg2) {
-	BOOL bQuoted = FALSE;
+bool ExtractFirstArgument(LPCWSTR lpArgs, LPWSTR lpArg1, LPWSTR lpArg2) {
+	bool bQuoted = false;
 
 	lstrcpy(lpArg1, lpArgs);
 	if (lpArg2) {
@@ -2135,21 +2058,21 @@ BOOL ExtractFirstArgument(LPCWSTR lpArgs, LPWSTR lpArg1, LPWSTR lpArg2) {
 
 	TrimString(lpArg1);
 	if (*lpArg1 == L'\0') {
-		return FALSE;
+		return false;
 	}
 
 	LPWSTR psz = lpArg1;
 	WCHAR ch = *psz;
 	if (ch == L'\"') {
 		*psz++ = L' ';
-		bQuoted = TRUE;
+		bQuoted = true;
 	} else if (ch == L'-' || ch == L'/') {
 		// fix -appid="string with space"
 		++psz;
 		while ((ch = *psz) != L'\0' && ch != L' ') {
 			++psz;
 			if (ch == L'=' && *psz == L'\"') {
-				bQuoted = TRUE;
+				bQuoted = true;
 				++psz;
 				break;
 			}
@@ -2167,7 +2090,7 @@ BOOL ExtractFirstArgument(LPCWSTR lpArgs, LPWSTR lpArg1, LPWSTR lpArg2) {
 
 	TrimString(lpArg1);
 
-	return TRUE;
+	return true;
 }
 
 //=============================================================================
@@ -2199,15 +2122,15 @@ void StrTab2Space(LPWSTR lpsz) {
 //
 // PathFixBackslashes() - in place conversion
 //
-BOOL PathFixBackslashes(LPWSTR lpsz) {
+bool PathFixBackslashes(LPWSTR lpsz) {
 	WCHAR *c = lpsz;
-	BOOL bFixed = FALSE;
+	bool bFixed = false;
 	while ((c = StrChr(c, L'/')) != NULL) {
 		if (c != lpsz && c[-1] == L':' && c[1] == L'/') {
 			c += 2;
 		} else {
 			*c++ = L'\\';
-			bFixed = TRUE;
+			bFixed = true;
 		}
 	}
 	return bFixed;
@@ -2275,17 +2198,18 @@ void StripMnemonic(LPWSTR pszMenu) {
 			}
 
 			len -= offset;
-			MoveMemory(prev, p + offset, sizeof(WCHAR) * len);
+			memmove(prev, p + offset, sizeof(WCHAR) * len);
 			prev[len] = L'\0';
 			break;
 		}
-	} while (TRUE);
+	} while (true);
 }
 
 //=============================================================================
 //
 // FormatNumberStr()
 //
+#ifndef _WIN64
 void FormatNumberStr(LPWSTR lpNumberStr) {
 	const int i = lstrlen(lpNumberStr);
 	if (i <= 3) {
@@ -2306,23 +2230,40 @@ void FormatNumberStr(LPWSTR lpNumberStr) {
 	lpNumberStr += 3;
 	do {
 		c -= 3;
-		MoveMemory(c + 1, c, sizeof(WCHAR) * (end - c + 1));
+		memmove(c + 1, c, sizeof(WCHAR) * (end - c + 1));
 		*c = sep;
 		++end;
 	} while (c > lpNumberStr);
 }
+#endif
 
-//=============================================================================
-//
-// SetDlgItemIntEx()
-//
-BOOL SetDlgItemIntEx(HWND hwnd, int nIdItem, UINT uValue) {
-	WCHAR szBuf[32];
+void FormatNumber(LPWSTR lpNumberStr, ptrdiff_t value) {
+#ifdef _WIN64
+	_i64tow(value, lpNumberStr, 10);
+	if (value < 1000) {
+		return;
+	}
 
-	_ultow(uValue, szBuf, 10);
-	FormatNumberStr(szBuf);
+	WCHAR szSep[4];
+	const WCHAR sep = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STHOUSAND, szSep, COUNTOF(szSep))? szSep[0] : L',';
 
-	return SetDlgItemText(hwnd, nIdItem, szBuf);
+	WCHAR *c = lpNumberStr + lstrlen(lpNumberStr);
+	WCHAR *end = c;
+	lpNumberStr += 3;
+	do {
+		c -= 3;
+		memmove(c + 1, c, sizeof(WCHAR) * (end - c + 1));
+		*c = sep;
+		++end;
+	} while (c > lpNumberStr);
+
+#else
+	_ltow(value, lpNumberStr, 10);
+	if (value < 1000) {
+		return;
+	}
+	FormatNumberStr(lpNumberStr);
+#endif
 }
 
 //=============================================================================
@@ -2332,7 +2273,7 @@ BOOL SetDlgItemIntEx(HWND hwnd, int nIdItem, UINT uValue) {
 UINT GetDlgItemTextA2W(UINT uCP, HWND hDlg, int nIDDlgItem, LPSTR lpString, int nMaxCount) {
 	DStringW wsz = DSTRINGW_INIT;
 	const int iRet = DStringW_GetDlgItemText(&wsz, hDlg, nIDDlgItem);
-	ZeroMemory(lpString, nMaxCount);
+	memset(lpString, 0, nMaxCount);
 	if (iRet) {
 		WideCharToMultiByte(uCP, 0, wsz.buffer, -1, lpString, nMaxCount - 2, NULL, NULL);
 	}
@@ -2381,11 +2322,11 @@ void MRU_Destroy(LPMRULIST pmru) {
 		}
 	}
 
-	ZeroMemory(pmru, sizeof(MRULIST));
+	memset(pmru, 0, sizeof(MRULIST));
 	NP2HeapFree(pmru);
 }
 
-static inline BOOL MRU_Equal(int flags, LPCWSTR psz1, LPCWSTR psz2) {
+static inline bool MRU_Equal(int flags, LPCWSTR psz1, LPCWSTR psz2) {
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 	return CompareStringOrdinal(psz1, -1, psz2, -1, flags & MRUFlags_FilePath) == CSTR_EQUAL;
 #else
@@ -2393,7 +2334,7 @@ static inline BOOL MRU_Equal(int flags, LPCWSTR psz1, LPCWSTR psz2) {
 #endif
 }
 
-BOOL MRU_Add(LPMRULIST pmru, LPCWSTR pszNew) {
+bool MRU_Add(LPMRULIST pmru, LPCWSTR pszNew) {
 	const int flags = pmru->iFlags;
 	int i;
 	for (i = 0; i < pmru->iSize; i++) {
@@ -2411,19 +2352,19 @@ BOOL MRU_Add(LPMRULIST pmru, LPCWSTR pszNew) {
 		pmru->pszItems[i] = pmru->pszItems[i - 1];
 	}
 	pmru->pszItems[0] = StrDup(pszNew);
-	return TRUE;
+	return true;
 }
 
-BOOL MRU_AddMultiline(LPMRULIST pmru, LPCWSTR pszNew) {
+bool MRU_AddMultiline(LPMRULIST pmru, LPCWSTR pszNew) {
 	const int len = lstrlen(pszNew);
 	LPWSTR lpszEsc = (LPWSTR)NP2HeapAlloc((2*len + 1)*sizeof(WCHAR));
 	AddBackslashW(lpszEsc, pszNew);
 	MRU_Add(pmru, lpszEsc);
 	NP2HeapFree(lpszEsc);
-	return TRUE;
+	return true;
 }
 
-BOOL MRU_AddFile(LPMRULIST pmru, LPCWSTR pszFile, BOOL bRelativePath, BOOL bUnexpandMyDocs) {
+bool MRU_AddFile(LPMRULIST pmru, LPCWSTR pszFile, bool bRelativePath, bool bUnexpandMyDocs) {
 	int i;
 	for (i = 0; i < pmru->iSize; i++) {
 		WCHAR * const item = pmru->pszItems[i];
@@ -2436,7 +2377,7 @@ BOOL MRU_AddFile(LPMRULIST pmru, LPCWSTR pszFile, BOOL bRelativePath, BOOL bUnex
 		}
 		{
 			WCHAR wchItem[MAX_PATH];
-			PathAbsoluteFromApp(item, wchItem, TRUE);
+			PathAbsoluteFromApp(item, wchItem, true);
 			if (PathEqual(wchItem, pszFile)) {
 				LocalFree(item);
 				break;
@@ -2450,18 +2391,18 @@ BOOL MRU_AddFile(LPMRULIST pmru, LPCWSTR pszFile, BOOL bRelativePath, BOOL bUnex
 
 	if (bRelativePath) {
 		WCHAR wchFile[MAX_PATH];
-		PathRelativeToApp(pszFile, wchFile, 0, TRUE, bUnexpandMyDocs);
+		PathRelativeToApp(pszFile, wchFile, 0, true, bUnexpandMyDocs);
 		pmru->pszItems[0] = StrDup(wchFile);
 	} else {
 		pmru->pszItems[0] = StrDup(pszFile);
 	}
 
-	return TRUE;
+	return true;
 }
 
-BOOL MRU_Delete(LPMRULIST pmru, int iIndex) {
+bool MRU_Delete(LPMRULIST pmru, int iIndex) {
 	if (iIndex < 0 || iIndex >= pmru->iSize) {
-		return FALSE;
+		return false;
 	}
 	if (pmru->pszItems[iIndex]) {
 		LocalFree(pmru->pszItems[iIndex]);
@@ -2470,18 +2411,18 @@ BOOL MRU_Delete(LPMRULIST pmru, int iIndex) {
 		pmru->pszItems[i] = pmru->pszItems[i + 1];
 		pmru->pszItems[i + 1] = NULL;
 	}
-	return TRUE;
+	return true;
 }
 
-BOOL MRU_DeleteFileFromStore(LPCMRULIST pmru, LPCWSTR pszFile) {
+bool MRU_DeleteFileFromStore(LPCMRULIST pmru, LPCWSTR pszFile) {
 	int i = 0;
 	WCHAR wchItem[MAX_PATH];
 
 	LPMRULIST pmruStore = MRU_Create(pmru->szRegKey, pmru->iFlags, pmru->iSize);
 	MRU_Load(pmruStore);
 
-	while (MRU_Enum(pmruStore, i, wchItem, COUNTOF(wchItem)) != -1) {
-		PathAbsoluteFromApp(wchItem, wchItem, TRUE);
+	while (MRU_Enum(pmruStore, i, wchItem, COUNTOF(wchItem)) >= 0) {
+		PathAbsoluteFromApp(wchItem, wchItem, true);
 		if (PathEqual(wchItem, pszFile)) {
 			MRU_Delete(pmruStore, i);
 		} else {
@@ -2491,7 +2432,7 @@ BOOL MRU_DeleteFileFromStore(LPCMRULIST pmru, LPCWSTR pszFile) {
 
 	MRU_Save(pmruStore);
 	MRU_Destroy(pmruStore);
-	return 1;
+	return true;
 }
 
 void MRU_Empty(LPMRULIST pmru) {
@@ -2519,15 +2460,15 @@ int MRU_Enum(LPCMRULIST pmru, int iIndex, LPWSTR pszItem, int cchItem) {
 	return TRUE;
 }
 
-BOOL MRU_Load(LPMRULIST pmru) {
+bool MRU_Load(LPMRULIST pmru) {
 	if (StrIsEmpty(szIniFile)) {
-		return TRUE;
+		return true;
 	}
 
 	IniSection section;
 	WCHAR *pIniSectionBuf = (WCHAR *)NP2HeapAlloc(sizeof(WCHAR) * MAX_INI_SECTION_SIZE_MRU);
 	const int cchIniSection = (int)(NP2HeapSize(pIniSectionBuf) / sizeof(WCHAR));
-	IniSection *pIniSection = &section;
+	IniSection * const pIniSection = &section;
 
 	MRU_Empty(pmru);
 	IniSectionInit(pIniSection, MRU_MAXITEMS);
@@ -2547,23 +2488,22 @@ BOOL MRU_Load(LPMRULIST pmru) {
 
 	IniSectionFree(pIniSection);
 	NP2HeapFree(pIniSectionBuf);
-	return TRUE;
+	return true;
 }
 
-BOOL MRU_Save(LPCMRULIST pmru) {
+bool MRU_Save(LPCMRULIST pmru) {
 	if (StrIsEmpty(szIniFile)) {
-		return TRUE;
+		return true;
 	}
 	if (MRU_GetCount(pmru) == 0) {
 		IniClearSection(pmru->szRegKey);
-		return TRUE;
+		return true;
 	}
 
 	WCHAR tchName[16];
-	IniSectionOnSave section;
 	WCHAR *pIniSectionBuf = (WCHAR *)NP2HeapAlloc(sizeof(WCHAR) * MAX_INI_SECTION_SIZE_MRU);
-	IniSectionOnSave *pIniSection = &section;
-	pIniSection->next = pIniSectionBuf;
+	IniSectionOnSave section = { pIniSectionBuf };
+	IniSectionOnSave * const pIniSection = &section;
 	const BOOL quoted = pmru->iFlags & MRUFlags_QuoteValue;
 
 	for (int i = 0; i < pmru->iSize; i++) {
@@ -2579,10 +2519,10 @@ BOOL MRU_Save(LPCMRULIST pmru) {
 
 	SaveIniSection(pmru->szRegKey, pIniSectionBuf);
 	NP2HeapFree(pIniSectionBuf);
-	return TRUE;
+	return true;
 }
 
-BOOL MRU_MergeSave(LPCMRULIST pmru, BOOL bAddFiles, BOOL bRelativePath, BOOL bUnexpandMyDocs) {
+bool MRU_MergeSave(LPCMRULIST pmru, bool bAddFiles, bool bRelativePath, bool bUnexpandMyDocs) {
 	LPMRULIST pmruBase = MRU_Create(pmru->szRegKey, pmru->iFlags, pmru->iSize);
 	MRU_Load(pmruBase);
 
@@ -2590,7 +2530,7 @@ BOOL MRU_MergeSave(LPCMRULIST pmru, BOOL bAddFiles, BOOL bRelativePath, BOOL bUn
 		for (int i = pmru->iSize - 1; i >= 0; i--) {
 			if (pmru->pszItems[i]) {
 				WCHAR wchItem[MAX_PATH];
-				PathAbsoluteFromApp(pmru->pszItems[i], wchItem, TRUE);
+				PathAbsoluteFromApp(pmru->pszItems[i], wchItem, true);
 				MRU_AddFile(pmruBase, wchItem, bRelativePath, bUnexpandMyDocs);
 			}
 		}
@@ -2604,7 +2544,7 @@ BOOL MRU_MergeSave(LPCMRULIST pmru, BOOL bAddFiles, BOOL bRelativePath, BOOL bUn
 
 	MRU_Save(pmruBase);
 	MRU_Destroy(pmruBase);
-	return TRUE;
+	return true;
 }
 
 /*
@@ -2614,14 +2554,14 @@ BOOL MRU_MergeSave(LPCMRULIST pmru, BOOL bAddFiles, BOOL bRelativePath, BOOL bUn
  Based on code of MFC helper class CDialogTemplate
 
 */
-BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
+bool GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
 #if NP2_ENABLE_APP_LOCALIZATION_DLL && NP2_ENABLE_TEST_LOCALIZATION_LAYOUT
 	extern LANGID uiLanguage;
 	GetLocaleDefaultUIFont(uiLanguage, lpFaceName, wSize);
-	return TRUE;
+	return true;
 #else
 
-	BOOL bSucceed = FALSE;
+	bool bSucceed = false;
 	const UINT iLogPixelsY = g_uSystemDPI;
 
 	if (IsAppThemed()) {
@@ -2637,7 +2577,7 @@ BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
 					*wSize = 8;
 				}
 				lstrcpyn(lpFaceName, lf.lfFaceName, LF_FACESIZE);
-				bSucceed = TRUE;
+				bSucceed = true;
 			}
 			CloseThemeData(hTheme);
 		}
@@ -2645,7 +2585,7 @@ BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
 
 	if (!bSucceed) {
 		NONCLIENTMETRICS ncm;
-		ZeroMemory(&ncm, sizeof(ncm));
+		memset(&ncm, 0, sizeof(ncm));
 		ncm.cbSize = sizeof(NONCLIENTMETRICS);
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 		if (!IsVistaAndAbove()) {
@@ -2661,7 +2601,7 @@ BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
 				*wSize = 8;
 			}
 			lstrcpyn(lpFaceName, ncm.lfMessageFont.lfFaceName, LF_FACESIZE);
-			bSucceed = TRUE;
+			bSucceed = true;
 		}
 	}
 
@@ -2673,7 +2613,7 @@ BOOL GetThemedDialogFont(LPWSTR lpFaceName, WORD *wSize) {
 #endif
 }
 
-static inline BOOL DialogTemplate_IsDialogEx(const DLGTEMPLATE *pTemplate) {
+static inline bool DialogTemplate_IsDialogEx(const DLGTEMPLATE *pTemplate) {
 	return ((DLGTEMPLATEEX *)pTemplate)->signature == 0xFFFF;
 }
 
@@ -2681,12 +2621,12 @@ static inline BOOL DialogTemplate_HasFont(const DLGTEMPLATE *pTemplate) {
 	return (DS_SETFONT & (DialogTemplate_IsDialogEx(pTemplate) ? ((DLGTEMPLATEEX *)pTemplate)->style : pTemplate->style));
 }
 
-static inline int DialogTemplate_FontAttrSize(BOOL bDialogEx) {
+static inline int DialogTemplate_FontAttrSize(bool bDialogEx) {
 	return (int)sizeof(WORD) * (bDialogEx ? 3 : 1);
 }
 
 static inline BYTE *DialogTemplate_GetFontSizeField(const DLGTEMPLATE *pTemplate) {
-	const BOOL bDialogEx = DialogTemplate_IsDialogEx(pTemplate);
+	const bool bDialogEx = DialogTemplate_IsDialogEx(pTemplate);
 	WORD *pw;
 
 	if (bDialogEx) {
@@ -2728,7 +2668,7 @@ DLGTEMPLATE *LoadThemedDialogTemplate(LPCWSTR lpDialogTemplateID, HINSTANCE hIns
 		return NULL;
 	}
 
-	CopyMemory((BYTE *)pTemplate, pRsrcMem, (size_t)dwTemplateSize);
+	memcpy((BYTE *)pTemplate, pRsrcMem, (size_t)dwTemplateSize);
 	FreeResource(hRsrcMem);
 
 	WCHAR wchFaceName[LF_FACESIZE];
@@ -2737,7 +2677,7 @@ DLGTEMPLATE *LoadThemedDialogTemplate(LPCWSTR lpDialogTemplateID, HINSTANCE hIns
 		return pTemplate;
 	}
 
-	const BOOL bDialogEx = DialogTemplate_IsDialogEx(pTemplate);
+	const bool bDialogEx = DialogTemplate_IsDialogEx(pTemplate);
 	const BOOL bHasFont = DialogTemplate_HasFont(pTemplate);
 	const int cbFontAttr = DialogTemplate_FontAttrSize(bDialogEx);
 
@@ -2758,11 +2698,11 @@ DLGTEMPLATE *LoadThemedDialogTemplate(LPCWSTR lpDialogTemplateID, HINSTANCE hIns
 
 	const WORD nCtrl = bDialogEx ? (WORD)((DLGTEMPLATEEX *)pTemplate)->cDlgItems : (WORD)pTemplate->cdit;
 	if (cbNew != cbOld && nCtrl > 0) {
-		MoveMemory(pNewControls, pOldControls, (size_t)(dwTemplateSize - (pOldControls - (BYTE *)pTemplate)));
+		memmove(pNewControls, pOldControls, (size_t)(dwTemplateSize - (pOldControls - (BYTE *)pTemplate)));
 	}
 
 	*(WORD *)pb = wFontSize;
-	MoveMemory(pb + cbFontAttr, pbNew, (size_t)(cbNew - cbFontAttr));
+	memmove(pb + cbFontAttr, pbNew, (size_t)(cbNew - cbFontAttr));
 
 	return pTemplate;
 }
@@ -2960,9 +2900,9 @@ void TransformBackslashes(char *pszInput, BOOL bRegEx, UINT cpEdit) {
 	}
 }
 
-BOOL AddBackslashA(char *pszOut, const char *pszInput) {
-	BOOL hasEscapeChar = FALSE;
-	BOOL hasSlash = FALSE;
+bool AddBackslashA(char *pszOut, const char *pszInput) {
+	bool hasEscapeChar = false;
+	bool hasSlash = false;
 	char *lpszEsc = pszOut;
 	const char *lpsz = pszInput;
 	while (*lpsz) {
@@ -2970,47 +2910,47 @@ BOOL AddBackslashA(char *pszOut, const char *pszInput) {
 		case '\n':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 'n';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		case '\r':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 'r';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		case '\t':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 't';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		case '\\':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = '\\';
-			hasSlash = TRUE;
+			hasSlash = true;
 			break;
 		case '\f':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 'f';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		case '\v':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 'v';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		case '\a':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 'b';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		case '\b':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 'a';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		case '\x1B':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 'e';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		default:
 			*lpszEsc++ = *lpsz;
@@ -3025,9 +2965,9 @@ BOOL AddBackslashA(char *pszOut, const char *pszInput) {
 	return hasEscapeChar;
 }
 
-BOOL AddBackslashW(LPWSTR pszOut, LPCWSTR pszInput) {
-	BOOL hasEscapeChar = FALSE;
-	BOOL hasSlash = FALSE;
+bool AddBackslashW(LPWSTR pszOut, LPCWSTR pszInput) {
+	bool hasEscapeChar = false;
+	bool hasSlash = false;
 	LPWSTR lpszEsc = pszOut;
 	LPCWSTR lpsz = pszInput;
 	while (*lpsz) {
@@ -3035,47 +2975,47 @@ BOOL AddBackslashW(LPWSTR pszOut, LPCWSTR pszInput) {
 		case '\n':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 'n';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		case '\r':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 'r';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		case '\t':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 't';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		case '\\':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = '\\';
-			hasSlash = TRUE;
+			hasSlash = true;
 			break;
 		case '\f':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 'f';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		case '\v':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 'v';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		case '\a':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 'b';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		case '\b':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 'a';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		case '\x1B':
 			*lpszEsc++ = '\\';
 			*lpszEsc++ = 'e';
-			hasEscapeChar = TRUE;
+			hasEscapeChar = true;
 			break;
 		default:
 			*lpszEsc++ = *lpsz;
@@ -3140,7 +3080,7 @@ BOOL AddBackslashW(LPWSTR pszOut, LPCWSTR pszInput) {
 // all current versions of the shell. If explorer isn't running, we try our
 // best to work with a 3rd party shell. If we still can't find anything, we
 // return a rect in the lower right hand corner of the screen
-static VOID GetTrayWndRect(LPRECT lpTrayRect) {
+static void GetTrayWndRect(LPRECT lpTrayRect) {
 	// First, we'll use a quick hack method. We know that the taskbar is a window
 	// of class Shell_TrayWnd, and the status tray is a child of this of class
 	// TrayNotifyWnd. This provides us a window rect to minimize to. Note, however,
@@ -3222,7 +3162,7 @@ static VOID GetTrayWndRect(LPRECT lpTrayRect) {
 }
 
 // Check to see if the animation has been disabled
-/*static */BOOL GetDoAnimateMinimize(void) {
+/*static */bool GetDoAnimateMinimize(void) {
 	ANIMATIONINFO ai;
 
 	ai.cbSize = sizeof(ai);

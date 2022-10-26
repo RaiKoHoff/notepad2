@@ -39,7 +39,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* [AutoHotkey_L](tools/lang/AutoHotkey_L.ahk) and [AutoHotkey_H](tools/lang/AutoHotkey_H.ahk) Script, up to v2.
 	* AutoIt Script
 	* [AviSynth Script](tools/lang/AviSynth.avs), up to AviSynth 2.6, AviSynth+ 3.6, GScript 1.1.
-	* [AWK](tools/lang/Awk.awk), up to GNU AWK 5.1.
+	* [AWK](tools/lang/Awk.awk), up to GNU AWK 5.2.
 	* [Batch Script](tools/lang/Batch.bat), [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#batch)
 	* [blockdiag](tools/lang/blockdiag.diag), seqdiag, actdiag and nwdiag
 	* [C#](tools/lang/CSharp.cs), up to C# 11.0. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#c)
@@ -60,9 +60,8 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* [D](tools/lang/D.d), up to D language 2.0.
 	* [Dart](tools/lang/Dart.dart), up to Dart 2.12.
 	* Diff/Patch File
-	* Doxygen
 	* F#
-	* Fortran, GNU Fortran
+	* [Fortran](tools/lang/Fortran.f), up to Fortran 2018.
 	* [GN Build](tools/lang/GN.gn), up to GN 2019-03-13.
 	* [Go](tools/lang/Go.go), up to Go 1.14.
 		* [Go+ (GoPlus)](https://goplus.org/) and the Q language
@@ -78,15 +77,15 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* INI Configuration File
 	* [Inno Setup](tools/lang/InnoSetup.iss), up to Inno Setup 6.2.
 	* [Boost Jam](tools/lang/Jamfile.jam), up to Jam 4.4.
-	* [Java](tools/lang/Java.java), up to Java 17. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#java)
+	* [Java](tools/lang/Java.java), up to Java 18. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#java)
 		* [BeanShell](https://github.com/beanshell/beanshell)
-	* [JavaScript](tools/lang/JavaScript.js), up to ECMAScript 2021 (12th edition) with [JSX](https://facebook.github.io/jsx/) and [Web APIs](https://developer.mozilla.org/en-US/docs/Web/API).
+	* [JavaScript](tools/lang/JavaScript.js), up to ECMAScript 2022 with [JSX](https://facebook.github.io/jsx/) and [Web APIs](https://developer.mozilla.org/en-US/docs/Web/API).
 	* [JSON](https://www.json.org) and [JSON5](https://json5.org/) Document
 	* [Julia Script](tools/lang/Julia.jl), up to Julia 1.2. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#julia)
-	* [Kotlin](tools/lang/Kotlin.kt), up to Kotlin 1.6.
+	* [Kotlin](tools/lang/Kotlin.kt), up to Kotlin 1.7.
 	* LaTeX
 	* Lisp Script (Common Lisp, Clojure, Scheme, etc.)
-	* [LLVM IR](tools/lang/LLVM.ll), up to LLVM 12.
+	* [LLVM IR](tools/lang/LLVM.ll), up to LLVM 15.
 	* [Lua Script](tools/lang/Lua.lua), up to Lua 5.4.
 	* Makefile, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#makefile)
 		* nmake
@@ -102,38 +101,38 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* Octave
 		* Scilab
 		* Gnuplot
-	* [Nullsoft Scriptable Install System](tools/lang/NSIS.nsi), up to NSIS 3.06.
+	* [Nullsoft Scriptable Install System](tools/lang/NSIS.nsi), up to NSIS 3.09.
 	* Pascal, Delphi
 	* Perl, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#perl)
-	* PowerShell
-	* [Python](tools/lang/Python.py), up to Python 3.10. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#python)
-	* [PHP Script](tools/lang/PHP.php), up to PHP 8.1. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#php)
+	* [PowerShell](tools/lang/PowerShell.ps1), up to PowerShell 7.2.
+	* [Python](tools/lang/Python.py), up to Python 3.11. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#python)
+	* [PHP Script](tools/lang/PHP.php), up to PHP 8.2. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#php)
 	* Windows Rescouce Script
-	* [R](tools/lang/R.r), up to R 4.0.3.
+	* [R](tools/lang/R.r), up to R 4.2.
 	* [REBOL](tools/lang/Rebol.r) 3 and [Red](tools/lang/Red.red)
 	* [Ruby](tools/lang/Ruby.rb), up to Ruby 3.1. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#ruby)
 	* [Rust](tools/lang/Rust.rs), up to Rust 1.38. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#rust)
-	* Scala Script
+	* [Scala](tools/lang/Scala.scala), up to Scala 3.2.
 	* Shell Script
 		* Bash likes (sh, bash, dash, ash, zsh, ksh), [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#shell-script)
 		* C Shell (csh, tcsh)
 		* M4 Macro, limited support
 	* SQL Query
 		* [SQL Standard](tools/lang/SQL.sql), up to SQL:2016.
-		* [MySQL](tools/lang/MySQL.sql), up to MySQL 8.0, MariaDB 10.3.
-		* [SQLite3](tools/lang/SQLite3.sql), up to 3.33.
-		* [PostgreSQL](tools/lang/PostgreSQL.sql), PostgreSQL 13.
+		* [MySQL](tools/lang/MySQL.sql), up to MySQL 8.0, MariaDB 10.9.
+		* [SQLite3](tools/lang/SQLite3.sql), up to 3.39.
+		* [PostgreSQL](tools/lang/PostgreSQL.sql), PostgreSQL 14.
 		* [Transact-SQL](tools/lang/Transact-SQL.sql), SQL Server 2019.
 		* [Oracle](tools/lang/Oracle.sql), Oracle 20, incomplete.
-	* [Swift](tools/lang/Swift.swift), Swift 5.6.
+	* [Swift](tools/lang/Swift.swift), up to Swift 5.7.
 	* TCL, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#tcl)
 	* Texinfo
 	* [TOML File](https://toml.io/)
-	* [TypeScript](tools/lang/TypeScript.ts), TypeScript 4.7.
+	* [TypeScript](tools/lang/TypeScript.ts), TypeScript 4.9.
 	* Visual Basic, VB6, VB.NET
 	* VBScript
-	* VHDL
-	* Verilog HDL
+	* [VHDL](tools/lang/VHDL.vhdl), up to VHDL 2019.
+	* Verilog HDL, up to [Verilog](tools/lang/Verilog.v) 2005 and [SystemVerilog](tools/lang/SystemVerilog.sv) 2017.
 	* [Vim Script](tools/lang/Vim.vim)
 	* [WebAssembly](https://github.com/WebAssembly/wabt/blob/main/src/lexer-keywords.txt), up to wabt 1.0.
 	* XML Document, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#xml)
@@ -199,6 +198,7 @@ Latest development builds (artifacts in Release configuration for each compiler 
 * [Scintilla's website](https://www.scintilla.org/)
 * [Build Notepad2 and metapath](https://github.com/zufuliu/notepad2/wiki/Build-Notepad2)
 * [Localization](https://github.com/zufuliu/notepad2/wiki/Localization)
+	* [Italiano](https://github.com/Matteo-Nigro/notepad2) by [@Matteo-Nigro](https://github.com/Matteo-Nigro)
 	* [日本語](https://github.com/maboroshin/notepad2) by [@maboroshin](https://github.com/maboroshin)
 	* [中文 (繁體)](https://github.com/zufuliu/notepad2/tree/main/locale/zh-Hant)
 	* [中文 (简体)](https://github.com/zufuliu/notepad2/tree/main/locale/zh-Hans)

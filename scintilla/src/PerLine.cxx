@@ -33,10 +33,6 @@ using namespace Scintilla::Internal;
 
 MarkerHandleSet::MarkerHandleSet() noexcept = default;
 
-MarkerHandleSet::~MarkerHandleSet() {
-	mhList.clear();
-}
-
 bool MarkerHandleSet::Empty() const noexcept {
 	return mhList.empty();
 }
@@ -92,8 +88,6 @@ void MarkerHandleSet::CombineWith(MarkerHandleSet *other) noexcept {
 	mhList.splice_after(mhList.before_begin(), other->mhList);
 }
 
-LineMarkers::~LineMarkers() = default;
-
 void LineMarkers::Init() {
 	markers.DeleteAll();
 }
@@ -134,7 +128,7 @@ Sci::Line LineMarkers::LineFromHandle(int markerHandle) const noexcept {
 }
 
 int LineMarkers::HandleFromLine(Sci::Line line, int which) const noexcept {
-	if (markers.Length() && (line >= 0) && (line < markers.Length()) && markers[line]) {
+	if (IsValidIndex(line, markers.Length()) && markers[line]) {
 		MarkerHandleNumber const *pnmh = markers[line]->GetMarkerHandleNumber(which);
 		return pnmh ? pnmh->handle : -1;
 	}
@@ -142,7 +136,7 @@ int LineMarkers::HandleFromLine(Sci::Line line, int which) const noexcept {
 }
 
 int LineMarkers::NumberFromLine(Sci::Line line, int which) const noexcept {
-	if (markers.Length() && (line >= 0) && (line < markers.Length()) && markers[line]) {
+	if (IsValidIndex(line, markers.Length()) && markers[line]) {
 		MarkerHandleNumber const *pnmh = markers[line]->GetMarkerHandleNumber(which);
 		return pnmh ? pnmh->number : -1;
 	}
@@ -159,7 +153,7 @@ void LineMarkers::MergeMarkers(Sci::Line line) {
 }
 
 MarkerMask LineMarkers::MarkValue(Sci::Line line) const noexcept {
-	if (markers.Length() && (line >= 0) && (line < markers.Length()) && markers[line])
+	if (IsValidIndex(line, markers.Length()) && markers[line])
 		return markers[line]->MarkValue();
 	else
 		return 0;
@@ -178,27 +172,24 @@ Sci::Line LineMarkers::MarkerNext(Sci::Line lineStart, MarkerMask mask) const no
 }
 
 int LineMarkers::AddMark(Sci::Line line, int markerNum, Sci::Line lines) {
-	handleCurrent++;
 	if (!markers.Length()) {
 		// No existing markers so allocate one element per line
 		markers.InsertEmpty(0, lines);
-	}
-	if (line >= markers.Length()) {
-		return -1;
 	}
 	if (!markers[line]) {
 		// Need new structure to hold marker handle
 		markers[line] = std::make_unique<MarkerHandleSet>();
 	}
-	markers[line]->InsertHandle(handleCurrent, markerNum);
 
+	handleCurrent++;
+	markers[line]->InsertHandle(handleCurrent, markerNum);
 	return handleCurrent;
 }
 
 bool LineMarkers::DeleteMark(Sci::Line line, int markerNum, bool all) {
 	bool someChanges = false;
-	if (markers.Length() && (line >= 0) && (line < markers.Length()) && markers[line]) {
-		if (markerNum == -1) {
+	if (IsValidIndex(line, markers.Length()) && markers[line]) {
+		if (markerNum < 0) {
 			someChanges = true;
 			markers[line].reset();
 		} else {
@@ -220,8 +211,6 @@ void LineMarkers::DeleteMarkFromHandle(int markerHandle) {
 		}
 	}
 }
-
-LineLevels::~LineLevels() = default;
 
 void LineLevels::Init() {
 	levels.DeleteAll();
@@ -249,7 +238,7 @@ void LineLevels::RemoveLine(Sci::Line line) {
 	if (levels.Length()) {
 		// Move up following lines but merge header flag from this line
 		// to line before to avoid a temporary disappearance causing expansion.
-		int firstHeader = levels[line] & static_cast<int>(Scintilla::FoldLevel::HeaderFlag);
+		const int firstHeader = levels[line] & static_cast<int>(Scintilla::FoldLevel::HeaderFlag);
 		levels.Delete(line);
 		if (line == levels.Length() - 1) // Last line loses the header flag
 			levels[line - 1] &= ~static_cast<int>(Scintilla::FoldLevel::HeaderFlag);
@@ -259,7 +248,6 @@ void LineLevels::RemoveLine(Sci::Line line) {
 }
 
 void LineLevels::ExpandLevels(Sci::Line sizeNew) {
-	levels.ReAllocate(sizeNew + 1);
 	levels.InsertValue(levels.Length(), sizeNew - levels.Length(), static_cast<int>(Scintilla::FoldLevel::Base));
 }
 
@@ -268,28 +256,22 @@ void LineLevels::ClearLevels() {
 }
 
 int LineLevels::SetLevel(Sci::Line line, int level, Sci::Line lines) {
-	int prev = 0;
-	if ((line >= 0) && (line < lines)) {
+	if (IsValidIndex(line, lines)) {
 		if (!levels.Length()) {
 			ExpandLevels(lines + 1);
 		}
-		prev = levels[line];
-		if (prev != level) {
-			levels[line] = level;
-		}
+		return levels.ReplaceValueAt(line, level);
 	}
-	return prev;
+	return level;
 }
 
 int LineLevels::GetLevel(Sci::Line line) const noexcept {
-	if ((line >= 0) && (line < levels.Length())) {
+	if (IsValidIndex(line, levels.Length())) {
 		return levels[line];
 	} else {
 		return static_cast<int>(Scintilla::FoldLevel::Base);
 	}
 }
-
-LineState::~LineState() = default;
 
 void LineState::Init() {
 	lineStates.DeleteAll();
@@ -320,22 +302,18 @@ void LineState::RemoveLine(Sci::Line line) {
 }
 
 int LineState::SetLineState(Sci::Line line, int state, Sci::Line lines) {
-	lineStates.ReAllocate(lines + 2);
-	lineStates.EnsureLength(line + 1);
-	const int stateOld = lineStates[line];
-	lineStates[line] = state;
-	return stateOld;
+	if (IsValidIndex(line, lines)) {
+		lineStates.EnsureLength(lines + 1);
+		return lineStates.ReplaceValueAt(line, state);
+	}
+	return state;
 }
 
 int LineState::GetLineState(Sci::Line line) const noexcept {
-	if (line < 0 || line >= lineStates.Length()) {
-		return 0;
+	if (IsValidIndex(line, lineStates.Length())) {
+		return lineStates[line];
 	}
-	return lineStates[line];
-}
-
-Sci::Line LineState::GetMaxLineState() const noexcept {
-	return lineStates.Length();
+	return 0;
 }
 
 // Each allocated LineAnnotation is a char array which starts with an AnnotationHeader
@@ -355,14 +333,12 @@ inline size_t NumberLines(std::string_view sv) {
 	return std::count(sv.begin(), sv.end(), '\n') + 1;
 }
 
-std::unique_ptr<char[]>AllocateAnnotation(size_t length, int style) {
+std::unique_ptr<char[]> AllocateAnnotation(size_t length, int style) {
 	const size_t len = sizeof(AnnotationHeader) + length + ((style == IndividualStyles) ? length : 0);
 	return std::make_unique<char[]>(len);
 }
 
 }
-
-LineAnnotation::~LineAnnotation() = default;
 
 bool LineAnnotation::Empty() const noexcept {
 	return annotations.Length() == 0;
@@ -391,35 +367,36 @@ void LineAnnotation::InsertLines(Sci::Line line, Sci::Line lines) {
 }
 
 void LineAnnotation::RemoveLine(Sci::Line line) {
-	if (annotations.Length() && (line > 0) && (line <= annotations.Length())) {
+	// see https://sourceforge.net/p/scintilla/bugs/1577/
+	if (IsValidIndex(line - 1, annotations.Length())) {
 		annotations[line - 1].reset();
 		annotations.Delete(line - 1);
 	}
 }
 
 bool LineAnnotation::MultipleStyles(Sci::Line line) const noexcept {
-	if (annotations.Length() && (line >= 0) && (line < annotations.Length()) && annotations[line])
+	if (IsValidIndex(line, annotations.Length()) && annotations[line])
 		return reinterpret_cast<AnnotationHeader *>(annotations[line].get())->style == IndividualStyles;
 	else
 		return false;
 }
 
 int LineAnnotation::Style(Sci::Line line) const noexcept {
-	if (annotations.Length() && (line >= 0) && (line < annotations.Length()) && annotations[line])
+	if (IsValidIndex(line, annotations.Length()) && annotations[line])
 		return reinterpret_cast<AnnotationHeader *>(annotations[line].get())->style;
 	else
 		return 0;
 }
 
 const char *LineAnnotation::Text(Sci::Line line) const noexcept {
-	if (annotations.Length() && (line >= 0) && (line < annotations.Length()) && annotations[line])
+	if (IsValidIndex(line, annotations.Length()) && annotations[line])
 		return annotations[line].get() + sizeof(AnnotationHeader);
 	else
 		return nullptr;
 }
 
 const unsigned char *LineAnnotation::Styles(Sci::Line line) const noexcept {
-	if (annotations.Length() && (line >= 0) && (line < annotations.Length()) && annotations[line] && MultipleStyles(line))
+	if (IsValidIndex(line, annotations.Length()) && annotations[line] && MultipleStyles(line))
 		return reinterpret_cast<unsigned char *>(annotations[line].get() + sizeof(AnnotationHeader) + Length(line));
 	else
 		return nullptr;
@@ -439,7 +416,7 @@ void LineAnnotation::SetText(Sci::Line line, const char *text) {
 		pah->lines = static_cast<short>(NumberLines(std::string_view(text, length)));
 		memcpy(pa + sizeof(AnnotationHeader), text, length);
 	} else {
-		if (annotations.Length() && (line >= 0) && (line < annotations.Length()) && annotations[line]) {
+		if (IsValidIndex(line, annotations.Length()) && annotations[line]) {
 			annotations[line].reset();
 		}
 	}
@@ -465,7 +442,7 @@ void LineAnnotation::SetStyles(Sci::Line line, const unsigned char *styles) {
 		} else {
 			const AnnotationHeader *pahSource = reinterpret_cast<AnnotationHeader *>(annotations[line].get());
 			if (pahSource->style != IndividualStyles) {
-				std::unique_ptr<char[]>allocation = AllocateAnnotation(pahSource->length, IndividualStyles);
+				std::unique_ptr<char[]> allocation = AllocateAnnotation(pahSource->length, IndividualStyles);
 				AnnotationHeader *pahAlloc = reinterpret_cast<AnnotationHeader *>(allocation.get());
 				pahAlloc->length = pahSource->length;
 				pahAlloc->lines = pahSource->lines;
@@ -480,20 +457,18 @@ void LineAnnotation::SetStyles(Sci::Line line, const unsigned char *styles) {
 }
 
 int LineAnnotation::Length(Sci::Line line) const noexcept {
-	if (annotations.Length() && (line >= 0) && (line < annotations.Length()) && annotations[line])
+	if (IsValidIndex(line, annotations.Length()) && annotations[line])
 		return reinterpret_cast<AnnotationHeader *>(annotations[line].get())->length;
 	else
 		return 0;
 }
 
 int LineAnnotation::Lines(Sci::Line line) const noexcept {
-	if (annotations.Length() && (line >= 0) && (line < annotations.Length()) && annotations[line])
+	if (IsValidIndex(line, annotations.Length()) && annotations[line])
 		return reinterpret_cast<AnnotationHeader *>(annotations[line].get())->lines;
 	else
 		return 0;
 }
-
-LineTabstops::~LineTabstops() = default;
 
 void LineTabstops::Init() {
 	tabstops.DeleteAll();

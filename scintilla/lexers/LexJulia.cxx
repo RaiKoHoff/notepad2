@@ -29,18 +29,21 @@ namespace {
 struct EscapeSequence {
 	int outerState = SCE_JULIA_DEFAULT;
 	int digitsLeft = 0;
-	int numBase = 0;
+	bool hex = false;
 
 	// highlight any character as escape sequence.
 	bool resetEscapeState(int state, int chNext) noexcept {
+		if (IsEOLChar(chNext)) {
+			return false;
+		}
 		outerState = state;
 		digitsLeft = 1;
-		numBase = 16;
 		if (state == SCE_JULIA_RAWSTRING || state == SCE_JULIA_TRIPLE_RAWSTRING) {
 			// TODO: only when backslash followed by double quote
 			return chNext == '\\' || chNext == '\"';
 		}
 
+		hex = true;
 		if (chNext == 'x') {
 			digitsLeft = 3;
 		} else if (chNext == 'u') {
@@ -49,13 +52,13 @@ struct EscapeSequence {
 			digitsLeft = 9;
 		} else if (IsOctalDigit(chNext)) {
 			digitsLeft = 3;
-			numBase = 8;
+			hex = false;
 		}
 		return true;
 	}
 	bool atEscapeEnd(int ch) noexcept {
 		--digitsLeft;
-		return digitsLeft <= 0 || !IsADigit(ch, numBase);
+		return digitsLeft <= 0 || !IsOctalOrHex(ch, hex);
 	}
 };
 
@@ -78,7 +81,7 @@ enum class KeywordType {
 };
 
 constexpr bool IsJuliaExponent(int base, int ch, int chNext) noexcept {
-	return ((base == 10 && (ch == 'e' || ch == 'E' || ch == 'f' || ch == 'F'))
+	return ((base == 10 && AnyOf<'E', 'e', 'F', 'f'>(ch))
 		|| (base == 16 && (ch == 'p' || ch == 'P')))
 		&& (chNext == '+' || chNext == '-' || IsADigit(chNext));
 }
@@ -189,6 +192,7 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 	int visibleChars = 0;
 	int visibleCharsBefore = 0;
 	EscapeSequence escSeq;
+	int numBase = 0;
 
 	StyleContext sc(startPos, lengthDoc, initStyle, styler);
 	if (sc.currentLine > 0) {
@@ -217,10 +221,10 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 
 		case SCE_JULIA_NUMBER:
 			// strict to avoid color multiply expression as number
-			if (!(IsADigit(sc.ch, escSeq.numBase) || sc.ch == '_')) {
-				if (IsJuliaExponent(escSeq.numBase, sc.ch, sc.chNext)) {
+			if (!(IsADigitEx(sc.ch, numBase) || sc.ch == '_')) {
+				if (IsJuliaExponent(numBase, sc.ch, sc.chNext)) {
 					sc.Forward();
-				} else if (!(escSeq.numBase == 10 && sc.ch == '.' && sc.chPrev != '.')) {
+				} else if (!(numBase == 10 && sc.ch == '.' && sc.chPrev != '.')) {
 					sc.SetState(SCE_JULIA_DEFAULT);
 				}
 			}
@@ -239,7 +243,7 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 				if (sc.state == SCE_JULIA_IDENTIFIER) {
 					char s[128];
 					sc.GetCurrent(s, sizeof(s));
-					if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+					if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 						if (StrEqual(s, "type")) {
 							// only in `abstract type` or `primitive type`
 							if (kwType == KeywordType::Keyword) {
@@ -261,11 +265,11 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 								kwType = KeywordType::Keyword;
 							}
 						}
-					} else if (keywordLists[KeywordIndex_Type]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Type].InList(s)) {
 						sc.ChangeState(SCE_JULIA_TYPE);
-					} else if (keywordLists[KeywordIndex_Constant]->InList(s)) {
+					} else if (keywordLists[KeywordIndex_Constant].InList(s)) {
 						sc.ChangeState(SCE_JULIA_CONSTANT);
-					} else if (keywordLists[KeywordIndex_BasicFunction]->InListPrefixed(s, '(')) {
+					} else if (keywordLists[KeywordIndex_BasicFunction].InListPrefixed(s, '(')) {
 						sc.ChangeState(SCE_JULIA_BASIC_FUNCTION);
 					} else if (kwType != KeywordType::None && kwType != KeywordType::Keyword) {
 						sc.ChangeState(static_cast<int>(kwType));
@@ -469,21 +473,22 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 				isTransposeOperator = true;
 				sc.SetState(SCE_JULIA_VARIABLE);
 			} else if (sc.ch == '0') {
-				escSeq.numBase = 10;
+				numBase = 10;
 				isTransposeOperator = true;
 				sc.SetState(SCE_JULIA_NUMBER);
-				if (sc.chNext == 'x' || sc.chNext == 'X') {
-					escSeq.numBase = 16;
-				} else if (sc.chNext == 'b' || sc.chNext == 'B') {
-					escSeq.numBase = 2;
-				} else if (sc.chNext == 'o' || sc.chNext == 'O') {
-					escSeq.numBase = 8;
+				const int chNext = UnsafeLower(sc.chNext);
+				if (chNext == 'x') {
+					numBase = 16;
+				} else if (chNext == 'b') {
+					numBase = 2;
+				} else if (chNext == 'o') {
+					numBase = 8;
 				}
-				if (escSeq.numBase != 10) {
+				if (numBase != 10) {
 					sc.Forward();
 				}
 			} else if (IsNumberStart(sc.ch, sc.chNext)) {
-				escSeq.numBase = 10;
+				numBase = 10;
 				isTransposeOperator = true;
 				sc.SetState(SCE_JULIA_NUMBER);
 			} else if (IsIdentifierStartEx(sc.ch)) {
@@ -498,13 +503,15 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 					isTransposeOperator = true;
 				}
 
-				const bool interpolating = !nestedState.empty();
-				sc.SetState(interpolating ? SCE_JULIA_OPERATOR2 : SCE_JULIA_OPERATOR);
-				if (interpolating) {
+				sc.SetState(SCE_JULIA_OPERATOR);
+				if (!nestedState.empty()) {
 					if (sc.ch == '(') {
 						nestedState.push_back(SCE_JULIA_DEFAULT);
 					} else if (sc.ch == ')') {
 						const int outerState = TakeAndPop(nestedState);
+						if (outerState != SCE_JULIA_DEFAULT) {
+							sc.ChangeState(SCE_JULIA_OPERATOR2);
+						}
 						sc.ForwardSetState(outerState);
 						continue;
 					}
@@ -608,7 +615,7 @@ void FoldJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 				wordLen = 0;
 				if (StrEqual(buf, "end")) {
 					levelNext--;
-				} else if (keywordLists[KeywordIndex_CodeFolding]->InList(buf)) {
+				} else if (keywordLists[KeywordIndex_CodeFolding].InList(buf)) {
 					levelNext++;
 				}
 			}

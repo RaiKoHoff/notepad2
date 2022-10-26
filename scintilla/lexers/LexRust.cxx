@@ -24,13 +24,16 @@ using namespace Lexilla;
 
 namespace {
 
+// https://doc.rust-lang.org/reference/tokens.html#string-literals
 struct EscapeSequence {
 	int outerState = SCE_RUST_DEFAULT;
 	int digitsLeft = 0;
+	bool brace = false;
 
-	// highlight any character as escape sequence, no highlight for hex in '\u{hex}'.
+	// highlight any character as escape sequence.
 	void resetEscapeState(int state, int chNext) noexcept {
 		outerState = state;
+		brace = false;
 		digitsLeft = (chNext == 'x') ? 3 : 1;
 	}
 	bool atEscapeEnd(int ch) noexcept {
@@ -175,8 +178,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 		commentLevel = (lineState >> 11) & 0xff;
 		hashCount = (lineState >> 19) & 0xff;
 		lineStateAttribute = lineState & RustLineStateMaskAttribute;
-	}
-	if (startPos == 0 && sc.Match('#', '!')) {
+	} else if (startPos == 0 && sc.Match('#', '!')) {
 		// Shell Shebang at beginning of file
 		sc.SetState(SCE_RUST_COMMENTLINE);
 		sc.Forward();
@@ -209,7 +211,7 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					} else {
 						char s[128];
 						sc.GetCurrent(s, sizeof(s));
-						if (keywordLists[KeywordIndex_Keyword]->InList(s)) {
+						if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 							sc.ChangeState(SCE_RUST_WORD);
 							if (StrEqual(s, "struct")) {
 								kwType = KeywordType::Struct;
@@ -235,19 +237,19 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 							if ((visibleChars == 3 || visibleChars == 6) && StrEqual(s, "use")) {
 								lineStateLineType = RustLineStateMaskPubUse;
 							}
-						} else if (keywordLists[KeywordIndex_ReservedKeyword]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_ReservedKeyword].InList(s)) {
 							sc.ChangeState(SCE_RUST_WORD2);
-						} else if (keywordLists[KeywordIndex_PrimitiveType]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_PrimitiveType].InList(s)) {
 							sc.ChangeState(SCE_RUST_TYPE);
-						} else if (keywordLists[KeywordIndex_Struct]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_Struct].InList(s)) {
 							sc.ChangeState(SCE_RUST_STRUCT);
-						} else if (keywordLists[KeywordIndex_Trait]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_Trait].InList(s)) {
 							sc.ChangeState(SCE_RUST_TRAIT);
-						} else if (keywordLists[KeywordIndex_Enumeration]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_Enumeration].InList(s)) {
 							sc.ChangeState(SCE_RUST_ENUMERATION);
-						} else if (keywordLists[KeywordIndex_Union]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_Union].InList(s)) {
 							sc.ChangeState(SCE_RUST_UNION);
-						} else if (keywordLists[KeywordIndex_Constant]->InList(s)) {
+						} else if (keywordLists[KeywordIndex_Constant].InList(s)) {
 							sc.ChangeState(SCE_RUST_CONSTANT);
 						} else if (sc.ch != '.') {
 							const int chNext = sc.GetDocNextChar();
@@ -320,6 +322,11 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 						escSeq.resetEscapeState(state, sc.chNext);
 						sc.SetState(SCE_RUST_ESCAPECHAR);
 						sc.Forward();
+						if (state == SCE_RUST_STRING && sc.Match('u', '{')) {
+							escSeq.brace = true;
+							escSeq.digitsLeft = 7; // 24-bit code point escape
+							sc.Forward();
+						}
 					}
 				}
 				break;
@@ -375,6 +382,11 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					escSeq.resetEscapeState(sc.state, sc.chNext);
 					sc.SetState(SCE_RUST_ESCAPECHAR);
 					sc.Forward();
+					if (escSeq.outerState == SCE_RUST_CHARACTER && sc.Match('u', '{')) {
+						escSeq.brace = true;
+						escSeq.digitsLeft = 7; // 24-bit code point escape
+						sc.Forward();
+					}
 				}
 			} else if (sc.ch == '\'') {
 				sc.ForwardSetState(SCE_RUST_DEFAULT);
@@ -386,6 +398,9 @@ void ColouriseRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_RUST_ESCAPECHAR:
 			if (escSeq.atEscapeEnd(sc.ch)) {
+				if (escSeq.brace && sc.ch == '}') {
+					sc.Forward();
+				}
 				sc.SetState(escSeq.outerState);
 				continue;
 			}
