@@ -6,6 +6,7 @@
 // The License.txt file describes the conditions under which this software may be distributed.
 
 #include <cassert>
+#include <cstring>
 
 #include <string>
 #include <string_view>
@@ -21,6 +22,10 @@
 using namespace Lexilla;
 
 Accessor::Accessor(Scintilla::IDocument *pAccess_, const PropSetSimple &props_) noexcept : LexAccessor(pAccess_), props(props_) {
+}
+
+const char *Accessor::GetProperty(const char *key, size_t keyLen) const {
+	return props.Get(std::string_view(key, keyLen));
 }
 
 int Accessor::GetPropertyInt(const char *key, size_t keyLen, int defaultValue) const {

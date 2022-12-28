@@ -45,7 +45,7 @@ struct EscapeSequence {
 bool IsRustRawString(LexAccessor &styler, Sci_PositionU pos, bool start, int &hashCount) noexcept {
 	int count = 0;
 	char ch;
-	while ((ch = styler.SafeGetCharAt(pos)) == '#') {
+	while ((ch = styler[pos]) == '#') {
 		++count;
 		++pos;
 	}
@@ -106,40 +106,40 @@ Sci_Position CheckFormatSpecifier(const StyleContext &sc, LexAccessor &styler) n
 		if (ch & 0x80) {
 			styler.GetCharacterAndWidth(pos, &width);
 		}
-		const char chNext = styler.SafeGetCharAt(pos + width);
+		const char chNext = styler[pos + width];
 		if (AnyOf(ch, '<', '^', '>') || AnyOf(chNext, '<', '^', '>')) {
 			pos += 1 + width;
-			ch = styler.SafeGetCharAt(pos);
+			ch = styler[pos];
 		}
 	}
 	// [sign]['#']['0']
 	if (ch == '+' || ch == '-') {
-		ch = styler.SafeGetCharAt(++pos);
+		ch = styler[++pos];
 	}
 	if (ch == '#') {
-		ch = styler.SafeGetCharAt(++pos);
+		ch = styler[++pos];
 	}
 	if (ch == '0') {
-		ch = styler.SafeGetCharAt(++pos);
+		ch = styler[++pos];
 	}
 	// [width]['.' precision]type
 	for (int i = 0; i < 3; i++) {
 		if (i < 2 && ch == '.') {
 			i = 1;
-			ch = styler.SafeGetCharAt(++pos);
+			ch = styler[++pos];
 			if (ch == '*') {
 				i = 2;
-				ch = styler.SafeGetCharAt(++pos);
+				ch = styler[++pos];
 			}
 		}
 		while (IsIdentifierCharEx(static_cast<uint8_t>(ch))) {
-			ch = styler.SafeGetCharAt(++pos);
+			ch = styler[++pos];
 		}
 		if (i < 2 && ch == '$') {
-			ch = styler.SafeGetCharAt(++pos);
+			ch = styler[++pos];
 		}
 		if (ch == '?') {
-			ch = styler.SafeGetCharAt(++pos);
+			ch = styler[++pos];
 			break;
 		}
 	}
@@ -559,19 +559,19 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 	int levelNext = levelCurrent;
 	FoldLineState foldCurrent(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = sci::min(lineStartNext, endPos) - 1;
+	lineStartNext = sci::min(lineStartNext, endPos);
 
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
 	int style = initStyle;
 	int visibleChars = 0;
 
-	for (Sci_PositionU i = startPos; i < endPos; i++) {
+	while (startPos < endPos) {
 		const char ch = chNext;
-		chNext = styler.SafeGetCharAt(i + 1);
 		const int stylePrev = style;
 		style = styleNext;
-		styleNext = styler.StyleAt(i + 1);
+		chNext = styler[++startPos];
+		styleNext = styler.StyleAt(startPos);
 
 		switch (style) {
 		case SCE_RUST_COMMENTBLOCK:
@@ -579,10 +579,10 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 			const int level = (ch == '/' && chNext == '*') ? 1 : ((ch == '*' && chNext == '/') ? -1 : 0);
 			if (level != 0) {
 				levelNext += level;
-				i++;
+				startPos++;
 				style = styleNext;
-				chNext = styler.SafeGetCharAt(i + 1);
-				styleNext = styler.StyleAt(i + 1);
+				chNext = styler[startPos];
+				styleNext = styler.StyleAt(startPos);
 			}
 		} break;
 
@@ -609,7 +609,7 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 		if (visibleChars == 0 && !IsSpaceEquiv(style)) {
 			++visibleChars;
 		}
-		if (i == lineEndPos) {
+		if (startPos == lineStartNext) {
 			const FoldLineState foldNext(styler.GetLineState(lineCurrent + 1));
 			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
@@ -619,10 +619,10 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 				const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent, SCE_RUST_OPERATOR, SCE_RUST_TASKMARKER);
 				if (bracePos) {
 					levelNext++;
-					i = bracePos; // skip the brace
+					startPos = bracePos + 1; // skip the brace
 					style = SCE_RUST_OPERATOR;
-					chNext = styler.SafeGetCharAt(i + 1);
-					styleNext = styler.StyleAt(i + 1);
+					chNext = styler[startPos];
+					styleNext = styler.StyleAt(startPos);
 				}
 			}
 
@@ -637,7 +637,7 @@ void FoldRustDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = sci::min(lineStartNext, endPos) - 1;
+			lineStartNext = sci::min(lineStartNext, endPos);
 			levelCurrent = levelNext;
 			foldPrev = foldCurrent;
 			foldCurrent = foldNext;

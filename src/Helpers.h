@@ -13,7 +13,7 @@
 *
 *                                              (c) Florian Balmer 1996-2011
 *                                                  florian.balmer@gmail.com
-*                                               http://www.flos-freeware.ch
+*                                              https://www.flos-freeware.ch
 *
 *
 ******************************************************************************/
@@ -632,24 +632,7 @@ bool IsElevated(void);
 
 bool FindUserResourcePath(LPCWSTR path, LPWSTR outPath);
 HBITMAP LoadBitmapFile(LPCWSTR path);
-HBITMAP EnlargeImageForDPI(HBITMAP hbmp, UINT dpi);
-HBITMAP ResizeImageForDPI(HBITMAP hbmp, UINT dpi, int height);
-
-NP2_inline HBITMAP EnlargeImageForCurrentDPI(HBITMAP hbmp) {
-	return EnlargeImageForDPI(hbmp, g_uCurrentDPI);
-}
-
-NP2_inline HBITMAP ResizeImageForCurrentDPI(HBITMAP hbmp, int height) {
-	return ResizeImageForDPI(hbmp, g_uCurrentDPI, height);
-}
-
-NP2_inline HBITMAP ResizeButtonImageForCurrentDPI(HBITMAP hbmp) {
-	return ResizeImageForDPI(hbmp, g_uCurrentDPI, 16);
-}
-
-NP2_inline HBITMAP ResizeToolbarImageForCurrentDPI(HBITMAP hbmp) {
-	return ResizeImageForDPI(hbmp, g_uCurrentDPI, 16);
-}
+HBITMAP ResizeImageForCurrentDPI(HBITMAP hbmp);
 
 bool BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest);
 bool BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha);
@@ -923,6 +906,8 @@ void TransformBackslashes(char *pszInput, BOOL bRegEx, UINT cpEdit);
 bool AddBackslashA(char *pszOut, const char *pszInput);
 bool AddBackslashW(LPWSTR pszOut, LPCWSTR pszInput);
 void EscapeRegex(LPSTR pszOut, LPCSTR pszIn);
+size_t Base64Encode(char *output, const uint8_t *src, size_t length, bool urlSafe);
+size_t Base64Decode(uint8_t *output, const uint8_t *src, size_t length);
 
 //==== MinimizeToTray Functions - see comments in Helpers.c ===================
 bool GetDoAnimateMinimize(void);

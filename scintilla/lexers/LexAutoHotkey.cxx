@@ -165,35 +165,35 @@ inline Sci_Position CheckFormatSpecifier(const StyleContext &sc, LexAccessor &st
 	}
 
 	Sci_PositionU pos = sc.currentPos + 1;
-	char ch = styler.SafeGetCharAt(pos);
+	char ch = styler[pos];
 	// index
 	while (IsADigit(ch)) {
-		ch = styler.SafeGetCharAt(++pos);
+		ch = styler[++pos];
 	}
 	if (ch == ':') {
 		// Flags
-		ch = styler.SafeGetCharAt(++pos);
+		ch = styler[++pos];
 		while (AnyOf(ch, '-', '+', '0', ' ', '#')) {
-			ch = styler.SafeGetCharAt(++pos);
+			ch = styler[++pos];
 		}
 		// Width
 		while (IsADigit(ch)) {
-			ch = styler.SafeGetCharAt(++pos);
+			ch = styler[++pos];
 		}
 		// .Precision
 		if (ch == '.') {
-			ch = styler.SafeGetCharAt(++pos);
+			ch = styler[++pos];
 			while (IsADigit(ch)) {
-				ch = styler.SafeGetCharAt(++pos);
+				ch = styler[++pos];
 			}
 		}
 		// ULT
 		if (AnyOf(ch, 'U', 'L', 'T', 'l', 't')) {
-			ch = styler.SafeGetCharAt(++pos);
+			ch = styler[++pos];
 		}
 		// Type
 		if (IsFormatSpecifier(ch)) {
-			ch = styler.SafeGetCharAt(++pos);
+			ch = styler[++pos];
 		}
 	}
 	if (ch == '}') {
@@ -799,16 +799,16 @@ void FoldAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 	int levelNext = levelCurrent;
 	int lineCommentCurrent = GetLineCommentState(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = sci::min(lineStartNext, endPos) - 1;
+	lineStartNext = sci::min(lineStartNext, endPos);
+
+	int styleNext = styler.StyleAt(startPos);
+	int style = initStyle;
 	int visibleChars = 0;
 
-	int style = initStyle;
-	int styleNext = styler.StyleAt(startPos);
-
-	for (Sci_PositionU i = startPos; i < endPos; i++) {
+	while (startPos < endPos) {
 		const int stylePrev = style;
 		style = styleNext;
-		styleNext = styler.StyleAt(i + 1);
+		styleNext = styler.StyleAt(++startPos);
 
 		switch (style) {
 		case SCE_AHK_COMMENTBLOCK:
@@ -830,7 +830,7 @@ void FoldAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 			break;
 
 		case SCE_AHK_OPERATOR: {
-			const char ch = styler[i];
+			const char ch = styler[startPos - 1];
 			if (ch == '{' || ch == '[' || ch == '(') {
 				levelNext++;
 			} else if (ch == '}' || ch == ']' || ch == ')') {
@@ -842,7 +842,7 @@ void FoldAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 		if (visibleChars == 0 && !IsSpaceEquiv(style)) {
 			++visibleChars;
 		}
-		if (i == lineEndPos) {
+		if (startPos == lineStartNext) {
 			const int lineCommentNext = GetLineCommentState(styler.GetLineState(lineCurrent + 1));
 			if (lineCommentCurrent) {
 				levelNext += lineCommentNext - lineCommentPrev;
@@ -850,9 +850,9 @@ void FoldAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 				const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent, SCE_AHK_OPERATOR, SCE_AHK_TASKMARKER);
 				if (bracePos) {
 					levelNext++;
-					i = bracePos; // skip the brace
+					startPos = bracePos + 1; // skip the brace
 					style = SCE_AHK_OPERATOR;
-					styleNext = styler.StyleAt(i + 1);
+					styleNext = styler.StyleAt(startPos);
 				}
 			}
 
@@ -867,7 +867,7 @@ void FoldAHKDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = sci::min(lineStartNext, endPos) - 1;
+			lineStartNext = sci::min(lineStartNext, endPos);
 			levelCurrent = levelNext;
 			lineCommentPrev = lineCommentCurrent;
 			lineCommentCurrent = lineCommentNext;

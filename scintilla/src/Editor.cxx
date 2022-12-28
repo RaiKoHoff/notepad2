@@ -211,24 +211,35 @@ void Editor::Finalise() noexcept {
 void Editor::SetRepresentations() {
 	reprs.Clear();
 
-	// C0 control set
-	static const char * const reps[] = {
+	// C0 control set, same as ControlCharacterString()
+	static constexpr char reps[][4] = {
 		"NUL", "SOH", "STX", "ETX", "EOT", "ENQ", "ACK", "BEL",
 		"BS", "HT", "LF", "VT", "FF", "CR", "SO", "SI",
 		"DLE", "DC1", "DC2", "DC3", "DC4", "NAK", "SYN", "ETB",
-		"CAN", "EM", "SUB", "ESC", "FS", "GS", "RS", "US"
+		"CAN", "EM", "SUB", "ESC", "FS", "GS", "RS", "US", "BAD"
 	};
-	for (size_t j = 0; j < std::size(reps); j++) {
+	for (size_t j = 0; j < std::size(reps) - 1; j++) {
 		const char c[2] = { static_cast<char>(j), '\0' };
-		reprs.SetRepresentation(std::string_view(c, 1), reps[j]);
+		const char *rep = reps[j];
+		reprs.SetRepresentation(std::string_view(c, 1), std::string_view(rep, (rep[2] == '\0') ? 2 : 3));
 	}
-	reprs.SetRepresentation("\x7f", "DEL");
+
+	struct CharacterRepresentation {
+		char code[4];
+		char rep[4];
+	};
+	static constexpr CharacterRepresentation repsMisc[] = {
+		{ "\x7f", "DEL" },
+		{ "\xe2\x80\xa8", "LS" },
+		{ "\xe2\x80\xa9", "PS" },
+	};
+	reprs.SetRepresentation(std::string_view(repsMisc[0].code, 1), std::string_view(repsMisc[0].rep, 3));
 
 	const int dbcsCodePage = pdoc->dbcsCodePage;
 	// C1 control set
 	// As well as Unicode mode, ISO-8859-1 should use these
 	if (CpUtf8 == dbcsCodePage) {
-		static const char * const repsC1[] = {
+		static constexpr char repsC1[][5] = {
 			"PAD", "HOP", "BPH", "NBH", "IND", "NEL", "SSA", "ESA",
 			"HTS", "HTJ", "VTS", "PLD", "PLU", "RI", "SS2", "SS3",
 			"DCS", "PU1", "PU2", "STS", "CCH", "MW", "SPA", "EPA",
@@ -236,10 +247,12 @@ void Editor::SetRepresentations() {
 		};
 		for (size_t j = 0; j < std::size(repsC1); j++) {
 			const char c1[3] = { '\xc2',  static_cast<char>(0x80 + j), '\0' };
-			reprs.SetRepresentation(c1, repsC1[j]);
+			const char *rep = repsC1[j];
+			const size_t len = (rep[2] == '\0') ? 2 : ((rep[3] == '\0') ? 3 : 4);
+			reprs.SetRepresentation(std::string_view(c1, 2), std::string_view(rep, len));
 		}
-		reprs.SetRepresentation("\xe2\x80\xa8", "LS");
-		reprs.SetRepresentation("\xe2\x80\xa9", "PS");
+		reprs.SetRepresentation(std::string_view(repsMisc[1].code, 3), std::string_view(repsMisc[1].rep, 2));
+		reprs.SetRepresentation(std::string_view(repsMisc[2].code, 3), std::string_view(repsMisc[2].rep, 2));
 	}
 	if (dbcsCodePage) {
 		// UTF-8 invalid bytes or DBCS invalid single bytes.
@@ -247,7 +260,7 @@ void Editor::SetRepresentations() {
 			if (!IsDBCSValidSingleByte(dbcsCodePage, k)) {
 				const char hiByte[2] = { static_cast<char>(k), '\0' };
 				const char hexits[4] = { 'x', "0123456789ABCDEF"[k >> 4], "0123456789ABCDEF"[k & 15], '\0' };
-				reprs.SetRepresentation(hiByte, hexits);
+				reprs.SetRepresentation(std::string_view(hiByte, 1), std::string_view(hexits, 3));
 			}
 		}
 	}
@@ -1059,8 +1072,7 @@ void Editor::MoveSelectedLines(int lineDelta) {
 	}
 	SetSelection(selectionStart, selectionEnd);
 
-	SelectionText selectedText;
-	CopySelectionRange(&selectedText);
+	const std::string selectedText = RangeText(selectionStart, selectionEnd);
 
 	const Point currentLocation = LocationFromPosition(CurrentPosition());
 	const Sci::Line currentLine = LineFromLocation(currentLocation);
@@ -1074,7 +1086,7 @@ void Editor::MoveSelectedLines(int lineDelta) {
 		pdoc->InsertString(pdoc->LengthNoExcept(), eol, strlen(eol));
 	GoToLine(currentLine + lineDelta);
 
-	Sci::Position selectionLength = pdoc->InsertString(CurrentPosition(), selectedText.Data(), selectedText.Length());
+	Sci::Position selectionLength = pdoc->InsertString(CurrentPosition(), selectedText);
 	if (appendEol) {
 		const Sci::Position lengthInserted = pdoc->InsertString(CurrentPosition() + selectionLength, eol, strlen(eol));
 		selectionLength += lengthInserted;
@@ -2266,7 +2278,7 @@ void Editor::ClearDocumentStyle() {
 
 void Editor::CopyAllowLine() {
 	SelectionText selectedText;
-	CopySelectionRange(&selectedText, true);
+	CopySelectionRange(selectedText, true);
 	CopyToClipboard(selectedText);
 }
 
@@ -4343,7 +4355,7 @@ std::string Editor::RangeText(Sci::Position start, Sci::Position end) const {
 	return {};
 }
 
-void Editor::CopySelectionRange(SelectionText *ss, bool allowLineCopy) {
+void Editor::CopySelectionRange(SelectionText &ss, bool allowLineCopy) {
 	if (sel.Empty()) {
 		if (allowLineCopy) {
 			const Sci::Line currentLine = pdoc->SciLineFromPosition(sel.MainCaret());
@@ -4351,7 +4363,7 @@ void Editor::CopySelectionRange(SelectionText *ss, bool allowLineCopy) {
 			const Sci::Position end = pdoc->LineStart(currentLine + 1);
 
 			const std::string text = RangeText(start, end);
-			ss->Copy(text, pdoc->dbcsCodePage, false, true);
+			ss.Copy(text, pdoc->dbcsCodePage, false, true);
 		}
 	} else {
 		std::string text;
@@ -4367,7 +4379,7 @@ void Editor::CopySelectionRange(SelectionText *ss, bool allowLineCopy) {
 					text.push_back('\n');
 			}
 		}
-		ss->Copy(text, pdoc->dbcsCodePage, sel.IsRectangular(), sel.selType == Selection::SelTypes::lines);
+		ss.Copy(text, pdoc->dbcsCodePage, sel.IsRectangular(), sel.selType == Selection::SelTypes::lines);
 	}
 }
 
@@ -4909,7 +4921,7 @@ void Editor::ButtonMoveWithModifiers(Point pt, unsigned int, KeyMod modifiers) {
 			SetMouseCapture(false);
 			FineTickerCancel(TickReason::scroll);
 			SetDragPosition(movePos);
-			CopySelectionRange(&drag);
+			CopySelectionRange(drag);
 			StartDrag();
 		}
 		return;
@@ -5761,15 +5773,27 @@ Sci::Position Editor::GetTag(char *tagValue, int tagNumber) {
 	return length;
 }
 
-Sci::Position Editor::ReplaceTarget(bool replacePatterns, const char *text, Sci::Position length) {
+Sci::Position Editor::ReplaceTarget(ReplaceType replaceType, std::string_view text) {
 	const UndoGroup ug(pdoc);
-	if (length < 0)
-		length = strlen(text);
-	if (replacePatterns) {
-		text = pdoc->SubstituteByPosition(text, &length);
-		if (!text) {
+	if (replaceType == ReplaceType::patterns) {
+		Sci::Position length = text.length();
+		const char *p = pdoc->SubstituteByPosition(text.data(), &length);
+		if (!p) {
 			return 0;
 		}
+		text = std::string_view(p, length);
+	}
+
+	if (replaceType == ReplaceType::minimal) {
+		// Check for prefix and suffix and reduce text and target to match.
+		// This is performed with Range which doesn't support virtual space.
+		Range range(targetRange.start.Position(), targetRange.end.Position());
+		pdoc->TrimReplacement(text, range);
+		// Re-apply virtual space to start if start position didn't change.
+		// Don't bother with end as its virtual space is not used
+		const SelectionPosition start(range.start == targetRange.start.Position() ?
+			targetRange.start : SelectionPosition(range.start));
+		targetRange = SelectionSegment(start, SelectionPosition(range.end));
 	}
 
 	// Remove the text inside the range
@@ -5784,9 +5808,9 @@ Sci::Position Editor::ReplaceTarget(bool replacePatterns, const char *text, Sci:
 	targetRange.end = targetRange.start;
 
 	// Insert the new text
-	const Sci::Position lengthInserted = pdoc->InsertString(targetRange.start.Position(), text, length);
+	const Sci::Position lengthInserted = pdoc->InsertString(targetRange.start.Position(), text);
 	targetRange.end.SetPosition(targetRange.start.Position() + lengthInserted);
-	return length;
+	return text.length();
 }
 
 bool Editor::IsUnicodeMode() const noexcept {
@@ -5847,6 +5871,27 @@ void Editor::AddStyledText(const char *buffer, Sci::Position appendLength) {
 	pdoc->StartStyling(CurrentPosition());
 	pdoc->SetStyles(textLength, reinterpret_cast<const unsigned char*>(text.c_str()));
 	SetEmptySelection(sel.MainCaret() + lengthInserted);
+}
+
+Sci::Position Editor::GetStyledText(char *buffer, Sci::Position cpMin, Sci::Position cpMax) const noexcept {
+	Sci::Position iPlace = 0;
+	for (Sci::Position iChar = cpMin; iChar < cpMax; iChar++) {
+		buffer[iPlace++] = pdoc->CharAt(iChar);
+		buffer[iPlace++] = pdoc->StyleAt(iChar);
+	}
+	buffer[iPlace] = '\0';
+	buffer[iPlace + 1] = '\0';
+	return iPlace;
+}
+
+Sci::Position Editor::GetTextRange(char *buffer, Sci::Position cpMin, Sci::Position cpMax) const noexcept {
+	const Sci::Position cpEnd = (cpMax == -1) ? pdoc->Length() : cpMax;
+	PLATFORM_ASSERT(cpEnd <= pdoc->Length());
+	const Sci::Position len = cpEnd - cpMin; 	// No -1 as cpMin and cpMax are referring to inter character positions
+	pdoc->GetCharRange(buffer, cpMin, len);
+	// Spec says copied text is terminated with a NUL
+	buffer[len] = '\0';
+	return len; 	// Not including NUL
 }
 
 bool Editor::ValidMargin(uptr_t wParam) const noexcept {
@@ -6192,7 +6237,8 @@ sptr_t Editor::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 
 	case Message::GetSelText: {
 			SelectionText selectedText;
-			CopySelectionRange(&selectedText);
+			selectedText.asBinary = wParam != 0;
+			CopySelectionRange(selectedText);
 			const size_t iChar = selectedText.Length();
 			if (lParam) {
 				char *ptr = CharPtrFromSPtr(lParam);
@@ -6289,11 +6335,15 @@ sptr_t Editor::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 
 	case Message::ReplaceTarget:
 		PLATFORM_ASSERT(lParam);
-		return ReplaceTarget(false, ConstCharPtrFromSPtr(lParam), PositionFromUPtr(wParam));
+		return ReplaceTarget(ReplaceType::basic, ViewFromParams(lParam, wParam));
 
 	case Message::ReplaceTargetRE:
 		PLATFORM_ASSERT(lParam);
-		return ReplaceTarget(true, ConstCharPtrFromSPtr(lParam), PositionFromUPtr(wParam));
+		return ReplaceTarget(ReplaceType::patterns, ViewFromParams(lParam, wParam));
+
+	case Message::ReplaceTargetMinimal:
+		PLATFORM_ASSERT(lParam);
+		return ReplaceTarget(ReplaceType::minimal, ViewFromParams(lParam, wParam));
 
 	case Message::SearchInTarget:
 		PLATFORM_ASSERT(lParam);
@@ -6378,21 +6428,11 @@ sptr_t Editor::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 	case Message::FindTextFull:
 		return FindTextFull(wParam, lParam);
 
-	case Message::GetTextRangeFull: {
-			if (lParam == 0)
-				return 0;
-			TextRangeFull *tr = static_cast<TextRangeFull *>(PtrFromSPtr(lParam));
-			Sci::Position cpMax = tr->chrg.cpMax;
-			if (cpMax < 0)
-				cpMax = pdoc->LengthNoExcept();
-			PLATFORM_ASSERT(cpMax <= pdoc->LengthNoExcept());
-			const Sci::Position len = cpMax - tr->chrg.cpMin; 	// No -1 as cpMin and cpMax are referring to inter character positions
-			PLATFORM_ASSERT(len >= 0);
-			pdoc->GetCharRange(tr->lpstrText, tr->chrg.cpMin, len);
-			// Spec says copied text is terminated with a NUL
-			tr->lpstrText[len] = '\0';
-			return len; 	// Not including NUL
+	case Message::GetTextRangeFull:
+		if (TextRangeFull *tr = static_cast<TextRangeFull *>(PtrFromSPtr(lParam))) {
+			return GetTextRange(tr->lpstrText, tr->chrg.cpMin, tr->chrg.cpMax);
 		}
+		return 0;
 
 	case Message::HideSelection:
 		vs.selection.visible = wParam != 0;
@@ -6642,19 +6682,11 @@ sptr_t Editor::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		pdoc->SetSavePoint();
 		break;
 
-	case Message::GetStyledText: {
-			if (lParam == 0)
-				return 0;
-			TextRangeFull *tr = static_cast<TextRangeFull *>(PtrFromSPtr(lParam));
-			Sci::Position iPlace = 0;
-			for (Sci::Position iChar = tr->chrg.cpMin; iChar < tr->chrg.cpMax; iChar++) {
-				tr->lpstrText[iPlace++] = pdoc->CharAt(iChar);
-				tr->lpstrText[iPlace++] = pdoc->StyleAt(iChar);
-			}
-			tr->lpstrText[iPlace] = '\0';
-			tr->lpstrText[iPlace + 1] = '\0';
-			return iPlace;
+	case Message::GetStyledTextFull:
+		if (TextRangeFull *tr = static_cast<TextRangeFull *>(PtrFromSPtr(lParam))) {
+			return GetStyledText(tr->lpstrText, tr->chrg.cpMin, tr->chrg.cpMax);
 		}
+		return 0;
 
 	case Message::CanRedo:
 		return (pdoc->CanRedo() && !pdoc->IsReadOnly()) ? 1 : 0;

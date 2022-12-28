@@ -92,7 +92,7 @@ public:
 	void SetUndoCollection(bool collectUndo);
 	void SelectAll();
 	void SetSavePoint();
-	Position GetStyledText(void *tr);
+	Position GetStyledTextFull(void *tr);
 	bool CanRedo();
 	Line MarkerLineFromHandle(int markerHandle);
 	void MarkerDeleteHandle(int markerHandle);
@@ -327,8 +327,8 @@ public:
 	int MarginRight();
 	bool Modify();
 	void SetSel(Position anchor, Position caret);
-	Position GetSelText(char *text);
-	std::string GetSelText();
+	Position GetSelText(bool asBinary, char *text);
+	std::string GetSelText(bool asBinary);
 	Position GetTextRangeFull(void *tr);
 	void HideSelection(bool hide);
 	bool SelectionHidden();
@@ -376,6 +376,7 @@ public:
 	void TargetWholeDocument();
 	Position ReplaceTarget(Position length, const char *text);
 	Position ReplaceTargetRE(Position length, const char *text);
+	Position ReplaceTargetMinimal(Position length, const char *text);
 	Position SearchInTarget(Position length, const char *text);
 	void SetSearchFlags(Scintilla::FindOption searchFlags);
 	Scintilla::FindOption SearchFlags();

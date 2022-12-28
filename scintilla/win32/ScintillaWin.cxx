@@ -386,20 +386,6 @@ public:
 	}
 };
 
-class MouseWheelDelta {
-	int wheelDelta = 0;
-public:
-	bool Accumulate(WPARAM wParam) noexcept {
-		wheelDelta -= GET_WHEEL_DELTA_WPARAM(wParam);
-		return std::abs(wheelDelta) >= WHEEL_DELTA;
-	}
-	int Actions() noexcept {
-		const int actions = wheelDelta / WHEEL_DELTA;
-		wheelDelta = wheelDelta % WHEEL_DELTA;
-		return actions;
-	}
-};
-
 struct HorizontalScrollRange {
 	int pageWidth;
 	int documentWidth;
@@ -746,7 +732,10 @@ void ScintillaWin::Finalise() noexcept {
 }
 
 bool ScintillaWin::UpdateRenderingParams(bool force) noexcept {
-	HMONITOR monitor = ::MonitorFromWindow(MainHWND(), MONITOR_DEFAULTTONEAREST);
+	// see https://sourceforge.net/p/scintilla/bugs/2344/?page=2
+	//HWND topLevel = ::GetAncestor(MainHWND(), GA_ROOT);
+	HWND topLevel = ::GetParent(MainHWND()); // our main window
+	HMONITOR monitor = ::MonitorFromWindow(topLevel, MONITOR_DEFAULTTONEAREST);
 	if (!force && monitor == hCurrentMonitor && (technology == Technology::Default || defaultRenderingParams)) {
 		return false;
 	}
@@ -781,17 +770,9 @@ void ScintillaWin::EnsureRenderTarget(HDC hdc) noexcept {
 		renderTargetValid = true;
 	}
 	if (!pRenderTarget) {
-		HWND hw = MainHWND();
-		RECT rc;
-		::GetClientRect(hw, &rc);
-
-		const D2D1_SIZE_U size = D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top);
-
 		// Create a Direct2D render target.
 		D2D1_RENDER_TARGET_PROPERTIES drtp {};
 		drtp.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
-		drtp.pixelFormat.format = DXGI_FORMAT_UNKNOWN;
-		drtp.pixelFormat.alphaMode = D2D1_ALPHA_MODE_UNKNOWN;
 		drtp.dpiX = 96.0;
 		drtp.dpiY = 96.0;
 		drtp.usage = D2D1_RENDER_TARGET_USAGE_NONE;
@@ -799,8 +780,7 @@ void ScintillaWin::EnsureRenderTarget(HDC hdc) noexcept {
 
 		if (technology == Technology::DirectWriteDC) {
 			// Explicit pixel format needed.
-			drtp.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-				D2D1_ALPHA_MODE_IGNORE);
+			drtp.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE);
 
 			ID2D1DCRenderTarget *pDCRT = nullptr;
 			const HRESULT hr = pD2DFactory->CreateDCRenderTarget(&drtp, &pDCRT);
@@ -813,11 +793,15 @@ void ScintillaWin::EnsureRenderTarget(HDC hdc) noexcept {
 				//Platform::DebugPrintf("Failed CreateDCRenderTarget 0x%lx\n", hr);
 				pRenderTarget = nullptr;
 			}
-
 		} else {
+			drtp.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_UNKNOWN);
+
+			HWND hw = MainHWND();
+			RECT rc;
+			::GetClientRect(hw, &rc);
 			D2D1_HWND_RENDER_TARGET_PROPERTIES dhrtp {};
 			dhrtp.hwnd = hw;
-			dhrtp.pixelSize = size;
+			dhrtp.pixelSize = D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top);
 			dhrtp.presentOptions = (technology == Technology::DirectWriteRetain) ?
 				D2D1_PRESENT_OPTIONS_RETAIN_CONTENTS : D2D1_PRESENT_OPTIONS_NONE;
 
@@ -1428,7 +1412,10 @@ bool ScintillaWin::HandleLaTeXTabCompletion() {
 	wclen = main - pos - 1;
 #endif
 
+	//const ElapsedPeriod elapsed;
 	const uint32_t wch = GetLaTeXInputUnicodeCharacter(ptr, wclen);
+	//const double duration = elapsed.Duration()*1e6;
+	//printf("LaTeXInput(%s) => %04X, %.3f\n", ptr, wch, duration);
 	if (wch == 0) {
 		return false;
 	}
@@ -1442,7 +1429,7 @@ bool ScintillaWin::HandleLaTeXTabCompletion() {
 
 	targetRange.start.SetPosition(pos);
 	targetRange.end.SetPosition(main);
-	ReplaceTarget(false, buffer, len);
+	ReplaceTarget(ReplaceType::basic, std::string_view(buffer, len));
 	// move caret after character
 	SetEmptySelection(pos + len);
 	return true;
@@ -2381,20 +2368,17 @@ sptr_t ScintillaWin::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		case WM_NCLBUTTONDOWN:
 		case WM_SYSCOMMAND:
 		case WM_WINDOWPOSCHANGING:
+		case WM_WINDOWPOSCHANGED:
 			return ::DefWindowProc(MainHWND(), msg, wParam, lParam);
 
-		case WM_WINDOWPOSCHANGED: {
-			HMONITOR current = hCurrentMonitor;
+#if 0 // we don't use Scintilla as top level window
+		case WM_WINDOWPOSCHANGED:
 			if (UpdateRenderingParams(false)) {
 				DropGraphics();
 				Redraw();
-				if (current) {
-					// recreate toolbar after monitor changed
-					::PostMessage(::GetParent(MainHWND()), WM_THEMECHANGED, 0, 0);
-				}
 			}
 			return ::DefWindowProc(MainHWND(), msg, wParam, lParam);
-		}
+#endif
 
 		case WM_GETTEXTLENGTH:
 			return GetTextLength();
@@ -2902,7 +2886,7 @@ void ScintillaWin::Copy(bool asBinary) {
 	if (!sel.Empty()) {
 		SelectionText selectedText;
 		selectedText.asBinary = asBinary;
-		CopySelectionRange(&selectedText);
+		CopySelectionRange(selectedText);
 		CopyToClipboard(selectedText);
 	}
 }
@@ -4059,11 +4043,11 @@ LRESULT CALLBACK ScintillaWin::CTWndProc(HWND hWnd, UINT iMessage, WPARAM wParam
 				::BeginPaint(hWnd, &ps);
 				const std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(sciThis->technology));
 				ID2D1HwndRenderTarget *pCTRenderTarget = nullptr;
-				RECT rc;
-				GetClientRect(hWnd, &rc);
 				if (sciThis->technology == Technology::Default) {
 					surfaceWindow->Init(ps.hdc, hWnd);
 				} else {
+					RECT rc;
+					GetClientRect(hWnd, &rc);
 					// Create a Direct2D render target.
 					D2D1_HWND_RENDER_TARGET_PROPERTIES dhrtp {};
 					dhrtp.hwnd = hWnd;
@@ -4073,8 +4057,7 @@ LRESULT CALLBACK ScintillaWin::CTWndProc(HWND hWnd, UINT iMessage, WPARAM wParam
 
 					D2D1_RENDER_TARGET_PROPERTIES drtp {};
 					drtp.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
-					drtp.pixelFormat.format = DXGI_FORMAT_UNKNOWN;
-					drtp.pixelFormat.alphaMode = D2D1_ALPHA_MODE_UNKNOWN;
+					drtp.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_UNKNOWN);
 					drtp.dpiX = 96.0;
 					drtp.dpiY = 96.0;
 					drtp.usage = D2D1_RENDER_TARGET_USAGE_NONE;

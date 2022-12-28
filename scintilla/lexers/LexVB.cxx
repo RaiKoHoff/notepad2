@@ -119,10 +119,6 @@ void ColouriseVBDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, 
 				if (skipType) {
 					s[len - 1] = '\0';
 				}
-				if (visibleChars == len && sc.GetLineNextChar() == ':') {
-					sc.ChangeState(SCE_B_LABEL);
-					sc.SetState(SCE_B_DEFAULT);
-				} else
 					if (StrEqual(s, "rem")) {
 						sc.ChangeState(SCE_B_COMMENT);
 					} else {
@@ -133,6 +129,8 @@ void ColouriseVBDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, 
 							sc.ChangeState(SCE_B_KEYWORD);
 						} else if (keywords2.InList(s)) {
 							sc.ChangeState(SCE_B_KEYWORD2);
+						} else if (visibleChars == len && sc.GetLineNextChar() == ':') {
+							sc.ChangeState(SCE_B_LABEL);
 						} else if (keywords3.InList(s)) {
 							sc.ChangeState(SCE_B_KEYWORD3);
 						} else if (!vbScriptSyntax && s[0] == '#' && keywords4.InList(s + 1)) {
@@ -253,11 +251,25 @@ bool VBMatchNextWord(LexAccessor &styler, Sci_Position startPos, Sci_Position en
 	return isspacechar(LexCharAt(pos + static_cast<int>(strlen(word))))
 		&& styler.MatchLowerCase(pos, word);
 }
-bool IsVBProperty(LexAccessor &styler, Sci_Line line, Sci_Position startPos) noexcept {
+int IsVBProperty(LexAccessor &styler, Sci_Line line, Sci_Position startPos) noexcept {
 	const Sci_Position endPos = styler.LineStart(line + 1) - 1;
+	bool visibleChars = false;
 	for (Sci_Position i = startPos; i < endPos; i++) {
-		if (styler.StyleAt(i) == SCE_B_OPERATOR && LexCharAt(i) == '(')
+		const uint8_t ch = UnsafeLower(styler[i]);
+		const int style = styler.StyleAt(i);
+		if (style == SCE_B_OPERATOR && ch == '(') {
 			return true;
+		}
+		if (style == SCE_B_KEYWORD && !visibleChars
+			&& (ch == 'g' || ch == 'l' || ch == 's')
+			&& UnsafeLower(styler[i + 1]) == 'e' 
+			&& UnsafeLower(styler[i + 2]) == 't'
+			&& isspacechar(styler[i + 3])) {
+			return 2;
+		}
+		if (ch > ' ') {
+			visibleChars = true;
+		}
 	}
 	return false;
 }
@@ -428,11 +440,9 @@ void FoldVBDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lexer
 			} else if (!isInterface && VBMatch("property")) {
 				isProperty = true;
 				if (!(isEnd || isExit)) {
-					levelNext++;
-					if (!IsVBProperty(styler, lineCurrent, i + 8)) {
-						isProperty = false;
-						levelNext--;
-					}
+					const int result = IsVBProperty(styler, lineCurrent, i + 8);
+					levelNext += result != 0;
+					isProperty = result & true;
 				}
 				if (isEnd) {
 					isEnd = false; isProperty = false;

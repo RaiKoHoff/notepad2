@@ -13,7 +13,7 @@
 *
 *                                              (c) Florian Balmer 1996-2011
 *                                                  florian.balmer@gmail.com
-*                                               http://www.flos-freeware.ch
+*                                              https://www.flos-freeware.ch
 *
 *
 ******************************************************************************/
@@ -412,7 +412,7 @@ void InitInstance(HINSTANCE hInstance, int nCmdShow) {
 		}
 	}
 
-	hwndMain = CreateWindowEx(
+	HWND hwnd = CreateWindowEx(
 				   0,
 				   WC_METAPATH,
 				   WC_METAPATH,
@@ -425,21 +425,18 @@ void InitInstance(HINSTANCE hInstance, int nCmdShow) {
 				   NULL,
 				   hInstance,
 				   NULL);
-
 	if (bAlwaysOnTop) {
-		SetWindowPos(hwndMain, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+		SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 	}
-
 	if (bTransparentMode) {
-		SetWindowTransparentMode(hwndMain, true, iOpacityLevel);
+		SetWindowTransparentMode(hwnd, true, iOpacityLevel);
 	}
-
 	if (!flagStartAsTrayIcon) {
-		ShowWindow(hwndMain, nCmdShow);
-		UpdateWindow(hwndMain);
+		ShowWindow(hwnd, nCmdShow);
+		UpdateWindow(hwnd);
 	} else {
-		ShowWindow(hwndMain, SW_HIDE);   // trick ShowWindow()
-		ShowNotifyIcon(hwndMain, true);
+		ShowWindow(hwnd, SW_HIDE);   // trick ShowWindow()
+		ShowNotifyIcon(hwnd, true);
 	}
 
 	// Pathname parameter
@@ -464,7 +461,7 @@ void InitInstance(HINSTANCE hInstance, int nCmdShow) {
 
 	// Update Dirlist
 	if (!ListView_GetItemCount(hwndDirList)) {
-		PostWMCommand(hwndMain, IDM_VIEW_UPDATE);
+		PostWMCommand(hwnd, IDM_VIEW_UPDATE);
 	}
 }
 
@@ -759,9 +756,8 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 //
 LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	UNREFERENCED_PARAMETER(wParam);
-
+	hwndMain = hwnd;
 	HINSTANCE hInstance = ((LPCREATESTRUCT)lParam)->hInstance;
-
 	hwndDirList = CreateWindowEx(
 					  WS_EX_CLIENTEDGE,
 					  WC_LISTVIEW,
@@ -851,7 +847,6 @@ LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	GetMenuItemInfo(hmenu, SC_MINIMIZE, FALSE, &mii);
 	mii.wID = SC_MINIMIZE | 0x02;
 	SetMenuItemInfo(hmenu, SC_MINIMIZE, FALSE, &mii);
-
 	return 0;
 }
 
@@ -1079,13 +1074,13 @@ void MsgSize(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 		//cy -= (rc.bottom - rc.top);
 
 		//SendMessage(hwndToolbar, TB_GETITEMRECT, 0, (LPARAM)&rc);
-		SetWindowPos(hwndReBar, NULL, 0, 0, LOWORD(lParam), cyReBar, SWP_NOZORDER);
+		SetWindowPos(hwndReBar, NULL, 0, 0, cx, cyReBar, SWP_NOZORDER);
 		// the ReBar automatically sets the correct height
 		// calling SetWindowPos() with the height of one toolbar button
 		// causes the control not to temporarily use the whole client area
 		// and prevents flickering
 
-		GetWindowRect(hwndReBar, &rc);
+		//GetWindowRect(hwndReBar, &rc);
 		y = cyReBar + cyReBarFrame;    // define
 		cy -= cyReBar + cyReBarFrame;  // border
 	}
@@ -2106,11 +2101,12 @@ LRESULT MsgNotify(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 					GetDateFormat(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, NULL, tchdate, COUNTOF(tchdate));
 					GetTimeFormat(LOCALE_USER_DEFAULT, 0, &st, NULL, tchtime, COUNTOF(tchdate));
 
-					WCHAR tchattr[64];
-					lstrcpy(tchattr, (fd.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE) ? L"A" : L"-");
-					lstrcat(tchattr, (fd.dwFileAttributes & FILE_ATTRIBUTE_READONLY) ? L"R" : L"-");
-					lstrcat(tchattr, (fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) ? L"H" : L"-");
-					lstrcat(tchattr, (fd.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) ? L"S" : L"-");
+					WCHAR tchattr[6];
+					tchattr[0] = (fd.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE) ? L'A' : L'-';
+					tchattr[1] = (fd.dwFileAttributes & FILE_ATTRIBUTE_READONLY) ? L'R' : L'-';
+					tchattr[2] = (fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) ? L'H' : L'-';
+					tchattr[3] = (fd.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) ? L'S' : L'-';
+					tchattr[4] = L'\0';
 
 					wsprintf(tch, L"%s | %s %s | %s", tchsize, tchdate, tchtime, tchattr);
 				} else {
@@ -2336,6 +2332,9 @@ void ValidateUILangauge(void) {
 	case LANG_CHINESE:
 		languageResID = IsChineseTraditionalSubLang(subLang)? IDS_LANG_CHINESE_TRADITIONAL : IDS_LANG_CHINESE_SIMPLIFIED;
 		break;
+	case LANG_FRENCH:
+		languageResID = IDS_LANG_FRENCH_FRANCE;
+		break;
 	case LANG_GERMAN:
 		languageResID = IDS_LANG_GERMAN;
 		break;
@@ -2373,6 +2372,9 @@ void SetUILanguage(int resID) {
 		break;
 	case IDS_LANG_CHINESE_TRADITIONAL:
 		lang = MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL);
+		break;
+	case IDS_LANG_FRENCH_FRANCE:
+		lang = MAKELANGID(LANG_FRENCH, SUBLANG_FRENCH);
 		break;
 	case IDS_LANG_GERMAN:
 		lang = MAKELANGID(LANG_GERMAN, SUBLANG_GERMAN);
@@ -3476,10 +3478,8 @@ void GetRelaunchParameters(LPWSTR szParameters) {
 //
 void ShowNotifyIcon(HWND hwnd, bool bAdd) {
 	static HICON hIcon;
-
 	if (!hIcon) {
-		hIcon = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(IDR_MAINWND),
-						  IMAGE_ICON, 16, 16, LR_DEFAULTCOLOR);
+		hIcon = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(IDR_MAINWND), IMAGE_ICON, 16, 16, LR_DEFAULTCOLOR);
 	}
 
 	NOTIFYICONDATA nid;
@@ -3491,12 +3491,7 @@ void ShowNotifyIcon(HWND hwnd, bool bAdd) {
 	nid.uCallbackMessage = APPM_TRAYMESSAGE;
 	nid.hIcon = hIcon;
 	lstrcpy(nid.szTip, WC_METAPATH);
-
-	if (bAdd) {
-		Shell_NotifyIcon(NIM_ADD, &nid);
-	} else {
-		Shell_NotifyIcon(NIM_DELETE, &nid);
-	}
+	Shell_NotifyIcon(bAdd ? NIM_ADD : NIM_DELETE, &nid);
 }
 
 //=============================================================================

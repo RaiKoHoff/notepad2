@@ -647,6 +647,9 @@ enum {
 	APDLKeywordIndex_StarCommand = 3,
 	AutoHotkeyKeywordIndex_Directive = 1,
 	AutoHotkeyKeywordIndex_CompilerDirective = 2,
+	AutoIt3KeywordIndex_Macro = 2,
+	AutoIt3KeywordIndex_Directive = 4,
+	AutoIt3KeywordIndex_Special = 5,
 	CPPKeywordIndex_Preprocessor = 2,
 	CPPKeywordIndex_Directive = 3,
 	CSSKeywordIndex_AtRule = 1,
@@ -1059,6 +1062,18 @@ static AddWordResult AutoC_AddSpecWord(struct WordList *pWList, int iCurrentStyl
 		}
 		if (ch == '@' && (iCurrentStyle == SCE_AHK_COMMENTLINE || iCurrentStyle == SCE_AHK_COMMENTBLOCK)) {
 			WordList_AddList(pWList, pLex->pKeyWords->pszKeyWords[AutoHotkeyKeywordIndex_CompilerDirective]);
+			return AddWordResult_Finish;
+		}
+		break;
+
+	case NP2LEX_AUTOIT3:
+		if (ch == '#' && iCurrentStyle == SCE_AU3_DEFAULT) {
+			WordList_AddList(pWList, pLex->pKeyWords->pszKeyWords[AutoIt3KeywordIndex_Directive]);
+			WordList_AddList(pWList, pLex->pKeyWords->pszKeyWords[AutoIt3KeywordIndex_Special]);
+			return AddWordResult_Finish;
+		}
+		if (ch == '@' && iCurrentStyle == SCE_AU3_DEFAULT) {
+			WordList_AddList(pWList, pLex->pKeyWords->pszKeyWords[AutoIt3KeywordIndex_Macro]);
 			return AddWordResult_Finish;
 		}
 		break;
@@ -1807,11 +1822,9 @@ void EditAutoCloseBraceQuote(int ch) {
 		//}
 
 		const char tchIns[4] = { fillChar };
-		SciCall_BeginUndoAction();
 		SciCall_ReplaceSel(tchIns);
 		const Sci_Position iCurrentPos = (ch == ',') ? iCurPos + 1 : iCurPos;
 		SciCall_SetSel(iCurrentPos, iCurrentPos);
-		SciCall_EndUndoAction();
 		if (closeBrace) {
 			// fix brace matching
 			SciCall_EnsureStyledTo(iCurPos + 1);
@@ -1900,10 +1913,8 @@ void EditAutoCloseXMLTag(void) {
 			if (shouldAutoClose) {
 				tchIns[cchIns - 1] = '>';
 				autoClosed = true;
-				SciCall_BeginUndoAction();
 				SciCall_ReplaceSel(tchIns);
 				SciCall_SetSel(iCurPos, iCurPos);
-				SciCall_EndUndoAction();
 			}
 		}
 	}
@@ -2238,22 +2249,18 @@ void EditAutoIndent(void) {
 		}
 
 		if (*pLineBuf) {
-			SciCall_BeginUndoAction();
 			SciCall_AddText(strlen(pLineBuf), pLineBuf);
 			if (indent != AutoIndentType_None) {
 				SciCall_SetSel(iIndentPos, iIndentPos);
 			}
-			SciCall_EndUndoAction();
 
 			//const Sci_Position iPrevLineStartPos = SciCall_PositionFromLine(iCurLine - 1);
 			//const Sci_Position iPrevLineEndPos = SciCall_GetLineEndPosition(iCurLine - 1);
 			//const Sci_Position iPrevLineIndentPos = SciCall_GetLineIndentPosition(iCurLine - 1);
 
 			//if (iPrevLineEndPos == iPrevLineIndentPos) {
-			//	SciCall_BeginUndoAction();
 			//	SciCall_SetTargetRange(iPrevLineStartPos, iPrevLineEndPos);
 			//	SciCall_ReplaceTarget(0, "");
-			//	SciCall_EndUndoAction();
 			//}
 		}
 
@@ -2748,6 +2755,7 @@ void InitAutoCompletionCache(LPCEDITLEXER pLex) {
 	case NP2LEX_2NDTEXTFILE:
 	case NP2LEX_ANSI:
 	case NP2LEX_BLOCKDIAG:
+	case NP2LEX_CSV:
 	case NP2LEX_GRAPHVIZ:
 	case NP2LEX_LISP:
 	case NP2LEX_SMALI:

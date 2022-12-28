@@ -13,7 +13,7 @@
 *
 *                                              (c) Florian Balmer 1996-2011
 *                                                  florian.balmer@gmail.com
-*                                               http://www.flos-freeware.ch
+*                                              https://www.flos-freeware.ch
 *
 *
 ******************************************************************************/
@@ -961,6 +961,9 @@ HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName) {
 		break;
 	case LANG_CHINESE:
 		folder = IsChineseTraditionalSubLang(subLang) ? L"zh-Hant" : L"zh-Hans";
+		break;
+	case LANG_FRENCH:
+		folder = L"fr-FR";
 		break;
 	case LANG_GERMAN:
 		folder = L"de";

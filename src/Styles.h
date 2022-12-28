@@ -13,7 +13,7 @@
 *
 *                                              (c) Florian Balmer 1996-2011
 *                                                  florian.balmer@gmail.com
-*                                               http://www.flos-freeware.ch
+*                                              https://www.flos-freeware.ch
 *
 *
 ******************************************************************************/
@@ -61,7 +61,7 @@ void	Style_SaveTabSettings(PEDITLEXER pLex);
 void	EditApplyDefaultEncoding(PEDITLEXER pLex, BOOL bLexerChanged);
 void	InitAutoCompletionCache(LPCEDITLEXER pLex);
 
-void	Style_DetectBaseFontSize(HWND hwnd);
+void	Style_DetectBaseFontSize(HMONITOR hMonitor);
 HFONT	Style_CreateCodeFont(UINT dpi);
 void	Style_OnDPIChanged(PEDITLEXER pLex);
 void	Style_OnStyleThemeChanged(int theme);
@@ -69,7 +69,6 @@ void	Style_InitDefaultColor(void);
 void	Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged);
 bool	Style_SetLexerFromFile(LPCWSTR lpszFile);
 void	Style_SetLexerFromName(LPCWSTR lpszFile, LPCWSTR lpszName);
-bool	Style_MaybeBinaryFile(LPCWSTR lpszFile);
 bool	Style_CanOpenFile(LPCWSTR lpszFile);
 void	Style_SetLexerFromID(int rid);
 int		Style_GetMatchLexerIndex(int rid);
@@ -121,3 +120,4 @@ void	Style_SetStyles(int iStyle, LPCWSTR lpszStyle);
 int 	Style_GetLexerIconId(LPCEDITLEXER pLex, DWORD iconFlags);
 void	Style_ConfigDlg(HWND hwnd);
 void	Style_SelectLexerDlg(HWND hwnd, bool favorite);
+bool	SelectCSVOptionsDlg(void);

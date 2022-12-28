@@ -27,7 +27,7 @@
 									STRINGIFY(VERSION_BUILD) "." STRINGIFY(VERSION_REV)
 #define VERSION_LEGALCOPYRIGHT		L"\xA9 2004-2022 Florian Balmer and all contributors"
 #define VERSION_COMPANYNAME			L"Florian Balmer et al."
-#define VERSION_WEBPAGE_DISPLAY		L"flo's freeware - http://www.flos-freeware.ch"
+#define VERSION_WEBPAGE_DISPLAY		L"flo's freeware - https://www.flos-freeware.ch"
 #define VERSION_EMAIL_DISPLAY		L"florian.balmer@gmail.com"
 #define VERSION_MODPAGE_DISPLAY		L"https://xhmikosr.github.io/notepad2-mod/"
 #define VERSION_NEWPAGE_DISPLAY		L"https://github.com/zufuliu/notepad2"
@@ -39,7 +39,7 @@
 #define HELP_LINK_FEATURE_REQUEST	L"https://github.com/zufuliu/notepad2/issues"
 #define HELP_LINK_ONLINE_WIKI		L"https://github.com/zufuliu/notepad2/wiki"
 
-#define VERSION_BUILD_INFO_LIB		L",\nScintilla 5.3.1."
+#define VERSION_BUILD_INFO_LIB		L",\nScintilla 5.3.2."
 #define VERSION_BUILD_INFO_FORMAT	L"Compiled on " __DATE__ L" with %s %d.%d.%d" VERSION_BUILD_INFO_LIB
 #if defined(__clang__)
 #define VERSION_BUILD_TOOL_NAME		L"Clang"

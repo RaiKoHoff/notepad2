@@ -13,7 +13,7 @@
 *
 *                                              (c) Florian Balmer 1996-2011
 *                                                  florian.balmer@gmail.com
-*                                               http://www.flos-freeware.ch
+*                                              https://www.flos-freeware.ch
 *
 *
 ******************************************************************************/
@@ -76,6 +76,7 @@ extern EDITLEXER lexCIL;
 extern EDITLEXER lexCMake;
 extern EDITLEXER lexCoffeeScript;
 extern EDITLEXER lexConfig;
+extern EDITLEXER lexCSV;
 
 extern EDITLEXER lexDLang;
 extern EDITLEXER lexDart;
@@ -179,6 +180,7 @@ static PEDITLEXER pLexArray[] = {
 	&lexCMake,
 	&lexCoffeeScript,
 	&lexConfig,
+	&lexCSV,
 
 	&lexDLang,
 	&lexDart,
@@ -271,7 +273,10 @@ static WCHAR favoriteSchemesConfig[MAX_FAVORITE_SCHEMES_CONFIG_SIZE];
 static PEDITLEXER pLexGlobal = &lexGlobal;
 PEDITLEXER pLexCurrent = &lexTextFile;
 int np2LexLangIndex = 0;
+static int iCsvOption = ('\"' << 8) | ',';
 
+#define CsvOption_BackslashEscape	(1 << 15)
+#define CsvOption_MergeDelimiter	(1 << 16)
 #define LexerChanged_Override		2
 
 #define STYLESMODIFIED_NONE			0
@@ -485,8 +490,6 @@ static inline UINT GetLexerStyleControlMask(int rid, int index) {
 	case NP2LEX_GLOBAL:
 	case NP2LEX_2NDGLOBAL:
 		switch (index) {
-		case GlobalStyleIndex_ControlCharacter:
-			return StyleControl_Font;
 		case GlobalStyleIndex_IndentationGuide:
 		case GlobalStyleIndex_Whitespace:
 		case GlobalStyleIndex_CurrentLine:
@@ -544,8 +547,7 @@ static inline void FindSystemDefaultTextFont(void) {
 	GetThemedDialogFont(systemTextFontName, &wSize);
 }
 
-void Style_DetectBaseFontSize(HWND hwnd) {
-	HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+void Style_DetectBaseFontSize(HMONITOR hMonitor) {
 	MONITORINFO mi;
 	mi.cbSize = sizeof(mi);
 	GetMonitorInfo(hMonitor, &mi);
@@ -738,7 +740,9 @@ static int __cdecl CmpEditLexerByOrder(const void *p1, const void *p2) {
 	// TODO: sort by localized name
 #if NP2_ENABLE_LOCALIZE_LEXER_NAME
 #endif
-	cmp = cmp ? cmp : StrCmpIW(pLex1->pszName, pLex2->pszName);
+	if (cmp == 0) {
+		cmp = StrCmpIW(pLex1->pszName, pLex2->pszName);
+	}
 	return cmp;
 }
 
@@ -1424,6 +1428,10 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 			dialect = np2LexLangIndex - IDM_LEXER_CSS;
 		} break;
 
+		case NP2LEX_CSV:
+			dialect = iCsvOption;
+			break;
+
 		case NP2LEX_JAVASCRIPT:
 		case NP2LEX_TYPESCRIPT: {
 			LPCWSTR lpszExt = PathFindExtension(szCurFile);
@@ -1450,8 +1458,11 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 			break;
 		}
 		if (dialect > 0) {
-			char lang[2] = "";
-			lang[0] = (char)(dialect + '0');
+			char lang[4];
+			if (dialect < 10) {
+				dialect += '0';
+			}
+			memcpy(lang, &dialect, sizeof(int));
 			SciCall_SetProperty("lexer.lang", lang);
 		}
 
@@ -1717,8 +1728,8 @@ void Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged) {
 	}
 
 	// other lexer styles
+	Style_SetDefaultStyle(GlobalStyleIndex_ControlCharacter);
 	if (rid != NP2LEX_ANSI) {
-		Style_SetDefaultStyle(GlobalStyleIndex_ControlCharacter);
 		Style_SetAllStyle(pLexNew, 0);
 
 		switch (rid) {
@@ -2613,7 +2624,9 @@ bool Style_SetLexerFromFile(LPCWSTR lpszFile) {
 				// some conf/cfg file is xml
 				pLexNew = &lexXML;
 			} else if (!pLexNew) {
-				if (StrStartsWithCase(p, "<!DOCTYPE")) {
+				if (StrStartsWith(p, "<?php")) {
+					pLexNew = &lexPHP;
+				} else if (StrStartsWithCase(p, "<!DOCTYPE")) {
 					pLexNew = &lexXML;
 				} else if (StrStartsWithCase(p, "<html")) {
 					pLexNew = &lexHTML;
@@ -2725,43 +2738,9 @@ bool Style_CanOpenFile(LPCWSTR lpszFile) {
 	return pLexNew != NULL || StrIsEmpty(lpszExt) || bDotFile || StrCaseEqual(lpszExt, L"cgi") || StrCaseEqual(lpszExt, L"fcgi");
 }
 
-static inline bool IsC0ControlChar(uint8_t ch) {
-#if 1
-	return ch < 32 && ((uint8_t)(ch - 0x09)) > (0x0d - 0x09);
-#else
-	// exclude whitespace and separator
-	return ch < 0x1c && ((uint8_t)(ch - 0x09)) > (0x0d - 0x09);
-#endif
-}
 
+#if 0
 bool Style_MaybeBinaryFile(LPCWSTR lpszFile) {
-#if 1
-	UNREFERENCED_PARAMETER(lpszFile);
-	/* Test C0 Control Character
-	These characters are not reused in most text encodings, and do not appear in normal text files.
-	Most binary files have reserved fields (mostly zeros) or small values in the header.
-	Treat the file as binary when we find two adjacent C0 control characters
-	(very common in file header) or some (currently set to 8) C0 control characters. */
-
-	const Sci_Position headerLen = min_pos(1023, SciCall_GetLength() - 1);
-	const uint8_t *ptr = (const uint8_t *)SciCall_GetRangePointer(0, headerLen + 1);
-	if (ptr == NULL || headerLen <= 0) {
-		return false; // empty file
-	}
-
-	const uint8_t * const end = ptr + headerLen;
-	UINT count = 0;
-	while (ptr < end) {
-		uint8_t ch = *ptr++;
-		if (IsC0ControlChar(ch)) {
-			++count;
-			ch = *ptr++;
-			if ((count >= 8) || IsC0ControlChar(ch)) {
-				return true;
-			}
-		}
-	}
-#else
 	uint8_t buf[5] = {0}; // file magic
 	SciCall_GetText(COUNTOF(buf) - 1, buf);
 	const UINT magic2 = (buf[0] << 8) | buf[1];
@@ -2816,14 +2795,15 @@ bool Style_MaybeBinaryFile(LPCWSTR lpszFile) {
 			L" ", wch);
 		return lpszMatch != NULL;
 	}
-#endif
 	return false;
 }
+#endif
 
 void Style_SetLexerByLangIndex(int lang) {
 	const int langIndex = np2LexLangIndex;
 	PEDITLEXER pLex = NULL;
 	np2LexLangIndex = lang;
+	bool bLexerChanged = false;
 
 	switch (lang) {
 	// Text File
@@ -2831,14 +2811,23 @@ void Style_SetLexerByLangIndex(int lang) {
 		np2LexLangIndex = 0;
 		pLex = &lexTextFile;
 		break;
-
 	case IDM_LEXER_2NDTEXTFILE:
 		np2LexLangIndex = 0;
 		pLex = &lex2ndTextFile;
 		break;
 
-	case IDM_LEXER_APACHE:
-		pLex = &lexConfig;
+	case IDM_LEXER_CSV:
+		np2LexLangIndex = 0;
+		pLex = &lexCSV;
+		bLexerChanged = SelectCSVOptionsDlg();
+		break;
+
+	// CSS Style Sheet
+	case IDM_LEXER_CSS:
+	case IDM_LEXER_SCSS:
+	case IDM_LEXER_LESS:
+	case IDM_LEXER_HSS:
+		pLex = &lexCSS;
 		break;
 
 	// Web Source Code
@@ -2855,6 +2844,27 @@ void Style_SetLexerByLangIndex(int lang) {
 		break;
 	case IDM_LEXER_PHP:
 		pLex = &lexPHP;
+		break;
+
+	// Markdown
+	case IDM_LEXER_MARKDOWN_GITHUB:
+	case IDM_LEXER_MARKDOWN_GITLAB:
+	case IDM_LEXER_MARKDOWN_PANDOC:
+		pLex = &lexMarkdown;
+		break;
+
+	// Math
+	case IDM_LEXER_MATLAB:
+	case IDM_LEXER_OCTAVE:
+	case IDM_LEXER_SCILAB:
+		pLex = &lexMatlab;
+		break;
+
+	// Shell Script
+	case IDM_LEXER_BASH:
+	case IDM_LEXER_CSHELL:
+	case IDM_LEXER_M4:
+		pLex = &lexBash;
 		break;
 
 	// XML Document
@@ -2893,39 +2903,13 @@ void Style_SetLexerByLangIndex(int lang) {
 		pLex = &lexXML;
 		break;
 
-	// Shell Script
-	case IDM_LEXER_BASH:
-	case IDM_LEXER_CSHELL:
-	case IDM_LEXER_M4:
-		pLex = &lexBash;
-		break;
-
-	// Markdown
-	case IDM_LEXER_MARKDOWN_GITHUB:
-	case IDM_LEXER_MARKDOWN_GITLAB:
-	case IDM_LEXER_MARKDOWN_PANDOC:
-		pLex = &lexMarkdown;
-		break;
-
-	// Math
-	case IDM_LEXER_MATLAB:
-	case IDM_LEXER_OCTAVE:
-	case IDM_LEXER_SCILAB:
-		pLex = &lexMatlab;
-		break;
-
-	// CSS Style Sheet
-	case IDM_LEXER_CSS:
-	case IDM_LEXER_SCSS:
-	case IDM_LEXER_LESS:
-	case IDM_LEXER_HSS:
-		pLex = &lexCSS;
+	case IDM_LEXER_APACHE:
+		pLex = &lexConfig;
 		break;
 	}
 	if (pLex != NULL) {
-		const bool bLexerChanged = pLex != pLexCurrent || langIndex != np2LexLangIndex;
-		if (bLexerChanged) {
-			Style_SetLexer(pLex, true);
+		if (bLexerChanged || pLex != pLexCurrent || langIndex != np2LexLangIndex) {
+			Style_SetLexer(pLex, (pLex != pLexCurrent) + true);
 		}
 	}
 }
@@ -2933,25 +2917,28 @@ void Style_SetLexerByLangIndex(int lang) {
 void Style_UpdateSchemeMenu(HMENU hmenu) {
 	int lang = np2LexLangIndex;
 	if (lang == 0) {
+		bool update = true;
 		switch (pLexCurrent->rid) {
 		// Text File
 		case NP2LEX_TEXTFILE:
+			update = false;
 			lang = IDM_LEXER_TEXTFILE;
 			break;
 		case NP2LEX_2NDTEXTFILE:
+			update = false;
 			lang = IDM_LEXER_2NDTEXTFILE;
+			break;
+		case NP2LEX_CSV:
+			update = false;
+			lang = IDM_LEXER_CSV;
+			break;
+		// CSS Style Sheet
+		case NP2LEX_CSS:
+			lang = IDM_LEXER_CSS;
 			break;
 		// Web Source Code
 		case NP2LEX_HTML:
 			lang = IDM_LEXER_WEB;
-			break;
-		// XML Document
-		case NP2LEX_XML:
-			lang = IDM_LEXER_XML;
-			break;
-		// Shell Script
-		case NP2LEX_BASH:
-			lang = IDM_LEXER_BASH;
 			break;
 		// Markdown
 		case NP2LEX_MARKDOWN:
@@ -2967,15 +2954,18 @@ void Style_UpdateSchemeMenu(HMENU hmenu) {
 		case NP2LEX_SCILAB:
 			lang = IDM_LEXER_SCILAB;
 			break;
-		// CSS Style Sheet
-		case NP2LEX_CSS:
-			lang = IDM_LEXER_CSS;
+		// Shell Script
+		case NP2LEX_BASH:
+			lang = IDM_LEXER_BASH;
+			break;
+		// XML Document
+		case NP2LEX_XML:
+			lang = IDM_LEXER_XML;
 			break;
 		}
-		np2LexLangIndex = lang;
-	}
-	if (lang == IDM_LEXER_TEXTFILE || lang == NP2LEX_2NDTEXTFILE) {
-		np2LexLangIndex = 0;
+		if (update) {
+			np2LexLangIndex = lang;
+		}
 	}
 	for (int i = IDM_LEXER_TEXTFILE; i < IDM_LEXER_LAST_LEXER; i++) {
 		CheckCmd(hmenu, i, FALSE);
@@ -5209,13 +5199,113 @@ void Style_SelectLexerDlg(HWND hwnd, bool favorite) {
 	const LPCEDITLEXER pLex = pLexCurrent;
 	const int langIndex = np2LexLangIndex;
 	if (IDOK == ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_STYLESELECT), GetParent(hwnd), Style_SelectLexerDlgProc, favorite)) {
-		const bool bLexerChanged = !favorite && (pLex != pLexCurrent || langIndex != np2LexLangIndex);
-		if (bLexerChanged) {
-			Style_SetLexer(pLexCurrent, LexerChanged_Override);
+		if (!favorite && (pLex != pLexCurrent || langIndex != np2LexLangIndex)) {
+			if (pLexCurrent->iLexer == SCLEX_CSV) {
+				SelectCSVOptionsDlg();
+			}
+			Style_SetLexer(pLexCurrent, (pLex != pLexCurrent) + true);
 		}
 	} else {
 		if (favorite) {
 			Style_SetFavoriteSchemes();
 		}
 	}
+}
+
+static INT_PTR CALLBACK SelectCSVOptionsDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) {
+	UNREFERENCED_PARAMETER(lParam);
+	switch (umsg) {
+	case WM_INITDIALOG: {
+		const uint32_t option = iCsvOption;
+		const uint8_t delimiter = option & 0xff;
+		const uint8_t qualifier = (option >> 8) & 0x7f;
+		int index = IDC_CSV_DELIMITER_COMMA;
+		if (delimiter != ',') {
+			uint32_t mask = ('\t' << ((IDC_CSV_DELIMITER_TAB - IDC_CSV_DELIMITER_COMMA - 1)*8))
+				| (' ' << ((IDC_CSV_DELIMITER_SPACE - IDC_CSV_DELIMITER_COMMA - 1)*8))
+				| (';' << ((IDC_CSV_DELIMITER_SEMICOLON - IDC_CSV_DELIMITER_COMMA - 1)*8))
+				| ('|' << ((IDC_CSV_DELIMITER_PIPE - IDC_CSV_DELIMITER_COMMA - 1)*8));
+			do {
+				++index;
+				if ((mask & 0xff) == delimiter) {
+					break;
+				}
+				mask >>= 8;
+			} while (mask);
+			if (mask == 0) {
+				++index;
+				const WCHAR tch[2] = {delimiter, L'\0'};
+				SetDlgItemText(hwnd, IDC_CSV_DELIMITER_OTHER_TEXT, tch);
+			}
+		}
+
+		CheckRadioButton(hwnd, IDC_CSV_DELIMITER_COMMA, IDC_CSV_DELIMITER_OTHER, index);
+		SendWMCommand(hwnd, index);
+		index = (qualifier == 0) ? IDC_CSV_QUALIFIER_NONE : (IDC_CSV_QUALIFIER_DOUBLE + (qualifier & 1));
+		if (qualifier == 0 || (option & CsvOption_BackslashEscape) != 0) {
+			CheckDlgButton(hwnd, IDC_CSV_BACKSLASH_ESCAPE, BST_CHECKED);
+		}
+		CheckRadioButton(hwnd, IDC_CSV_QUALIFIER_DOUBLE, IDC_CSV_QUALIFIER_NONE, index);
+		if (option & CsvOption_MergeDelimiter) {
+			CheckDlgButton(hwnd, IDC_CSV_MERGE_DELIMITER, BST_CHECKED);
+		}
+		CenterDlgInParent(hwnd);
+	}
+	return TRUE;
+
+	case WM_COMMAND:
+		switch (LOWORD(wParam)) {
+		case IDOK: {
+			int index = GetCheckedRadioButton(hwnd, IDC_CSV_DELIMITER_COMMA, IDC_CSV_DELIMITER_OTHER);
+			int option = ',';
+			if (index == IDC_CSV_DELIMITER_OTHER) {
+				WCHAR tch[2] = L"";
+				GetDlgItemText(hwnd, IDC_CSV_DELIMITER_OTHER_TEXT, tch, COUNTOF(tch));
+				const WCHAR ch = tch[0];
+				if (ch > ' ' && ch < 0x7f) {
+					option = ch;
+				}
+			} else if (index > IDC_CSV_DELIMITER_COMMA) {
+				const uint32_t mask = ('\t' << ((IDC_CSV_DELIMITER_TAB - IDC_CSV_DELIMITER_COMMA - 1)*8))
+					| (' ' << ((IDC_CSV_DELIMITER_SPACE - IDC_CSV_DELIMITER_COMMA - 1)*8))
+					| (';' << ((IDC_CSV_DELIMITER_SEMICOLON - IDC_CSV_DELIMITER_COMMA - 1)*8))
+					| ('|' << ((IDC_CSV_DELIMITER_PIPE - IDC_CSV_DELIMITER_COMMA - 1)*8));
+				option = (mask >> ((index - IDC_CSV_DELIMITER_COMMA - 1)*8)) & 0xff;
+			}
+
+			index = GetCheckedRadioButton(hwnd, IDC_CSV_QUALIFIER_DOUBLE, IDC_CSV_QUALIFIER_NONE);
+			uint32_t qualifier = ('\"' | ('\'' << 8)) << 8;
+			qualifier = (qualifier >> (index - IDC_CSV_QUALIFIER_DOUBLE)*8) & 0xff00;
+			option |= qualifier;
+			if (qualifier == 0 || IsButtonChecked(hwnd, IDC_CSV_BACKSLASH_ESCAPE)) {
+				option |= CsvOption_BackslashEscape;
+			}
+			if (IsButtonChecked(hwnd, IDC_CSV_MERGE_DELIMITER)) {
+				option |= CsvOption_MergeDelimiter;
+			}
+			index = iCsvOption;
+			iCsvOption = option;
+			EndDialog(hwnd, (index == option) ? IDCANCEL : IDOK);
+		} break;
+
+		case IDCANCEL:
+			EndDialog(hwnd, IDCANCEL);
+			break;
+
+		default:
+			if (LOWORD(wParam) == IDC_CSV_QUALIFIER_NONE) {
+				CheckDlgButton(hwnd, IDC_CSV_BACKSLASH_ESCAPE, BST_CHECKED);
+			} else if (LOWORD(wParam) >= IDC_CSV_DELIMITER_COMMA && LOWORD(wParam) <= IDC_CSV_DELIMITER_OTHER) {
+				EnableWindow(GetDlgItem(hwnd, IDC_CSV_DELIMITER_OTHER_TEXT), (LOWORD(wParam) == IDC_CSV_DELIMITER_OTHER));
+			}
+			break;
+		}
+		return TRUE;
+	}
+	return FALSE;
+}
+
+bool SelectCSVOptionsDlg(void) {
+	const INT_PTR iResult = ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_CSV_OPTIONS), hwndMain, SelectCSVOptionsDlgProc, 0);
+	return iResult == IDOK;
 }
