@@ -670,6 +670,9 @@ get CaseVisible StyleGetCase=2489(int style,)
 # Get the character get of the font in a style.
 get CharacterSet StyleGetCharacterSet=2490(int style,)
 
+# Get is a style strike or not.
+get bool StyleGetStrike=2283(int style,)
+
 # Get is a style visible or not.
 get bool StyleGetVisible=2491(int style,)
 
@@ -3221,7 +3224,7 @@ get int GetProperty=4008(string key, stringresult value)
 # Retrieve a "property" value previously set with SetProperty,
 # with "$()" variable replacement on returned buffer.
 # Result is NUL-terminated.
-get int GetPropertyExpanded=4009(string key, stringresult value)
+#get int GetPropertyExpanded=4009(string key, stringresult value)
 
 # Retrieve a "property" value previously set with SetProperty,
 # interpreted as an int AFTER any "$()" variable replacement.

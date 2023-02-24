@@ -38,8 +38,13 @@ IDR_RT_MANIFEST         RT_MANIFEST             "..\\..\\metapath\\res\\metapath
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
+#if NP2_ENABLE_HIDPI_IMAGE_RESOURCE
 IDR_MAINWND             ICON                    "..\\..\\metapath\\res\\metapath.ico"
 IDI_RUN                 ICON                    "..\\..\\metapath\\res\\Run.ico"
+#else
+IDR_MAINWND             ICON                    "..\\..\\metapath\\res\\metapath_min.ico"
+IDI_RUN                 ICON                    "..\\..\\metapath\\res\\Run_min.ico"
+#endif
 IDI_PROGS               ICON                    "..\\..\\metapath\\res\\Progs.ico"
 IDI_OPTIONS             ICON                    "..\\..\\metapath\\res\\Options.ico"
 IDI_OPTIONS2            ICON                    "..\\..\\metapath\\res\\Options2.ico"
@@ -48,13 +53,26 @@ IDI_ITEMS               ICON                    "..\\..\\metapath\\res\\Items.ic
 IDI_CROSS1              ICON                    "..\\..\\metapath\\res\\cross1.ico"
 IDI_CROSS2              ICON                    "..\\..\\metapath\\res\\cross2.ico"
 
+#if !NP2_ENABLE_APP_LOCALIZATION_DLL
 /////////////////////////////////////////////////////////////////////////////
 //
 // Bitmap
 //
 
-IDR_MAINWND             BITMAP                  "..\\..\\metapath\\res\\Toolbar.bmp"
-IDB_OPEN_FOLDER         BITMAP                  "..\\..\\metapath\\res\\OpenFolder.bmp"
+IDB_TOOLBAR16           BITMAP                  "..\\..\\metapath\\res\\Toolbar16.bmp"
+IDB_OPEN_FOLDER16       BITMAP                  "..\\..\\metapath\\res\\OpenFolder16.bmp"
+
+#if NP2_ENABLE_HIDPI_IMAGE_RESOURCE
+IDB_TOOLBAR24           BITMAP                  "..\\..\\metapath\\res\\Toolbar24.bmp"
+IDB_TOOLBAR32           BITMAP                  "..\\..\\metapath\\res\\Toolbar32.bmp"
+IDB_TOOLBAR40           BITMAP                  "..\\..\\metapath\\res\\Toolbar40.bmp"
+IDB_TOOLBAR48           BITMAP                  "..\\..\\metapath\\res\\Toolbar48.bmp"
+
+IDB_OPEN_FOLDER24       BITMAP                  "..\\..\\metapath\\res\\OpenFolder24.bmp"
+IDB_OPEN_FOLDER32       BITMAP                  "..\\..\\metapath\\res\\OpenFolder32.bmp"
+IDB_OPEN_FOLDER40       BITMAP                  "..\\..\\metapath\\res\\OpenFolder40.bmp"
+IDB_OPEN_FOLDER48       BITMAP                  "..\\..\\metapath\\res\\OpenFolder48.bmp"
+#endif // NP2_ENABLE_HIDPI_IMAGE_RESOURCE
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -62,6 +80,7 @@ IDB_OPEN_FOLDER         BITMAP                  "..\\..\\metapath\\res\\OpenFold
 //
 
 IDC_CROSSHAIR           CURSOR                  "..\\..\\metapath\\res\\crosshair.cur"
+#endif // NP2_ENABLE_HIDPI_IMAGE_RESOURCE
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -137,6 +156,7 @@ BEGIN
 	BEGIN
 		MENUITEM "显示工具栏(&T)",				IDM_VIEW_TOOLBAR
 		MENUITEM "自定义工具栏(&C)...",			IDM_VIEW_CUSTOMIZETB
+		MENUITEM "工具栏比例自适应(&A)",			IDM_VIEW_AUTO_SCALE_TOOLBAR
 		MENUITEM "显示状态栏(&S)",				IDM_VIEW_STATUSBAR
 	END
 	POPUP "+"
@@ -231,7 +251,7 @@ BEGIN
     LTEXT           "版权所有 © 1996-2012 Florian Balmer.",IDC_STATIC,45,30,200,8
     LTEXT           "",IDC_WEBPAGE_TEXT,45,40,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_WEBPAGE_LINK,"SysLink",WS_TABSTOP,45,40,200,10
-    LTEXT           "版权所有 © 2011-2022 Zufu Liu 和所有贡献者.",IDC_STATIC,45,52,200,8
+    LTEXT           "版权所有 © 2011-2023 Zufu Liu 和所有贡献者.",IDC_STATIC,45,52,200,8
     LTEXT           "",IDC_NEW_PAGE_TEXT,45,60,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_NEW_PAGE_LINK,"SysLink",WS_TABSTOP,45,60,200,10
     LTEXT           "联系 Florian Balmer:",IDC_STATIC,45,72,94,8

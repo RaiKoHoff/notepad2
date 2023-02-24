@@ -70,6 +70,8 @@ static TBBUTTON tbbMainWnd[] = {
 static HWND hwndDriveBox;
 HWND	hwndDirList;
 HWND	hwndMain;
+static HICON hTrayIcon = NULL;
+static UINT uTrayIconDPI = 0;
 
 static HANDLE hChangeHandle = NULL;
 HISTORY	mHistory;
@@ -105,6 +107,7 @@ bool	bMinimizeToTray;
 bool	fUseRecycleBin;
 bool	fNoConfirmDelete;
 static bool bShowToolbar;
+static bool bAutoScaleToolbar;
 static bool bShowStatusbar;
 static bool bShowDriveBox;
 int		cxRunDlg;
@@ -164,11 +167,37 @@ WCHAR	szDDEApp[256] = L"";
 WCHAR	szDDETopic[256] = L"";
 
 HINSTANCE	g_hInstance;
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+HINSTANCE	g_exeInstance;
+#endif
 HANDLE		g_hDefaultHeap;
 #if _WIN32_WINNT < _WIN32_WINNT_VISTA
 DWORD		g_uWinVer;
 #endif
+UINT		g_uCurrentDPI = USER_DEFAULT_SCREEN_DPI;
 UINT		g_uSystemDPI = USER_DEFAULT_SCREEN_DPI;
+#if !NP2_HAS_GETDPIFORWINDOW
+// scintilla\win32\PlatWin.cxx
+typedef UINT (WINAPI *GetDpiForWindowSig)(HWND hwnd);
+static GetDpiForWindowSig fnGetDpiForWindow = NULL;
+
+#ifndef DPI_ENUMS_DECLARED
+#define MDT_EFFECTIVE_DPI	0
+#endif
+
+typedef HRESULT (WINAPI *GetDpiForMonitorSig)(HMONITOR hmonitor, /*MONITOR_DPI_TYPE*/int dpiType, UINT *dpiX, UINT *dpiY);
+static HMODULE hShcoreDLL = NULL;
+static GetDpiForMonitorSig fnGetDpiForMonitor = NULL;
+
+typedef int (WINAPI *GetSystemMetricsForDpiSig)(int nIndex, UINT dpi);
+static GetSystemMetricsForDpiSig fnGetSystemMetricsForDpi = NULL;
+
+typedef BOOL (WINAPI *AdjustWindowRectExForDpiSig)(LPRECT lpRect, DWORD dwStyle, BOOL bMenu, DWORD dwExStyle, UINT dpi);
+static AdjustWindowRectExForDpiSig fnAdjustWindowRectExForDpi = NULL;
+
+static void LoadDpiForWindow(void) NP2_noexcept;
+#endif // NP2_HAS_GETDPIFORWINDOW
+
 WCHAR g_wchAppUserModelID[64] = L"";
 #if NP2_ENABLE_APP_LOCALIZATION_DLL
 static HMODULE hResDLL;
@@ -209,12 +238,20 @@ static void CleanUpResources(bool initialized) {
 	if (tchToolbarBitmapDisabled != NULL) {
 		LocalFree(tchToolbarBitmapDisabled);
 	}
+	if (hTrayIcon) {
+		DestroyIcon(hTrayIcon);
+	}
 	if (initialized) {
 		UnregisterClass(WC_METAPATH, g_hInstance);
 	}
 #if NP2_ENABLE_APP_LOCALIZATION_DLL
 	if (hResDLL) {
 		FreeLibrary(hResDLL);
+	}
+#endif
+#if !NP2_HAS_GETDPIFORWINDOW
+	if (hShcoreDLL) {
+		FreeLibrary(hShcoreDLL);
 	}
 #endif
 	OleUninitialize();
@@ -246,6 +283,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 
 	// Set global variable g_hInstance
 	g_hInstance = hInstance;
+#if NP2_ENABLE_APP_LOCALIZATION_DLL
+	g_exeInstance = hInstance;
+#endif
 #if _WIN32_WINNT < _WIN32_WINNT_VISTA
 	// Set the Windows version global variable
 	NP2_COMPILER_WARNING_PUSH
@@ -294,15 +334,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 // 1709 was the first version for Windows 10 on ARM64.
 	g_uSystemDPI = GetDpiForSystem();
 #else
-	typedef UINT (WINAPI *GetDpiForSystemSig)(void);
-	GetDpiForSystemSig pfnGetDpiForSystem = DLLFunctionEx(GetDpiForSystemSig, L"user32.dll", "GetDpiForSystem");
-	if (pfnGetDpiForSystem) {
-		g_uSystemDPI = pfnGetDpiForSystem();
-	} else {
-		HDC hDC = GetDC(NULL);
-		g_uSystemDPI = GetDeviceCaps(hDC, LOGPIXELSY);
-		ReleaseDC(NULL, hDC);
-	}
+	LoadDpiForWindow();
 #endif
 
 	// Load Settings
@@ -343,7 +375,7 @@ BOOL InitApplication(HINSTANCE hInstance) {
 	wc.cbWndExtra    = 0;
 	wc.hInstance     = hInstance;
 	wc.hIcon         = LoadIcon(hInstance, MAKEINTRESOURCE(IDR_MAINWND));
-	wc.hCursor       = LoadCursor(hInstance, IDC_ARROW);
+	wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
 	wc.hbrBackground = (HBRUSH)(COLOR_3DFACE + 1);
 	wc.lpszMenuName  = NULL;
 	wc.lpszClassName = WC_METAPATH;
@@ -508,6 +540,10 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 	// Reinitialize theme-dependent values and resize windows
 	case WM_THEMECHANGED:
 		MsgThemeChanged(hwnd, wParam, lParam);
+		break;
+
+	case WM_DPICHANGED:
+		MsgDPIChanged(hwnd, wParam, lParam);
 		break;
 
 	// update colors of DirList manually
@@ -757,6 +793,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	UNREFERENCED_PARAMETER(wParam);
 	hwndMain = hwnd;
+	g_uCurrentDPI = GetWindowDPI(hwnd);
 	HINSTANCE hInstance = ((LPCREATESTRUCT)lParam)->hInstance;
 	hwndDirList = CreateWindowEx(
 					  WS_EX_CLIENTEDGE,
@@ -875,8 +912,11 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 	if (hbmp != NULL) {
 		bExternalBitmap = true;
 	} else {
-		hbmp = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(IDR_MAINWND), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
-		hbmpCopy = (HBITMAP)CopyImage(hbmp, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
+		const int resource = GetBitmapResourceIdForCurrentDPI(IDB_TOOLBAR16);
+		hbmp = (HBITMAP)LoadImage(g_exeInstance, MAKEINTRESOURCE(resource), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
+	}
+	if (bAutoScaleToolbar) {
+		hbmp = ResizeImageForCurrentDPI(hbmp);
 	}
 
 	BITMAP bmp;
@@ -891,6 +931,9 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 	if (tchToolbarBitmapHot != NULL) {
 		hbmp = LoadBitmapFile(tchToolbarBitmapHot);
 		if (hbmp != NULL) {
+			if (bAutoScaleToolbar) {
+				hbmp = ResizeImageForCurrentDPI(hbmp);
+			}
 			GetObject(hbmp, sizeof(BITMAP), &bmp);
 			himl = ImageList_Create(bmp.bmHeight, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 0, 0);
 			ImageList_AddMasked(himl, hbmp, CLR_DEFAULT);
@@ -903,6 +946,9 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 	if (tchToolbarBitmapDisabled != NULL) {
 		hbmp = LoadBitmapFile(tchToolbarBitmapDisabled);
 		if (hbmp != NULL) {
+			if (bAutoScaleToolbar) {
+				hbmp = ResizeImageForCurrentDPI(hbmp);
+			}
 			GetObject(hbmp, sizeof(BITMAP), &bmp);
 			himl = ImageList_Create(bmp.bmHeight, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 0, 0);
 			ImageList_AddMasked(himl, hbmp, CLR_DEFAULT);
@@ -1006,6 +1052,41 @@ void CreateBars(HWND hwnd, HINSTANCE hInstance) {
 	cyDriveBoxFrame = bIsAppThemed ? 0 : 2;
 }
 
+void RecreateBars(HWND hwnd, HINSTANCE hInstance) {
+	Toolbar_GetButtons(hwndToolbar, TOOLBAR_COMMAND_BASE, tchToolbarButtons, COUNTOF(tchToolbarButtons));
+
+	DestroyWindow(hwndToolbar);
+	DestroyWindow(hwndReBar);
+	DestroyWindow(hwndStatus);
+	CreateBars(hwnd, hInstance);
+}
+
+//=============================================================================
+//
+// MsgDPIChanged() - Handle WM_DPICHANGED
+//
+//
+void MsgDPIChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) {
+	g_uCurrentDPI = HIWORD(wParam);
+	const RECT* const rc = (RECT *)lParam;
+
+	// recreate toolbar and statusbar
+	WCHAR chStatus[255];
+	SendMessage(hwndStatus, SB_GETTEXT, ID_FILEINFO, (LPARAM)chStatus);
+	RecreateBars(hwnd, g_hInstance);
+
+	const int cx = rc->right - rc->left;
+	const int cy = rc->bottom - rc->top;
+	SetWindowPos(hwnd, NULL, rc->left, rc->top, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
+	if (bShowToolbar) {
+		// on Window 8.1 when move Notepad2 to another monitor with same scaling settings
+		// WM_DPICHANGED is sent with same DPI, and WM_SIZE is not sent after WM_DPICHANGED.
+		SetWindowPos(hwndReBar, NULL, 0, 0, cx, cyReBar, SWP_NOZORDER);
+	}
+
+	StatusSetText(hwndStatus, ID_FILEINFO, chStatus);
+}
+
 //=============================================================================
 //
 //  MsgThemeChanged() - Handles WM_THEMECHANGED
@@ -1033,19 +1114,11 @@ void MsgThemeChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 	// recreate toolbar and statusbar
 	WCHAR chStatus[255];
 	SendMessage(hwndStatus, SB_GETTEXT, ID_FILEINFO, (LPARAM)chStatus);
-
-	// recreate toolbar and statusbar
-	Toolbar_GetButtons(hwndToolbar, TOOLBAR_COMMAND_BASE, tchToolbarButtons, COUNTOF(tchToolbarButtons));
-
-	DestroyWindow(hwndToolbar);
-	DestroyWindow(hwndReBar);
-	DestroyWindow(hwndStatus);
-	CreateBars(hwnd, hInstance);
+	RecreateBars(hwnd, hInstance);
 
 	RECT rc;
 	GetClientRect(hwnd, &rc);
 	SendMessage(hwnd, WM_SIZE, SIZE_RESTORED, MAKELPARAM(rc.right, rc.bottom));
-
 	StatusSetText(hwndStatus, ID_FILEINFO, chStatus);
 }
 
@@ -1149,6 +1222,7 @@ void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	CheckCmd(hmenu, IDM_VIEW_TOOLBAR, bShowToolbar);
 	EnableCmd(hmenu, IDM_VIEW_CUSTOMIZETB, bShowToolbar);
+	CheckCmd(hmenu, IDM_VIEW_AUTO_SCALE_TOOLBAR, bAutoScaleToolbar);
 	CheckCmd(hmenu, IDM_VIEW_STATUSBAR, bShowStatusbar);
 	CheckCmd(hmenu, IDM_VIEW_DRIVEBOX, bShowDriveBox);
 
@@ -1689,6 +1763,11 @@ LRESULT MsgCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
 	case IDM_VIEW_CUSTOMIZETB:
 		SendMessage(hwndToolbar, TB_CUSTOMIZE, 0, 0);
+		break;
+
+	case IDM_VIEW_AUTO_SCALE_TOOLBAR:
+		bAutoScaleToolbar = !bAutoScaleToolbar;
+		MsgThemeChanged(hwnd, 0, 0);
 		break;
 
 	case IDM_VIEW_STATUSBAR:
@@ -2541,6 +2620,7 @@ void LoadSettings(void) {
 	}
 
 	bShowToolbar = IniSectionGetBool(pIniSection, L"ShowToolbar", true);
+	bAutoScaleToolbar = IniSectionGetBool(pIniSection, L"AutoScaleToolbar", true);
 	bShowStatusbar = IniSectionGetBool(pIniSection, L"ShowStatusbar", true);
 	bShowDriveBox = IniSectionGetBool(pIniSection, L"ShowDriveBox", true);
 
@@ -2717,6 +2797,7 @@ void SaveSettings(bool bSaveSettingsNow) {
 	Toolbar_GetButtons(hwndToolbar, TOOLBAR_COMMAND_BASE, tchToolbarButtons, COUNTOF(tchToolbarButtons));
 	IniSectionSetStringEx(pIniSection, L"ToolbarButtons", tchToolbarButtons, DefaultToolbarButtons);
 	IniSectionSetBoolEx(pIniSection, L"ShowToolbar", bShowToolbar, true);
+	IniSectionSetBoolEx(pIniSection, L"AutoScaleToolbar", bAutoScaleToolbar, true);
 	IniSectionSetBoolEx(pIniSection, L"ShowStatusbar", bShowStatusbar, true);
 	IniSectionSetBoolEx(pIniSection, L"ShowDriveBox", bShowDriveBox, true);
 
@@ -3477,9 +3558,18 @@ void GetRelaunchParameters(LPWSTR szParameters) {
 //
 //
 void ShowNotifyIcon(HWND hwnd, bool bAdd) {
-	static HICON hIcon;
-	if (!hIcon) {
-		hIcon = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(IDR_MAINWND), IMAGE_ICON, 16, 16, LR_DEFAULTCOLOR);
+	if (bAdd && (hTrayIcon == NULL || uTrayIconDPI != g_uCurrentDPI)) {
+		if (hTrayIcon) {
+			DestroyIcon(hTrayIcon);
+			hTrayIcon = NULL;
+		}
+		uTrayIconDPI = g_uCurrentDPI;
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+		LoadIconMetric(g_exeInstance, MAKEINTRESOURCE(IDR_MAINWND), LIM_SMALL, &hTrayIcon);
+#else
+		const int size = SystemMetricsForDpi(SM_CXSMICON, uTrayIconDPI);
+		hTrayIcon = (HICON)LoadImage(g_exeInstance, MAKEINTRESOURCE(IDR_MAINWND), IMAGE_ICON, size, size, LR_DEFAULTCOLOR);
+#endif
 	}
 
 	NOTIFYICONDATA nid;
@@ -3489,7 +3579,7 @@ void ShowNotifyIcon(HWND hwnd, bool bAdd) {
 	nid.uID = 0;
 	nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
 	nid.uCallbackMessage = APPM_TRAYMESSAGE;
-	nid.hIcon = hIcon;
+	nid.hIcon = hTrayIcon;
 	lstrcpy(nid.szTip, WC_METAPATH);
 	Shell_NotifyIcon(bAdd ? NIM_ADD : NIM_DELETE, &nid);
 }
@@ -3791,3 +3881,62 @@ void SnapToDefaultPos(HWND hwnd) {
 
 	SetWindowPlacement(hwnd, &wndpl);
 }
+
+#if !NP2_HAS_GETDPIFORWINDOW
+// scintilla\win32\PlatWin.cxx
+static void LoadDpiForWindow(void) NP2_noexcept {
+	HMODULE user32 = GetModuleHandleW(L"user32.dll");
+	fnGetDpiForWindow = DLLFunction(GetDpiForWindowSig, user32, "GetDpiForWindow");
+	fnGetSystemMetricsForDpi = DLLFunction(GetSystemMetricsForDpiSig, user32, "GetSystemMetricsForDpi");
+	fnAdjustWindowRectExForDpi = DLLFunction(AdjustWindowRectExForDpiSig, user32, "AdjustWindowRectExForDpi");
+
+	typedef UINT (WINAPI *GetDpiForSystemSig)(void);
+	GetDpiForSystemSig fnGetDpiForSystem = DLLFunction(GetDpiForSystemSig, user32, "GetDpiForSystem");
+	if (fnGetDpiForSystem) {
+		g_uSystemDPI = fnGetDpiForSystem();
+	} else {
+		HDC hDC = GetDC(NULL);
+		g_uSystemDPI = GetDeviceCaps(hDC, LOGPIXELSY);
+		ReleaseDC(NULL, hDC);
+	}
+
+	if (!fnGetDpiForWindow) {
+		hShcoreDLL = LoadLibraryExW(L"shcore.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+		if (hShcoreDLL) {
+			fnGetDpiForMonitor = DLLFunction(GetDpiForMonitorSig, hShcoreDLL, "GetDpiForMonitor");
+		}
+	}
+}
+
+UINT GetWindowDPI(HWND hwnd) NP2_noexcept {
+	if (fnGetDpiForWindow) {
+		return fnGetDpiForWindow(hwnd);
+	}
+	if (fnGetDpiForMonitor) {
+		HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+		UINT dpiX = 0;
+		UINT dpiY = 0;
+		if (fnGetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY) == S_OK) {
+			return dpiY;
+		}
+	}
+	return g_uSystemDPI;
+}
+
+int SystemMetricsForDpi(int nIndex, UINT dpi) NP2_noexcept {
+	if (fnGetSystemMetricsForDpi) {
+		return fnGetSystemMetricsForDpi(nIndex, dpi);
+	}
+
+	int value = GetSystemMetrics(nIndex);
+	value = (dpi == g_uSystemDPI) ? value : MulDiv(value, dpi, g_uSystemDPI);
+	return value;
+}
+
+BOOL AdjustWindowRectForDpi(LPRECT lpRect, DWORD dwStyle, DWORD dwExStyle, UINT dpi) NP2_noexcept {
+	if (fnAdjustWindowRectExForDpi) {
+		return fnAdjustWindowRectExForDpi(lpRect, dwStyle, FALSE, dwExStyle, dpi);
+	}
+	return AdjustWindowRectEx(lpRect, dwStyle, FALSE, dwExStyle);
+}
+#endif // NP2_HAS_GETDPIFORWINDOW

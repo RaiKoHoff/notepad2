@@ -449,13 +449,20 @@ HBITMAP ResizeImageForCurrentDPI(HBITMAP hbmp) {
 	if (GetObject(hbmp, sizeof(BITMAP), &bmp)) {
 		// assume 16x16 at 100% scaling
 		const int height = (g_uCurrentDPI*16) / USER_DEFAULT_SCREEN_DPI;
-		if (height == bmp.bmHeight) {
+		if (height == bmp.bmHeight && bmp.bmBitsPixel == 32) {
 			return hbmp;
 		}
 		// keep aspect ratio
 		const int width = MulDiv(height, bmp.bmWidth, bmp.bmHeight);
 		HBITMAP hCopy = (HBITMAP)CopyImage(hbmp, IMAGE_BITMAP, width, height, LR_COPYRETURNORG | LR_COPYDELETEORG);
 		if (hCopy != NULL) {
+#if 0
+			BITMAP bmp2;
+			if (GetObject(hCopy, sizeof(BITMAP), &bmp2)) {
+				printf("%s %u: (%d x %d, %d) => (%d x %d, %d)\n", __func__, g_uCurrentDPI,
+				bmp.bmWidth, bmp.bmHeight, bmp.bmBitsPixel, bmp2.bmWidth, bmp2.bmHeight, bmp2.bmBitsPixel);
+			}
+#endif
 			hbmp = hCopy;
 		}
 	}
@@ -1251,7 +1258,12 @@ void MultilineEditSetup(HWND hwndDlg, int nCtlId) {
 //
 // MakeBitmapButton()
 //
-void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, WORD wBmpId) {
+void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, int wBmpId) {
+#if NP2_ENABLE_HIDPI_IMAGE_RESOURCE
+	if (hInstance) {
+		wBmpId = GetBitmapResourceIdForCurrentDPI(wBmpId);
+	}
+#endif
 	HWND hwndCtl = GetDlgItem(hwnd, nCtlId);
 	HBITMAP hBmp = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(wBmpId), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
 	hBmp = ResizeImageForCurrentDPI(hBmp);
@@ -1283,12 +1295,6 @@ void MakeColorPickButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, COLORREF cr
 	if (IsWindowEnabled(hwndCtl) && crColor != (COLORREF)(-1)) {
 		colormap[0].from = RGB(0x00, 0x00, 0x00);
 		colormap[0].to	 = GetSysColor(COLOR_3DSHADOW);
-	} else {
-		colormap[0].from = RGB(0x00, 0x00, 0x00);
-		colormap[0].to	 = RGB(0xFF, 0xFF, 0xFF);
-	}
-
-	if (IsWindowEnabled(hwndCtl) && crColor != (COLORREF)(-1)) {
 		if (crColor == RGB(0xFF, 0xFF, 0xFF)) {
 			crColor = RGB(0xFF, 0xFF, 0xFE);
 		}
@@ -1296,13 +1302,18 @@ void MakeColorPickButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, COLORREF cr
 		colormap[1].from = RGB(0xFF, 0xFF, 0xFF);
 		colormap[1].to	 = crColor;
 	} else {
+		colormap[0].from = RGB(0x00, 0x00, 0x00);
+		colormap[0].to	 = RGB(0xFF, 0xFF, 0xFF);
 		colormap[1].from = RGB(0xFF, 0xFF, 0xFF);
 		colormap[1].to	 = RGB(0xFF, 0xFF, 0xFF);
 	}
 
 	HBITMAP hBmp = CreateMappedBitmap(hInstance, IDB_PICK, 0, colormap, 2);
+	hBmp = ResizeImageForCurrentDPI(hBmp);
+	BITMAP bmp;
+	GetObject(hBmp, sizeof(BITMAP), &bmp);
 
-	bi.himl = ImageList_Create(16, 16, ILC_COLORDDB | ILC_MASK, 1, 0);
+	bi.himl = ImageList_Create(bmp.bmWidth, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 1, 0);
 	ImageList_AddMasked(bi.himl, hBmp, RGB(0xFF, 0xFF, 0xFF));
 	DeleteObject(hBmp);
 
@@ -1589,7 +1600,7 @@ bool PathGetRealPath(HANDLE hFile, LPCWSTR lpszSrc, LPWSTR lpszDest) {
 }
 
 #if _WIN32_WINNT < _WIN32_WINNT_WIN8
-#if defined(_MSC_BUILD) && (_WIN32_WINNT < _WIN32_WINNT_VISTA)
+#if defined(_MSC_BUILD) && !defined(FILE_INVALID_FILE_ID)
 typedef struct FILE_ID_128 {
 	BYTE Identifier[16];
 } FILE_ID_128;
@@ -2214,15 +2225,11 @@ void StripMnemonic(LPWSTR pszMenu) {
 
 //=============================================================================
 //
-// FormatNumberStr()
+// FormatNumber()
 //
 #ifndef _WIN64
-void FormatNumberStr(LPWSTR lpNumberStr) {
-	const int i = lstrlen(lpNumberStr);
-	if (i <= 3) {
-		return;
-	}
-
+void FormatNumber64(LPWSTR lpNumberStr, uint64_t value) {
+	_i64tow(value, lpNumberStr, 10);
 	// https://docs.microsoft.com/en-us/windows/desktop/Intl/locale-sthousand
 	// https://docs.microsoft.com/en-us/windows/desktop/Intl/locale-sgrouping
 	WCHAR szSep[4];
@@ -2232,7 +2239,7 @@ void FormatNumberStr(LPWSTR lpNumberStr) {
 	const WCHAR sep = GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, szSep, COUNTOF(szSep))? szSep[0] : L',';
 #endif
 
-	WCHAR *c = lpNumberStr + i;
+	WCHAR *c = lpNumberStr + lstrlen(lpNumberStr);
 	WCHAR *end = c;
 	lpNumberStr += 3;
 	do {
@@ -2244,33 +2251,52 @@ void FormatNumberStr(LPWSTR lpNumberStr) {
 }
 #endif
 
-void FormatNumber(LPWSTR lpNumberStr, ptrdiff_t value) {
-#ifdef _WIN64
-	_i64tow(value, lpNumberStr, 10);
-	if (value < 1000) {
+void FormatNumber(LPWSTR lpNumberStr, size_t value) {
+	if (value < 10) {
+		lpNumberStr[0] = (WCHAR)(value + L'0');
+		lpNumberStr[1] = L'\0';
 		return;
 	}
 
-	WCHAR szSep[4];
-	const WCHAR sep = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STHOUSAND, szSep, COUNTOF(szSep))? szSep[0] : L',';
-
-	WCHAR *c = lpNumberStr + lstrlen(lpNumberStr);
-	WCHAR *end = c;
-	lpNumberStr += 3;
-	do {
-		c -= 3;
-		memmove(c + 1, c, sizeof(WCHAR) * (end - c + 1));
-		*c = sep;
-		++end;
-	} while (c > lpNumberStr);
-
+	WCHAR sep = L',';
+	if (value >= 1000) {
+		WCHAR szSep[4];
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+		if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STHOUSAND, szSep, COUNTOF(szSep))) {
+			sep = szSep[0];
+		}
 #else
-	_ltow(value, lpNumberStr, 10);
-	if (value < 1000) {
-		return;
-	}
-	FormatNumberStr(lpNumberStr);
+		if (GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, szSep, COUNTOF(szSep))) {
+			sep = szSep[0];
+		}
 #endif
+	}
+
+#if defined(_WIN64)
+	uint32_t len = np2_ilog10_upper64(value);
+#else
+	uint32_t len = np2_ilog10_upper(value);
+#endif
+	len += (len - 1)/3;
+
+	WCHAR * const end = lpNumberStr + len;
+	WCHAR *ptr = end;
+	int count = 0;
+	*ptr = L'\0';
+	do {
+		if (count == 3) {
+			count = 0;
+			*--ptr = sep;
+		}
+		++count;
+		*--ptr = (WCHAR)((value % 10) + L'0');
+		value /= 10;
+	} while (value != 0);
+	if (ptr != lpNumberStr) {
+		do {
+			*lpNumberStr++ = *ptr++;
+		} while (ptr <= end);
+	}
 }
 
 //=============================================================================

@@ -26,7 +26,12 @@
 #include <shellapi.h>
 #include <commctrl.h>
 #include <commdlg.h>
+#include <string>
+#include <string_view>
+#include <memory>
+
 #include "SciCall.h"
+#include "VectorISA.h"
 #if !NP2_FORCE_COMPILE_C_AS_CPP
 extern "C" {
 #endif
@@ -34,6 +39,8 @@ extern "C" {
 #include "Helpers.h"
 #include "Dialogs.h"
 #include "Notepad2.h"
+#include "Edit.h"
+#include "Styles.h"
 
 #if !NP2_FORCE_COMPILE_C_AS_CPP
 }
@@ -59,18 +66,18 @@ extern "C" HWND hwndStatus;
 extern "C" WCHAR defaultTextFontName[LF_FACESIZE];
 #endif
 
-// Stored objects...
-static HGLOBAL hDevMode {};
-static HGLOBAL hDevNames {};
+namespace {
 
-static void EditPrintInit() noexcept;
+// Stored objects...
+HGLOBAL hDevMode {};
+HGLOBAL hDevNames {};
 
 // https://docs.microsoft.com/en-us/windows/win32/intl/locale-imeasure
 // This value is 0 if the metric system (Systéme International d'Units,
 // or S.I.) is used, and 1 if the United States system is used.
 #define MeasurementInternational	0
 #define MeasurementUnitedStates		1
-static inline UINT GetLocaleMeasurement() noexcept {
+inline UINT GetLocaleMeasurement() noexcept {
 	UINT measurement = MeasurementInternational;
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 	GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IMEASURE | LOCALE_RETURN_NUMBER,
@@ -80,6 +87,29 @@ static inline UINT GetLocaleMeasurement() noexcept {
 		(LPWSTR)(&measurement), sizeof(UINT) / sizeof(WCHAR));
 #endif
 	return measurement;
+}
+
+//=============================================================================
+//
+// EditPrintInit() - Setup default page margin if no values from registry
+//
+void EditPrintInit() noexcept {
+	if ((pageSetupMargin.left | pageSetupMargin.top | pageSetupMargin.right | pageSetupMargin.bottom) < 0) {
+		const UINT measurement = GetLocaleMeasurement();
+		if (measurement == MeasurementInternational) {
+			pageSetupMargin.left = 2000;
+			pageSetupMargin.top = 2000;
+			pageSetupMargin.right = 2000;
+			pageSetupMargin.bottom = 2000;
+		} else {
+			pageSetupMargin.left = 1000;
+			pageSetupMargin.top = 1000;
+			pageSetupMargin.right = 1000;
+			pageSetupMargin.bottom = 1000;
+		}
+	}
+}
+
 }
 
 //=============================================================================
@@ -309,7 +339,7 @@ extern "C" bool EditPrint(HWND hwnd, LPCWSTR pszDocTitle) {
 	frPrint.rc.bottom	-= footerLineHeight + footerLineHeight / 2;
 
 	// Print each page
-	int pageNum = 1;
+	UINT pageNum = 1;
 	WCHAR tchPageFormat[128];
 	WCHAR tchPageStatus[128];
 	GetString(IDS_PRINT_PAGENUM, tchPageFormat, COUNTOF(tchPageFormat));
@@ -566,23 +596,415 @@ extern "C" void EditPrintSetup(HWND hwnd) {
 	NP2HeapFree(pDlgTemplate);
 }
 
-//=============================================================================
-//
-// EditPrintInit() - Setup default page margin if no values from registry
-//
-static void EditPrintInit() noexcept {
-	if ((pageSetupMargin.left | pageSetupMargin.top | pageSetupMargin.right | pageSetupMargin.bottom) < 0) {
-		const UINT measurement = GetLocaleMeasurement();
-		if (measurement == MeasurementInternational) {
-			pageSetupMargin.left = 2000;
-			pageSetupMargin.top = 2000;
-			pageSetupMargin.right = 2000;
-			pageSetupMargin.bottom = 2000;
-		} else {
-			pageSetupMargin.left = 1000;
-			pageSetupMargin.top = 1000;
-			pageSetupMargin.right = 1000;
-			pageSetupMargin.bottom = 1000;
+namespace {
+
+#if (__cplusplus > 201703L || (defined(_MSVC_LANG) && _MSVC_LANG > 201703L)) && ( \
+	(defined(_MSC_VER) && _MSC_VER >= 1920 && (defined(_WIN64) || !defined(__clang__))) || \
+	(defined(_LIBCPP_VERSION) && _LIBCPP_VERSION >= 16000) || \
+	(!defined(_LIBCPP_VERSION) && defined(__GNUC__) && __GNUC__ >= 11) )
+using std::make_unique_for_overwrite; // requires C++20 library support
+#else
+// https://en.cppreference.com/w/cpp/memory/unique_ptr/make_unique
+template<class T>
+std::enable_if_t<std::is_array_v<T>, std::unique_ptr<T>>
+make_unique_for_overwrite(std::size_t n) {
+	return std::unique_ptr<T>(new std::remove_extent_t<T>[n]);
+}
+#endif
+
+struct DocumentStyledText {
+	std::unique_ptr<char[]> styledText;
+	std::unique_ptr<StyleDefinition[]> styleList;
+	size_t textLength;
+	unsigned styleCount;
+	UINT cpEdit;
+};
+
+void GetStyleDefinitionFor(int style, StyleDefinition &definition) noexcept {
+	definition.fontSize = SciCall_StyleGetSizeFractional(style);
+	definition.foreColor = SciCall_StyleGetFore(style);
+	definition.backColor = SciCall_StyleGetBack(style);
+	definition.weight = SciCall_StyleGetWeight(style);
+	definition.italic = SciCall_StyleGetItalic(style);
+	definition.underline = SciCall_StyleGetUnderline(style);
+	definition.strike = SciCall_StyleGetStrike(style);
+	definition.eolFilled = SciCall_StyleGetEOLFilled(style);
+	definition.charset = SciCall_StyleGetCharacterSet(style);
+	SciCall_StyleGetFont(style, definition.fontFace);
+}
+
+DocumentStyledText GetDocumentStyledText(uint8_t (&styleMap)[STYLE_MAX + 1], Sci_Position startPos, Sci_Position endPos) noexcept {
+	SciCall_EnsureStyledTo(endPos);
+	std::unique_ptr<char[]> styledText = make_unique_for_overwrite<char[]>(2*(endPos - startPos + 1));
+	const UINT cpEdit = SciCall_GetCodePage();
+	const Sci_TextRangeFull tr { { startPos, endPos }, styledText.get() };
+	const size_t textLength = SciCall_GetStyledTextFull(&tr);
+
+	uint32_t styleUsed[8]{}; // bitmap for styles used in the range
+	styleUsed[STYLE_DEFAULT >> 5] |= (1U << (STYLE_DEFAULT & 31));
+	unsigned maxStyle = STYLE_DEFAULT;
+
+	for (size_t offset = 1; offset < textLength; offset += 2) {
+		const uint8_t style = styledText[offset];
+		styleUsed[style >> 5] |= (1U << (style & 31));
+		if (style > maxStyle) {
+			maxStyle = style;
 		}
+	}
+
+	++maxStyle;
+	static_assert(__is_standard_layout(StyleDefinition));
+	//static_assert(STYLE_DEFAULT == 0); //! STYLE_DEFAULT should be put at styleList[0]
+	memset(styleMap, 0, STYLE_MAX + 1);
+
+	unsigned styleCount = 0;
+	std::unique_ptr<StyleDefinition[]> styleList = std::make_unique<StyleDefinition[]>(maxStyle);
+	if constexpr (STYLE_DEFAULT != 0) {
+		styleCount = 1;
+		styleUsed[STYLE_DEFAULT >> 5] &= ~(1U << (STYLE_DEFAULT & 31));
+		GetStyleDefinitionFor(STYLE_DEFAULT, styleList[0]);
+	}
+
+	for (unsigned style = 0; style < maxStyle; style++) {
+		if (!BitTestEx(styleUsed, style)) {
+			continue;
+		}
+
+		StyleDefinition &definition = styleList[styleCount];
+		GetStyleDefinitionFor(style, definition);
+		unsigned index = 0;
+		for (; index < styleCount; index++) {
+			// NOLINTNEXTLINE(bugprone-suspicious-memory-comparison)
+			if (memcmp(&definition, &styleList[index], sizeof(StyleDefinition)) == 0) {
+				memset(definition.fontFace, 0, sizeof(definition.fontFace));
+				break;
+			}
+		}
+		styleMap[style] = static_cast<uint8_t>(index);
+		if (index == styleCount) {
+			styleCount++;
+		}
+	}
+
+	return { std::move(styledText), std::move(styleList), textLength, styleCount, cpEdit };
+}
+
+// code based SciTE's ExportRTF.cxx
+// Rich Text Format (RTF) Specification Version 1.9.1
+// https://www.loc.gov/preservation/digital/formats/fdd/fdd000473.shtml
+// https://latex2rtf.sourceforge.net/RTF-Spec-1.2.pdf
+
+// RTF version, character set and ANSI code page, default font, default tab width
+#define RTF_HEADEROPEN "{\\rtf1\\ansi\\ansicpg%u\\deff0\\deftab420"
+#define RTF_FONTDEFOPEN "{\\fonttbl"
+#define RTF_FONTDEFCLOSE "}"
+// omitted definition for first color, which is used to turn off background highlighting
+#define RTF_COLORDEFOPEN "{\\colortbl;"
+#define RTF_COLORDEFCLOSE "}"
+#define RTF_HEADERCLOSE "\n"
+#define RTF_BODYOPEN ""
+#define RTF_BODYCLOSE "}"
+// box paragraph with background color
+#define RTF_PARAGRAPH_BEGIN "\\pard\\box\\cbpat%u"
+#define RTF_PARAGRAPH_END "\\par\n"
+
+#define RTF_SETFONTFACE "\\f"
+#define RTF_SETFONTSIZE "\\fs"
+#define RTF_SETCOLOR "\\cf"
+#define RTF_SETBACKGROUND "\\highlight"
+#define RTF_BOLD_ON "\\b"
+#define RTF_BOLD_OFF "\\b0"
+#define RTF_ITALIC_ON "\\i"
+#define RTF_ITALIC_OFF "\\i0"
+#define RTF_UNDERLINE_ON "\\ul"
+#define RTF_UNDERLINE_OFF "\\ulnone"
+#define RTF_STRIKE_ON "\\strike"
+#define RTF_STRIKE_OFF "\\strike0"
+
+#define RTF_EOL "\\line\n"
+#define RTF_TAB "\\tab "
+
+// font face, size, color, bold, italic, underline, strike
+#define RTF_MAX_STYLEPROP 7
+#define RTF_MAX_STYLEDEF 128
+#ifndef CF_RTF
+#define CF_RTF TEXT("Rich Text Format")
+#endif
+
+// extract the next RTF control word from *style
+void GetRTFNextControl(const char **style, char *control) noexcept {
+	const char *pos = *style;
+	*control = '\0';
+	if ('\0' == *pos) {
+		return;
+	}
+	pos++; // implicit skip over leading '\'
+	while ('\0' != *pos && '\\' != *pos) {
+		pos++;
+	}
+	const size_t len = pos - *style;
+	memcpy(control, *style, len);
+	*(control + len) = '\0';
+	*style = pos;
+}
+
+// extracts control words that are different between two styles
+// \f0\fs20\cf0\b0\i0
+void GetRTFStyleChange(std::string &delta, const char *last, const char *current) {
+	char lastControl[RTF_MAX_STYLEDEF];
+	char currentControl[RTF_MAX_STYLEDEF];
+	lastControl[0] = '\0';
+	currentControl[0] = '\0';
+	const char *lastPos = last;
+	const char *currentPos = current;
+	const size_t len = delta.length();
+	for (int i = 0; i < RTF_MAX_STYLEPROP; i++) {
+		GetRTFNextControl(&lastPos, lastControl);
+		GetRTFNextControl(&currentPos, currentControl);
+		if (strcmp(lastControl, currentControl) != 0) {	// changed
+			delta += currentControl;
+		}
+	}
+	if (len != delta.length()) {
+		delta += ' ';
+	}
+}
+
+constexpr int GetRTFFontSize(int size) noexcept {
+	return size / (SC_FONT_SIZE_MULTIPLIER / 2);
+}
+
+std::string SaveToStreamRTF(Sci_Position startPos, Sci_Position endPos) {
+	uint8_t styleMap[STYLE_MAX + 1];
+	const auto [styledText, styleList, textLength, styleCount, cpEdit] = GetDocumentStyledText(styleMap, startPos, endPos);
+	const std::unique_ptr<std::string[]> styles = make_unique_for_overwrite<std::string[]>(styleCount);
+	const std::unique_ptr<LPCSTR[]> fontList = make_unique_for_overwrite<LPCSTR[]>(styleCount);
+	const std::unique_ptr<COLORREF[]> colorList = make_unique_for_overwrite<COLORREF[]>(2*styleCount);
+
+	UINT legacyACP = cpEdit;
+	if (legacyACP == SC_CP_UTF8 || legacyACP == 0) {
+		legacyACP = mEncoding[CPI_DEFAULT].uCodePage;
+	}
+
+	char fmtbuf[RTF_MAX_STYLEDEF];
+	fmtbuf[0] = '\0';
+	unsigned fmtlen = sprintf(fmtbuf, RTF_HEADEROPEN RTF_FONTDEFOPEN, legacyACP);
+	std::string os(fmtbuf, fmtlen);
+
+	int fontCount = 0;
+	int colorCount = 0;
+	for (unsigned styleIndex = 0; styleIndex < styleCount; styleIndex++) {
+		StyleDefinition &definition = styleList[styleIndex];
+
+		int iFont = 0;
+		for (; iFont < fontCount; iFont++) {
+			if (_stricmp(fontList[iFont], definition.fontFace) == 0) {
+				break;
+			}
+		}
+		if (iFont == fontCount) {
+			fontList[fontCount++] = definition.fontFace;
+			// convert fontFace to ANSI code page
+			char fontFace[LF_FACESIZE]{};
+			MultiByteToWideChar(CP_UTF8, 0, definition.fontFace, -1, definition.fontWide, COUNTOF(definition.fontWide));
+			WideCharToMultiByte(legacyACP, 0, definition.fontWide, -1, fontFace, COUNTOF(fontFace), nullptr, nullptr);
+			const int charset = definition.charset;
+			if (charset == DEFAULT_CHARSET || charset == ANSI_CHARSET) {
+				fmtlen = sprintf(fmtbuf, "{\\f%d\\fnil %s;}", iFont, fontFace);
+			} else {
+				fmtlen = sprintf(fmtbuf, "{\\f%d\\fnil\\fcharset%d %s;}", iFont, charset, fontFace);
+			}
+			os += std::string_view{fmtbuf, fmtlen};
+		}
+
+		int iFore = 0;
+		for (; iFore < colorCount; iFore++) {
+			if (colorList[iFore] == definition.foreColor) {
+				break;
+			}
+		}
+		if (iFore == colorCount) {
+			colorList[colorCount++] = definition.foreColor;
+		}
+
+		// PL: highlights doesn't seems to follow a distinct table, at least with WordPad and Word 97
+		// Perhaps it is different for Word 6?
+		int iBack = 1;
+		for (; iBack < colorCount; iBack++) {
+			if (colorList[iBack] == definition.backColor) {
+				break;
+			}
+		}
+		if (iBack == colorCount) {
+			colorList[colorCount++] = definition.backColor;
+		}
+
+		definition.backIndex = static_cast<uint16_t>(iBack + 1);
+		fmtlen = sprintf(fmtbuf, RTF_SETFONTFACE "%d" RTF_SETFONTSIZE "%d" RTF_SETCOLOR "%d",
+			iFont, GetRTFFontSize(definition.fontSize), iFore + 1);
+
+		std::string osStyle(fmtbuf, fmtlen);
+		osStyle += ((definition.weight >= FW_SEMIBOLD) ? RTF_BOLD_ON : RTF_BOLD_OFF);
+		osStyle += (definition.italic ? RTF_ITALIC_ON : RTF_ITALIC_OFF);
+		osStyle += (definition.underline ? RTF_UNDERLINE_ON : RTF_UNDERLINE_OFF);
+		osStyle += (definition.strike ? RTF_STRIKE_ON : RTF_STRIKE_OFF);
+		styles[styleIndex] = std::move(osStyle);
+	}
+
+	os += RTF_FONTDEFCLOSE RTF_COLORDEFOPEN;
+	for (int i = 0; i < colorCount; i++) {
+		const COLORREF color = colorList[i];
+		fmtlen = sprintf(fmtbuf, "\\red%d\\green%d\\blue%d;",
+			static_cast<int>(color & 0xff), static_cast<int>((color >> 8) & 0xff), static_cast<int>((color >> 16) & 0xff));
+		os += std::string_view{fmtbuf, fmtlen};
+	}
+	os += RTF_COLORDEFCLOSE RTF_HEADERCLOSE RTF_BODYOPEN;
+
+	const char *lastStyle = "";
+	unsigned styleCurrent = STYLE_MAX + 1;
+	unsigned column = 0;
+	// check eolFilled on first line
+	constexpr uint8_t defaultBackground = 2; // omitted default, STYLE_DEFAULT foreColor, STYLE_DEFAULT backColor
+	bool eolFilled = false;
+	unsigned background = defaultBackground;
+	unsigned highlight = 0;
+	{
+		const Sci_Line line = SciCall_LineFromPosition(startPos);
+		const Sci_Position pos = SciCall_PositionFromLine(line + 1);
+		if (pos < endPos) {
+			uint8_t eolStyle = styledText[2*(pos - startPos) - 1];
+			eolStyle = styleMap[eolStyle];
+			eolFilled = styleList[eolStyle].eolFilled;
+			if (eolFilled) {
+				background = styleList[eolStyle].backIndex;
+			}
+		}
+		fmtlen = sprintf(fmtbuf, RTF_PARAGRAPH_BEGIN, background);
+		os += std::string_view{fmtbuf, fmtlen};
+	}
+
+	for (size_t offset = 0; offset < textLength; offset += 2) {
+		const char ch = styledText[offset];
+		uint8_t style = styledText[offset + 1];
+		style = styleMap[style];
+		if (style != styleCurrent) {
+			styleCurrent = style;
+			const char * const currentStyle = styles[style].c_str();
+			GetRTFStyleChange(os, lastStyle, currentStyle);
+			lastStyle = currentStyle;
+			// detect background color change
+			unsigned backIndex = styleList[style].backIndex;
+			backIndex = (backIndex == background)? 0 : backIndex;
+			if (backIndex != highlight) {
+				highlight = backIndex;
+				fmtlen = sprintf(fmtbuf, RTF_SETBACKGROUND "%u ", backIndex);
+				os += std::string_view{fmtbuf, fmtlen};
+			}
+		}
+
+		std::string_view sv;
+		column++;
+		if (ch == '{') {
+			sv = "\\{";
+		} else if (ch == '}') {
+			sv = "\\}";
+		} else if (ch == '\\') {
+			sv = "\\\\";
+		} else if (ch == '\t') {
+			if (!fvCurFile.bTabsAsSpaces) {
+				sv = RTF_TAB;
+			} else {
+				const unsigned tabWidth = fvCurFile.iTabWidth;
+				const unsigned padding = tabWidth - ((column - 1) % tabWidth);
+				column += padding;
+				for (unsigned itab = 0; itab < padding; itab++) {
+					os += ' ';
+				}
+			}
+		} else if (ch == '\r' || ch == '\n') {
+			sv = RTF_EOL;
+			column = 0;
+			if (ch == '\r' && styledText[offset + 2] == '\n') {
+				offset += 2;
+			}
+			// check eolFilled on next line
+			const Sci_Line line = SciCall_LineFromPosition(startPos + offset/2);
+			const Sci_Position pos = SciCall_PositionFromLine(line + 2);
+			if (pos < endPos) {
+				uint8_t eolStyle = styledText[2*(pos - startPos) - 1];
+				eolStyle = styleMap[eolStyle];
+				bool changed = styleList[eolStyle].eolFilled;
+				if (changed) {
+					eolFilled = true;
+					const unsigned backIndex = styleList[eolStyle].backIndex;
+					changed = backIndex != background;
+					background = backIndex;
+				} else if (eolFilled) {
+					changed = true;
+					eolFilled = false;
+					background = defaultBackground;
+				}
+				if (changed) {
+					lastStyle = "";
+					styleCurrent = STYLE_MAX + 1;
+					highlight = 0;
+					fmtlen = sprintf(fmtbuf, RTF_PARAGRAPH_END RTF_PARAGRAPH_BEGIN, background);
+					sv = {fmtbuf, fmtlen};
+				}
+			}
+		} else if (static_cast<signed char>(ch) < 0 && cpEdit == SC_CP_UTF8) {
+			const Sci_Position pos = startPos + offset/2;
+			Sci_Position width = 0;
+			const unsigned int u32 = SciCall_GetCharacterAndWidth(pos, &width);
+			offset += 2*(width - 1);
+			if (u32 < 0x10000) {
+				fmtlen = sprintf(fmtbuf, "\\u%d?", static_cast<short>(u32));
+			} else {
+				fmtlen = sprintf(fmtbuf, "\\u%d?\\u%d?",
+					static_cast<short>(((u32 - 0x10000) >> 10) + 0xD800),
+					static_cast<short>((u32 & 0x3ff) + 0xDC00));
+			}
+			sv = {fmtbuf, fmtlen};
+		}
+
+		if (sv.empty()) {
+			if (ch != '\t') {
+				os += ch;
+			}
+		} else {
+			os += sv;
+		}
+	}
+
+	os += RTF_PARAGRAPH_END RTF_BODYCLOSE;
+	return os;
+}
+
+}
+
+// code from SciTEWin::CopyAsRTF()
+extern "C" void EditCopyAsRTF(HWND hwnd) {
+	const Sci_Position startPos = SciCall_GetSelectionStart();
+	const Sci_Position endPos = SciCall_GetSelectionEnd();
+	if (startPos == endPos) {
+		return;
+	}
+	try {
+		const std::string rtf = SaveToStreamRTF(startPos, endPos);
+		//printf("%s:\n%s\n", __func__, rtf.c_str());
+		const size_t len = rtf.length() + 1; // +1 for NUL
+		HGLOBAL handle = ::GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, len);
+		if (handle) {
+			::OpenClipboard(hwnd);
+			::EmptyClipboard();
+			char *ptr = static_cast<char *>(::GlobalLock(handle));
+			if (ptr) {
+				memcpy(ptr, rtf.c_str(), len);
+				::GlobalUnlock(handle);
+			}
+			::SetClipboardData(::RegisterClipboardFormat(CF_RTF), handle);
+			::CloseClipboard();
+		}
+	} catch (...) {
 	}
 }

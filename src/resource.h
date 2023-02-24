@@ -10,11 +10,33 @@
 #define IDI_RUN							101
 #define IDI_STYLES						102
 // Bitmap
-#define IDB_OPEN_FOLDER					101
-#define IDB_PREV						102
-#define IDB_NEXT						103
-#define IDB_PICK						104
-#define IDB_ENCODING					105
+#define IDB_TOOLBAR16					100
+#define IDB_TOOLBAR24					101
+#define IDB_TOOLBAR32					102
+#define IDB_TOOLBAR40					103
+#define IDB_TOOLBAR48					104
+#define IDB_OPEN_FOLDER16				105
+#define IDB_OPEN_FOLDER24				106
+#define IDB_OPEN_FOLDER32				107
+#define IDB_OPEN_FOLDER40				108
+#define IDB_OPEN_FOLDER48				109
+#define IDB_PREV16						110
+#define IDB_PREV24						111
+#define IDB_PREV32						112
+#define IDB_PREV40						113
+#define IDB_PREV48						114
+#define IDB_NEXT16						115
+#define IDB_NEXT24						116
+#define IDB_NEXT32						117
+#define IDB_NEXT40						118
+#define IDB_NEXT48						119
+#define IDB_PICK						120
+#define IDB_ENCODING16					121
+#define IDB_ENCODING24					122
+#define IDB_ENCODING32					123
+#define IDB_ENCODING40					124
+#define IDB_ENCODING48					125
+
 // Cursor
 #define IDC_COPY						100
 // Common
@@ -720,8 +742,9 @@
 #define IDM_SET_FILE_AUTOSAVE					40493
 #define IDM_EDIT_BASE64_ENCODE					40494
 #define IDM_EDIT_BASE64_SAFE_ENCODE				40495
-#define IDM_EDIT_BASE64_DECODE					40496
-#define IDM_EDIT_BASE64_DECODE_AS_HEX			40497
+#define IDM_EDIT_BASE64_HTML_EMBEDDED_IMAGE		40496
+#define IDM_EDIT_BASE64_DECODE					40497
+#define IDM_EDIT_BASE64_DECODE_AS_HEX			40498
 
 #define IDM_HELP_ABOUT					40500	// F1
 #define IDM_CMDLINE_HELP				40501

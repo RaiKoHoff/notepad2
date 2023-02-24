@@ -52,8 +52,6 @@ extern bool		bAutoStripBlanks;
 #if NP2_ENABLE_APP_LOCALIZATION_DLL
 extern LANGID uiLanguage;
 #endif
-extern FILEVARS fvCurFile;
-extern EditTabSettings tabSettings;
 extern int iWrapColumn;
 extern bool bUseXPFileDialog;
 
@@ -403,7 +401,7 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 	switch (umsg) {
 	case WM_INITDIALOG: {
 		ResizeDlg_InitX(hwnd, cxRunDlg, IDC_RESIZEGRIP3);
-		MakeBitmapButton(hwnd, IDC_SEARCHEXE, g_hInstance, IDB_OPEN_FOLDER);
+		MakeBitmapButton(hwnd, IDC_SEARCHEXE, g_exeInstance, IDB_OPEN_FOLDER16);
 
 		HWND hwndCtl = GetDlgItem(hwnd, IDC_COMMANDLINE);
 		Edit_LimitText(hwndCtl, MAX_PATH - 1);
@@ -594,7 +592,7 @@ static INT_PTR CALLBACK OpenWithDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPA
 		DirList_StartIconThread(hwndLV);
 		ListView_SetItemState(hwndLV, 0, LVIS_FOCUSED, LVIS_FOCUSED);
 
-		MakeBitmapButton(hwnd, IDC_GETOPENWITHDIR, g_hInstance, IDB_OPEN_FOLDER);
+		MakeBitmapButton(hwnd, IDC_GETOPENWITHDIR, g_exeInstance, IDB_OPEN_FOLDER16);
 
 		CenterDlgInParent(hwnd);
 	}
@@ -770,7 +768,7 @@ static INT_PTR CALLBACK FavoritesDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LP
 		DirList_StartIconThread(hwndLV);
 		ListView_SetItemState(hwndLV, 0, LVIS_FOCUSED, LVIS_FOCUSED);
 
-		MakeBitmapButton(hwnd, IDC_GETFAVORITESDIR, g_hInstance, IDB_OPEN_FOLDER);
+		MakeBitmapButton(hwnd, IDC_GETFAVORITESDIR, g_exeInstance, IDB_OPEN_FOLDER16);
 
 		CenterDlgInParent(hwnd);
 	}
@@ -1935,8 +1933,9 @@ static INT_PTR CALLBACK SelectEncodingDlgProc(HWND hwnd, UINT umsg, WPARAM wPara
 		// TODO: following code is buggy when icon size for shfi.hIcon is larger than bmp.bmHeight,
 		// we need to determine icon size first, then resize the encoding mask bitmap accordingly.
 
-		HBITMAP hbmp = (HBITMAP)LoadImage(g_hInstance, MAKEINTRESOURCE(IDB_ENCODING), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
-		hbmp = ResizeImageForCurrentDPI(hbmp); // 32x16
+		const int resource = GetBitmapResourceIdForCurrentDPI(IDB_ENCODING16);
+		HBITMAP hbmp = (HBITMAP)LoadImage(g_exeInstance, MAKEINTRESOURCE(resource), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
+		hbmp = ResizeImageForCurrentDPI(hbmp);
 		BITMAP bmp;
 		GetObject(hbmp, sizeof(BITMAP), &bmp);
 		HIMAGELIST himl = ImageList_Create(bmp.bmHeight, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 0, 0);

@@ -26,6 +26,8 @@
 
 using namespace Lexilla;
 
+namespace {
+
 #define HERE_DELIM_MAX			256
 
 // define this if you want 'invalid octals' to be marked as errors
@@ -58,8 +60,6 @@ using namespace Lexilla;
 #define BASH_DELIM_BACKTICK		5
 
 #define BASH_DELIM_STACK_MAX	7
-
-namespace {
 
 constexpr int translateBashDigit(int ch) noexcept {
 	if (ch >= '0' && ch <= '9') {
@@ -203,9 +203,10 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 	HereDocCls HereDoc;
 
 	class QuoteCls {	// Class to manage quote pairs (simplified vs LexPerl)
-		public:
+	public:
 		int Count;
-		int Up, Down;
+		int Up;
+		int Down;
 		QuoteCls() noexcept {
 			Count = 0;
 			Up    = '\0';
@@ -224,9 +225,10 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 	QuoteCls Quote;
 
 	class QuoteStackCls {	// Class to manage quote pairs that nest
-		public:
+	public:
 		int Count;
-		int Up, Down;
+		int Up;
+		int Down;
 		int Style;
 		int Depth;			// levels pushed
 		int CountStack[BASH_DELIM_STACK_MAX];
@@ -529,7 +531,7 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 				}
 				if (prefixws > 0)
 					sc.SetState(SCE_SH_HERE_Q);
-				while (!sc.MatchLineEnd()) {
+				while (sc.More() && !sc.MatchLineEnd()) {
 					sc.Forward();
 				}
 				char s[HERE_DELIM_MAX];
@@ -841,7 +843,6 @@ void FoldBashDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWordList
 	const bool isCShell = styler.GetPropertyBool("lexer.lang");
 
 	const Sci_PositionU endPos = startPos + length;
-	int skipHereCh = 0;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelPrev = styler.LevelAt(lineCurrent) & SC_FOLDLEVELNUMBERMASK;
 	int levelCurrent = levelPrev;
@@ -897,16 +898,10 @@ void FoldBashDoc(Sci_PositionU startPos, Sci_Position length, int, LexerWordList
 		if (style == SCE_SH_HERE_DELIM) {
 			if (ch == '<' && chNext == '<') {
 				if (styler.SafeGetCharAt(i + 2) == '<') {
-					skipHereCh = 1;
-				} else {
-					if (skipHereCh == 0) {
-						levelCurrent++;
-					} else {
-						skipHereCh = 0;
-					}
+					levelCurrent++;
 				}
 			}
-		} else if (style == SCE_SH_HERE_Q && styler.StyleAt(i + 1) == SCE_SH_DEFAULT) {
+		} else if (style == SCE_SH_HERE_Q && styleNext == SCE_SH_DEFAULT) {
 			levelCurrent--;
 		}
 		if (atEOL) {
