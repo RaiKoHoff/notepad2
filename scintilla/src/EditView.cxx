@@ -23,15 +23,10 @@
 #include <algorithm>
 #include <iterator>
 #include <memory>
-#include <chrono>
-
 #include <atomic>
 //#include <future>
-#include <windows.h>
-#ifndef _WIN32_WINNT_VISTA
-#define _WIN32_WINNT_VISTA	0x0600
-#endif
 
+#include "ParallelSupport.h"
 #include "ScintillaTypes.h"
 #include "ScintillaMessages.h"
 #include "ScintillaStructures.h"
@@ -358,6 +353,13 @@ namespace {
 
 constexpr XYPOSITION epsilon = 0.0001f;	// A small nudge to avoid floating point precision issues
 
+template<typename T>
+inline void UpdateMaximum(std::atomic<T> &maximum, const T &value) noexcept {
+	// https://stackoverflow.com/questions/16190078/how-to-atomically-update-a-maximum-value
+	T prev = maximum;
+	while(prev < value && !maximum.compare_exchange_weak(prev, value)) {}
+}
+
 struct LayoutWorker {
 	LineLayout * const ll;
 	const ViewStyle &vstyle;
@@ -371,31 +373,12 @@ struct LayoutWorker {
 	std::atomic<uint32_t> nextIndex = 0;
 	std::atomic<uint32_t> finishedCount = 0;
 
-#define USE_STD_ASYNC_FUTURE	0
-#if USE_STD_ASYNC_FUTURE
-#define USE_WIN32_PTP_WORK		0
-#define USE_WIN32_WORK_ITEM		0
-#elif _WIN32_WINNT >= _WIN32_WINNT_VISTA
-#define USE_WIN32_PTP_WORK		1
-#define USE_WIN32_WORK_ITEM		0
-#else
-#define USE_WIN32_PTP_WORK		0
-#define USE_WIN32_WORK_ITEM		1
-#endif
-
 #if USE_WIN32_WORK_ITEM
 	HANDLE finishedEvent = nullptr;
 	std::atomic<uint32_t> runningThread = 0;
 #endif
 
 	static constexpr int blockSize = 4096;
-
-	template<typename T>
-	static inline void UpdateMaximum(std::atomic<T> &maximum, const T &value) noexcept {
-		// https://stackoverflow.com/questions/16190078/how-to-atomically-update-a-maximum-value
-		T prev = maximum;
-		while(prev < value && !maximum.compare_exchange_weak(prev, value)) {}
-	}
 
 	void Layout(const TextSegment &ts, Surface *surface) {
 		const unsigned char styleSegment = ll->styles[ts.start];
@@ -524,7 +507,7 @@ struct LayoutWorker {
 			processed += ts.length;
 			if (processed >= blockSize) {
 				processed = 0;
-				if (ts.end() > maxPosInLine && WaitForSingleObject(idleTaskTimer, 0) == WAIT_OBJECT_0) {
+				if (ts.end() > maxPosInLine && WaitableTimerExpired(idleTaskTimer)) {
 					break;
 				}
 			}
@@ -564,7 +547,7 @@ struct LayoutWorker {
 			processed += ts.length;
 			if (processed >= blockSize) {
 				processed = 0;
-				if (ts.end() > maxPosInLine && WaitForSingleObject(idleTaskTimer, 0) == WAIT_OBJECT_0) {
+				if (ts.end() > maxPosInLine && WaitableTimerExpired(idleTaskTimer)) {
 					break;
 				}
 			}

@@ -164,6 +164,18 @@ D2D1_DRAW_TEXT_OPTIONS d2dDrawTextOptions = D2D1_DRAW_TEXT_OPTIONS_NONE;
 static HMODULE hDLLD2D {};
 static HMODULE hDLLDWrite {};
 
+int64_t QueryPerformanceFrequency() noexcept {
+	LARGE_INTEGER freq;
+	::QueryPerformanceFrequency(&freq);
+	return freq.QuadPart;
+}
+
+int64_t QueryPerformanceCounter() noexcept {
+	LARGE_INTEGER count;
+	::QueryPerformanceCounter(&count);
+	return count.QuadPart;
+}
+
 extern "C" const GUID __declspec(selectany) IID_IDWriteFactory2 = // 0439fc60-ca44-4994-8dee-3a9af7b732ec
 { 0x0439fc60, 0xca44, 0x4994, { 0x8d, 0xee, 0x3a, 0x9a, 0xf7, 0xb7, 0x32, 0xec } };
 
@@ -2035,8 +2047,8 @@ void SurfaceD2D::Stadium(PRectangle rc, FillStroke fillStroke, Ends ends) {
 		D2DPenColourAlpha(fillStroke.stroke.colour);
 		pRenderTarget->DrawGeometry(pathGeometry, pBrush, fillStroke.stroke.WidthF());
 		ReleaseUnknown(pathGeometry);
- 	}
- }
+	}
+}
 
 void SurfaceD2D::Copy(PRectangle rc, Point from, Surface &surfaceSource) {
 	SurfaceD2D &surfOther = down_cast<SurfaceD2D &>(surfaceSource);
@@ -2589,19 +2601,16 @@ void SurfaceD2D::MeasureWidths(const Font *font_, std::string_view text, XYPOSIT
 			positions[i++] = lastPos;
 		}
 	} else {
-		const DBCSCharClassify *dbcs = DBCSCharClassify::Get(mode.codePage);
-		if (dbcs) {
+		if (mode.codePage) {
 			// May be one or two bytes per position
 			UINT ui = 0;
 			for (size_t i = 0; i < text.length() && ui < tbuf.length();) {
 				positions[i] = poses[ui];
-				if (dbcs->IsLeadByte(text[i])) {
-					positions[i + 1] = poses[ui];
-					i += 2;
-				} else {
-					i++;
+				const unsigned char uch = text[i++];
+				if (!UTF8IsAscii(uch) && DBCSIsLeadByte(mode.codePage, uch)) {
+					positions[i] = poses[ui];
+					i += 1;
 				}
-
 				ui++;
 			}
 		} else {
@@ -3048,9 +3057,9 @@ class ListBoxX final : public ListBox {
 	HWND GetHWND() const noexcept;
 	void AppendListItem(const char *text, const char *numword, unsigned int len);
 	void AdjustWindowRect(PRectangle *rc) const noexcept;
-	int ItemHeight() const;
+	int ItemHeight() const noexcept;
 	int MinClientWidth() const noexcept;
-	int TextOffset() const;
+	int TextOffset() const noexcept;
 	POINT GetClientExtent() const noexcept;
 	POINT MinTrackSize() const;
 	POINT MaxTrackSize() const;
@@ -3086,7 +3095,7 @@ public:
 	void SetVisibleRows(int rows) noexcept override;
 	int GetVisibleRows() const noexcept override;
 	PRectangle GetDesiredRect() override;
-	int CaretFromEdge() const override;
+	int CaretFromEdge() const noexcept override;
 	void Clear() noexcept override;
 	void Append(const char *s, int type = -1) const noexcept override;
 	int Length() const noexcept override;
@@ -3206,12 +3215,12 @@ PRectangle ListBoxX::GetDesiredRect() {
 	return rcDesired;
 }
 
-int ListBoxX::TextOffset() const {
+int ListBoxX::TextOffset() const noexcept {
 	const int pixWidth = images.GetWidth();
 	return static_cast<int>(pixWidth == 0 ? ItemInset.x : ItemInset.x + pixWidth + (ImageInset.x * 2));
 }
 
-int ListBoxX::CaretFromEdge() const {
+int ListBoxX::CaretFromEdge() const noexcept {
 	PRectangle rc;
 	AdjustWindowRect(&rc);
 	return TextOffset() + static_cast<int>(TextInset.x + (0 - rc.left) - 1);
@@ -3451,7 +3460,7 @@ void ListBoxX::AdjustWindowRect(PRectangle *rc) const noexcept {
 #endif
 }
 
-int ListBoxX::ItemHeight() const {
+int ListBoxX::ItemHeight() const noexcept {
 	int itemHeight = lineHeight + (static_cast<int>(TextInset.y) * 2);
 	const int pixHeight = images.GetHeight() + (static_cast<int>(ImageInset.y) * 2);
 	if (itemHeight < pixHeight) {

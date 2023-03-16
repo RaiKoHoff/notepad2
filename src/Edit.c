@@ -77,14 +77,25 @@ static DStringW wchAppendLines;
 #define NP2_DYNAMIC_LOAD_ELSCORE_DLL	1
 #endif
 #if NP2_DYNAMIC_LOAD_ELSCORE_DLL
-#if _WIN32_WINNT >= _WIN32_WINNT_WIN8
-#define kSystemLibraryLoadFlags		LOAD_LIBRARY_SEARCH_SYSTEM32
-#else
-extern DWORD kSystemLibraryLoadFlags;
-#endif
 static HMODULE hELSCoreDLL = NULL;
 #else
 #pragma comment(lib, "elscore.lib")
+#endif
+
+#define NP2_DYNAMIC_LOAD_wcsftime	1
+#if NP2_DYNAMIC_LOAD_wcsftime
+static HMODULE hCrtDLL = NULL;
+
+typedef size_t (__cdecl *wcsftimeSig)(wchar_t *str, size_t count, const wchar_t *format, const struct tm *time);
+wcsftimeSig GetFunctionPointer_wcsftime(void) {
+	if (hCrtDLL == NULL) {
+		hCrtDLL = LoadLibraryExW(L"ucrtbase.dll", NULL, kSystemLibraryLoadFlags);
+		if (hCrtDLL == NULL) {
+			hCrtDLL = LoadLibraryExW(L"msvcrt.dll", NULL, kSystemLibraryLoadFlags);
+		}
+	}
+	return DLLFunction(wcsftimeSig, hCrtDLL, "wcsftime");
+}
 #endif
 
 void Edit_ReleaseResources(void) {
@@ -95,6 +106,11 @@ void Edit_ReleaseResources(void) {
 #if NP2_DYNAMIC_LOAD_ELSCORE_DLL
 	if (hELSCoreDLL != NULL) {
 		FreeLibrary(hELSCoreDLL);
+	}
+#endif
+#if NP2_DYNAMIC_LOAD_wcsftime
+	if (hCrtDLL) {
+		FreeLibrary(hCrtDLL);
 	}
 #endif
 }
@@ -1623,9 +1639,17 @@ void EditMapTextCase(int menu) {
 			charsConverted = TransliterateText(pGuid, pszTextW, cchTextW, &pszMappedW);
 		}
 		if (pszMappedW == NULL && flags != 0) {
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+			charsConverted = LCMapStringEx(LOCALE_NAME_USER_DEFAULT, flags, pszTextW, cchTextW, NULL, 0, NULL, NULL, 0);
+#else
 			charsConverted = LCMapString(LOCALE_USER_DEFAULT, flags, pszTextW, cchTextW, NULL, 0);
+#endif
 			if (charsConverted) {
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+				charsConverted = LCMapStringEx(LOCALE_NAME_USER_DEFAULT, flags, pszTextW, cchTextW, pszMappedW, charsConverted, NULL, NULL, 0);
+#else
 				pszMappedW = (LPWSTR)NP2HeapAlloc((charsConverted + 1)*sizeof(WCHAR));
+#endif
 				charsConverted = LCMapString(LOCALE_USER_DEFAULT, flags, pszTextW, cchTextW, pszMappedW, charsConverted);
 			}
 		}
@@ -3194,6 +3218,13 @@ void EditAlignText(EditAlignMode nMode) {
 	}
 
 	if (iMaxLength < BUFSIZE_ALIGN) {
+		typedef struct EditAlignTextVar {
+			char tchLineBuf[BUFSIZE_ALIGN * kMaxMultiByteCount];
+			WCHAR wchLineBuf[BUFSIZE_ALIGN];
+			LPWSTR pWords[BUFSIZE_ALIGN];
+			WCHAR wchNewLineBuf[BUFSIZE_ALIGN * 3];
+		} EditAlignTextVar;
+		EditAlignTextVar * const var = (EditAlignTextVar *)NP2HeapAlloc(sizeof(EditAlignTextVar));
 		SciCall_BeginUndoAction();
 		for (Sci_Line iLine = iLineStart; iLine <= iLineEnd; iLine++) {
 			const Sci_Position iIndentPos = SciCall_GetLineIndentPosition(iLine);
@@ -3203,16 +3234,18 @@ void EditAlignText(EditAlignMode nMode) {
 				const Sci_Position iStartPos = SciCall_PositionFromLine(iLine);
 				SciCall_DeleteRange(iStartPos, iEndPos - iStartPos);
 			} else {
-				char tchLineBuf[BUFSIZE_ALIGN * kMaxMultiByteCount] = "";
-				WCHAR wchLineBuf[BUFSIZE_ALIGN] = L"";
-				WCHAR *pWords[BUFSIZE_ALIGN];
+				char* const tchLineBuf = var->tchLineBuf;
+				WCHAR* const wchLineBuf = var->wchLineBuf;
+				LPWSTR* const pWords = var->pWords;
+				WCHAR * const wchNewLineBuf = var->wchNewLineBuf;
 				WCHAR *p = wchLineBuf;
 
-				int iWords = 0;
 				Sci_Position iWordsLength = 0;
 				const Sci_Position cchLine = SciCall_GetLine(iLine, tchLineBuf);
 
-				MultiByteToWideChar(cpEdit, 0, tchLineBuf, (int)cchLine, wchLineBuf, COUNTOF(wchLineBuf));
+				int iWords = MultiByteToWideChar(cpEdit, 0, tchLineBuf, (int)cchLine, wchLineBuf, COUNTOF(var->wchLineBuf));
+				wchLineBuf[iWords] = L'\0';
+				iWords = 0;
 				StrTrim(wchLineBuf, L"\r\n\t ");
 
 				while (*p) {
@@ -3224,7 +3257,7 @@ void EditAlignText(EditAlignMode nMode) {
 							iWordsLength++;
 						}
 					} else {
-						*p++ = 0;
+						*p++ = L'\0';
 					}
 				}
 
@@ -3251,41 +3284,38 @@ void EditAlignText(EditAlignMode nMode) {
 							const Sci_Position iSpacesPerGap = (iMaxLength - iMinIndent - iWordsLength) / iGaps;
 							const Sci_Position iExtraSpaces = (iMaxLength - iMinIndent - iWordsLength) % iGaps;
 
-							WCHAR wchNewLineBuf[BUFSIZE_ALIGN * 3];
 							lstrcpy(wchNewLineBuf, pWords[0]);
 							p = StrEnd(wchNewLineBuf);
 
 							for (int i = 1; i < iWords; i++) {
 								for (Sci_Position j = 0; j < iSpacesPerGap; j++) {
 									*p++ = L' ';
-									*p = 0;
 								}
 								if (i > iGaps - iExtraSpaces) {
 									*p++ = L' ';
-									*p = 0;
 								}
+								*p = L'\0';
 								lstrcat(p, pWords[i]);
 								p = StrEnd(p);
 							}
 
-							WideCharToMultiByte(cpEdit, 0, wchNewLineBuf, -1, tchLineBuf, COUNTOF(tchLineBuf), NULL, NULL);
+							WideCharToMultiByte(cpEdit, 0, wchNewLineBuf, -1, tchLineBuf, COUNTOF(var->tchLineBuf), NULL, NULL);
 
 							SciCall_SetTargetRange(SciCall_PositionFromLine(iLine), SciCall_GetLineEndPosition(iLine));
 							SciCall_ReplaceTarget(-1, tchLineBuf);
 							SciCall_SetLineIndentation(iLine, iMinIndent);
 						} else {
-							WCHAR wchNewLineBuf[BUFSIZE_ALIGN];
 							lstrcpy(wchNewLineBuf, pWords[0]);
 							p = StrEnd(wchNewLineBuf);
 
 							for (int i = 1; i < iWords; i++) {
 								*p++ = L' ';
-								*p = 0;
+								*p = L'\0';
 								lstrcat(wchNewLineBuf, pWords[i]);
 								p = StrEnd(p);
 							}
 
-							WideCharToMultiByte(cpEdit, 0, wchNewLineBuf, -1, tchLineBuf, COUNTOF(tchLineBuf), NULL, NULL);
+							WideCharToMultiByte(cpEdit, 0, wchNewLineBuf, -1, tchLineBuf, COUNTOF(var->tchLineBuf), NULL, NULL);
 
 							SciCall_SetTargetRange(SciCall_PositionFromLine(iLine), SciCall_GetLineEndPosition(iLine));
 							SciCall_ReplaceTarget(-1, tchLineBuf);
@@ -3295,23 +3325,20 @@ void EditAlignText(EditAlignMode nMode) {
 						const Sci_Position iExtraSpaces = iMaxLength - iMinIndent - iWordsLength - iWords + 1;
 						Sci_Position iOddSpaces = iExtraSpaces % 2;
 
-						WCHAR wchNewLineBuf[BUFSIZE_ALIGN * 3] = L"";
 						p = wchNewLineBuf;
-
 						if (nMode == EditAlignMode_Right) {
 							for (Sci_Position i = 0; i < iExtraSpaces; i++) {
 								*p++ = L' ';
 							}
-							*p = 0;
 						}
 
 						if (nMode == EditAlignMode_Center) {
 							for (Sci_Position i = 1; i < iExtraSpaces - iOddSpaces; i += 2) {
 								*p++ = L' ';
 							}
-							*p = 0;
 						}
 
+						*p = L'\0';
 						for (int i = 0; i < iWords; i++) {
 							lstrcat(p, pWords[i]);
 							if (i < iWords - 1) {
@@ -3324,7 +3351,7 @@ void EditAlignText(EditAlignMode nMode) {
 							p = StrEnd(p);
 						}
 
-						WideCharToMultiByte(cpEdit, 0, wchNewLineBuf, -1, tchLineBuf, COUNTOF(tchLineBuf), NULL, NULL);
+						WideCharToMultiByte(cpEdit, 0, wchNewLineBuf, -1, tchLineBuf, COUNTOF(var->tchLineBuf), NULL, NULL);
 
 						Sci_Position iPos;
 						if (nMode == EditAlignMode_Right || nMode == EditAlignMode_Center) {
@@ -3344,6 +3371,7 @@ void EditAlignText(EditAlignMode nMode) {
 			}
 		}
 		SciCall_EndUndoAction();
+		NP2HeapFree(var);
 	} else {
 		MsgBoxInfo(MB_OK, IDS_BUFFERTOOSMALL);
 	}
@@ -3935,7 +3963,7 @@ void EditCompressSpaces(void) {
 		}
 		SciCall_ReplaceTarget(-1, pszOut);
 		const Sci_Position iTargetStart = SciCall_GetTargetStart();
-		const Sci_Position iTargetEnd = SciCall_GetTargetStart();
+		const Sci_Position iTargetEnd = SciCall_GetTargetEnd();
 		if (iCurPos > iAnchorPos) {
 			iCurPos = iTargetEnd;
 			iAnchorPos = iTargetStart;
@@ -4209,11 +4237,10 @@ void EditJoinLinesEx(void) {
 typedef struct SORTLINE {
 	LPCWSTR pwszLine;
 	LPCWSTR pwszSortEntry;
-	Sci_Line iLine;
+	LPCWSTR pwszSortLine;
+	int iLine;
 	EditSortFlag iSortFlags;
 } SORTLINE;
-
-typedef int (__stdcall *FNSTRCMP)(LPCWSTR, LPCWSTR);
 
 static int __cdecl CmpSortLine(const void *p1, const void *p2) {
 	const SORTLINE *s1 = (const SORTLINE *)p1;
@@ -4223,18 +4250,17 @@ static int __cdecl CmpSortLine(const void *p1, const void *p2) {
 	if (iSortFlags & EditSortFlag_LogicalNumber) {
 		cmp = StrCmpLogicalW(s1->pwszSortEntry, s2->pwszSortEntry);
 		if (cmp == 0 && (iSortFlags & (EditSortFlag_ColumnSort | EditSortFlag_GroupByFileType))) {
-			cmp = StrCmpLogicalW(s1->pwszLine, s2->pwszLine);
+			cmp = StrCmpLogicalW(s1->pwszSortLine, s2->pwszSortLine);
 		}
 	}
 	if (cmp == 0) {
-		FNSTRCMP pfnStrCmp = (iSortFlags & EditSortFlag_IgnoreCase) ? StrCmpIW : StrCmpW;
-		cmp = pfnStrCmp(s1->pwszSortEntry, s2->pwszSortEntry);
+		cmp = wcscmp(s1->pwszSortEntry, s2->pwszSortEntry);
 		if (cmp == 0 && (iSortFlags & (EditSortFlag_ColumnSort | EditSortFlag_GroupByFileType))) {
-			cmp = pfnStrCmp(s1->pwszLine, s2->pwszLine);
+			cmp = wcscmp(s1->pwszSortLine, s2->pwszSortLine);
 		}
 		if (cmp == 0) {
 			// stable sort for duplicate lines
-			cmp = (int)(s1->iLine - s2->iLine);
+			cmp = s1->iLine - s2->iLine;
 			if (iSortFlags & EditSortFlag_MergeDuplicate) {
 				cmp = -cmp; // reverse order to keep first line
 			}
@@ -4249,7 +4275,7 @@ static int __cdecl CmpSortLine(const void *p1, const void *p2) {
 static int __cdecl DontSortLine(const void *p1, const void *p2) {
 	const SORTLINE *s1 = (const SORTLINE *)p1;
 	const SORTLINE *s2 = (const SORTLINE *)p2;
-	return (int)(s1->iLine - s2->iLine);
+	return s1->iLine - s2->iLine;
 }
 
 void EditSortLines(EditSortFlag iSortFlags) {
@@ -4311,9 +4337,13 @@ void EditSortLines(EditSortFlag iSortFlags) {
 	Sci_Position iTargetStart = SciCall_PositionFromLine(iLineStart);
 	Sci_Position iTargetEnd = SciCall_PositionFromLine(iLineEnd + 1);
 	const size_t cbPmszBuf = iTargetEnd - iTargetStart + 2*iLineCount + 1; // 2 for CR LF
+	size_t cchTextW = cbPmszBuf*sizeof(WCHAR) + iLineCount*NP2_alignof(WCHAR *);
+	if (iSortFlags & EditSortFlag_IgnoreCase) {
+		cchTextW += cchTextW;
+	}
 	char * const pmszBuf = (char *)NP2HeapAlloc(cbPmszBuf);
 	SORTLINE * const pLines = (SORTLINE *)NP2HeapAlloc(sizeof(SORTLINE) * iLineCount);
-	WCHAR * const pszTextW = (WCHAR *)NP2HeapAlloc(cbPmszBuf*sizeof(WCHAR) + iLineCount*NP2_alignof(WCHAR *));
+	WCHAR * const pszTextW = (WCHAR *)NP2HeapAlloc(cchTextW);
 	size_t cchTotal = NP2_alignof(WCHAR *)/sizeof(WCHAR); // first pointer reserved for empty line
 
 	for (Sci_Line i = 0, iLine = iLineStart; iLine <= iLineEnd; i++, iLine++) {
@@ -4334,7 +4364,20 @@ void EditSortLines(EditSortFlag iSortFlags) {
 			const UINT cchLine = MultiByteToWideChar(cpEdit, 0, pmszBuf, -1, pwszLine, (int)cbPmszBuf);
 			cchTotal += NP2_align_up(cchLine, NP2_alignof(WCHAR *)/sizeof(WCHAR));
 			pLines[i].pwszLine = pwszLine;
+			if (iSortFlags & EditSortFlag_IgnoreCase) {
+				// convert to uppercase for case insensitive comparison
+				// https://learn.microsoft.com/en-us/dotnet/api/system.string.toupper?view=net-7.0#system-string-toupper
+				LPWSTR pwszSortLine = pszTextW + cchTotal;
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+				const UINT charsConverted = LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE, pwszLine, cchLine, pwszSortLine, (int)cbPmszBuf, NULL, NULL, 0);
+#else
+				const UINT charsConverted = LCMapString(LOCALE_USER_DEFAULT, LCMAP_UPPERCASE, pwszLine, cchLine, pwszSortLine, (int)cbPmszBuf);
+#endif
+				cchTotal += NP2_align_up(charsConverted, NP2_alignof(WCHAR *)/sizeof(WCHAR));
+				pwszLine = pwszSortLine;
+			}
 
+			pLines[i].pwszSortLine = pwszLine;
 			if (iSortFlags & EditSortFlag_ColumnSort) {
 				const int tabWidth = fvCurFile.iTabWidth;
 				Sci_Position col = 0;
@@ -4362,12 +4405,13 @@ void EditSortLines(EditSortFlag iSortFlags) {
 				pwszLine = PathFindExtension(pwszLine);
 			}
 			pLines[i].pwszSortEntry = pwszLine;
-			pLines[i].iLine = iLine;
+			pLines[i].iLine = (int)iLine;
 			pLines[i].iSortFlags = iSortFlags;
 		} else {
 			pLines[i].pwszLine = pszTextW;
 			pLines[i].pwszSortEntry = pszTextW;
-			pLines[i].iLine = iLine;
+			pLines[i].pwszSortLine = pszTextW;
+			pLines[i].iLine = (int)iLine;
 			pLines[i].iSortFlags = iSortFlags;
 		}
 	}
@@ -4383,11 +4427,10 @@ void EditSortLines(EditSortFlag iSortFlags) {
 	} else {
 		qsort(pLines, iLineCount, sizeof(SORTLINE), CmpSortLine);
 		if (iSortFlags > EditSortFlag_Shuffle) {
-			FNSTRCMP pfnStrCmp = (iSortFlags & EditSortFlag_IgnoreCase) ? StrCmpIW : StrCmpW;
 			bool bLastDup = false;
 			for (Sci_Line i = 0; i < iLineCount; i++) {
 				BOOL bDropLine;
-				if (i + 1 < iLineCount && pfnStrCmp(pLines[i].pwszLine, pLines[i + 1].pwszLine) == 0) {
+				if (i + 1 < iLineCount && wcscmp(pLines[i].pwszSortLine, pLines[i + 1].pwszSortLine) == 0) {
 					bLastDup = true;
 					bDropLine = EditSortFlag_MergeDuplicate | EditSortFlag_RemoveDuplicate;
 				} else {
@@ -6679,6 +6722,18 @@ void EditInsertTagDlg(HWND hwnd) {
 	ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_INSERTTAG), hwnd, EditInsertTagDlgProc, 0);
 }
 
+static inline int GetDaylightSavingTimeFlag(void) {
+	// https://en.cppreference.com/w/c/chrono/tm
+	// https://learn.microsoft.com/en-us/windows/win32/api/timezoneapi/nf-timezoneapi-gettimezoneinformation
+#if 0//_WIN32_WINNT >= _WIN32_WINNT_VISTA
+	DYNAMIC_TIME_ZONE_INFORMATION info;
+	return GetDynamicTimeZoneInformation(&info) - 1;
+#else
+	TIME_ZONE_INFORMATION info;
+	return GetTimeZoneInformation(&info) - 1;
+#endif
+}
+
 void EditInsertDateTime(bool bShort) {
 	WCHAR tchDateTime[256];
 	WCHAR tchTemplate[256];
@@ -6686,10 +6741,9 @@ void EditInsertDateTime(bool bShort) {
 	SYSTEMTIME st;
 	GetLocalTime(&st);
 
-	if (IniGetString(INI_SECTION_NAME_FLAGS, bShort ? L"DateTimeShort" : L"DateTimeLong",
-					 L"", tchTemplate, COUNTOF(tchTemplate))) {
+	if (IniGetString(INI_SECTION_NAME_FLAGS, bShort ? L"DateTimeShort" : L"DateTimeLong", L"", tchTemplate, COUNTOF(tchTemplate))) {
 		struct tm sst;
-		sst.tm_isdst	= -1;
+		sst.tm_isdst	= GetDaylightSavingTimeFlag();
 		sst.tm_sec		= (int)st.wSecond;
 		sst.tm_min		= (int)st.wMinute;
 		sst.tm_hour		= (int)st.wHour;
@@ -6697,15 +6751,22 @@ void EditInsertDateTime(bool bShort) {
 		sst.tm_mon		= (int)st.wMonth - 1;
 		sst.tm_year		= (int)st.wYear - 1900;
 		sst.tm_wday		= (int)st.wDayOfWeek;
-		mktime(&sst);
+#if NP2_DYNAMIC_LOAD_wcsftime
+		wcsftimeSig pfn = GetFunctionPointer_wcsftime();
+		pfn(tchDateTime, COUNTOF(tchDateTime), tchTemplate, &sst);
+#else
 		wcsftime(tchDateTime, COUNTOF(tchDateTime), tchTemplate, &sst);
+#endif
 	} else {
 		WCHAR tchDate[128];
 		WCHAR tchTime[128];
-		GetDateFormat(LOCALE_USER_DEFAULT, bShort ? DATE_SHORTDATE : DATE_LONGDATE,
-					  &st, NULL, tchDate, COUNTOF(tchDate));
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+		GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, bShort ? DATE_SHORTDATE : DATE_LONGDATE, &st, NULL, tchDate, COUNTOF(tchDate), NULL);
+		GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &st, NULL, tchTime, COUNTOF(tchTime));
+#else
+		GetDateFormat(LOCALE_USER_DEFAULT, bShort ? DATE_SHORTDATE : DATE_LONGDATE, &st, NULL, tchDate, COUNTOF(tchDate));
 		GetTimeFormat(LOCALE_USER_DEFAULT, TIME_NOSECONDS, &st, NULL, tchTime, COUNTOF(tchTime));
-
+#endif
 		wsprintf(tchDateTime, L"%s %s", tchTime, tchDate);
 	}
 
@@ -6736,7 +6797,7 @@ void EditUpdateTimestampMatchTemplate(HWND hwnd) {
 	SYSTEMTIME st;
 	struct tm sst;
 	GetLocalTime(&st);
-	sst.tm_isdst = -1;
+	sst.tm_isdst = GetDaylightSavingTimeFlag();
 	sst.tm_sec	 = (int)st.wSecond;
 	sst.tm_min	 = (int)st.wMinute;
 	sst.tm_hour	 = (int)st.wHour;
@@ -6744,10 +6805,14 @@ void EditUpdateTimestampMatchTemplate(HWND hwnd) {
 	sst.tm_mon	 = (int)st.wMonth - 1;
 	sst.tm_year	 = (int)st.wYear - 1900;
 	sst.tm_wday	 = (int)st.wDayOfWeek;
-	mktime(&sst);
 
 	WCHAR wchReplace[256];
+#if NP2_DYNAMIC_LOAD_wcsftime
+	wcsftimeSig pfn = GetFunctionPointer_wcsftime();
+	pfn(wchReplace, COUNTOF(wchReplace), wchTemplate, &sst);
+#else
 	wcsftime(wchReplace, COUNTOF(wchReplace), wchTemplate, &sst);
+#endif
 
 	const UINT cpEdit = SciCall_GetCodePage();
 #if NP2_USE_DESIGNATED_INITIALIZER

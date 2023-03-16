@@ -21,8 +21,7 @@
 #include <algorithm>
 #include <memory>
 
-#include <windows.h>
-
+#include "ParallelSupport.h"
 #include "ScintillaTypes.h"
 #include "ILoader.h"
 #include "ILexer.h"
@@ -102,7 +101,7 @@ bool EditModel::BidirectionalEnabled() const noexcept {
 }
 
 SurfaceMode EditModel::CurrentSurfaceMode() const noexcept {
-	return { pdoc->dbcsCodePage, BidirectionalR2L() };
+	return { pdoc->dbcsCodePage/*, BidirectionalR2L()*/ };
 }
 
 void EditModel::SetDefaultFoldDisplayText(const char *text) {
@@ -142,7 +141,7 @@ void EditModel::SetIdleTaskTime(uint32_t milliseconds) const noexcept {
 }
 
 bool EditModel::IdleTaskTimeExpired() const noexcept {
-	return WaitForSingleObject(idleTaskTimer, 0) == WAIT_OBJECT_0;
+	return WaitableTimerExpired(idleTaskTimer);
 }
 
 void EditModel::UpdateParallelLayoutThreshold() noexcept {

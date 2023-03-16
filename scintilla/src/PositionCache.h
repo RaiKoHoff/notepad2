@@ -46,7 +46,7 @@ class LineLayout final {
 private:
 	std::unique_ptr<int[]> lineStarts;
 	/// Drawing is only performed for @a maxLineLength characters on each line.
-	const Sci::Line lineNumber;
+	Sci::Line lineNumber;
 	int lenLineStarts;
 public:
 	enum {
@@ -85,6 +85,7 @@ public:
 	void operator=(LineLayout &&) = delete;
 	~LineLayout();
 	void Resize(int maxLineLength_);
+	void Reset(Sci::Line lineNumber_, Sci::Position maxLineLength_);
 	void EnsureBidiData();
 	void Free() noexcept;
 	void ClearPositions() const noexcept;
@@ -149,6 +150,16 @@ struct ScreenLine : public IScreenLine {
 	XYPOSITION TabPositionAfter(XYPOSITION xPosition) const noexcept override;
 };
 
+struct SignificantLines {
+	Sci::Line lineCaret;
+	Sci::Line lineTop;
+	Sci::Line linesOnScreen;
+	Sci::Line linesTotal;
+	int styleClock;
+	Scintilla::LineCache level;
+	bool LineMayCache(Sci::Line line) const noexcept;
+};
+
 /**
  */
 class LineLayoutCache final {
@@ -176,6 +187,15 @@ public:
 	}
 	LineLayout* SCICALL Retrieve(Sci::Line lineNumber, Sci::Line lineCaret, int maxChars, int styleClock_,
 		Sci::Line linesOnScreen, Sci::Line linesInDoc, Sci::Line topLine);
+	LineLayout* Retrieve(Sci::Line lineNumber, const SignificantLines &significantLines, int maxChars) {
+		return Retrieve(lineNumber, significantLines.lineCaret,
+			maxChars, significantLines.styleClock,
+			significantLines.linesOnScreen, significantLines.linesTotal, significantLines.lineTop);
+	}
+
+	static constexpr int UseLongCache(unsigned maxChars) noexcept {
+		return maxChars >> (20 + 1); // 2MiB
+	}
 };
 
 class PositionCacheEntry {
@@ -300,6 +320,7 @@ public:
 
 class PositionCache {
 	std::vector<PositionCacheEntry> pces;
+	NativeMutex cacheLock;
 	uint32_t clock;
 	bool allClear;
 public:

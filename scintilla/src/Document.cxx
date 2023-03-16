@@ -22,7 +22,6 @@
 #include <optional>
 #include <algorithm>
 #include <memory>
-#include <chrono>
 
 #ifndef NO_CXX11_REGEX
 #include <regex>
@@ -147,7 +146,6 @@ Document::Document(DocumentOption options) :
 	eolMode = EndOfLine::Lf;
 #endif
 	dbcsCodePage = CpUtf8;
-	dbcsCharClass = nullptr;
 	lineEndBitSet = LineEndType::Default;
 	endStyled = 0;
 	styleClock = 0;
@@ -263,13 +261,20 @@ LineEndType Document::LineEndTypesSupported() const noexcept {
 		return LineEndType::Default;
 }
 
+static inline std::unique_ptr<DBCSCharClassify> GetDBCSCharClassify(int codePage) {
+	if (codePage != 0 && codePage != CpUtf8) {
+		return std::make_unique<DBCSCharClassify>(codePage);
+	}
+	return {};
+}
+
 bool Document::SetDBCSCodePage(int dbcsCodePage_) {
 	if (dbcsCodePage != dbcsCodePage_) {
 		dbcsCodePage = dbcsCodePage_;
 		pcf.reset();
 		cb.SetLineEndTypes(lineEndBitSet & LineEndTypesSupported());
 		cb.SetUTF8Substance(CpUtf8 == dbcsCodePage);
-		dbcsCharClass = DBCSCharClassify::Get(dbcsCodePage_);
+		dbcsCharClass = GetDBCSCharClassify(dbcsCodePage);
 		ModifiedAt(0);	// Need to restyle whole document
 		return true;
 	} else {
@@ -458,6 +463,10 @@ int Document::MarkerHandleFromLine(Sci::Line line, int which) const noexcept {
 
 Sci_Position SCI_METHOD Document::LineStart(Sci_Line line) const noexcept {
 	return cb.LineStart(line);
+}
+
+Range Document::LineRange(Sci::Line line) const noexcept {
+	return {cb.LineStart(line), cb.LineStart(line + 1)};
 }
 
 bool Document::IsLineStartPosition(Sci::Position position) const noexcept {

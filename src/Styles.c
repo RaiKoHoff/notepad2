@@ -713,7 +713,7 @@ static int __cdecl CmpEditLexerByOrder(const void *p1, const void *p2) {
 #if NP2_ENABLE_LOCALIZE_LEXER_NAME
 #endif
 	if (cmp == 0) {
-		cmp = StrCmpIW(pLex1->pszName, pLex2->pszName);
+		cmp = _wcsicmp(pLex1->pszName, pLex2->pszName);
 	}
 	return cmp;
 }
@@ -724,7 +724,7 @@ static int __cdecl CmpEditLexerByName(const void *p1, const void *p2) {
 	// TODO: sort by localized name
 #if NP2_ENABLE_LOCALIZE_LEXER_NAME
 #endif
-	const int cmp = StrCmpIW(pLex1->pszName, pLex2->pszName);
+	const int cmp = _wcsicmp(pLex1->pszName, pLex2->pszName);
 	return cmp;
 }
 
@@ -820,8 +820,8 @@ static void Style_LoadAll(bool bReload) {
 		GetPrivateProfileSection(INI_SECTION_NAME_CUSTOM_COLORS, pIniSectionBuf, cchIniSection, themePath);
 		IniSectionParseArray(pIniSection, pIniSectionBuf, FALSE);
 
-		const int count = min_i(pIniSection->count, MAX_CUSTOM_COLOR_COUNT);
-		for (int i = 0; i < count; i++) {
+		const UINT count = min_u(pIniSection->count, MAX_CUSTOM_COLOR_COUNT);
+		for (UINT i = 0; i < count; i++) {
 			const IniKeyValueNode *node = &pIniSection->nodeList[i];
 			const UINT n = (UINT)(wcstol(node->key, NULL, 10) - 1);
 			LPCWSTR wch = node->value;

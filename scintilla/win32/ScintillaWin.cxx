@@ -23,7 +23,6 @@
 #include <optional>
 #include <algorithm>
 #include <memory>
-#include <chrono>
 //#include <mutex>
 
 // WIN32_LEAN_AND_MEAN is defined to avoid including commdlg.h
@@ -53,6 +52,7 @@ Used by VSCode, Atom etc.
 */
 #define Enable_ChromiumWebCustomMIMEDataFormat	0
 
+#include "ParallelSupport.h"
 #include "ScintillaTypes.h"
 #include "ScintillaMessages.h"
 #include "ScintillaStructures.h"
@@ -90,7 +90,7 @@ Used by VSCode, Atom etc.
 #include "MarginView.h"
 #include "EditView.h"
 #include "Editor.h"
-#include "ElapsedPeriod.h"
+//#include "ElapsedPeriod.h"
 
 #include "AutoComplete.h"
 #include "ScintillaBase.h"
@@ -982,6 +982,15 @@ std::wstring StringDecode(const std::string_view sv, int codePage) {
 }
 
 std::wstring StringMapCase(const std::wstring_view wsv, DWORD mapFlags) {
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+	const int charsConverted = ::LCMapStringEx(LOCALE_NAME_USER_DEFAULT, mapFlags,
+		wsv.data(), static_cast<int>(wsv.length()), nullptr, 0, nullptr, nullptr, 0);
+	std::wstring wsConverted(charsConverted, 0);
+	if (charsConverted) {
+		::LCMapStringEx(LOCALE_NAME_USER_DEFAULT, mapFlags,
+			wsv.data(), static_cast<int>(wsv.length()), wsConverted.data(), charsConverted, nullptr, nullptr, 0);
+	}
+#else
 	const int charsConverted = ::LCMapStringW(LOCALE_USER_DEFAULT, mapFlags,
 		wsv.data(), static_cast<int>(wsv.length()), nullptr, 0);
 	std::wstring wsConverted(charsConverted, 0);
@@ -989,6 +998,7 @@ std::wstring StringMapCase(const std::wstring_view wsv, DWORD mapFlags) {
 		::LCMapStringW(LOCALE_USER_DEFAULT, mapFlags,
 			wsv.data(), static_cast<int>(wsv.length()), wsConverted.data(), charsConverted);
 	}
+#endif
 	return wsConverted;
 }
 
@@ -2578,7 +2588,7 @@ void ScintillaWin::SetTrackMouseLeaveEvent(bool on) noexcept {
 
 void ScintillaWin::UpdateBaseElements() {
 	struct ElementToIndex { Element element; int nIndex; };
-	const ElementToIndex eti[] = {
+	constexpr ElementToIndex eti[] = {
 		{ Element::List, COLOR_WINDOWTEXT },
 		{ Element::ListBack, COLOR_WINDOW },
 		{ Element::ListSelected, COLOR_HIGHLIGHTTEXT },
@@ -2586,7 +2596,9 @@ void ScintillaWin::UpdateBaseElements() {
 	};
 	bool changed = false;
 	for (const ElementToIndex &ei : eti) {
-		changed = vs.SetElementBase(ei.element, ColourRGBA::FromRGB(::GetSysColor(ei.nIndex))) || changed;
+		if (vs.SetElementBase(ei.element, ColourRGBA::FromRGB(::GetSysColor(ei.nIndex)))) {
+			changed = true;
+		}
 	}
 	if (changed) {
 		Redraw();
@@ -2834,10 +2846,9 @@ std::unique_ptr<CaseFolder> ScintillaWin::CaseFolderForEncoding() {
 			std::unique_ptr<CaseFolderTable> pcf = std::make_unique<CaseFolderTable>();
 			// Only for single byte encodings
 			for (int i = 0x80; i < 0x100; i++) {
-				char sCharacter[2] = "A";
-				sCharacter[0] = static_cast<char>(i);
+				const char sCharacter[2] = {static_cast<char>(i), '\0'};
 				wchar_t wCharacter[20];
-				const unsigned int lengthUTF16 = WideCharFromMultiByte(cpDest, sCharacter,
+				const unsigned int lengthUTF16 = WideCharFromMultiByte(cpDest, std::string_view(sCharacter, 1),
 					wCharacter, std::size(wCharacter));
 				if (lengthUTF16 == 1) {
 					const char *caseFolded = CaseConvert(wCharacter[0], CaseConversion::fold);

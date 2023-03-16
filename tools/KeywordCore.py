@@ -1067,7 +1067,7 @@ def parse_graphviz_api_file(path):
 			keywordMap['attributes'].extend(attributes)
 			keywordMap['values'].extend(values)
 		elif key == 'color names':
-			items = [item for item in doc.split() if not item[-1] in string.digits]
+			items = [item for item in doc.split() if item[-1] not in string.digits]
 			ColorNameList.update(items)
 		elif key == 'labels':
 			labels = re.findall(r'<(\w+)', doc)
@@ -1389,7 +1389,7 @@ def parse_javascript_api_file(path):
 			items = re.findall(r'@(\w+)', doc)
 			keywordMap[key] = items
 		elif key == 'api':
-			classes = set(['JSON', 'jQuery'])
+			classes = set(['JSON'])
 			constant = set()
 			functions = set()
 			properties = set(['URL'])

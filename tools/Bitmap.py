@@ -2,60 +2,35 @@ import os.path
 import struct
 import io
 from enum import IntEnum
+import ctypes
 from PIL import Image
 
-__all__ = ['Bitmap', 'Icon', 'Image', 'ResizeMethod', 'QuantizeMethod']
-# https://pillow.readthedocs.io/en/stable/index.html
+__all__ = ['Bitmap', 'Color', 'Icon', 'Image', 'ResizeMethod', 'QuantizeMethod']
 
-# https://en.wikipedia.org/wiki/BMP_file_format
-# https://learn.microsoft.com/en-us/windows/win32/gdi/windows-gdi
-class BitmapFileHeader:
-	StructureSize = 14
+class Color:
+	Transparent = (0, 0, 0, 0)
+	Black = (0, 0, 0, 255)
+	White = (255, 255, 255, 255)
 
-	def __init__(self):
-		self.size = 0
-		self.reserved1 = 0
-		self.reserved2 = 0
-		self.offset = 54
+	@staticmethod
+	def find_color_index_naive(table, color):
+		result = 0
+		diff = 1 << 18 # 4*255*255
+		red, green, blue, alpha = color
+		for index, item in enumerate(table):
+			R, G, B, A = item
+			distance = (red - R)**2 + (green - G)**2 + (blue - B)**2 + (alpha - A)**2
+			if distance < diff:
+				diff = distance
+				result = index
+		return result
 
-	def read(self, fd):
-		magic = fd.read(2)
-		assert magic == b'BM'
-		self.size = struct.unpack('<I', fd.read(4))[0]
-		self.reserved1, self.reserved2 = struct.unpack('<HH', fd.read(2*2))
-		self.offset = struct.unpack('<I', fd.read(4))[0]
-		assert self.offset >= 54, self.offset
-
-	def write(self, fd):
-		fd.write(b'BM')
-		fd.write(struct.pack('<I', self.size))
-		fd.write(struct.pack('<HH', self.reserved1, self.reserved2))
-		fd.write(struct.pack('<I', self.offset))
-
-	def __str__(self):
-		return f'''BitmapFileHeader {{
-	size: {self.size :08X} {self.size}
-	reserved: {self.reserved1 :04X} {self.reserved2 :04X}
-	offset: {self.offset :08X} {self.offset}
-}}'''
-
-_InchesPerMetre = 0.0254
-_TransparentColor = (0, 0, 0, 0)
-_WhiteColor = (255, 255, 255, 255)
-_SupportedColorDepth = (1, 4, 8, 24, 32, 'png')
-_PngMagic = b'\x89PNG'
-
-def _find_color_index_naive(table, color):
-	result = 0
-	diff = 1 << 18 # 4*255*255
-	red, green, blue, alpha = color
-	for index, item in enumerate(table):
-		R, G, B, A = item
-		distance = (red - R)**2 + (green - G)**2 + (blue - B)**2 + (alpha - A)**2
-		if distance < diff:
-			diff = distance
-			result = index
-	return result
+	# https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getsyscolor
+	@staticmethod
+	def GetSysColor(index):
+		value = ctypes.windll.user32.GetSysColor(index)
+		red, green, blue = value & 0xff, (value >> 8) & 0xff, (value >> 16) & 0xff
+		return (red, green, blue, 0xff)
 
 def _drawMaskRow(maskRow):
 	result = ['o']*8*len(maskRow)
@@ -110,6 +85,7 @@ def _diffMaskData(name, referData, maskData, rowSize, saveLog=False):
 		fd.write(doc.encode('utf-8'))
 	return total
 
+# https://pillow.readthedocs.io/en/stable/index.html
 def _showMaskImage(maskList, rowSize, height, title=None):
 	rows = [maskList[i:i+rowSize] for i in range(0, len(maskList), rowSize)]
 	maskList = []
@@ -135,6 +111,12 @@ class QuantizeMethod(IntEnum):
 	PngQuant = 101
 	ImageMagick = 102
 
+# https://en.wikipedia.org/wiki/BMP_file_format
+# https://learn.microsoft.com/en-us/windows/win32/gdi/windows-gdi
+_InchesPerMetre = 0.0254
+_SupportedColorDepth = (1, 4, 8, 24, 32, 'png')
+_PngMagic = b'\x89PNG'
+
 class CompressionMethod(IntEnum):
 	BI_RGB = 0
 	BI_RLE8 = 1
@@ -153,6 +135,36 @@ class CompressionMethod(IntEnum):
 			return CompressionMethod(value).name
 		except ValueError:
 			return f'Unknown-{value}'
+
+class BitmapFileHeader:
+	StructureSize = 14
+
+	def __init__(self):
+		self.size = 0
+		self.reserved1 = 0
+		self.reserved2 = 0
+		self.offset = 54
+
+	def read(self, fd):
+		magic = fd.read(2)
+		assert magic == b'BM'
+		self.size = struct.unpack('<I', fd.read(4))[0]
+		self.reserved1, self.reserved2 = struct.unpack('<HH', fd.read(2*2))
+		self.offset = struct.unpack('<I', fd.read(4))[0]
+		assert self.offset >= 54, self.offset
+
+	def write(self, fd):
+		fd.write(b'BM')
+		fd.write(struct.pack('<I', self.size))
+		fd.write(struct.pack('<HH', self.reserved1, self.reserved2))
+		fd.write(struct.pack('<I', self.offset))
+
+	def __str__(self):
+		return f'''BitmapFileHeader {{
+	size: {self.size :08X} {self.size}
+	reserved: {self.reserved1 :04X} {self.reserved2 :04X}
+	offset: {self.offset :08X} {self.offset}
+}}'''
 
 class BitmapInfoHeader:
 	StructureSize = 40
@@ -254,9 +266,9 @@ class Bitmap:
 		self.maskData = None
 
 		if width and height:
+			row = [Color.Transparent] * width
 			for y in range(height):
-				row = [_TransparentColor] * width
-				self.rows.append(row)
+				self.rows.append(row[:])
 
 	def read(self, fd, iconFile=False):
 		start = fd.tell()
@@ -284,6 +296,8 @@ class Bitmap:
 	def write(self, fd, iconFile=False):
 		self.encode()
 		maskData = self.maskData
+		#if self.bitsPerPixel == 32:
+		#	maskData = None # mask is not required
 		if iconFile:
 			if maskData:
 				self.infoHeader.sizeImage += len(maskData)
@@ -390,7 +404,7 @@ class Bitmap:
 				buf.extend(padding)
 		self._set_data(buf)
 
-	def _decode_palette(self):
+	def decode_palette(self):
 		palette = self.palette
 		table = []
 		for i in range(0, len(palette), 4):
@@ -411,23 +425,23 @@ class Bitmap:
 					counter[color] = 1
 		return counter
 
-	def _build_palette(self, method=None):
+	def build_palette(self, method=None):
 		colorCount = 1 << self.bitsPerPixel
 		palette = self.palette
 		colorMap = {}
 		if palette and len(palette) == 4*colorCount:
-			table = self._decode_palette()
+			table = self.decode_palette()
 			for index, color in enumerate(table):
 				if color not in colorMap:
 					colorMap[color] = index
 		else:
 			counter = self.countColor()
 			if len(counter) > colorCount and (method is None or method < QuantizeMethod.Naive):
-				bmp = self.quantize(colorCount, method, False)
+				reduced, result, count, bmp = self.reduce_color(colorCount, method)
 				name = 'Default' if method is None else method.name
-				print(f'{name} reduce {bmp.width}x{bmp.height} bitmap color: {len(counter)} => {bmp.colorUsed}')
+				print(f'{name} reduce {bmp.width}x{bmp.height} bitmap color: {len(counter)} => {reduced}, {(count, result)}')
 				bmp.bitsPerPixel = self.bitsPerPixel
-				return bmp._build_palette(QuantizeMethod.Naive)
+				return bmp.build_palette(QuantizeMethod.Naive)
 
 			table = [item[0] for item in sorted(counter.items(), key=lambda m: (m[1], m[0]), reverse=True)][:colorCount]
 			for index, color in enumerate(table):
@@ -435,7 +449,7 @@ class Bitmap:
 			if len(counter) > colorCount:
 				for color in counter:
 					if color not in colorMap:
-						index = _find_color_index_naive(table, color)
+						index = Color.find_color_index_naive(table, color)
 						colorMap[color] = index
 
 			palette = []
@@ -465,7 +479,7 @@ class Bitmap:
 		buf = self.data
 		padding = self.rowPadding
 		rows = []
-		table = self._decode_palette()
+		table = self.decode_palette()
 		for y in range(height):
 			row = []
 			for x in range(width):
@@ -480,7 +494,7 @@ class Bitmap:
 	def _encode_8bit(self):
 		padding = [0] * self.rowPadding
 		buf = []
-		palette, indexData = self._build_palette()
+		palette, indexData = self.build_palette()
 		for row in reversed(indexData):
 			buf.extend(row)
 			if padding:
@@ -497,7 +511,7 @@ class Bitmap:
 		rows = []
 		padded = width & 1
 		octet = (width + padded) >> 1
-		table = self._decode_palette()
+		table = self.decode_palette()
 		for y in range(height):
 			row = []
 			for x in range(octet):
@@ -518,7 +532,7 @@ class Bitmap:
 		padding = [0] * (2*self.rowPadding + padded)
 		octet = width + len(padding)
 		buf = []
-		palette, indexData = self._build_palette()
+		palette, indexData = self.build_palette()
 		for row in reversed(indexData):
 			if padding:
 				row.extend(padding)
@@ -537,7 +551,7 @@ class Bitmap:
 		rows = []
 		padded = (8 - (width & 7)) & 7
 		octet = (width + padded) >> 3
-		table = self._decode_palette()
+		table = self.decode_palette()
 		for y in range(height):
 			row = []
 			for x in range(octet):
@@ -564,7 +578,7 @@ class Bitmap:
 		padding = [0] * (8*self.rowPadding + padded)
 		octet = width + len(padding)
 		buf = []
-		palette, indexData = self._build_palette()
+		palette, indexData = self.build_palette()
 		for row in reversed(indexData):
 			if padding:
 				row.extend(padding)
@@ -641,7 +655,7 @@ class Bitmap:
 			for mask in maskRow:
 				for i in range(8):
 					if mask & 0x80:
-						row[offset] = _TransparentColor
+						row[offset] = Color.Transparent
 					mask <<= 1
 					offset += 1
 					if offset == width:
@@ -709,9 +723,9 @@ class Bitmap:
 		self.palette = None
 		self.rows[y][x] = color
 
-	def save(self, path, colorDepth=None):
-		if colorDepth not in (None, 32) and not self.isOpaque():
-			bmp = self.asOpaque()
+	def save(self, path, colorDepth=None, backColor=Color.White):
+		if colorDepth and colorDepth != 32 and not self.isOpaque():
+			bmp = self.asOpaque(backColor)
 			bmp.save(path, colorDepth)
 			return
 
@@ -753,16 +767,18 @@ class Bitmap:
 					color = data[x, y]
 					# TODO: fix transparent color
 					if color[3] == 0:
-						bmp[x, y] = _TransparentColor
+						bmp[x, y] = Color.Transparent
 					else:
 						bmp[x, y] = color
 		return bmp
 
-	def asOpaque(self, backColor=_WhiteColor):
+	def asOpaque(self, backColor=Color.White):
 		image = self.toImage(32, False)
-		background = Image.new('RGBA', image.size, color=backColor)
-		image = Image.alpha_composite(background, image)
-		#image = image.convert('RGB')
+		if backColor is None:
+			image = image.convert('RGB')
+		else:
+			background = Image.new('RGBA', image.size, color=backColor)
+			image = Image.alpha_composite(background, image)
 		bmp = Bitmap.fromImage(image)
 		bmp.bitsPerPixel = 24
 		return bmp
@@ -775,37 +791,56 @@ class Bitmap:
 			self.make_transparent(maskData)
 			return
 
-		rows = []
-		for row in self.rows:
-			rows.append(row[:])
 		if current == colorCount:
+			rows = []
+			for row in self.rows:
+				rows.append(row[:])
 			self.make_transparent(maskData)
 			counter = self.countColor()
 			if len(counter) <= colorCount:
 				return
 			self.rows = rows
 
-		reduced = colorCount
-		while reduced:
-			bmp = self.quantize(reduced, method, False)
-			bmp.make_transparent(maskData)
-			counter = bmp.countColor()
-			if len(counter) <= colorCount:
-				break
-			reduced -= 1
-			self.rows = rows
-
+		reduced, result, count, bmp = self.reduce_color(colorCount, method, maskData)
 		self.rows = bmp.rows
 		name = 'Default' if method is None else method.name
-		print(f'{name} reduce {bmp.width}x{bmp.height} icon color: {current} => {reduced}, {len(counter)}')
+		print(f'{name} reduce {bmp.width}x{bmp.height} icon color: {current} => {reduced}, {(count, result)}')
 
-	def asIcon(self, colorDepth=None, method=None, threshold=0, backColor=_WhiteColor):
+	def reduce_color(self, colorCount, method=None, maskData=None):
+		image = self.toImage()
+		reduced = {}
+		best = None
+		count = colorCount
+		while count and count <= 256:
+			img = image.quantize(count, method=method)
+			bmp = Bitmap.fromImage(img)
+			if maskData:
+				bmp.make_transparent(maskData)
+			counter = bmp.countColor()
+			result = len(counter)
+			reduced[count] = (result, count, bmp)
+			if result == colorCount:
+				best = (result, count, bmp)
+				break
+			if result > colorCount:
+				count -= 1
+			else:
+				count += 1
+			if count in reduced:
+				break
+
+		if not best:
+			best = sorted(value for value in reduced.values() if value[0] < colorCount)[-1]
+		reduced = dict((key, value[0]) for key, value in reduced.items())
+		return reduced, *best
+
+	def asIcon(self, colorDepth=None, method=None, threshold=0, backColor=Color.White):
 		maskData = self.build_alpha_mask(threshold)
 		maskData = bytes(maskData)
 		bmp = self
-		if colorDepth not in (None, 32) and not self.isOpaque():
+		colorDepth = colorDepth or self.bitsPerPixel
+		if colorDepth != 32 and not self.isOpaque():
 			bmp = self.asOpaque(backColor)
-		colorDepth = colorDepth or bmp.bitsPerPixel
 		if colorDepth < 24:
 			bmp.reduce_icon_color(colorDepth, maskData, method)
 		elif colorDepth == 24:
@@ -828,7 +863,7 @@ class Bitmap:
 				count += alpha & 1
 				if alpha not in (0, 0xFF):
 					return False
-				if color == _TransparentColor:
+				if color == Color.Transparent:
 					transparent += 1
 		total = self.width*self.height
 		return transparent != total and (count == 0 or count == total)
@@ -859,8 +894,8 @@ class Bitmap:
 			return self
 		if method and method >= QuantizeMethod.Naive:
 			return self
-		image = self.toImage().quantize(colorCount, method=method)
-		return Bitmap.fromImage(image)
+		result = self.reduce_color(colorCount, method)
+		return result[-1]
 
 	@staticmethod
 	def fromFileEx(path):
@@ -997,7 +1032,7 @@ class Bitmap:
 			bmp.rows.append(row[:])
 		return bmp
 
-
+# https://en.wikipedia.org/wiki/ICO_(file_format)
 class IconCursorType(IntEnum):
 	Icon = 1
 	Cursor = 2
@@ -1104,8 +1139,6 @@ class Icon:
 			if magic == _PngMagic:
 				image = Image.open(stream)
 				#print(f'{image.width}x{image.height} png')
-				#with open(f'{image.width}x{image.height}.png', 'wb') as out:
-				#	out.write(raw)
 				self.imageList.append((image, 'png', raw))
 				continue
 
@@ -1142,7 +1175,7 @@ class Icon:
 			with open(path, 'wb') as fd:
 				self.write(fd)
 
-	def _build(self, args, method=None, threshold=0):
+	def build(self, args, method=None, threshold=0, backColor=Color.White):
 		imageList = {}
 		for path, colorDepth, hotspot in args:
 			index = _SupportedColorDepth.index(colorDepth)
@@ -1151,12 +1184,14 @@ class Icon:
 					raw = fd.read()
 				stream = io.BytesIO(raw)
 				image = Image.open(stream)
+				if image.getpalette():
+					print(f'ERROR: {image.width}x{image.height} icon png with palette: {path}')
 				assert image.width == image.height, (path, image.width, image.height)
 				imageList[(image.width, image.height, index)] = (image, colorDepth, raw, hotspot)
 			else:
 				bmp = Bitmap.fromFileEx(path)
-				assert bmp.width == bmp.height, (path, bmp.width, bmp.height)
-				bmp = bmp.asIcon(colorDepth, method, threshold)
+				assert bmp.width == bmp.height and bmp.width < 256 and bmp.height < 256, (path, bmp.width, bmp.height)
+				bmp = bmp.asIcon(colorDepth, method, threshold, backColor)
 				stream = io.BytesIO()
 				bmp.write(stream, iconFile=True)
 				raw = stream.getvalue()
@@ -1177,6 +1212,25 @@ class Icon:
 				entry.hotspot = hotspot
 			self.directory.entryList.append(entry)
 
+	def extract(self, folder='.', prefix='', dims=None):
+		if not os.path.exists(folder):
+			os.makedirs(folder)
+		for image, fmt, data in self.imageList:
+			dim = f'{image.width}x{image.height}'
+			if dims and dim not in dims:
+				continue
+			if fmt == 'png':
+				path = f'{folder}/{prefix}{dim}.png'
+			else:
+				path = f'{folder}/{prefix}{dim}@{fmt}.png'
+			if data and fmt == 'png':
+				with open(path, 'wb') as fd:
+					fd.write(data)
+			else:
+				if isinstance(image, Bitmap):
+					image = image.toImage(32)
+				image.save(path)
+
 	@property
 	def imageType(self):
 		return self.directory.imageType
@@ -1192,18 +1246,22 @@ class Icon:
 		return icon
 
 	@staticmethod
-	def makeIcon(args, path=None, method=None, threshold=0):
+	def makeIcon(args, path=None, method=None, threshold=0, backColor=Color.White):
 		icon = Icon()
 		args = [(*arg, None) for arg in args]
-		icon._build(args, method, threshold)
+		if path:
+			print('make icon:', path)
+		icon.build(args, method, threshold, backColor)
 		if path:
 			icon.save(path)
 		return icon
 
 	@staticmethod
-	def makeCursor(args, path=None, method=None, threshold=0):
+	def makeCursor(args, path=None, method=None, threshold=0, backColor=Color.White):
 		icon = Icon(IconCursorType.Cursor)
-		icon._build(args, method, threshold)
+		if path:
+			print('make cursor:', path)
+		icon.build(args, method, threshold, backColor)
 		if path:
 			icon.save(path)
 		return icon
