@@ -248,6 +248,10 @@ LexerConfigMap = {
 		'line_comment_string': '#',
 		'operator_style': ['SCE_CONF_OPERATOR'],
 	},
+	'NP2LEX_CSV': {
+		'escape_char_start': NoEscapeCharacter,
+		'extra_word_char': '-',
+	},
 	'NP2LEX_CPP': {
 		'cpp_style_comment': True,
 		'default_fold_level': ['preprocessor', 'namespace', 'class', 'method'],
@@ -858,8 +862,12 @@ LexerConfigMap = {
 def get_enum_flag_expr(flag, merge=True, separator='_'):
 	cls = flag.__class__
 	prefix = cls.__name__ + separator
-	if flag.name:
-		return prefix + flag.name
+	if name := flag.name:
+		if '|' in name:
+			# Python 3.11
+			result = [prefix + item.strip() for item in name.split('|')]
+			return ' | '.join(result) if merge else result
+		return prefix + name
 
 	result = []
 	values = cls.__members__.values()

@@ -13,7 +13,7 @@
 *
 *                                              (c) Florian Balmer 1996-2011
 *                                                  florian.balmer@gmail.com
-*                                               http://www.flos-freeware.ch
+*                                              https://www.flos-freeware.ch
 *
 *
 ******************************************************************************/
@@ -164,6 +164,7 @@ void SnapToDefaultPos(HWND hwnd);
 LRESULT CALLBACK MainWndProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam);
 LRESULT MsgCreate(HWND hwnd, WPARAM wParam, LPARAM lParam);
 void CreateBars(HWND hwnd, HINSTANCE hInstance);
+void MsgDPIChanged(HWND hwnd, WPARAM wParam, LPARAM lParam);
 void MsgThemeChanged(HWND hwnd, WPARAM wParam, LPARAM lParam);
 void MsgSize(HWND hwnd, WPARAM wParam, LPARAM lParam);
 void MsgInitMenu(HWND hwnd, WPARAM wParam, LPARAM lParam);

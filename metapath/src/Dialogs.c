@@ -13,7 +13,7 @@
 *
 *                                              (c) Florian Balmer 1996-2011
 *                                                  florian.balmer@gmail.com
-*                                               http://www.flos-freeware.ch
+*                                              https://www.flos-freeware.ch
 *
 *
 ******************************************************************************/
@@ -189,7 +189,7 @@ INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) 
 	switch (umsg) {
 	case WM_INITDIALOG: {
 		ResizeDlg_InitX(hwnd, cxRunDlg, IDC_RESIZEGRIP3);
-		MakeBitmapButton(hwnd, IDC_SEARCHEXE, g_hInstance, IDB_OPEN_FOLDER);
+		MakeBitmapButton(hwnd, IDC_SEARCHEXE, g_exeInstance, IDB_OPEN_FOLDER16);
 
 		HWND hwndCtl = GetDlgItem(hwnd, IDC_COMMANDLINE);
 		DLITEM dli;
@@ -457,7 +457,7 @@ void OpenHelpLink(HWND hwnd, int cmd) {
 	LPCWSTR link = NULL;
 	switch (cmd) {
 	case IDC_WEBPAGE_LINK:
-		link = L"http://www.flos-freeware.ch";
+		link = L"https://www.flos-freeware.ch";
 		break;
 	case IDC_EMAIL_LINK:
 		link = L"mailto:florian.balmer@gmail.com";
@@ -1098,8 +1098,8 @@ void UpdateSystemIntegrationStatus(int mask, LPCWSTR lpszText, LPCWSTR lpszName)
 static INT_PTR CALLBACK ProgPageProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) {
 	switch (umsg) {
 	case WM_INITDIALOG: {
-		MakeBitmapButton(hwnd, IDC_BROWSE_Q, g_hInstance, IDB_OPEN_FOLDER);
-		MakeBitmapButton(hwnd, IDC_BROWSE_F, g_hInstance, IDB_OPEN_FOLDER);
+		MakeBitmapButton(hwnd, IDC_BROWSE_Q, g_exeInstance, IDB_OPEN_FOLDER16);
+		MakeBitmapButton(hwnd, IDC_BROWSE_F, g_exeInstance, IDB_OPEN_FOLDER16);
 
 		WCHAR tch[MAX_PATH];
 		lstrcpy(tch, szQuickview);
@@ -1439,7 +1439,7 @@ INT_PTR CALLBACK GetFilterDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lP
 
 			DWORD dwIndex = 0;
 			DWORD dwCheck = 0xFFFF; // index of current filter
-			for (int i = 0; i < pIniSection->count; i++, dwIndex++) {
+			for (UINT i = 0; i < pIniSection->count; i++, dwIndex++) {
 				const IniKeyValueNode *node = &pIniSection->nodeList[i];
 				LPCWSTR pszFilterValue = node->value;
 				if (*pszFilterValue) {
@@ -1687,7 +1687,7 @@ INT_PTR CALLBACK CopyMoveDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lPa
 		SetWindowLongPtr(hwnd, DWLP_USER, lParam);
 
 		ResizeDlg_InitX(hwnd, cxCopyMoveDlg, IDC_RESIZEGRIP5);
-		MakeBitmapButton(hwnd, IDC_BROWSEDESTINATION, g_hInstance, IDB_OPEN_FOLDER);
+		MakeBitmapButton(hwnd, IDC_BROWSEDESTINATION, g_exeInstance, IDB_OPEN_FOLDER16);
 
 		const LPCFILEOPDLGDATA lpfod = (LPCFILEOPDLGDATA)lParam;
 		SetDlgItemText(hwnd, IDC_SOURCE, lpfod->szSource);
@@ -1893,7 +1893,7 @@ INT_PTR CALLBACK OpenWithDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lPa
 		DirList_StartIconThread(hwndLV);
 		ListView_SetItemState(hwndLV, 0, LVIS_FOCUSED, LVIS_FOCUSED);
 
-		MakeBitmapButton(hwnd, IDC_GETOPENWITHDIR, g_hInstance, IDB_OPEN_FOLDER);
+		MakeBitmapButton(hwnd, IDC_GETOPENWITHDIR, g_exeInstance, IDB_OPEN_FOLDER16);
 
 		CenterDlgInParent(hwnd);
 	}
@@ -2156,9 +2156,9 @@ static INT_PTR CALLBACK FindWinDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 		SetWindowLongPtr(hwnd, DWLP_USER, lParam);
 		ResizeDlg_InitX(hwnd, cxFindWindowDlg, IDC_RESIZEGRIP5);
 
-		hIconCross1 = LoadIcon(g_hInstance, MAKEINTRESOURCE(IDI_CROSS1));
-		hIconCross2 = LoadIcon(g_hInstance, MAKEINTRESOURCE(IDI_CROSS2));
-		hCursorCross = LoadCursor(g_hInstance, MAKEINTRESOURCE(IDC_CROSSHAIR));
+		hIconCross1 = LoadIcon(g_exeInstance, MAKEINTRESOURCE(IDI_CROSS1));
+		hIconCross2 = LoadIcon(g_exeInstance, MAKEINTRESOURCE(IDI_CROSS2));
+		hCursorCross = LoadCursor(g_exeInstance, MAKEINTRESOURCE(IDC_CROSSHAIR));
 		CenterDlgInParent(hwnd);
 		bHasCapture = false;
 		return TRUE;
@@ -2349,8 +2349,8 @@ INT_PTR CALLBACK FindTargetDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 		//}
 
 		// Bitmap for the Browse button
-		MakeBitmapButton(hwnd, IDC_BROWSE, g_hInstance, IDB_OPEN_FOLDER);
-		//MakeBitmapButton(hwnd, IDC_FINDWIN, g_hInstance, IDB_BROWSE);
+		MakeBitmapButton(hwnd, IDC_BROWSE, g_exeInstance, IDB_OPEN_FOLDER16);
+		//MakeBitmapButton(hwnd, IDC_FINDWIN, g_exeInstance, IDB_BROWSE);
 
 		// initialize edit controls
 		HWND hwndCtl = GetDlgItem(hwnd, IDC_TARGETPATH);

@@ -26,6 +26,8 @@ IF /I "%~1" == "/?"     GOTO SHOWHELP
 @rem default arguments
 SET "COMPILER=MSVC"
 SET "ARCH=all"
+SET NO_32BIT=0
+SET NO_ARM=0
 SET "CONFIG=Release"
 SET "WITH_LOCALE="
 SET "ZIP_SUFFIX="
@@ -81,6 +83,14 @@ IF /I "%~1" == "all"     SET "ARCH=all"   & SHIFT & GOTO CheckThirdArg
 IF /I "%~1" == "/all"    SET "ARCH=all"   & SHIFT & GOTO CheckThirdArg
 IF /I "%~1" == "-all"    SET "ARCH=all"   & SHIFT & GOTO CheckThirdArg
 IF /I "%~1" == "--all"   SET "ARCH=all"   & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "No32bit"   SET "ARCH=all" & SET NO_ARM=1 & SET NO_32BIT=1 & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "/No32bit"  SET "ARCH=all" & SET NO_ARM=1 & SET NO_32BIT=1 & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "-No32bit"  SET "ARCH=all" & SET NO_ARM=1 & SET NO_32BIT=1 & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "--No32bit" SET "ARCH=all" & SET NO_ARM=1 & SET NO_32BIT=1 & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "NoARM"   SET "ARCH=all"   & SET NO_ARM=1 & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "/NoARM"  SET "ARCH=all"   & SET NO_ARM=1 & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "-NoARM"  SET "ARCH=all"   & SET NO_ARM=1 & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "--NoARM" SET "ARCH=all"   & SET NO_ARM=1 & SHIFT & GOTO CheckThirdArg
 
 
 :CheckThirdArg
@@ -103,10 +113,11 @@ IF /I "%~1" == "Locale"   SET "WITH_LOCALE=1" & SHIFT & GOTO StartWork
 IF /I "%~1" == "/Locale"  SET "WITH_LOCALE=1" & SHIFT & GOTO StartWork
 IF /I "%~1" == "-Locale"  SET "WITH_LOCALE=1" & SHIFT & GOTO StartWork
 IF /I "%~1" == "--Locale" SET "WITH_LOCALE=1" & SHIFT & GOTO StartWork
-IF NOT "%~1" == "1" (IF NOT "%~1" == "0" (SET "ZIP_SUFFIX=%1" & SHIFT & GOTO StartWork))
 
 
 :StartWork
+IF NOT "%~1" == "" (IF NOT "%~1" == "1" (IF NOT "%~1" == "0" (SET "ZIP_SUFFIX=%1" & SHIFT)))
+IF "%ZIP_SUFFIX%" == "" (IF "%WITH_LOCALE%" == "1" (SET "ZIP_SUFFIX=i18n"))
 SET "EXIT_ON_ERROR=%~1"
 
 CALL :SubGetVersion
@@ -138,27 +149,29 @@ IF /I "%COMPILER%" == "GCC" (
   SET INPUTDIR_ARM=bin\%CONFIG%\ARM
 )
 
+IF %NO_32BIT% == 1 GOTO ARCH_x64
 IF /I "%ARCH%" == "AVX2" GOTO ARCH_AVX2
 IF /I "%ARCH%" == "x64" GOTO ARCH_x64
 IF /I "%ARCH%" == "Win32" GOTO ARCH_Win32
 IF /I "%ARCH%" == "ARM64" GOTO ARCH_ARM64
 IF /I "%ARCH%" == "ARM" GOTO ARCH_ARM
 
-:ARCH_AVX2
-IF EXIST "%INPUTDIR_AVX2%" CALL :SubZipFiles %INPUTDIR_AVX2% AVX2
-IF /I "%ARCH%" == "AVX2" GOTO END_ARCH
+:ARCH_Win32
+IF EXIST "%INPUTDIR_Win32%" CALL :SubZipFiles %INPUTDIR_Win32% Win32
+IF /I "%ARCH%" == "Win32" GOTO END_ARCH
 
 :ARCH_x64
 IF EXIST "%INPUTDIR_x64%" CALL :SubZipFiles %INPUTDIR_x64% x64
 IF /I "%ARCH%" == "x64" GOTO END_ARCH
 
-:ARCH_Win32
-IF EXIST "%INPUTDIR_Win32%" CALL :SubZipFiles %INPUTDIR_Win32% Win32
-IF /I "%ARCH%" == "Win32" GOTO END_ARCH
+:ARCH_AVX2
+IF EXIST "%INPUTDIR_AVX2%" CALL :SubZipFiles %INPUTDIR_AVX2% AVX2
+IF /I "%ARCH%" == "AVX2" GOTO END_ARCH
 
 :ARCH_ARM64
 IF EXIST "%INPUTDIR_ARM64%" CALL :SubZipFiles %INPUTDIR_ARM64% ARM64
 IF /I "%ARCH%" == "ARM64" GOTO END_ARCH
+IF %NO_ARM% == 1 GOTO END_ARCH
 
 :ARCH_ARM
 IF EXIST "%INPUTDIR_ARM%" CALL :SubZipFiles %INPUTDIR_ARM% ARM
@@ -174,11 +187,7 @@ EXIT /B
 IF NOT EXIST "%1\Notepad2.exe" CALL (:SUBMSG "ERROR" "%1\Notepad2.exe NOT found" & EXIT /B)
 IF NOT EXIST "%1\metapath.exe" CALL (:SUBMSG "ERROR" "%1\metapath.exe NOT found" & EXIT /B)
 
-IF "%WITH_LOCALE%" == "1" (
-  SET "ZIP_NAME=Notepad2_i18n"
-) ELSE (
-  IF "%ZIP_SUFFIX%" == "" (SET "ZIP_NAME=Notepad2") ELSE (SET "ZIP_NAME=Notepad2_%ZIP_SUFFIX%")
-)
+IF "%ZIP_SUFFIX%" == "" (SET "ZIP_NAME=Notepad2") ELSE (SET "ZIP_NAME=Notepad2_%ZIP_SUFFIX%")
 IF /I "%COMPILER%" == "MSVC" (
   SET "ZIP_NAME=%ZIP_NAME%_%2_%NP2_VER%"
 ) ELSE (
@@ -248,7 +257,7 @@ EXIT /B
 :SHOWHELP
 TITLE %~nx0 %1
 ECHO. & ECHO.
-ECHO Usage:  %~nx0 [MSVC^|GCC^|Clang^|LLVM] [Win32^|x64^|AVX2^|ARM64^|ARM^|all] [Release^|Debug] [Locale]
+ECHO Usage:  %~nx0 [MSVC^|GCC^|Clang^|LLVM] [Win32^|x64^|AVX2^|ARM64^|ARM^|all^|NoARM^|No32bit] [Release^|Debug] [Locale]
 ECHO.
 ECHO Notes:  You can also prefix the commands with "-", "--" or "/".
 ECHO         The arguments are not case sensitive.

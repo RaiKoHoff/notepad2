@@ -13,6 +13,11 @@ namespace Scintilla {
 
 enum class Message;	// Declare in case ScintillaMessages.h not included
 
+// Declare in case ScintillaStructures.h not included
+struct TextRangeFull;
+struct TextToFindFull;
+struct RangeToFormatFull;
+
 using FunctionDirect = intptr_t(*)(intptr_t ptr, unsigned int iMessage, uintptr_t wParam, intptr_t lParam, int *pStatus);
 
 struct Failure {
@@ -46,6 +51,7 @@ class ScintillaCall {
 	intptr_t ptr;
 	intptr_t CallPointer(Message msg, uintptr_t wParam, void *s);
 	intptr_t CallString(Message msg, uintptr_t wParam, const char *s);
+	intptr_t CallConstPointer(Message msg, uintptr_t wParam, const void *s);
 	std::string CallReturnString(Message msg, uintptr_t wParam);
 public:
 	Scintilla::Status statusLastCall;
@@ -92,7 +98,7 @@ public:
 	void SetUndoCollection(bool collectUndo);
 	void SelectAll();
 	void SetSavePoint();
-	Position GetStyledText(void *tr);
+	Position GetStyledTextFull(const TextRangeFull *tr);
 	bool CanRedo();
 	Line MarkerLineFromHandle(int markerHandle);
 	void MarkerDeleteHandle(int markerHandle);
@@ -185,6 +191,7 @@ public:
 	bool StyleGetUnderline(int style);
 	Scintilla::CaseVisible StyleGetCase(int style);
 	Scintilla::CharacterSet StyleGetCharacterSet(int style);
+	bool StyleGetStrike(int style);
 	bool StyleGetVisible(int style);
 	bool StyleGetChangeable(int style);
 	bool StyleGetHotSpot(int style);
@@ -291,7 +298,7 @@ public:
 	Position LineIndentPosition(Line line);
 	Position Column(Position pos);
 	Position CountCharacters(Position start, Position end);
-	void CountCharactersAndColumns(void *ft);
+	void CountCharactersAndColumns(TextToFindFull *ft);
 	Position CountCodeUnits(Position start, Position end);
 	void SetHScrollBar(bool visible);
 	bool HScrollBar();
@@ -312,8 +319,8 @@ public:
 	int PrintMagnification();
 	void SetPrintColourMode(Scintilla::PrintOption mode);
 	Scintilla::PrintOption PrintColourMode();
-	Position FindTextFull(Scintilla::FindOption searchFlags, void *ft);
-	Position FormatRangeFull(bool draw, void *fr);
+	Position FindTextFull(Scintilla::FindOption searchFlags, TextToFindFull *ft);
+	Position FormatRangeFull(bool draw, const RangeToFormatFull *fr);
 	void SetChangeHistory(Scintilla::ChangeHistoryOption changeHistory);
 	Scintilla::ChangeHistoryOption ChangeHistory();
 	Line FirstVisibleLine();
@@ -327,9 +334,9 @@ public:
 	int MarginRight();
 	bool Modify();
 	void SetSel(Position anchor, Position caret);
-	Position GetSelText(char *text);
-	std::string GetSelText();
-	Position GetTextRangeFull(void *tr);
+	Position GetSelText(bool asBinary, char *text);
+	std::string GetSelText(bool asBinary);
+	Position GetTextRangeFull(const TextRangeFull *tr);
 	void HideSelection(bool hide);
 	bool SelectionHidden();
 	int PointXFromPosition(Position pos);
@@ -376,6 +383,7 @@ public:
 	void TargetWholeDocument();
 	Position ReplaceTarget(Position length, const char *text);
 	Position ReplaceTargetRE(Position length, const char *text);
+	Position ReplaceTargetMinimal(Position length, const char *text);
 	Position SearchInTarget(Position length, const char *text);
 	void SetSearchFlags(Scintilla::FindOption searchFlags);
 	Scintilla::FindOption SearchFlags();
@@ -826,8 +834,6 @@ public:
 	void SetKeyWords(int keyWordSet, const char *keyWords);
 	int Property(const char *key, char *value);
 	std::string Property(const char *key);
-	int PropertyExpanded(const char *key, char *value);
-	std::string PropertyExpanded(const char *key);
 	int PropertyInt(const char *key, int defaultValue);
 	int LexerLanguage(char *language);
 	std::string LexerLanguage();

@@ -13,7 +13,7 @@
 *
 *                                              (c) Florian Balmer 1996-2011
 *                                                  florian.balmer@gmail.com
-*                                               http://www.flos-freeware.ch
+*                                              https://www.flos-freeware.ch
 *
 *
 ******************************************************************************/
@@ -46,6 +46,34 @@ typedef enum CaretStyle {
 	CaretStyle_LineWidth3,
 } CaretStyle;
 
+typedef enum StyleDefinitionMask {
+	StyleDefinitionMask_None = 0,
+	StyleDefinitionMask_FontFace = 1 << 0,
+	StyleDefinitionMask_FontSize = 1 << 1,
+	StyleDefinitionMask_ForeColor = 1 << 2,
+	StyleDefinitionMask_BackColor = 1 << 3,
+	StyleDefinitionMask_FontWeight = 1 << 4,
+	StyleDefinitionMask_Charset = 1 << 5,
+} StyleDefinitionMask;
+
+typedef struct StyleDefinition {
+	UINT mask;
+	int fontSize;
+	COLORREF foreColor;
+	COLORREF backColor;
+	int weight;
+	bool italic;
+	bool underline;
+	bool strike;
+	bool overline;
+	bool eolFilled;
+	uint8_t unused;
+	uint16_t backIndex;
+	int charset;
+	WCHAR fontWide[LF_FACESIZE];
+	char fontFace[LF_FACESIZE * kMaxMultiByteCount];
+} StyleDefinition;
+
 extern PEDITLEXER pLexCurrent;
 extern int np2LexLangIndex;
 extern bool bUse2ndGlobalStyle;
@@ -61,7 +89,7 @@ void	Style_SaveTabSettings(PEDITLEXER pLex);
 void	EditApplyDefaultEncoding(PEDITLEXER pLex, BOOL bLexerChanged);
 void	InitAutoCompletionCache(LPCEDITLEXER pLex);
 
-void	Style_DetectBaseFontSize(HWND hwnd);
+void	Style_DetectBaseFontSize(HMONITOR hMonitor);
 HFONT	Style_CreateCodeFont(UINT dpi);
 void	Style_OnDPIChanged(PEDITLEXER pLex);
 void	Style_OnStyleThemeChanged(int theme);
@@ -69,7 +97,6 @@ void	Style_InitDefaultColor(void);
 void	Style_SetLexer(PEDITLEXER pLexNew, BOOL bLexerChanged);
 bool	Style_SetLexerFromFile(LPCWSTR lpszFile);
 void	Style_SetLexerFromName(LPCWSTR lpszFile, LPCWSTR lpszName);
-bool	Style_MaybeBinaryFile(LPCWSTR lpszFile);
 bool	Style_CanOpenFile(LPCWSTR lpszFile);
 void	Style_SetLexerFromID(int rid);
 int		Style_GetMatchLexerIndex(int rid);
@@ -121,3 +148,4 @@ void	Style_SetStyles(int iStyle, LPCWSTR lpszStyle);
 int 	Style_GetLexerIconId(LPCEDITLEXER pLex, DWORD iconFlags);
 void	Style_ConfigDlg(HWND hwnd);
 void	Style_SelectLexerDlg(HWND hwnd, bool favorite);
+bool	SelectCSVOptionsDlg(void);

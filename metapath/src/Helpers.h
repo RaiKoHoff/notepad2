@@ -13,7 +13,7 @@
 *
 *                                              (c) Florian Balmer 1996-2011
 *                                                  florian.balmer@gmail.com
-*                                               http://www.flos-freeware.ch
+*                                              https://www.flos-freeware.ch
 *
 *
 ******************************************************************************/
@@ -77,6 +77,11 @@ NP2_inline bool CRTStrToInt(LPCWSTR str, int *value) {
 int ParseCommaList(LPCWSTR str, int result[], int count);
 
 extern HINSTANCE g_hInstance;
+#if defined(NP2_ENABLE_APP_LOCALIZATION_DLL) && NP2_ENABLE_APP_LOCALIZATION_DLL
+extern HINSTANCE g_exeInstance;
+#else
+#define g_exeInstance	g_hInstance
+#endif
 extern HANDLE g_hDefaultHeap;
 #if _WIN32_WINNT < _WIN32_WINNT_VISTA
 extern DWORD g_uWinVer;
@@ -111,6 +116,9 @@ extern DWORD g_uWinVer;
 #define IsWin10AndAbove()	(g_uWinVer >= _WIN32_WINNT_WIN10)
 #endif
 
+#ifndef LOAD_LIBRARY_SEARCH_SYSTEM32
+#define LOAD_LIBRARY_SEARCH_SYSTEM32	0x00000800
+#endif
 #ifndef LOAD_LIBRARY_AS_IMAGE_RESOURCE
 #define LOAD_LIBRARY_AS_IMAGE_RESOURCE	0x00000020
 #endif
@@ -136,12 +144,51 @@ extern DWORD g_uWinVer;
 #define DLLFunctionEx(funcSig, dllName, funcName)	(funcSig)GetProcAddress(GetModuleHandleW(dllName), (funcName))
 #endif
 
+// High DPI Reference
+// https://docs.microsoft.com/en-us/windows/desktop/hidpi/high-dpi-reference
+#ifndef WM_DPICHANGED
+#define WM_DPICHANGED	0x02E0				// _WIN32_WINNT >= _WIN32_WINNT_WIN7
+#endif
 #ifndef USER_DEFAULT_SCREEN_DPI
 #define USER_DEFAULT_SCREEN_DPI		96		// _WIN32_WINNT >= _WIN32_WINNT_VISTA
 #endif
 
+// use large icon when window DPI is greater than or equal to this value.
+#define NP2_LARGER_ICON_SIZE_DPI	192		// 200%
+
+// current DPI for main/editor window
+extern UINT g_uCurrentDPI;
 // system DPI, same for all monitor.
 extern UINT g_uSystemDPI;
+
+// since Windows 10, version 1607
+#if (defined(__aarch64__) || defined(_ARM64_) || defined(_M_ARM64)) && !defined(__MINGW32__)
+// 1709 was the first version for Windows 10 on ARM64.
+#define NP2_HAS_GETDPIFORWINDOW				1
+#define GetWindowDPI(hwnd)					GetDpiForWindow(hwnd)
+#define SystemMetricsForDpi(nIndex, dpi)	GetSystemMetricsForDpi((nIndex), (dpi))
+#define AdjustWindowRectForDpi(lpRect, dwStyle, dwExStyle, dpi) \
+		AdjustWindowRectExForDpi((lpRect), (dwStyle), FALSE, (dwExStyle), (dpi))
+
+#else
+#define NP2_HAS_GETDPIFORWINDOW				0
+extern UINT GetWindowDPI(HWND hwnd) NP2_noexcept;
+extern int SystemMetricsForDpi(int nIndex, UINT dpi) NP2_noexcept;
+extern BOOL AdjustWindowRectForDpi(LPRECT lpRect, DWORD dwStyle, DWORD dwExStyle, UINT dpi) NP2_noexcept;
+#endif
+
+#if defined(NP2_ENABLE_HIDPI_IMAGE_RESOURCE) && NP2_ENABLE_HIDPI_IMAGE_RESOURCE
+NP2_inline int GetBitmapResourceIdForCurrentDPI(int resourceId)	{
+	if (g_uCurrentDPI > USER_DEFAULT_SCREEN_DPI + USER_DEFAULT_SCREEN_DPI/4) {
+		int scale = (g_uCurrentDPI + USER_DEFAULT_SCREEN_DPI/4 - 1) / (USER_DEFAULT_SCREEN_DPI/2);
+		scale = min_i(scale, 6);
+		resourceId += scale - 2;
+	}
+	return resourceId;
+}
+#else
+#define GetBitmapResourceIdForCurrentDPI(resourceId)	(resourceId)
+#endif
 
 // https://docs.microsoft.com/en-us/windows/desktop/Memory/comparing-memory-allocation-methods
 // https://blogs.msdn.microsoft.com/oldnewthing/20120316-00/?p=8083/
@@ -205,8 +252,8 @@ typedef struct IniKeyValueNode {
 #define IniSectionImplUseSentinelNode	1
 
 typedef struct IniSection {
-	int count;
-	int capacity;
+	UINT count;
+	UINT capacity;
 	IniKeyValueNode *head;
 #if IniSectionImplUseSentinelNode
 	IniKeyValueNode *sentinel;
@@ -214,7 +261,7 @@ typedef struct IniSection {
 	IniKeyValueNode *nodeList;
 } IniSection;
 
-NP2_inline void IniSectionInit(IniSection *section, int capacity) {
+NP2_inline void IniSectionInit(IniSection *section, UINT capacity) {
 	section->count = 0;
 	section->capacity = capacity;
 	section->head = NULL;
@@ -361,6 +408,8 @@ bool ExeNameFromWnd(HWND hwnd, LPWSTR szExeName, DWORD cchExeName);
 
 bool FindUserResourcePath(LPCWSTR path, LPWSTR outPath);
 HBITMAP LoadBitmapFile(LPCWSTR path);
+HBITMAP ResizeImageForCurrentDPI(HBITMAP hbmp);
+
 bool BitmapMergeAlpha(HBITMAP hbmp, COLORREF crDest);
 bool BitmapAlphaBlend(HBITMAP hbmp, COLORREF crDest, BYTE alpha);
 bool BitmapGrayScale(HBITMAP hbmp);
@@ -392,7 +441,7 @@ void ResizeDlg_Size(HWND hwnd, LPARAM lParam, int *cx, int *cy);
 void ResizeDlg_GetMinMaxInfo(HWND hwnd, LPARAM lParam);
 HDWP DeferCtlPos(HDWP hdwp, HWND hwndDlg, int nCtlId, int dx, int dy, UINT uFlags);
 void ResizeDlgCtl(HWND hwndDlg, int nCtlId, int dx, int dy);
-void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, WORD wBmpId);
+void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, int wBmpId);
 void DeleteBitmapButton(HWND hwnd, int nCtlId);
 void SetClipData(HWND hwnd, LPCWSTR pszData);
 void SetWindowTransparentMode(HWND hwnd, bool bTransparentMode, int iOpacityLevel);
@@ -511,7 +560,7 @@ void StrTab2Space(LPWSTR lpsz);
 bool PathFixBackslashes(LPWSTR lpsz);
 void ExpandEnvironmentStringsEx(LPWSTR lpSrc, DWORD dwSrc);
 bool SearchPathEx(LPCWSTR lpFileName, DWORD nBufferLength, LPWSTR lpBuffer);
-void FormatNumber(LPWSTR lpNumberStr, int value);
+void FormatNumber(LPWSTR lpNumberStr, UINT value);
 
 void GetDefaultFavoritesDir(LPWSTR lpFavDir, int cchFavDir);
 void GetDefaultOpenWithDir(LPWSTR lpOpenWithDir, int cchOpenWithDir);

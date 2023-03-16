@@ -13,7 +13,7 @@
 *
 *                                              (c) Florian Balmer 1996-2011
 *                                                  florian.balmer@gmail.com
-*                                               http://www.flos-freeware.ch
+*                                              https://www.flos-freeware.ch
 *
 *
 ******************************************************************************/
@@ -60,12 +60,13 @@ typedef enum EditSortFlag {
 	EditSortFlag_Descending = 1,
 	EditSortFlag_IgnoreCase = 2,
 	EditSortFlag_LogicalNumber = 4,
-	EditSortFlag_MergeDuplicate = 8,
-	EditSortFlag_RemoveDuplicate = 16,
-	EditSortFlag_RemoveUnique = 32,
+	EditSortFlag_ColumnSort = 8,
+	EditSortFlag_GroupByFileType = 16,
+	EditSortFlag_DontSort = 32,
 	EditSortFlag_Shuffle = 64,
-	EditSortFlag_ColumnSort = 128,
-	EditSortFlag_GroupByFileType = 256,
+	EditSortFlag_MergeDuplicate = 128,
+	EditSortFlag_RemoveDuplicate = 256,
+	EditSortFlag_RemoveUnique = 512,
 } EditSortFlag;
 
 // wrap indent
@@ -103,7 +104,7 @@ enum {
 };
 
 void	Edit_ReleaseResources(void);
-HWND	EditCreate(HWND hwndParent);
+void	EditCreate(HWND hwndParent);
 void	EditSetNewText(LPCSTR lpstrText, DWORD cbText, Sci_Line lineCount);
 
 static inline void EditSetEmptyText(void) {
@@ -144,6 +145,14 @@ void	EditUnescapeXHTMLChars(HWND hwnd);
 void	EditChar2Hex(void);
 void	EditHex2Char(void);
 void	EditShowHex(void);
+
+typedef enum Base64EncodingFlag {
+	Base64EncodingFlag_Default,
+	Base64EncodingFlag_UrlSafe,
+	Base64EncodingFlag_HtmlEmbeddedImage,
+} Base64EncodingFlag;
+void	EditBase64Encode(Base64EncodingFlag encodingFlag);
+void	EditBase64Decode(bool decodeAsHex);
 void	EditConvertNumRadix(int radix);
 void	EditModifyNumber(bool bIncrease);
 
@@ -205,13 +214,14 @@ typedef enum OpenSelectionType {
 } OpenSelectionType;
 void EditOpenSelection(OpenSelectionType type);
 
-// in Print.cpp
+// in Bridge.cpp
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 bool	EditPrint(HWND hwnd, LPCWSTR pszDocTitle);
 void	EditPrintSetup(HWND hwnd);
+void	EditCopyAsRTF(HWND hwnd);
 
 #ifdef __cplusplus
 }
@@ -372,9 +382,10 @@ void	EditShowCallTips(Sci_Position position);
 
 enum {
 	EncodingFlag_None = 0,
-	EncodingFlag_Invalid = 1,
+	EncodingFlag_Binary = 1,
 	EncodingFlag_UTF7 = 2,
 	EncodingFlag_Reversed = 4,
+	EncodingFlag_Invalid = 8,
 };
 
 typedef struct NP2ENCODING {
@@ -547,6 +558,8 @@ typedef struct FILEVARS {
 } FILEVARS, *LPFILEVARS;
 
 typedef const FILEVARS * LPCFILEVARS;
+extern EditTabSettings tabSettings;
+extern FILEVARS fvCurFile;
 
 void	EditSetWrapStartIndent(int tabWidth, int indentWidth);
 void	EditSetWrapIndentMode(int tabWidth, int indentWidth);
@@ -573,6 +586,14 @@ void FoldToggleDefault(FOLD_ACTION action);
 void FoldClickAt(Sci_Position pos, int mode);
 void FoldAltArrow(int key, int mode);
 void EditGotoBlock(int menu);
+
+enum SelectOption {
+	SelectOption_None,
+	SelectOption_EnableMultipleSelection = 1,
+	SelectOption_CopySelectionAsFindText = 2,
+	SelectOption_CopyPasteBufferAsFindText = 4,
+	SelectOption_Default = 7,
+};
 
 enum LineSelectionMode {
 	LineSelectionMode_None,

@@ -13,7 +13,7 @@
 *
 *                                              (c) Florian Balmer 1996-2011
 *                                                  florian.balmer@gmail.com
-*                                               http://www.flos-freeware.ch
+*                                              https://www.flos-freeware.ch
 *
 *
 ******************************************************************************/
@@ -77,9 +77,9 @@ bool IniSectionParseArray(IniSection *section, LPWSTR lpCachedIniSection) {
 		return false;
 	}
 
-	const int capacity = section->capacity;
+	const UINT capacity = section->capacity;
 	LPWSTR p = lpCachedIniSection;
-	int count = 0;
+	UINT count = 0;
 
 	do {
 		LPWSTR v = StrChr(p, L'=');
@@ -104,9 +104,9 @@ bool IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection) {
 		return false;
 	}
 
-	const int capacity = section->capacity;
+	const UINT capacity = section->capacity;
 	LPWSTR p = lpCachedIniSection;
-	int count = 0;
+	UINT count = 0;
 
 	do {
 		LPWSTR v = StrChr(p, L'=');
@@ -330,6 +330,32 @@ HBITMAP LoadBitmapFile(LPCWSTR path) {
 	}
 
 	HBITMAP hbmp = (HBITMAP)LoadImage(NULL, szTmp, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION | LR_LOADFROMFILE);
+	return hbmp;
+}
+
+HBITMAP ResizeImageForCurrentDPI(HBITMAP hbmp) {
+	BITMAP bmp;
+	if (GetObject(hbmp, sizeof(BITMAP), &bmp)) {
+		// assume 16x16 at 100% scaling
+		const int height = (g_uCurrentDPI*16) / USER_DEFAULT_SCREEN_DPI;
+		if (height == bmp.bmHeight && bmp.bmBitsPixel == 32) {
+			return hbmp;
+		}
+		// keep aspect ratio
+		const int width = MulDiv(height, bmp.bmWidth, bmp.bmHeight);
+		HBITMAP hCopy = (HBITMAP)CopyImage(hbmp, IMAGE_BITMAP, width, height, LR_COPYRETURNORG | LR_COPYDELETEORG);
+		if (hCopy != NULL) {
+#if 0
+			BITMAP bmp2;
+			if (GetObject(hCopy, sizeof(BITMAP), &bmp2)) {
+				printf("%s %u: (%d x %d, %d) => (%d x %d, %d)\n", __func__, g_uCurrentDPI,
+				bmp.bmWidth, bmp.bmHeight, bmp.bmBitsPixel, bmp2.bmWidth, bmp2.bmHeight, bmp2.bmBitsPixel);
+			}
+#endif
+			hbmp = hCopy;
+		}
+	}
+
 	return hbmp;
 }
 
@@ -671,21 +697,30 @@ void SetDlgPos(HWND hDlg, int xDlg, int yDlg) {
 // Resize Dialog Helpers()
 //
 #define RESIZEDLG_PROP_KEY	L"ResizeDlg"
+#define MAX_RESIZEDLG_ATTR_COUNT	2
+// temporary fix for moving dialog to monitor with different DPI
+// TODO: all dimensions no longer valid after window DPI changed.
+#define NP2_ENABLE_RESIZEDLG_TEMP_FIX	0
+
 typedef struct RESIZEDLG {
 	int direction;
+	UINT dpi;
 	int cxClient;
 	int cyClient;
 	int mmiPtMinX;
 	int mmiPtMinY;
 	int mmiPtMaxX;	// only Y direction
 	int mmiPtMaxY;	// only X direction
+	int attrs[MAX_RESIZEDLG_ATTR_COUNT];
 } RESIZEDLG, *PRESIZEDLG;
 
-typedef const RESIZEDLG *LPCRESIZEDLG;
+typedef const RESIZEDLG * LPCRESIZEDLG;
 
 void ResizeDlg_InitEx(HWND hwnd, int cxFrame, int cyFrame, int nIdGrip, int iDirection) {
+	const UINT dpi = GetWindowDPI(hwnd);
 	RESIZEDLG *pm = (RESIZEDLG *)NP2HeapAlloc(sizeof(RESIZEDLG));
 	pm->direction = iDirection;
+	pm->dpi = dpi;
 
 	RECT rc;
 	GetClientRect(hwnd, &rc);
@@ -693,7 +728,7 @@ void ResizeDlg_InitEx(HWND hwnd, int cxFrame, int cyFrame, int nIdGrip, int iDir
 	pm->cyClient = rc.bottom - rc.top;
 
 	const DWORD style = GetWindowStyle(hwnd) | WS_THICKFRAME;
-	AdjustWindowRectEx(&rc, style, FALSE, 0);
+	AdjustWindowRectForDpi(&rc, style, 0, dpi);
 	pm->mmiPtMinX = rc.right - rc.left;
 	pm->mmiPtMinY = rc.bottom - rc.top;
 	// only one direction
@@ -724,7 +759,7 @@ void ResizeDlg_InitEx(HWND hwnd, int cxFrame, int cyFrame, int nIdGrip, int iDir
 
 	HWND hwndCtl = GetDlgItem(hwnd, nIdGrip);
 	SetWindowStyle(hwndCtl, GetWindowStyle(hwndCtl) | SBS_SIZEGRIP | WS_CLIPSIBLINGS);
-	const int cGrip = GetSystemMetrics(SM_CXHTHUMB);
+	const int cGrip = SystemMetricsForDpi(SM_CXHTHUMB, dpi);
 	SetWindowPos(hwndCtl, NULL, pm->cxClient - cGrip, pm->cyClient - cGrip, cGrip, cGrip, SWP_NOZORDER);
 }
 
@@ -748,6 +783,19 @@ void ResizeDlg_Size(HWND hwnd, LPARAM lParam, int *cx, int *cy) {
 	PRESIZEDLG pm = (PRESIZEDLG)GetProp(hwnd, RESIZEDLG_PROP_KEY);
 	const int cxClient = LOWORD(lParam);
 	const int cyClient = HIWORD(lParam);
+#if NP2_ENABLE_RESIZEDLG_TEMP_FIX
+	const UINT dpi = GetWindowDPI(hwnd);
+	const UINT old = pm->dpi;
+	if (cx) {
+		*cx = cxClient - MulDiv(pm->cxClient, dpi, old);
+	}
+	if (cy) {
+		*cy = cyClient - MulDiv(pm->cyClient, dpi, old);
+	}
+	// store in original DPI.
+	pm->cxClient = MulDiv(cxClient, old, dpi);
+	pm->cyClient = MulDiv(cyClient, old, dpi);
+#else
 	if (cx) {
 		*cx = cxClient - pm->cxClient;
 	}
@@ -756,12 +804,30 @@ void ResizeDlg_Size(HWND hwnd, LPARAM lParam, int *cx, int *cy) {
 	}
 	pm->cxClient = cxClient;
 	pm->cyClient = cyClient;
+#endif
 }
 
 void ResizeDlg_GetMinMaxInfo(HWND hwnd, LPARAM lParam) {
-	const LPCRESIZEDLG pm = (LPCRESIZEDLG)GetProp(hwnd, RESIZEDLG_PROP_KEY);
-
+	LPCRESIZEDLG pm = (LPCRESIZEDLG)GetProp(hwnd, RESIZEDLG_PROP_KEY);
 	LPMINMAXINFO lpmmi = (LPMINMAXINFO)lParam;
+#if NP2_ENABLE_RESIZEDLG_TEMP_FIX
+	const UINT dpi = GetWindowDPI(hwnd);
+	const UINT old = pm->dpi;
+
+	lpmmi->ptMinTrackSize.x = MulDiv(pm->mmiPtMinX, dpi, old);
+	lpmmi->ptMinTrackSize.y = MulDiv(pm->mmiPtMinY, dpi, old);
+
+	// only one direction
+	switch (pm->direction) {
+	case ResizeDlgDirection_OnlyX:
+		lpmmi->ptMaxTrackSize.y = MulDiv(pm->mmiPtMaxY, dpi, old);
+		break;
+
+	case ResizeDlgDirection_OnlyY:
+		lpmmi->ptMaxTrackSize.x = MulDiv(pm->mmiPtMaxX, dpi, old);
+		break;
+	}
+#else
 	lpmmi->ptMinTrackSize.x = pm->mmiPtMinX;
 	lpmmi->ptMinTrackSize.y = pm->mmiPtMinY;
 
@@ -775,6 +841,7 @@ void ResizeDlg_GetMinMaxInfo(HWND hwnd, LPARAM lParam) {
 		lpmmi->ptMaxTrackSize.x = pm->mmiPtMaxX;
 		break;
 	}
+#endif
 }
 
 HDWP DeferCtlPos(HDWP hdwp, HWND hwndDlg, int nCtlId, int dx, int dy, UINT uFlags) {
@@ -801,9 +868,15 @@ void ResizeDlgCtl(HWND hwndDlg, int nCtlId, int dx, int dy) {
 //
 //  MakeBitmapButton()
 //
-void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, WORD wBmpId) {
+void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, int wBmpId) {
+#if NP2_ENABLE_HIDPI_IMAGE_RESOURCE
+	if (hInstance) {
+		wBmpId = GetBitmapResourceIdForCurrentDPI(wBmpId);
+	}
+#endif
 	HWND hwndCtl = GetDlgItem(hwnd, nCtlId);
 	HBITMAP hBmp = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(wBmpId), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
+	hBmp = ResizeImageForCurrentDPI(hBmp);
 	BITMAP bmp;
 	GetObject(hBmp, sizeof(BITMAP), &bmp);
 	BUTTON_IMAGELIST bi;
@@ -961,6 +1034,9 @@ HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName) {
 		break;
 	case LANG_CHINESE:
 		folder = IsChineseTraditionalSubLang(subLang) ? L"zh-Hant" : L"zh-Hans";
+		break;
+	case LANG_FRENCH:
+		folder = L"fr-FR";
 		break;
 	case LANG_GERMAN:
 		folder = L"de";
@@ -1510,7 +1586,7 @@ bool SearchPathEx(LPCWSTR lpFileName, DWORD nBufferLength, LPWSTR lpBuffer) {
 //
 //  FormatNumber()
 //
-void FormatNumber(LPWSTR lpNumberStr, int value) {
+void FormatNumber(LPWSTR lpNumberStr, UINT value) {
 	_ltow(value, lpNumberStr, 10);
 	if (value < 1000) {
 		return;
@@ -1880,10 +1956,10 @@ bool MRU_Load(LPMRULIST pmru) {
 
 	LoadIniSection(pmru->szRegKey, pIniSectionBuf, cchIniSection);
 	IniSectionParseArray(pIniSection, pIniSectionBuf);
-	const int count = pIniSection->count;
-	const int size = pmru->iSize;
+	const UINT count = pIniSection->count;
+	const UINT size = pmru->iSize;
 
-	for (int i = 0, n = 0; i < count && n < size; i++) {
+	for (UINT i = 0, n = 0; i < count && n < size; i++) {
 		const IniKeyValueNode *node = &pIniSection->nodeList[i];
 		LPCWSTR tchItem = node->value;
 		if (StrNotEmpty(tchItem)) {

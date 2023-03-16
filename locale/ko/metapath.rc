@@ -38,30 +38,61 @@ IDR_RT_MANIFEST         RT_MANIFEST             "..\\..\\metapath\\res\\metapath
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
+#if NP2_ENABLE_HIDPI_IMAGE_RESOURCE
 IDR_MAINWND             ICON                    "..\\..\\metapath\\res\\metapath.ico"
 IDI_RUN                 ICON                    "..\\..\\metapath\\res\\Run.ico"
-IDI_PROGS               ICON                    "..\\..\\metapath\\res\\Progs.ico"
+IDI_GOTO                ICON                    "..\\..\\metapath\\res\\Goto.ico"
 IDI_OPTIONS             ICON                    "..\\..\\metapath\\res\\Options.ico"
 IDI_OPTIONS2            ICON                    "..\\..\\metapath\\res\\Options2.ico"
-IDI_GOTO                ICON                    "..\\..\\metapath\\res\\Goto.ico"
 IDI_ITEMS               ICON                    "..\\..\\metapath\\res\\Items.ico"
-IDI_CROSS1              ICON                    "..\\..\\metapath\\res\\cross1.ico"
-IDI_CROSS2              ICON                    "..\\..\\metapath\\res\\cross2.ico"
+IDI_PROGS               ICON                    "..\\..\\metapath\\res\\Progs.ico"
+IDI_CROSS1              ICON                    "..\\..\\metapath\\res\\Cross1.ico"
+IDI_CROSS2              ICON                    "..\\..\\metapath\\res\\Cross2.ico"
+#else
+IDR_MAINWND             ICON                    "..\\..\\metapath\\res\\metapath_min.ico"
+IDI_RUN                 ICON                    "..\\..\\metapath\\res\\Run_min.ico"
+IDI_GOTO                ICON                    "..\\..\\metapath\\res\\Goto_min.ico"
+IDI_OPTIONS             ICON                    "..\\..\\metapath\\res\\Options_min.ico"
+IDI_OPTIONS2            ICON                    "..\\..\\metapath\\res\\Options2_min.ico"
+IDI_ITEMS               ICON                    "..\\..\\metapath\\res\\Items_min.ico"
+IDI_PROGS               ICON                    "..\\..\\metapath\\res\\Progs_min.ico"
+IDI_CROSS1              ICON                    "..\\..\\metapath\\res\\Cross1_min.ico"
+IDI_CROSS2              ICON                    "..\\..\\metapath\\res\\Cross2_min.ico"
+#endif
 
+#if !NP2_ENABLE_APP_LOCALIZATION_DLL
 /////////////////////////////////////////////////////////////////////////////
 //
 // Bitmap
 //
 
-IDR_MAINWND             BITMAP                  "..\\..\\metapath\\res\\Toolbar.bmp"
-IDB_OPEN_FOLDER         BITMAP                  "..\\..\\metapath\\res\\OpenFolder.bmp"
+IDB_TOOLBAR16           BITMAP                  "..\\..\\metapath\\res\\Toolbar16.bmp"
+IDB_OPEN_FOLDER16       BITMAP                  "..\\..\\metapath\\res\\OpenFolder16.bmp"
+
+#if NP2_ENABLE_HIDPI_IMAGE_RESOURCE
+IDB_TOOLBAR24           BITMAP                  "..\\..\\metapath\\res\\Toolbar24.bmp"
+IDB_TOOLBAR32           BITMAP                  "..\\..\\metapath\\res\\Toolbar32.bmp"
+IDB_TOOLBAR40           BITMAP                  "..\\..\\metapath\\res\\Toolbar40.bmp"
+IDB_TOOLBAR48           BITMAP                  "..\\..\\metapath\\res\\Toolbar48.bmp"
+
+IDB_OPEN_FOLDER24       BITMAP                  "..\\..\\metapath\\res\\OpenFolder24.bmp"
+IDB_OPEN_FOLDER32       BITMAP                  "..\\..\\metapath\\res\\OpenFolder32.bmp"
+IDB_OPEN_FOLDER40       BITMAP                  "..\\..\\metapath\\res\\OpenFolder40.bmp"
+IDB_OPEN_FOLDER48       BITMAP                  "..\\..\\metapath\\res\\OpenFolder48.bmp"
+#endif // NP2_ENABLE_HIDPI_IMAGE_RESOURCE
 
 /////////////////////////////////////////////////////////////////////////////
 //
 // Cursor
 //
 
-IDC_CROSSHAIR           CURSOR                  "..\\..\\metapath\\res\\crosshair.cur"
+#if NP2_ENABLE_HIDPI_IMAGE_RESOURCE
+IDC_CROSSHAIR           CURSOR                  "..\\..\\metapath\\res\\Crosshair.cur"
+#else
+IDC_CROSSHAIR           CURSOR                  "..\\..\\metapath\\res\\Crosshair_min.cur"
+#endif
+
+#endif // NP2_ENABLE_APP_LOCALIZATION_DLL
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -137,6 +168,7 @@ BEGIN
 	BEGIN
 		MENUITEM "도구 모음 보이기(&T)",				IDM_VIEW_TOOLBAR
 		MENUITEM "도구 모음 편집(&E)...",		IDM_VIEW_CUSTOMIZETB
+		MENUITEM "도구모음 자동 크기 조정(&A)",			IDM_VIEW_AUTO_SCALE_TOOLBAR
 		MENUITEM "상태 표시줄 보이기(&S)",				IDM_VIEW_STATUSBAR
 	END
 	POPUP "+"
@@ -231,7 +263,7 @@ BEGIN
     LTEXT           "Copyright © 1996-2012 Florian Balmer.",IDC_STATIC,45,30,200,8
     LTEXT           "",IDC_WEBPAGE_TEXT,45,40,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_WEBPAGE_LINK,"SysLink",WS_TABSTOP,45,40,200,10
-    LTEXT           "Copyright © 2011-2022 Zufu Liu and all contributors.",IDC_STATIC,45,52,200,8
+    LTEXT           "Copyright © 2011-2023 Zufu Liu and all contributors.",IDC_STATIC,45,52,200,8
     LTEXT           "",IDC_NEW_PAGE_TEXT,45,60,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_NEW_PAGE_LINK,"SysLink",WS_TABSTOP,45,60,200,10
     LTEXT           "Florian Balmer에게 연락:",IDC_STATIC,45,72,94,8
@@ -478,118 +510,6 @@ END
 #ifdef APSTUDIO_INVOKED
 GUIDELINES DESIGNINFO
 BEGIN
-    IDD_ABOUT, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 219
-        VERTGUIDE, 45
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 63
-    END
-
-    IDD_RUN, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 217
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 78
-    END
-
-    IDD_OPENWITH, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 158
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 122
-    END
-
-    IDD_GOTO, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 217
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 80
-    END
-
-    IDD_FILTER, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 177
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 71
-    END
-
-    IDD_RENAME, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 165
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 67
-    END
-
-    IDD_NEWDIR, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 165
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 59
-    END
-
-    IDD_COPYMOVE, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 223
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 88
-    END
-
-    IDPP_GENERAL, DIALOG
-    BEGIN
-        LEFTMARGIN, 10
-        RIGHTMARGIN, 215
-        TOPMARGIN, 10
-        BOTTOMMARGIN, 175
-    END
-
-    IDPP_ADVANCED, DIALOG
-    BEGIN
-        LEFTMARGIN, 10
-        RIGHTMARGIN, 215
-        TOPMARGIN, 10
-        BOTTOMMARGIN, 175
-    END
-
-    IDPP_ITEMS, DIALOG
-    BEGIN
-        LEFTMARGIN, 10
-        RIGHTMARGIN, 215
-        TOPMARGIN, 10
-        BOTTOMMARGIN, 175
-    END
-
-    IDPP_PROG, DIALOG
-    BEGIN
-        LEFTMARGIN, 10
-        RIGHTMARGIN, 215
-        TOPMARGIN, 10
-        BOTTOMMARGIN, 175
-    END
-
-    IDD_FINDTARGET, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 264
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 171
-    END
-
-    IDD_FINDWIN, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 203
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 78
-    END
 END
 #endif    // APSTUDIO_INVOKED
 
@@ -690,6 +610,7 @@ BEGIN
 	IDS_LANG_GERMAN					"Deutsch"
 	IDS_LANG_ITALIAN				"Italiano"
 	IDS_LANG_PORTUGUESE_BRAZIL		"Português (Brasil)"
+	IDS_LANG_FRENCH_FRANCE		    "Français (France)"
 END
 #endif
 

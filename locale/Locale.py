@@ -7,9 +7,9 @@ import uuid
 import subprocess
 
 app = os.path.basename(__file__)
-localeDir = '.'
-notepad2_src = '../src/Notepad2.rc'
-metapath_src = '../metapath/src/metapath.rc'
+localeDir = os.getcwd()
+notepad2_src = os.path.abspath('../src/Notepad2.rc')
+metapath_src = os.path.abspath('../metapath/src/metapath.rc')
 
 def get_available_locales():
 	result = []
@@ -65,8 +65,8 @@ def make_new_localization(language):
 
 	metapath_dest = os.path.join(target, 'metapath.rc')
 	notepad2_dest = os.path.join(target, 'Notepad2.rc')
-	shutil.copy(metapath_src, metapath_dest)
-	shutil.copy(notepad2_src, notepad2_dest)
+	shutil.copyfile(metapath_src, metapath_dest)
+	shutil.copyfile(notepad2_src, notepad2_dest)
 
 	update_resource_include_path(metapath_dest, True)
 	update_resource_include_path(notepad2_dest, False)
@@ -78,10 +78,10 @@ def make_new_localization(language):
 	metapath_vcxproj = os.path.join(target, f'metapath({language}).vcxproj')
 	notepad2_vcxproj = os.path.join(target, f'Notepad2({language}).vcxproj')
 
-	shutil.copy(metapath_vcxproj_src, metapath_vcxproj)
-	shutil.copy(metapath_vcxproj_src + '.filters', metapath_vcxproj + '.filters')
-	shutil.copy(notepad2_vcxproj_src, notepad2_vcxproj)
-	shutil.copy(notepad2_vcxproj_src + '.filters', notepad2_vcxproj + '.filters')
+	shutil.copyfile(metapath_vcxproj_src, metapath_vcxproj)
+	shutil.copyfile(metapath_vcxproj_src + '.filters', metapath_vcxproj + '.filters')
+	shutil.copyfile(notepad2_vcxproj_src, notepad2_vcxproj)
+	shutil.copyfile(notepad2_vcxproj_src + '.filters', notepad2_vcxproj + '.filters')
 
 	patch_vc_project_file(metapath_vcxproj, src_lang, language)
 	patch_vc_project_file(notepad2_vcxproj, src_lang, language)
@@ -121,12 +121,12 @@ def copy_back_localized_resources(language):
     on first run to ensure proper backup for English resources.""")
 	else:
 		os.makedirs(backupDir)
-		shutil.copy(metapath_src, os.path.join(backupDir, 'metapath.rc'))
-		shutil.copy(notepad2_src, os.path.join(backupDir, 'Notepad2.rc'))
+		shutil.copyfile(metapath_src, os.path.join(backupDir, 'metapath.rc'))
+		shutil.copyfile(notepad2_src, os.path.join(backupDir, 'Notepad2.rc'))
 
 	folder = os.path.join(localeDir, language)
-	shutil.copy(os.path.join(folder, 'metapath.rc'), metapath_src)
-	shutil.copy(os.path.join(folder, 'Notepad2.rc'), notepad2_src)
+	shutil.copyfile(os.path.join(folder, 'metapath.rc'), metapath_src)
+	shutil.copyfile(os.path.join(folder, 'Notepad2.rc'), notepad2_src)
 
 	restore_resource_include_path(metapath_src, True)
 	restore_resource_include_path(notepad2_src, False)
@@ -397,7 +397,7 @@ class StringExtractor:
 							block_caption = caption
 					elif block_type == Block_StringTable:
 						lineno = self.parse_string_table_item(lineno, line, block_items)
-				except Exception as ex:
+				except Exception:
 					print(f'parse {block_type} {block_name} fail at {lineno} for {self.path}')
 					raise
 

@@ -6,6 +6,7 @@
 // The License.txt file describes the conditions under which this software may be distributed.
 
 #include <cassert>
+#include <cstring>
 
 #include <string>
 #include <string_view>
@@ -42,6 +43,7 @@ extern LexerModule lmConfig;
 extern LexerModule lmCPP;
 extern LexerModule lmCSharp;
 extern LexerModule lmCSS;
+extern LexerModule lmCSV;
 extern LexerModule lmDart;
 extern LexerModule lmDiff;
 extern LexerModule lmDLang;
@@ -118,6 +120,7 @@ const LexerModule * const lexerCatalogue[] = {
 	&lmCPP,
 	&lmCSharp,
 	&lmCSS,
+	&lmCSV,
 	&lmDart,
 	&lmDiff,
 	&lmDLang,

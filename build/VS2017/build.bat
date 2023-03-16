@@ -26,6 +26,8 @@ IF /I "%~1" == "/?"     GOTO SHOWHELP
 @rem default arguments
 SET "BUILDTYPE=Build"
 SET "ARCH=all"
+SET NO_32BIT=0
+SET NO_ARM=0
 SET "CONFIG=Release"
 
 @rem Check for the first switch
@@ -75,6 +77,14 @@ IF /I "%~1" == "all"     SET "ARCH=all"   & SHIFT & GOTO CheckThirdArg
 IF /I "%~1" == "/all"    SET "ARCH=all"   & SHIFT & GOTO CheckThirdArg
 IF /I "%~1" == "-all"    SET "ARCH=all"   & SHIFT & GOTO CheckThirdArg
 IF /I "%~1" == "--all"   SET "ARCH=all"   & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "No32bit"   SET "ARCH=all" & SET NO_ARM=1 & SET NO_32BIT=1 & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "/No32bit"  SET "ARCH=all" & SET NO_ARM=1 & SET NO_32BIT=1 & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "-No32bit"  SET "ARCH=all" & SET NO_ARM=1 & SET NO_32BIT=1 & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "--No32bit" SET "ARCH=all" & SET NO_ARM=1 & SET NO_32BIT=1 & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "NoARM"   SET "ARCH=all"   & SET NO_ARM=1 & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "/NoARM"  SET "ARCH=all"   & SET NO_ARM=1 & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "-NoARM"  SET "ARCH=all"   & SET NO_ARM=1 & SHIFT & GOTO CheckThirdArg
+IF /I "%~1" == "--NoARM" SET "ARCH=all"   & SET NO_ARM=1 & SHIFT & GOTO CheckThirdArg
 
 
 :CheckThirdArg
@@ -107,13 +117,9 @@ SET "EXIT_ON_ERROR=%~1"
 
 SET NEED_ARM64=0
 SET NEED_ARM=0
-IF /I "%ARCH%" == "AVX2" (
-	SET "ARCH=x64"
-	IF /I NOT "%CONFIG%" == "all" SET "CONFIG=AVX2%CONFIG%"
-)
 IF /I "%ARCH%" == "all" SET NEED_ARM64=1
 IF /I "%ARCH%" == "ARM64" SET NEED_ARM64=1
-IF /I "%ARCH%" == "all" SET NEED_ARM=1
+IF /I "%ARCH%" == "all" SET /A NEED_ARM=1 - %NO_ARM%
 IF /I "%ARCH%" == "ARM" SET NEED_ARM=1
 CALL :SubVSPath
 IF NOT EXIST "%VS_PATH%" CALL :SUBMSG "ERROR" "Visual Studio 2017, 2019 or 2022 NOT FOUND, please check VS_PATH environment variable!"
@@ -124,6 +130,8 @@ IF /I "%processor_architecture%" == "AMD64" (
 	SET "HOST_ARCH=x86"
 )
 
+IF %NO_32BIT% == 1 GOTO x64
+IF /I "%ARCH%" == "AVX2" GOTO AVX2
 IF /I "%ARCH%" == "x64" GOTO x64
 IF /I "%ARCH%" == "Win32" GOTO Win32
 IF /I "%ARCH%" == "ARM64" GOTO ARM64
@@ -131,26 +139,43 @@ IF /I "%ARCH%" == "ARM" GOTO ARM
 
 
 :Win32
+SETLOCAL
 CALL "%VS_PATH%\Common7\Tools\vsdevcmd" -no_logo -arch=x86 -host_arch=%HOST_ARCH%
 IF /I "%CONFIG%" == "all" (CALL :SUBMSVC %BUILDTYPE% Debug Win32 && CALL :SUBMSVC %BUILDTYPE% Release Win32) ELSE (CALL :SUBMSVC %BUILDTYPE% %CONFIG% Win32)
+ENDLOCAL
 IF /I "%ARCH%" == "Win32" GOTO END
 
 
 :x64
+SETLOCAL
 CALL "%VS_PATH%\Common7\Tools\vsdevcmd" -no_logo -arch=amd64 -host_arch=%HOST_ARCH%
 IF /I "%CONFIG%" == "all" (CALL :SUBMSVC %BUILDTYPE% Debug x64 && CALL :SUBMSVC %BUILDTYPE% Release x64) ELSE (CALL :SUBMSVC %BUILDTYPE% %CONFIG% x64)
+ENDLOCAL
 IF /I "%ARCH%" == "x64" GOTO END
 
 
+:AVX2
+SETLOCAL
+CALL "%VS_PATH%\Common7\Tools\vsdevcmd" -no_logo -arch=amd64 -host_arch=%HOST_ARCH%
+IF /I "%CONFIG%" == "all" (CALL :SUBMSVC %BUILDTYPE% AVX2Debug x64 && CALL :SUBMSVC %BUILDTYPE% AVX2Release x64) ELSE (CALL :SUBMSVC %BUILDTYPE% AVX2%CONFIG% x64)
+ENDLOCAL
+IF /I "%ARCH%" == "AVX2" GOTO END
+
+
 :ARM64
+SETLOCAL
 CALL "%VS_PATH%\Common7\Tools\vsdevcmd" -no_logo -arch=arm64 -host_arch=%HOST_ARCH%
 IF /I "%CONFIG%" == "all" (CALL :SUBMSVC %BUILDTYPE% Debug ARM64 && CALL :SUBMSVC %BUILDTYPE% Release ARM64) ELSE (CALL :SUBMSVC %BUILDTYPE% %CONFIG% ARM64)
+ENDLOCAL
 IF /I "%ARCH%" == "ARM64" GOTO END
+IF %NO_ARM% == 1 GOTO END
 
 
 :ARM
+SETLOCAL
 CALL "%VS_PATH%\Common7\Tools\vsdevcmd" -no_logo -arch=arm -host_arch=%HOST_ARCH%
 IF /I "%CONFIG%" == "all" (CALL :SUBMSVC %BUILDTYPE% Debug ARM && CALL :SUBMSVC %BUILDTYPE% Release ARM) ELSE (CALL :SUBMSVC %BUILDTYPE% %CONFIG% ARM)
+ENDLOCAL
 
 
 :END
@@ -194,7 +219,7 @@ EXIT /B
 :SHOWHELP
 TITLE %~nx0 %1
 ECHO. & ECHO.
-ECHO Usage: %~nx0 [Clean^|Build^|Rebuild] [Win32^|x64^|AVX2^|ARM64^|ARM^|all] [Debug^|Release^|LLVMDebug^|LLVMRelease^|all]
+ECHO Usage: %~nx0 [Clean^|Build^|Rebuild] [Win32^|x64^|AVX2^|ARM64^|ARM^|all^|NoARM^|No32bit] [Debug^|Release^|LLVMDebug^|LLVMRelease^|all]
 ECHO.
 ECHO Notes: You can also prefix the commands with "-", "--" or "/".
 ECHO        The arguments are not case sensitive.

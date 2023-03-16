@@ -40,28 +40,68 @@ IDR_RT_MANIFEST         RT_MANIFEST             "..\\..\\res\\Notepad2.exe.manif
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
+#if NP2_ENABLE_HIDPI_IMAGE_RESOURCE
 IDR_MAINWND             ICON                    "..\\..\\res\\Notepad2.ico"
 IDI_RUN                 ICON                    "..\\..\\res\\Run.ico"
 IDI_STYLES              ICON                    "..\\..\\res\\Styles.ico"
+#else
+IDR_MAINWND             ICON                    "..\\..\\res\\Notepad2_min.ico"
+IDI_RUN                 ICON                    "..\\..\\res\\Run_min.ico"
+IDI_STYLES              ICON                    "..\\..\\res\\Styles_min.ico"
+#endif
 
+#if !NP2_ENABLE_APP_LOCALIZATION_DLL
 /////////////////////////////////////////////////////////////////////////////
 //
 // Bitmap
 //
 
-IDR_MAINWND             BITMAP                  "..\\..\\res\\Toolbar.bmp"
-IDB_OPEN_FOLDER         BITMAP                  "..\\..\\res\\OpenFolder.bmp"
-IDB_NEXT                BITMAP                  "..\\..\\res\\Next.bmp"
-IDB_PREV                BITMAP                  "..\\..\\res\\Prev.bmp"
+IDB_TOOLBAR16           BITMAP                  "..\\..\\res\\Toolbar16.bmp"
+IDB_OPEN_FOLDER16       BITMAP                  "..\\..\\res\\OpenFolder16.bmp"
+IDB_NEXT16              BITMAP                  "..\\..\\res\\Next16.bmp"
+IDB_PREV16              BITMAP                  "..\\..\\res\\Prev16.bmp"
 IDB_PICK                BITMAP                  "..\\..\\res\\Pick.bmp"
-IDB_ENCODING            BITMAP                  "..\\..\\res\\Encoding.bmp"
+IDB_ENCODING16          BITMAP                  "..\\..\\res\\Encoding16.bmp"
+
+#if NP2_ENABLE_HIDPI_IMAGE_RESOURCE
+IDB_TOOLBAR24           BITMAP                  "..\\..\\res\\Toolbar24.bmp"
+IDB_TOOLBAR32           BITMAP                  "..\\..\\res\\Toolbar32.bmp"
+IDB_TOOLBAR40           BITMAP                  "..\\..\\res\\Toolbar40.bmp"
+IDB_TOOLBAR48           BITMAP                  "..\\..\\res\\Toolbar48.bmp"
+
+IDB_OPEN_FOLDER24       BITMAP                  "..\\..\\res\\OpenFolder24.bmp"
+IDB_OPEN_FOLDER32       BITMAP                  "..\\..\\res\\OpenFolder32.bmp"
+IDB_OPEN_FOLDER40       BITMAP                  "..\\..\\res\\OpenFolder40.bmp"
+IDB_OPEN_FOLDER48       BITMAP                  "..\\..\\res\\OpenFolder48.bmp"
+
+IDB_NEXT24              BITMAP                  "..\\..\\res\\Next24.bmp"
+IDB_NEXT32              BITMAP                  "..\\..\\res\\Next32.bmp"
+IDB_NEXT40              BITMAP                  "..\\..\\res\\Next40.bmp"
+IDB_NEXT48              BITMAP                  "..\\..\\res\\Next48.bmp"
+
+IDB_PREV24              BITMAP                  "..\\..\\res\\Prev24.bmp"
+IDB_PREV32              BITMAP                  "..\\..\\res\\Prev32.bmp"
+IDB_PREV40              BITMAP                  "..\\..\\res\\Prev40.bmp"
+IDB_PREV48              BITMAP                  "..\\..\\res\\Prev48.bmp"
+
+IDB_ENCODING24          BITMAP                  "..\\..\\res\\Encoding24.bmp"
+IDB_ENCODING32          BITMAP                  "..\\..\\res\\Encoding32.bmp"
+IDB_ENCODING40          BITMAP                  "..\\..\\res\\Encoding40.bmp"
+IDB_ENCODING48          BITMAP                  "..\\..\\res\\Encoding48.bmp"
+#endif // NP2_ENABLE_HIDPI_IMAGE_RESOURCE
 
 /////////////////////////////////////////////////////////////////////////////
 //
 // Cursor
 //
 
+#if NP2_ENABLE_HIDPI_IMAGE_RESOURCE
 IDC_COPY                CURSOR                  "..\\..\\res\\Copy.cur"
+#else
+IDC_COPY                CURSOR                  "..\\..\\res\\Copy_min.cur"
+#endif
+
+#endif // NP2_ENABLE_APP_LOCALIZATION_DLL
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -76,7 +116,8 @@ BEGIN
 		MENUITEM "열기(&O)...\tCtrl+O",				IDM_FILE_OPEN
 		MENUITEM "저장(&S)\tCtrl+S",					IDM_FILE_SAVE
 		MENUITEM "다른 이름으로 저장(&A)...\tF6",					IDM_FILE_SAVEAS
-		MENUITEM "복사본 저장(&Y)...\tCtrl+F6",			IDM_FILE_SAVECOPY
+		MENUITEM "백업 저장(&U)",					    IDM_FILE_SAVEBACKUP
+		MENUITEM "사본 저장(&Y)...\tCtrl+F6",			IDM_FILE_SAVECOPY
 		MENUITEM SEPARATOR
 		POPUP "파일 모드(&M)"
 		BEGIN
@@ -100,19 +141,6 @@ BEGIN
 #if defined(_WIN64)
 			MENUITEM "큰 파일 모드(&L)",			IDM_FILE_LARGE_FILE_MODE_RELOAD
 #endif
-		END
-		POPUP "실행(&L)"
-		BEGIN
-			MENUITEM "폴더 내용 열기(&F)",		IDM_FILE_OPEN_CONTAINING_FOLDER
-			MENUITEM "관리자 권한으로 열기(&A)",		IDM_FILE_RELAUNCH_ELEVATED
-			MENUITEM SEPARATOR
-			MENUITEM "새 창에 열기(&N)\tAlt+N",			IDM_FILE_NEWWINDOW
-			MENUITEM "빈 창 열기(&E)\tAlt+0",		IDM_FILE_NEWWINDOW2
-			MENUITEM "다시 시작(&R)",					IDM_FILE_RESTART
-			MENUITEM SEPARATOR
-			MENUITEM "문서 실행(&D)\tCtrl+L",	IDM_FILE_LAUNCH
-			MENUITEM "다른 프로그램으로 열기(&W)...",				IDM_FILE_OPENWITH
-			MENUITEM "명령(&C)...\tCtrl+R",			IDM_FILE_RUN
 		END
 		MENUITEM SEPARATOR
         POPUP "인코딩(&E)"
@@ -139,6 +167,7 @@ BEGIN
 		MENUITEM "인쇄(&P)...\tCtrl+P",				IDM_FILE_PRINT
 		MENUITEM SEPARATOR
 		MENUITEM "속성(&I)...",					IDM_FILE_PROPERTIES
+		MENUITEM "폴더 내용 열기(&C)",		IDM_FILE_OPEN_CONTAINING_FOLDER
 		MENUITEM "바탕화면에 링크 만들기(&K)",			IDM_FILE_CREATELINK
 		MENUITEM SEPARATOR
 		MENUITEM "찾아보기(&B)...\tCtrl+M",           IDM_FILE_BROWSE
@@ -199,6 +228,8 @@ BEGIN
 			MENUITEM SEPARATOR
 			MENUITEM "빈 줄 병합(&B)\tAlt+B",		IDM_EDIT_MERGEBLANKLINES
 			MENUITEM "빈 줄 제거(&R)\tAlt+R",		IDM_EDIT_REMOVEBLANKLINES
+			MENUITEM "중복된 줄 병합(&M)",			IDM_EDIT_MERGEDUPLICATELINE
+			MENUITEM "중복된 줄 제거(&V)",			IDM_EDIT_REMOVEDUPLICATELINE
 			MENUITEM "공백이 있는 패드(&P)\tAlt+P",			IDM_EDIT_PADWITHSPACES
 			MENUITEM "공백 압축(&W)\tAlt+W",		IDM_EDIT_COMPRESSWS
 		END
@@ -227,7 +258,7 @@ BEGIN
 			MENUITEM "줄 삭제(&E)\tCtrl+Shift+D",		IDM_EDIT_DELETELINE
 			MENUITEM SEPARATOR
 			MENUITEM "줄 결합(&J)\tCtrl+J",				IDM_EDIT_JOINLINES
-			MENUITEM "열 줄바꿈(&W)...\tCtrl+Shift+W",	IDM_EDIT_COLUMNWRAP
+			MENUITEM "열 줄바꿈(&W)...",				IDM_EDIT_COLUMNWRAP
 			MENUITEM "줄 분할(&S)\tCtrl+I",			IDM_EDIT_SPLITLINES
 			MENUITEM "단락 결합(&P)\tCtrl+Shift+J",	IDM_EDIT_JOINLINESEX
 		END
@@ -238,25 +269,6 @@ BEGIN
 			MENUITEM "대소문자 반전(&V)\tCtrl+Alt+U",		IDM_EDIT_INVERTCASE
 			MENUITEM "단어 첫글자만 대문자로(&C)\tCtrl+Alt+I",			IDM_EDIT_TITLECASE
 			MENUITEM "문장 첫글자만 대문자로(&S)\tCtrl+Alt+O",		IDM_EDIT_SENTENCECASE
-			POPUP "기타 변환(&E)"
-			BEGIN
-				MENUITEM "전각 문자로(&W)",		IDM_EDIT_MAP_FULLWIDTH
-				MENUITEM "반각 문자로(&A)",		IDM_EDIT_MAP_HALFWIDTH
-				MENUITEM SEPARATOR
-				MENUITEM "간체 한자로(&S)",	IDM_EDIT_MAP_SIMPLIFIED_CHINESE
-				MENUITEM "번체 한자로(&T)",	IDM_EDIT_MAP_TRADITIONAL_CHINESE
-				MENUITEM SEPARATOR
-				MENUITEM "가타카나를 히라가나로(&H)",		IDM_EDIT_MAP_HIRAGANA
-				MENUITEM "히라가나를 가타카나로(&K)",		IDM_EDIT_MAP_KATAKANA
-				MENUITEM SEPARATOR
-				MENUITEM "한국어 한자를 한글로(&J)",		        IDM_EDIT_MAP_HANJA_HANGUL
-				MENUITEM "한국어 한글 풀어쓰기(&G)",		IDM_EDIT_MAP_HANGUL_DECOMPOSITION
-				MENUITEM SEPARATOR
-				MENUITEM "벵골 문자를 라틴 문자로(&B)",					IDM_EDIT_MAP_BENGALI_LATIN
-				MENUITEM "키릴 문자를 라틴 문자로(&Y)",					IDM_EDIT_MAP_CYRILLIC_LATIN
-				MENUITEM "데바나가리 문자를 라틴 문자로(&D)",				IDM_EDIT_MAP_DEVANAGARI_LATIN
-				MENUITEM "말라얄람 문자를 라틴 문자로(&M)",					IDM_EDIT_MAP_MALAYALAM_LATIN
-			END
 			MENUITEM SEPARATOR
 			MENUITEM "선택 항목 탭 지정(&T)\tCtrl+Shift+T",		IDM_EDIT_CONVERTSPACES
 			MENUITEM "선택 항목 탭 해제(&N)\tCtrl+Shift+S",	IDM_EDIT_CONVERTTABS
@@ -328,12 +340,10 @@ BEGIN
 		BEGIN
 			MENUITEM "문자를 16진수로(&H)\tCtrl+Alt+X",				IDM_EDIT_CHAR2HEX
 			MENUITEM "16진수를 문자로(&R)\tCtrl+Alt+C",				IDM_EDIT_HEX2CHAR
-			MENUITEM "C 문자 이스케이프 (&P)\tCtrl+Alt+E",				IDM_EDIT_ESCAPECCHARS
-			MENUITEM "C 문자 이스케이프 해제(&U)\tCtrl+Alt+R",			IDM_EDIT_UNESCAPECCHARS
 			MENUITEM "16진수 코드 표시(&S)",							IDM_EDIT_SHOW_HEX
 			MENUITEM SEPARATOR
-			MENUITEM "URL 인코드(&E)\tCtrl+Shift+E",				IDM_EDIT_URLENCODE
-			MENUITEM "URL 디코드(&D)\tCtrl+Shift+R",				IDM_EDIT_URLDECODE
+			MENUITEM "C 문자 이스케이프 (&P)\tCtrl+Alt+E",				IDM_EDIT_ESCAPECCHARS
+			MENUITEM "C 문자 이스케이프 해제(&U)\tCtrl+Alt+R",			IDM_EDIT_UNESCAPECCHARS
 			MENUITEM "HTML/XML 문자 이스케이프(&M)\tAlt+Shift+X",		IDM_EDIT_XHTML_ESCAPE_CHAR
 			MENUITEM "HTML/XML 문자 이스케이프 해제(&X)\tAlt+Shift+H",	IDM_EDIT_XHTML_UNESCAPE_CHAR
 			MENUITEM SEPARATOR
@@ -343,18 +353,6 @@ BEGIN
 			MENUITEM "오른쪽 단어 삭제(&G)\tCtrl+Del",			CMD_CTRLDEL
 			MENUITEM SEPARATOR
 			MENUITEM "타임스탬프 업데이트(&T)\tShift+F5",			CMD_TIMESTAMPS
-		END
-		POPUP "선택시 동작(&O)"
-		BEGIN
-			MENUITEM "파일, 폴더, 링크, 기타 열기(&O)",		CMD_OPEN_PATH_OR_LINK
-			MENUITEM "폴더 내용 열기(&F)",				CMD_OPEN_CONTAINING_FOLDER
-			MENUITEM SEPARATOR
-			MENUITEM "Google에서 검색(&G)",					CMD_ONLINE_SEARCH_GOOGLE
-			MENUITEM "Bing에서 검색(&B)",					CMD_ONLINE_SEARCH_BING
-			MENUITEM "위키피디아에서 검색(&W)",				CMD_ONLINE_SEARCH_WIKI
-			MENUITEM SEPARATOR
-			MENUITEM "사용자 지정 동작 &1\tCtrl+Shift+1",		CMD_CUSTOM_ACTION1
-			MENUITEM "사용자 지정 동작 &2\tCtrl+Shift+2",		CMD_CUSTOM_ACTION2
 		END
 		MENUITEM SEPARATOR
 		POPUP "찾기 및 바꾸기(&F)"
@@ -422,7 +420,7 @@ BEGIN
 			MENUITEM "선택영역에서 블록 탈자기호 표시(&S)",		IDM_VIEW_CARET_STYLE_SELECTION
 		END
 		MENUITEM SEPARATOR
-		MENUITEM "줄바꿈(&R)\tCtrl+W",						IDM_VIEW_WORDWRAP
+		MENUITEM "줄바꿈(&R)\tCtrl+Shift+W",				IDM_VIEW_WORDWRAP
 		MENUITEM "긴 줄 표시(&L)\tCtrl+Shift+L",			IDM_VIEW_LONGLINEMARKER
 		MENUITEM "들여쓰기 안내선(&G)\tCtrl+Shift+G",		IDM_VIEW_SHOWINDENTGUIDES
 		MENUITEM SEPARATOR
@@ -501,6 +499,7 @@ BEGIN
 			MENUITEM "텍스트 파일(&T)",					IDM_LEXER_TEXTFILE
 			MENUITEM "두 번째 텍스트 파일(&2)",				IDM_LEXER_2NDTEXTFILE
 		END
+		MENUITEM "CSV 파일...",						IDM_LEXER_CSV
 		POPUP "CSS 스타일 시트(&H)"
 		BEGIN
 			MENUITEM "CSS 스타일 시트(&C)",			IDM_LEXER_CSS
@@ -588,21 +587,33 @@ BEGIN
 		MENUITEM "자동 완성 설정(&A)...",	IDM_VIEW_AUTOCOMPLETION_SETTINGS
 		MENUITEM "대소문자 무시 자동 완성(&G)",	IDM_VIEW_AUTOCOMPLETION_IGNORECASE
 		MENUITEM "LaTeX 입력 방법 사용함(&X)",		IDM_SET_LATEX_INPUT_METHOD
-		POPUP "줄 선택 모드(&M)"
+		POPUP "옵션 선택 및 편집(&E)"
 		BEGIN
-			MENUITEM "없음(&N)",						IDM_LINE_SELECTION_MODE_NONE
-			MENUITEM "Visual Studio(&V)",				IDM_LINE_SELECTION_MODE_VS
-			MENUITEM "일반(&M)",						IDM_LINE_SELECTION_MODE_NORMAL
+			MENUITEM "다중 선택 사용(&M)",		IDM_SET_MULTIPLE_SELECTION
+			MENUITEM "선택 항목을 텍스트 찾기로 복사(&S)",	IDM_SET_SELECTIONASFINDTEXT
+			MENUITEM "버퍼를 찾기 텍스트로 복사(&P)",	IDM_SET_PASTEBUFFERASFINDTEXT
+			POPUP "줄 선택 모드(&M)"
+			BEGIN
+				MENUITEM "없음(&N)",						IDM_LINE_SELECTION_MODE_NONE
+				MENUITEM "Visual Studio(&V)",				IDM_LINE_SELECTION_MODE_VS
+				MENUITEM "일반(&M)",						IDM_LINE_SELECTION_MODE_NORMAL
+			END
 		END
 		MENUITEM SEPARATOR
-		POPUP "모양(&E)"
+		POPUP "모양(&R)"
 		BEGIN
+			MENUITEM "메뉴 표시(&M)\tAlt+F11",			IDM_VIEW_MENU
 			MENUITEM "도구모음 표시(&H)\tCtrl+F11",		IDM_VIEW_TOOLBAR
 			MENUITEM "도구모음 사용자 지정(&Z)...",		IDM_VIEW_CUSTOMIZE_TOOLBAR
 			MENUITEM "도구모음 자동 크기 조정(&A)",			IDM_VIEW_AUTO_SCALE_TOOLBAR
 			MENUITEM "상태 표시줄 표시(&U)\tShift+F11",	IDM_VIEW_STATUSBAR
 			MENUITEM SEPARATOR
-			MENUITEM "투명 모드(&M)\tCtrl+0",	IDM_VIEW_TRANSPARENT
+			MENUITEM "투명 모드(&T)\tCtrl+0",	IDM_VIEW_TRANSPARENT
+			POPUP "전체 화면 모드(&N)"
+			BEGIN
+				MENUITEM "시작 시(&S)",					IDM_VIEW_FULLSCREEN_ON_START
+				MENUITEM "제목 숨기기(&T)",					IDM_VIEW_FULLSCREEN_HIDE_TITLE
+			END
 			POPUP "마지막 줄을 지나 스크롤(&P)"
 			BEGIN
 				MENUITEM "없음(&N)",						IDM_VIEW_SCROLLPASTLASTLINE_NO
@@ -618,6 +629,7 @@ BEGIN
 				MENUITEM "시스템 언어(&S)",		IDM_LANG_USER_DEFAULT
 				MENUITEM "Deutsch",					IDM_LANG_GERMAN
 				MENUITEM "English",					IDM_LANG_ENGLISH_US
+				MENUITEM "Français (France)",		IDM_LANG_FRENCH_FRANCE
 				MENUITEM "Italiano",				IDM_LANG_ITALIAN
 				MENUITEM "Português (Brasil)",		IDM_LANG_PORTUGUESE_BRAZIL
 				MENUITEM "日本語",					IDM_LANG_JAPANESE
@@ -626,13 +638,7 @@ BEGIN
 				MENUITEM "中文(简体)",				IDM_LANG_CHINESE_SIMPLIFIED
 			END
 #endif
-		END
-		POPUP "전체 화면 모드(&N)"
-		BEGIN
-			MENUITEM "시작 시(&S)",					IDM_VIEW_FULLSCREEN_ON_START
-			MENUITEM SEPARATOR
-			MENUITEM "제목 숨기기(&T)",					IDM_VIEW_FULLSCREEN_HIDE_TITLE
-			MENUITEM "메뉴 숨기기(&M)\tAlt+F11",			IDM_VIEW_FULLSCREEN_HIDE_MENU
+			MENUITEM "XP 스타일 열기/저장 대화 상자 사용(&X)",	IDM_SET_USE_XP_FILE_DIALOG
 		END
 		POPUP "창 옵션(&P)"
 		BEGIN
@@ -664,10 +670,6 @@ BEGIN
 		BEGIN
 			MENUITEM "최근 파일 기억(&F)",		IDM_VIEW_NOSAVERECENT
 			MENUITEM "검색 옵션 기억(&S)",	IDM_VIEW_NOSAVEFINDREPL
-			MENUITEM "도구 실행 전에 저장(&V)",	IDM_VIEW_SAVEBEFORERUNNINGTOOLS
-			MENUITEM SEPARATOR
-			MENUITEM "XP 스타일 열기/저장 대화 상자 사용(&U)",	IDM_SET_USE_XP_FILE_DIALOG
-			MENUITEM "metapath를 사용하여 폴더 열기(&M)",IDM_SET_OPEN_FOLDER_METAPATH
 		END
 		MENUITEM SEPARATOR
 		POPUP "고급 설정(&D)"
@@ -705,6 +707,62 @@ BEGIN
 		MENUITEM "종료 시 설정 저장(&O)",			IDM_VIEW_SAVESETTINGS
 		MENUITEM "지금 설정 저장(&V)\tF7",			IDM_VIEW_SAVESETTINGSNOW
 	END
+	POPUP "도구(&T)"
+	BEGIN
+		MENUITEM "도구 실행 전에 저장(&V)",	IDM_VIEW_SAVEBEFORERUNNINGTOOLS
+		MENUITEM "metapath를 사용하여 폴더 열기(&M)",IDM_SET_OPEN_FOLDER_METAPATH
+		MENUITEM SEPARATOR
+		MENUITEM "관리자 권한으로 열기(&A)",		IDM_FILE_RELAUNCH_ELEVATED
+		MENUITEM "다시 시작(&R)",					IDM_FILE_RESTART
+		MENUITEM "새 창 열기(&N)\tAlt+N",			IDM_FILE_NEWWINDOW
+		MENUITEM "빈 창 열기(&E)\tAlt+0",		IDM_FILE_NEWWINDOW2
+		MENUITEM SEPARATOR
+		MENUITEM "문서 실행(&D)\tCtrl+L",	IDM_FILE_LAUNCH
+		MENUITEM "다음으로 문서 열기(&W)...",				IDM_FILE_OPENWITH
+		MENUITEM "명령(&C)...\tCtrl+R",			IDM_FILE_RUN
+		MENUITEM SEPARATOR
+		POPUP "선택시 동작(&O)"
+		BEGIN
+			MENUITEM "파일, 폴더, 링크, 기타 열기(&O)",		CMD_OPEN_PATH_OR_LINK
+			MENUITEM "폴더 내용 열기(&F)",				CMD_OPEN_CONTAINING_FOLDER
+			MENUITEM SEPARATOR
+			MENUITEM "Google에서 검색(&G)",					CMD_ONLINE_SEARCH_GOOGLE
+			MENUITEM "Bing에서 검색(&B)",					CMD_ONLINE_SEARCH_BING
+			MENUITEM "위키피디아에서 검색(&W)",				CMD_ONLINE_SEARCH_WIKI
+			MENUITEM SEPARATOR
+			MENUITEM "사용자 지정 동작 &1\tCtrl+Shift+1",		CMD_CUSTOM_ACTION1
+			MENUITEM "사용자 지정 동작 &2\tCtrl+Shift+2",		CMD_CUSTOM_ACTION2
+		END
+		POPUP "&Base64"
+		BEGIN
+			MENUITEM "표준 인코드(&E)",							IDM_EDIT_BASE64_ENCODE
+			MENUITEM "URL 안전 인코드(&S)",							IDM_EDIT_BASE64_SAFE_ENCODE
+			MENUITEM "HTML 임베디드 이미지로 인코드(&I)",				IDM_EDIT_BASE64_HTML_EMBEDDED_IMAGE
+			MENUITEM "디코드(&D)",										IDM_EDIT_BASE64_DECODE
+			MENUITEM "16진수로 디코드(&H)",								IDM_EDIT_BASE64_DECODE_AS_HEX
+		END
+		POPUP "텍스트 변환(&T)"
+		BEGIN
+			MENUITEM "전각 문자로(&W)",		IDM_EDIT_MAP_FULLWIDTH
+			MENUITEM "반각 문자로(&A)",		IDM_EDIT_MAP_HALFWIDTH
+			MENUITEM SEPARATOR
+			MENUITEM "간체 한자로(&S)",	IDM_EDIT_MAP_SIMPLIFIED_CHINESE
+			MENUITEM "번체 한자로(&T)",	IDM_EDIT_MAP_TRADITIONAL_CHINESE
+			MENUITEM SEPARATOR
+			MENUITEM "가타카나를 히라가나로(&H)",		IDM_EDIT_MAP_HIRAGANA
+			MENUITEM "히라가나를 가타카나로(&K)",		IDM_EDIT_MAP_KATAKANA
+			MENUITEM SEPARATOR
+			MENUITEM "한국어 한자를 한글로(&J)",		        IDM_EDIT_MAP_HANJA_HANGUL
+			MENUITEM "한국어 한글 풀어쓰기(&G)",		IDM_EDIT_MAP_HANGUL_DECOMPOSITION
+			MENUITEM SEPARATOR
+			MENUITEM "벵골 문자를 라틴 문자로(&B)",					IDM_EDIT_MAP_BENGALI_LATIN
+			MENUITEM "키릴 문자를 라틴 문자로(&Y)",					IDM_EDIT_MAP_CYRILLIC_LATIN
+			MENUITEM "데바나가리 문자를 라틴 문자로(&D)",				IDM_EDIT_MAP_DEVANAGARI_LATIN
+			MENUITEM "말라얄람 문자를 라틴 문자로(&M)",					IDM_EDIT_MAP_MALAYALAM_LATIN
+		END
+		MENUITEM "URL 인코드(&U)\tCtrl+Shift+E",				IDM_EDIT_URLENCODE
+		MENUITEM "URL 디코드(&L)\tCtrl+Shift+R",				IDM_EDIT_URLDECODE
+	END
 	POPUP "도움말(&H)"
 	BEGIN
 		MENUITEM "프로젝트 홈(&H)",				IDM_HELP_PROJECT_HOME
@@ -740,6 +798,7 @@ BEGIN
 	END
 	POPUP "+"
 	BEGIN
+		MENUITEM "메뉴 표시(&M)",					IDM_VIEW_MENU
 		MENUITEM "도구모음 표시(&T)",				IDM_VIEW_TOOLBAR
 		MENUITEM "도구모음 사용자 지정(&C)...",		IDM_VIEW_CUSTOMIZE_TOOLBAR
 		MENUITEM "도구모음 자동 크기 조정(&A)",			IDM_VIEW_AUTO_SCALE_TOOLBAR
@@ -893,7 +952,7 @@ BEGIN
     VK_F10,         IDM_FILE_READONLY_MODE,     VIRTKEY, NOINVERT
     VK_F11,         IDM_VIEW_TOGGLE_FULLSCREEN, VIRTKEY, NOINVERT
     VK_F11,         IDM_VIEW_TOOLBAR,           VIRTKEY, CONTROL, NOINVERT
-    VK_F11,         IDM_VIEW_FULLSCREEN_HIDE_MENU,VIRTKEY, ALT, NOINVERT
+    VK_F11,         IDM_VIEW_MENU,              VIRTKEY, ALT, NOINVERT
     VK_F11,         IDM_VIEW_STATUSBAR,         VIRTKEY, SHIFT, NOINVERT
     VK_F12,         IDM_VIEW_SCHEME,            VIRTKEY, NOINVERT
     VK_F12,         IDM_VIEW_SCHEME_CONFIG,     VIRTKEY, CONTROL, NOINVERT
@@ -960,8 +1019,8 @@ BEGIN
     VK_TAB,         CMD_CTRLTAB,                VIRTKEY, CONTROL, NOINVERT
     VK_UP,          IDM_EDIT_MOVELINEUP,        VIRTKEY, ALT, NOINVERT
     "W",            IDM_EDIT_COMPRESSWS,        VIRTKEY, ALT, NOINVERT
-    "W",            IDM_VIEW_WORDWRAP,          VIRTKEY, CONTROL, NOINVERT
-    "W",            IDM_EDIT_COLUMNWRAP,        VIRTKEY, SHIFT, CONTROL, NOINVERT
+    "W",            IDM_FILE_EXIT,              VIRTKEY, CONTROL, NOINVERT
+    "W",            IDM_VIEW_WORDWRAP,          VIRTKEY, SHIFT, CONTROL, NOINVERT
     "X",            IDM_EDIT_CUT,               VIRTKEY, CONTROL, NOINVERT
     "X",            IDM_EDIT_INSERT_XMLTAG,     VIRTKEY, ALT, NOINVERT
     "X",            IDM_EDIT_XHTML_ESCAPE_CHAR, VIRTKEY, SHIFT, ALT, NOINVERT
@@ -1005,10 +1064,10 @@ BEGIN
     LTEXT           "Copyright © 2004-2012 Florian Balmer.",IDC_STATIC,45,38,200,8
     LTEXT           "",IDC_WEBPAGE_TEXT,45,48,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_WEBPAGE_LINK,"SysLink",WS_TABSTOP,45,48,200,10
-    LTEXT           "Copyright © 2010-2017 XhmikosR and all contributors.",IDC_STATIC,45,60,200,8
+    LTEXT           "Copyright © 2010-2017 XhmikosR 및 모든 기여자들",IDC_STATIC,45,60,200,8
     LTEXT           "",IDC_MOD_PAGE_TEXT,45,68,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_MOD_PAGE_LINK,"SysLink",WS_TABSTOP,45,68,200,10
-    LTEXT           "Copyright © 2011-2022 Zufu Liu and all contributors.",IDC_STATIC,45,80,200,8
+    LTEXT           "Copyright © 2011-2023 Zufu Liu 및 모든 기여자들",IDC_STATIC,45,80,200,8
     LTEXT           "",IDC_NEW_PAGE_TEXT,45,80,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_NEW_PAGE_LINK,"SysLink",WS_TABSTOP,45,88,200,10
     LTEXT           "Florian Balmer에게 연락:",IDC_STATIC,45,100,94,8
@@ -1201,7 +1260,7 @@ CAPTION "최근 파일 열기"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     CONTROL         "",IDC_FILEMRU,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS | LVS_AUTOARRANGE | LVS_NOCOLUMNHEADER | WS_BORDER | WS_TABSTOP,7,7,212,158
-    AUTOCHECKBOX    "종료 시 최근 파일 기억(&R)",IDC_SAVEMRU,7,169,114,10,WS_TABSTOP
+    AUTOCHECKBOX    "종료 시 최근 파일 기억(&R)",IDC_SAVEMRU,7,169,155,10,WS_TABSTOP
     CONTROL         "<a>기록 지우기</a>",IDC_EMPTY_MRU,"SysLink",WS_TABSTOP,172,169,48,10
     DEFPUSHBUTTON   "확인",IDOK,113,183,50,14,WS_DISABLED
     PUSHBUTTON      "취소",IDCANCEL,169,183,50,14
@@ -1481,21 +1540,22 @@ BEGIN
     AUTOCHECKBOX    "이 메시지를 다시 표시하지 않음(&D)",IDC_INFOBOXCHECK,7,55,120,10,WS_TABSTOP
 END
 
-IDD_SORT DIALOGEX 0, 0, 184, 152
+IDD_SORT DIALOGEX 0, 0, 184, 164
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "줄 순서"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
-    AUTORADIOBUTTON "오름차순 정렬(&A)",IDC_SORT_ASC,7,7,85,10,WS_GROUP | WS_TABSTOP
-    AUTORADIOBUTTON "내림차순 정렬(&D)",IDC_SORT_DESC,7,19,84,10,WS_TABSTOP
-    AUTORADIOBUTTON "줄 뒤섞기(&F)",IDC_SORT_SHUFFLE,7,31,70,10,WS_TABSTOP
-    AUTOCHECKBOX    "중복된 줄 병합(&M)",IDC_SORT_MERGE_DUP,7,50,100,10,WS_TABSTOP
-    AUTOCHECKBOX    "중복된 줄 제거(&R)",IDC_SORT_REMOVE_DUP,7,62,100,10,WS_TABSTOP
-    AUTOCHECKBOX    "독특한 줄 제거(&u)",IDC_SORT_REMOVE_UNIQUE,7,74,100,10,WS_TABSTOP
-    AUTOCHECKBOX    "대소문자 구분 안함(&C)",IDC_SORT_IGNORE_CASE,7,92,81,10,WS_TABSTOP
-    AUTOCHECKBOX    "논리 숫자 비교(&N)",IDC_SORT_LOGICAL_NUMBER,7,104,130,10,WS_TABSTOP
-    AUTOCHECKBOX    "파일 형식별 그룹(&T)",IDC_SORT_GROUPBY_FILE_TYPE,7,116,130,10,WS_TABSTOP
-    AUTOCHECKBOX    "열 정렬(사각형 선택)(&S)",IDC_SORT_COLUMN,7,135,150,10,WS_TABSTOP
+    AUTORADIOBUTTON "정렬 안 함(&S)",IDC_SORT_NONE,7,7,85,10,WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "오름차순 정렬(&A)",IDC_SORT_ASC,7,19,85,10,WS_TABSTOP
+    AUTORADIOBUTTON "내림차순 정렬(&D)",IDC_SORT_DESC,7,31,84,10,WS_TABSTOP
+    AUTORADIOBUTTON "줄 뒤섞기(&F)",IDC_SORT_SHUFFLE,7,43,70,10,WS_TABSTOP
+    AUTOCHECKBOX    "중복된 줄 병합(&M)",IDC_SORT_MERGE_DUP,7,62,100,10,WS_TABSTOP
+    AUTOCHECKBOX    "중복된 줄 제거(&R)",IDC_SORT_REMOVE_DUP,7,74,100,10,WS_TABSTOP
+    AUTOCHECKBOX    "독특한 줄 제거(&u)",IDC_SORT_REMOVE_UNIQUE,7,86,100,10,WS_TABSTOP
+    AUTOCHECKBOX    "대소문자 구분 안함(&I)",IDC_SORT_IGNORE_CASE,7,104,81,10,WS_TABSTOP
+    AUTOCHECKBOX    "논리 숫자 비교(&N)",IDC_SORT_LOGICAL_NUMBER,7,116,130,10,WS_TABSTOP
+    AUTOCHECKBOX    "파일 형식별 그룹(&T)",IDC_SORT_GROUPBY_FILE_TYPE,7,128,130,10,WS_TABSTOP
+    AUTOCHECKBOX    "열 정렬(사각형 선택)(&C)",IDC_SORT_COLUMN,7,147,150,10,WS_TABSTOP
     DEFPUSHBUTTON   "확인",IDOK,127,7,50,14
     PUSHBUTTON      "취소",IDCANCEL,127,24,50,14
 END
@@ -1594,7 +1654,7 @@ BEGIN
     PUSHBUTTON      "취소",IDCANCEL,399,145,50,14
 END
 
-IDD_AUTOSAVE DIALOGEX 0, 0, 184, 81
+IDD_AUTOSAVE DIALOGEX 0, 0, 184, 93
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "자동 저장 설정"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
@@ -1604,9 +1664,32 @@ BEGIN
     EDITTEXT        IDC_AUTOSAVE_PERIOD,140,17,30,12,ES_AUTOHSCROLL
     AUTOCHECKBOX    "시스템 일시 중단 시 백업 저장",IDC_AUTOSAVE_SUSPEND,7,31,170,10,WS_GROUP | WS_TABSTOP
     AUTOCHECKBOX    "시스템 종료 시 백업 저장",IDC_AUTOSAVE_SHUTDOWN,7,43,170,10,WS_TABSTOP
-    PUSHBUTTON      "폴더 열기",IDC_AUTOSAVE_OPENFOLDER,7,60,60,14
-    DEFPUSHBUTTON   "확인",IDOK,71,60,50,14
-    PUSHBUTTON      "취소",IDCANCEL,127,60,50,14
+    AUTOCHECKBOX    "수동으로 백업 삭제",IDC_AUTOSAVE_MANUALLYDELETE,7,55,170,10,WS_TABSTOP
+    PUSHBUTTON      "폴더 열기",IDC_AUTOSAVE_OPENFOLDER,7,72,60,14
+    DEFPUSHBUTTON   "확인",IDOK,71,72,50,14
+    PUSHBUTTON      "취소",IDCANCEL,127,72,50,14
+END
+
+IDD_CSV_OPTIONS DIALOGEX 0, 0, 220, 118
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "CSV 옵션"
+FONT 8, "MS Shell Dlg", 0, 0, 0x0
+BEGIN
+    GROUPBOX        "구분 기호",IDC_STATIC,7,7,206,50
+    AUTORADIOBUTTON "쉼표 (,)",IDC_CSV_DELIMITER_COMMA,14,19,60,10,WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "탭",IDC_CSV_DELIMITER_TAB,84,19,60,10,WS_TABSTOP
+    AUTORADIOBUTTON "파이프 (|)",IDC_CSV_DELIMITER_PIPE,154,19,55,10,WS_TABSTOP
+    AUTORADIOBUTTON "세미콜론 (;)",IDC_CSV_DELIMITER_SEMICOLON,14,31,60,10,WS_TABSTOP
+    AUTORADIOBUTTON "공백",IDC_CSV_DELIMITER_SPACE,84,31,60,10,WS_TABSTOP
+    AUTORADIOBUTTON "기타:",IDC_CSV_DELIMITER_OTHER,154,31,55,10,WS_TABSTOP
+    EDITTEXT        IDC_CSV_DELIMITER_OTHER_TEXT,166,42,40,11,ES_AUTOHSCROLL|WS_TABSTOP
+    AUTOCHECKBOX    "연속된 구분 기호를 하나로 처리",IDC_CSV_MERGE_DELIMITER,14,43,150,10,WS_TABSTOP
+    GROUPBOX        "텍스트 한정자",IDC_STATIC,7,63,206,26
+    AUTORADIOBUTTON "큰따옴표",IDC_CSV_QUALIFIER_DOUBLE,14,75,60,10,WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "작은따옴표",IDC_CSV_QUALIFIER_SINGLE,84,75,60,10,WS_TABSTOP
+    AUTORADIOBUTTON "없음",IDC_CSV_QUALIFIER_NONE,154,75,55,10,WS_TABSTOP
+    AUTOCHECKBOX    "역슬래시로 탈출",IDC_CSV_BACKSLASH_ESCAPE,14,97,140,10,WS_TABSTOP
+    DEFPUSHBUTTON   "확인",IDOK,163,97,50,14
 END
 
 
@@ -1618,214 +1701,6 @@ END
 #ifdef APSTUDIO_INVOKED
 GUIDELINES DESIGNINFO
 BEGIN
-    IDD_ABOUT, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 245
-        VERTGUIDE, 45
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 95
-    END
-
-    IDD_FIND, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 283
-        VERTGUIDE, 7
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 94
-    END
-
-    IDD_REPLACE, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 283
-        VERTGUIDE, 7
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 123
-    END
-
-    IDD_RUN, DIALOG
-    BEGIN
-        RIGHTMARGIN, 224
-        BOTTOMMARGIN, 85
-    END
-
-    IDD_OPENWITH, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 221
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 199
-    END
-
-    IDD_DEFENCODING, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 202
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 102
-    END
-
-    IDD_DEFEOLMODE, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 189
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 71
-    END
-
-    IDD_LINENUM, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 179
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 40
-    END
-
-    IDD_FILEMRU, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 219
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 197
-    END
-
-    IDD_CHANGENOTIFY, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 177
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 58
-    END
-
-    IDD_STYLESELECT, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 158
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 208
-    END
-
-    IDD_STYLECONFIG, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 461
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 231
-    END
-
-    IDD_TABSETTINGS, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 167
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 83
-    END
-
-    IDD_LONGLINES, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 177
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 48
-    END
-
-    IDD_WORDWRAP, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 243
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 93
-    END
-
-    IDD_PAGESETUP, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 349
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 253
-    END
-
-    IDD_FAVORITES, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 286
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 146
-    END
-
-    IDD_ADDTOFAV, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 247
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 59
-    END
-
-    IDD_COLUMNWRAP, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 123
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 40
-    END
-
-    IDD_MODIFYLINES, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 253
-        TOPMARGIN, 6
-        BOTTOMMARGIN, 114
-    END
-
-    IDD_INSERTTAG, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 257
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 83
-    END
-
-    IDD_ENCLOSESELECTION, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 241
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 87
-    END
-
-    IDD_INFOBOX, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 237
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 64
-    END
-
-    IDD_SORT, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 177
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 133
-    END
-
-    IDD_SELECT_ENCODING, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 180
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 231
-    END
-
-    IDD_ALIGN, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 177
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 67
-    END
 END
 #endif    // APSTUDIO_INVOKED
 
@@ -1844,7 +1719,7 @@ BEGIN
     IDS_TITLEEXCERPT        """%s"""
     IDS_READONLY_FILE       "(읽기 전용 파일)"
     IDS_READONLY_MODE       "(읽기 전용 모드)"
-    IDS_STATUSITEM_FORMAT   "행 %s / %s\n열 %s / %s\n글자 %s / %s\n선택 %s / %s\n선택행 %s\n일치 %s"
+    IDS_STATUSITEM_FORMAT   "행 %s / %s \n열 %s / %s \n글자 %s / %s \n선택 %s / %s \n선택행 %s \n찾기 %s "
     IDS_LOADFILE            """%s"" 불러오는 중..."
     IDS_SAVEFILE            """%s"" 저장 중..."
     IDS_PRINTFILE           "%s 페이지 인쇄 중..."

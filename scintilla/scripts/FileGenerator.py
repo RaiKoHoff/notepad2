@@ -50,7 +50,7 @@ def UpdateFile(filename, updated):
         newOrChanged = "New"
     with open(filename, "w", encoding="utf-8", newline='') as outfile:
         outfile.write(updated)
-    print("%s:0: %s" % (filename, newOrChanged))
+    print(f"{filename}:0: {newOrChanged}")
 
 # Automatically generated sections contain start and end comments,
 # a definition line and the results.
@@ -161,16 +161,16 @@ def UpdateLineInPlistFile(path, key, value):
     lines = []
     keyCurrent = ""
     with open(path, "rb", encoding="utf-8") as f:
-        for l in f.readlines():
-            ls = l.strip()
+        for line in f.readlines():
+            ls = line.strip()
             if ls.startswith("<key>"):
                 keyCurrent = ls.replace("<key>", "").replace("</key>", "")
             elif ls.startswith("<string>"):
                 if keyCurrent == key:
-                    start, tag, rest = l.partition("<string>")
+                    start, tag, rest = line.partition("<string>")
                     _val, etag, end = rest.partition("</string>")
-                    l = start + tag + value + etag + end
-            lines.append(l)
+                    line = start + tag + value + etag + end
+            lines.append(line)
     contents = "".join(lines)
     UpdateFile(path, contents)
 
@@ -178,13 +178,13 @@ def UpdateLineInFile(path, linePrefix, lineReplace):
     lines = []
     updated = False
     with open(path, "r", encoding="utf-8") as f:
-        for l in f.readlines():
-            l = l.rstrip()
-            if not updated and l.startswith(linePrefix):
+        for line in f.readlines():
+            line = line.rstrip()
+            if not updated and line.startswith(linePrefix):
                 lines.append(lineReplace)
                 updated = True
             else:
-                lines.append(l)
+                lines.append(line)
     if not updated:
         print(f"{path}:0: Can't find '{linePrefix}'")
     contents = lineEnd.join(lines) + lineEnd
@@ -194,7 +194,7 @@ def ReadFileAsList(path):
     """Read all the lnes in the file and return as a list of strings without line ends.
     """
     with open(path, "r", encoding="utf-8") as f:
-        return [l.rstrip('\n') for l in f]
+        return [line.rstrip('\n') for line in f]
 
 def UpdateFileFromLines(path, lines, lineEndToUse):
     """Join the lines with the lineEndToUse then update file if the result is different.
@@ -212,19 +212,19 @@ def FindSectionInList(lines, markers):
     start = -1
     end = -1
     state = 0
-    for i, l in enumerate(lines):
-        if markers[0] in l:
+    for i, line in enumerate(lines):
+        if markers[0] in line:
             if markers[1]:
                 state = 1
             else:
                 start = i+1
                 state = 2
         elif state == 1:
-            if markers[1] in l:
+            if markers[1] in line:
                 start = i+1
                 state = 2
         elif state == 2:
-            if markers[2] in l:
+            if markers[2] in line:
                 end = i
                 state = 3
     # Check that section was found
@@ -239,3 +239,63 @@ def ReplaceREInFile(path, match, replace, count=1):
         contents = f.read()
     contents = re.sub(match, replace, contents, count)
     UpdateFile(path, contents)
+
+def MakeKeywordGroups(items, maxLineLength=120, prefixLen=1, makeLower=False):
+    groups = {}
+    for item in items:
+        if item.endswith('()'):
+            # ')' is not used by lexer or auto-completion:
+            # 1. use InListPrefixed(s, '(') in lexer to match the word
+            # 2. ')' is auto added in WordList_AddListEx()
+            item = item[:-1]
+        key = item[:prefixLen]
+        if makeLower:
+            key = key.lower()
+        if key in groups:
+            groups[key]['items'].append(item)
+            groups[key]['len'] += len(item) + 1
+        else:
+            groups[key] = {'items': [item], 'len': len(item) + 1}
+
+    if prefixLen > 1:
+        removed = []
+        subs = []
+        for key, group in groups.items():
+            if group['len'] > maxLineLength:
+                removed.append(key)
+                sub = MakeKeywordGroups(group['items'], maxLineLength, prefixLen + 1, makeLower)
+                subs.append(sub)
+        for key in removed:
+            del groups[key]
+        for sub in subs:
+            groups.update(sub)
+        groups = dict(sorted(groups.items()))
+    return groups
+
+def MakeKeywordLines(items, maxLineLength=120, prefixLen=1, makeLower=False):
+    if not items:
+        return []
+    groups = MakeKeywordGroups(items, maxLineLength, prefixLen, makeLower)
+    groups = list(groups.values())
+    count = len(groups)
+    lines = []
+    index = 0
+    while index < count:
+        group = groups[index]
+        index += 1
+        lineLen = group['len']
+        items = group['items']
+        if lineLen > maxLineLength and prefixLen == 1:
+            sub = MakeKeywordLines(items, maxLineLength, 2, makeLower)
+            lines.extend(sub)
+        else:
+            while index < count:
+                group = groups[index]
+                lineLen += group['len']
+                if lineLen > maxLineLength:
+                    break
+                index += 1
+                items.extend(group['items'])
+            lines.append(' '.join(items))
+
+    return lines

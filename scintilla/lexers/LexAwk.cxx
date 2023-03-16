@@ -121,7 +121,7 @@ constexpr bool IsTimeFormatSpecifier(int ch, char chNext) noexcept {
 		|| (ch == 'O' && AnyOf(chNext, 'd', 'e', 'H', 'I', 'm', 'M', 'S', 'u', 'U', 'V', 'w', 'W', 'y'));
 }
 
-inline Sci_Position CheckFormatSpecifier(const StyleContext &sc, LexAccessor &styler, bool insideUrl) noexcept {
+Sci_Position CheckFormatSpecifier(const StyleContext &sc, LexAccessor &styler, bool insideUrl) noexcept {
 	if (sc.chNext == '%') {
 		return 2;
 	}
@@ -139,41 +139,41 @@ inline Sci_Position CheckFormatSpecifier(const StyleContext &sc, LexAccessor &st
 
 	Sci_PositionU pos = sc.currentPos + 1;
 	if (sc.chNext == 'E' || sc.chNext == 'O') {
-		const char ch = styler.SafeGetCharAt(pos + 2);
+		const char ch = styler[pos + 2];
 		if (IsTimeFormatSpecifier(sc.chNext, ch)) {
 			return 3;
 		}
 	}
 
 	// https://www.gnu.org/software/gawk/manual/html_node/Format-Modifiers.html
-	char ch = styler.SafeGetCharAt(pos);
+	char ch = styler[pos];
 	// positional specifier
 	while (IsADigit(ch)) {
-		ch = styler.SafeGetCharAt(++pos);
+		ch = styler[++pos];
 	}
 	if (ch == '$') {
-		ch = styler.SafeGetCharAt(++pos);
+		ch = styler[++pos];
 	}
 	// modifiers
 	while (AnyOf(ch, ' ', '+', '-', '#', '0', '\'')) {
-		ch = styler.SafeGetCharAt(++pos);
+		ch = styler[++pos];
 	}
 	// width
 	if (ch == '*') {
-		ch = styler.SafeGetCharAt(++pos);
+		ch = styler[++pos];
 	} else {
 		while (IsADigit(ch)) {
-			ch = styler.SafeGetCharAt(++pos);
+			ch = styler[++pos];
 		}
 	}
 	// .precision
 	if (ch == '.') {
-		ch = styler.SafeGetCharAt(++pos);
+		ch = styler[++pos];
 		if (ch == '*') {
-			ch = styler.SafeGetCharAt(++pos);
+			ch = styler[++pos];
 		} else {
 			while (IsADigit(ch)) {
-				ch = styler.SafeGetCharAt(++pos);
+				ch = styler[++pos];
 			}
 		}
 	}
@@ -424,14 +424,14 @@ void FoldAwkDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*
 	int levelNext = levelCurrent;
 	FoldLineState foldCurrent(styler.GetLineState(lineCurrent));
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
-	Sci_PositionU lineEndPos = sci::min(lineStartNext, endPos) - 1;
+	lineStartNext = sci::min(lineStartNext, endPos);
 	int visibleChars = 0;
 
-	for (Sci_PositionU i = startPos; i < endPos; i++) {
-		const int style = styler.StyleAt(i);
+	while (startPos < endPos) {
+		const int style = styler.StyleAt(startPos);
 
 		if (style == SCE_AWK_OPERATOR) {
-			const char ch = styler[i];
+			const char ch = styler[startPos];
 			if (ch == '{' || ch == '[' || ch == '(') {
 				levelNext++;
 			} else if (ch == '}' || ch == ']' || ch == ')') {
@@ -442,7 +442,7 @@ void FoldAwkDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*
 		if (visibleChars == 0 && !IsSpaceEquiv(style)) {
 			++visibleChars;
 		}
-		if (i == lineEndPos) {
+		if (++startPos == lineStartNext) {
 			const FoldLineState foldNext(styler.GetLineState(lineCurrent + 1));
 			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
@@ -454,7 +454,7 @@ void FoldAwkDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*
 				const Sci_PositionU bracePos = CheckBraceOnNextLine(styler, lineCurrent, SCE_AWK_OPERATOR, SCE_AWK_TASKMARKER);
 				if (bracePos) {
 					levelNext++;
-					i = bracePos; // skip the brace
+					startPos = bracePos + 1; // skip the brace
 				}
 			}
 
@@ -469,7 +469,7 @@ void FoldAwkDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineEndPos = sci::min(lineStartNext, endPos) - 1;
+			lineStartNext = sci::min(lineStartNext, endPos);
 			levelCurrent = levelNext;
 			foldPrev = foldCurrent;
 			foldCurrent = foldNext;

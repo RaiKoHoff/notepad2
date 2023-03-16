@@ -40,28 +40,68 @@ IDR_RT_MANIFEST         RT_MANIFEST             "..\\..\\res\\Notepad2.exe.manif
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
+#if NP2_ENABLE_HIDPI_IMAGE_RESOURCE
 IDR_MAINWND             ICON                    "..\\..\\res\\Notepad2.ico"
 IDI_RUN                 ICON                    "..\\..\\res\\Run.ico"
 IDI_STYLES              ICON                    "..\\..\\res\\Styles.ico"
+#else
+IDR_MAINWND             ICON                    "..\\..\\res\\Notepad2_min.ico"
+IDI_RUN                 ICON                    "..\\..\\res\\Run_min.ico"
+IDI_STYLES              ICON                    "..\\..\\res\\Styles_min.ico"
+#endif
 
+#if !NP2_ENABLE_APP_LOCALIZATION_DLL
 /////////////////////////////////////////////////////////////////////////////
 //
 // Bitmap
 //
 
-IDR_MAINWND             BITMAP                  "..\\..\\res\\Toolbar.bmp"
-IDB_OPEN_FOLDER         BITMAP                  "..\\..\\res\\OpenFolder.bmp"
-IDB_NEXT                BITMAP                  "..\\..\\res\\Next.bmp"
-IDB_PREV                BITMAP                  "..\\..\\res\\Prev.bmp"
+IDB_TOOLBAR16           BITMAP                  "..\\..\\res\\Toolbar16.bmp"
+IDB_OPEN_FOLDER16       BITMAP                  "..\\..\\res\\OpenFolder16.bmp"
+IDB_NEXT16              BITMAP                  "..\\..\\res\\Next16.bmp"
+IDB_PREV16              BITMAP                  "..\\..\\res\\Prev16.bmp"
 IDB_PICK                BITMAP                  "..\\..\\res\\Pick.bmp"
-IDB_ENCODING            BITMAP                  "..\\..\\res\\Encoding.bmp"
+IDB_ENCODING16          BITMAP                  "..\\..\\res\\Encoding16.bmp"
+
+#if NP2_ENABLE_HIDPI_IMAGE_RESOURCE
+IDB_TOOLBAR24           BITMAP                  "..\\..\\res\\Toolbar24.bmp"
+IDB_TOOLBAR32           BITMAP                  "..\\..\\res\\Toolbar32.bmp"
+IDB_TOOLBAR40           BITMAP                  "..\\..\\res\\Toolbar40.bmp"
+IDB_TOOLBAR48           BITMAP                  "..\\..\\res\\Toolbar48.bmp"
+
+IDB_OPEN_FOLDER24       BITMAP                  "..\\..\\res\\OpenFolder24.bmp"
+IDB_OPEN_FOLDER32       BITMAP                  "..\\..\\res\\OpenFolder32.bmp"
+IDB_OPEN_FOLDER40       BITMAP                  "..\\..\\res\\OpenFolder40.bmp"
+IDB_OPEN_FOLDER48       BITMAP                  "..\\..\\res\\OpenFolder48.bmp"
+
+IDB_NEXT24              BITMAP                  "..\\..\\res\\Next24.bmp"
+IDB_NEXT32              BITMAP                  "..\\..\\res\\Next32.bmp"
+IDB_NEXT40              BITMAP                  "..\\..\\res\\Next40.bmp"
+IDB_NEXT48              BITMAP                  "..\\..\\res\\Next48.bmp"
+
+IDB_PREV24              BITMAP                  "..\\..\\res\\Prev24.bmp"
+IDB_PREV32              BITMAP                  "..\\..\\res\\Prev32.bmp"
+IDB_PREV40              BITMAP                  "..\\..\\res\\Prev40.bmp"
+IDB_PREV48              BITMAP                  "..\\..\\res\\Prev48.bmp"
+
+IDB_ENCODING24          BITMAP                  "..\\..\\res\\Encoding24.bmp"
+IDB_ENCODING32          BITMAP                  "..\\..\\res\\Encoding32.bmp"
+IDB_ENCODING40          BITMAP                  "..\\..\\res\\Encoding40.bmp"
+IDB_ENCODING48          BITMAP                  "..\\..\\res\\Encoding48.bmp"
+#endif // NP2_ENABLE_HIDPI_IMAGE_RESOURCE
 
 /////////////////////////////////////////////////////////////////////////////
 //
 // Cursor
 //
 
+#if NP2_ENABLE_HIDPI_IMAGE_RESOURCE
 IDC_COPY                CURSOR                  "..\\..\\res\\Copy.cur"
+#else
+IDC_COPY                CURSOR                  "..\\..\\res\\Copy_min.cur"
+#endif
+
+#endif // NP2_ENABLE_APP_LOCALIZATION_DLL
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -76,6 +116,7 @@ BEGIN
 		MENUITEM "開く(&O)...\tCtrl+O",				IDM_FILE_OPEN
 		MENUITEM "上書き保存(&S)\tCtrl+S",					IDM_FILE_SAVE
 		MENUITEM "名前を付けて保存(&A)...\tF6",					IDM_FILE_SAVEAS
+		MENUITEM "バックアップを保存(&U)",					    IDM_FILE_SAVEBACKUP
 		MENUITEM "コピーして保存(&Y)...\tCtrl+F6",			IDM_FILE_SAVECOPY
 		MENUITEM SEPARATOR
 		POPUP "編集モード(&M)"
@@ -100,19 +141,6 @@ BEGIN
 #if defined(_WIN64)
 			MENUITEM "巨大ファイルモード(&L)",			IDM_FILE_LARGE_FILE_MODE_RELOAD
 #endif
-		END
-		POPUP "起動(&L)"
-		BEGIN
-			MENUITEM "ファイルのあるフォルダを開く(&F)",		IDM_FILE_OPEN_CONTAINING_FOLDER
-			MENUITEM "管理者権限で再起動(&A)",		IDM_FILE_RELAUNCH_ELEVATED
-			MENUITEM SEPARATOR
-			MENUITEM "同じファイルを開く(&N)\tAlt+N",			IDM_FILE_NEWWINDOW
-			MENUITEM "新規ウィンドウ(&E)\tAlt+0",		IDM_FILE_NEWWINDOW2
-			MENUITEM SEPARATOR
-			MENUITEM "再起動(&R)",					IDM_FILE_RESTART
-			MENUITEM "開いている文書を実行(&D)\tCtrl+L",	IDM_FILE_LAUNCH
-			MENUITEM "別のプログラムで開く(&W)...",				IDM_FILE_OPENWITH
-			MENUITEM "ファイル名を指定して実行(&C)...\tCtrl+R",			IDM_FILE_RUN
 		END
 		MENUITEM SEPARATOR
 		POPUP "文字コード(&E)"
@@ -139,6 +167,7 @@ BEGIN
 		MENUITEM "印刷(&P)...\tCtrl+P",				IDM_FILE_PRINT
 		MENUITEM SEPARATOR
 		MENUITEM "プロパティ(&I)...",					IDM_FILE_PROPERTIES
+		MENUITEM "ファイルのあるフォルダを開く(&C)",		IDM_FILE_OPEN_CONTAINING_FOLDER
 		MENUITEM "デスクトップにショートカット(&K)",			IDM_FILE_CREATELINK
 		MENUITEM SEPARATOR
 		MENUITEM "ファイラで開く(&B)...\tCtrl+M",				IDM_FILE_BROWSE
@@ -148,7 +177,7 @@ BEGIN
 			MENUITEM "現在のファイルを追加(&A)...\tAlt+K",	IDM_FILE_ADDTOFAV
 			MENUITEM "エクスプローラーで開く(&M)...\tAlt+F9",			IDM_FILE_MANAGEFAV
 		END
-		MENUITEM "最近開いたファイル(&H)...\tAlt+H",		IDM_FILE_RECENT
+		MENUITEM "最近使ったファイル(&H)...\tAlt+H",		IDM_FILE_RECENT
 		MENUITEM SEPARATOR
 		MENUITEM "終了(&X)\tAlt+F4",					IDM_FILE_EXIT
 	END
@@ -199,6 +228,8 @@ BEGIN
 			MENUITEM SEPARATOR
 			MENUITEM "余分な空行を削除(&B)\tAlt+B",		IDM_EDIT_MERGEBLANKLINES
 			MENUITEM "空行を削除(&R)\tAlt+R",		IDM_EDIT_REMOVEBLANKLINES
+			MENUITEM "重複行を合併(&M)",			IDM_EDIT_MERGEDUPLICATELINE
+			MENUITEM "重複行を削除(&V)",			IDM_EDIT_REMOVEDUPLICATELINE
 			MENUITEM "空欄を空白で埋める(&P)\tAlt+P",			IDM_EDIT_PADWITHSPACES
 			MENUITEM "空白をまとめる(&W)\tAlt+W",		IDM_EDIT_COMPRESSWS
 		END
@@ -227,7 +258,7 @@ BEGIN
 			MENUITEM "削除(&E)\tCtrl+Shift+D",		IDM_EDIT_DELETELINE
 			MENUITEM SEPARATOR
 			MENUITEM "行を結合(空白で)(&J)\tCtrl+J",				IDM_EDIT_JOINLINES
-			MENUITEM "空白で折り返し(&W)...\tCtrl+Shift+W",	IDM_EDIT_COLUMNWRAP
+			MENUITEM "空白で折り返し(&W)...",					IDM_EDIT_COLUMNWRAP
 			MENUITEM "長い行を分割し折り返し(&S)\tCtrl+I",			IDM_EDIT_SPLITLINES
 			MENUITEM "段落を温存して結合(&P)\tCtrl+Shift+J",	IDM_EDIT_JOINLINESEX
 		END
@@ -238,25 +269,6 @@ BEGIN
 			MENUITEM "大文字/小文字を反転(&V)\tCtrl+Alt+U",		IDM_EDIT_INVERTCASE
 			MENUITEM "頭文字を大文字に(&C)\tCtrl+Alt+I",			IDM_EDIT_TITLECASE
 			MENUITEM "文の最初を大文字に(&S)\tCtrl+Alt+O",		IDM_EDIT_SENTENCECASE
-			POPUP "他の言語の変換(&E)"
-			BEGIN
-				MENUITEM "半角を全角に(&W)",		IDM_EDIT_MAP_FULLWIDTH
-				MENUITEM "全角を半角に(&A)",		IDM_EDIT_MAP_HALFWIDTH
-				MENUITEM SEPARATOR
-				MENUITEM "繁体字を簡体字に(&S)(中国)",	IDM_EDIT_MAP_SIMPLIFIED_CHINESE
-				MENUITEM "簡体字を繁体字に(&T)",	IDM_EDIT_MAP_TRADITIONAL_CHINESE
-				MENUITEM SEPARATOR
-				MENUITEM "カタカナをひらがなに(&H)",		IDM_EDIT_MAP_HIRAGANA
-				MENUITEM "ひらがなをカタカナに(&K)",		IDM_EDIT_MAP_KATAKANA
-				MENUITEM SEPARATOR
-				MENUITEM "韓国漢字をハングルに(&J)",		        IDM_EDIT_MAP_HANJA_HANGUL
-				MENUITEM "ハングルを分解(&G)",		IDM_EDIT_MAP_HANGUL_DECOMPOSITION
-				MENUITEM SEPARATOR
-				MENUITEM "ベンガル語をラテンに(&B)",					IDM_EDIT_MAP_BENGALI_LATIN
-				MENUITEM "キリル文字を以下同(&Y)",					IDM_EDIT_MAP_CYRILLIC_LATIN
-				MENUITEM "デバナーガリ文字を(&D)",				IDM_EDIT_MAP_DEVANAGARI_LATIN
-				MENUITEM "マラヤーラム語を(&M)",					IDM_EDIT_MAP_MALAYALAM_LATIN
-			END
 			MENUITEM SEPARATOR
 			MENUITEM "空白をタブに(&T)\tCtrl+Shift+T",		IDM_EDIT_CONVERTSPACES
 			MENUITEM "タブを空白に(&N)\tCtrl+Shift+S",	IDM_EDIT_CONVERTTABS
@@ -266,7 +278,7 @@ BEGIN
 			MENUITEM "16進数(&H)\tCtrl+Alt+H",			IDM_EDIT_NUM2HEX
 			MENUITEM "10進数(&D)\tCtrl+Alt+D",				IDM_EDIT_NUM2DEC
 			MENUITEM "バイナリ(&B)\tCtrl+Alt+B",				IDM_EDIT_NUM2BIN
-			MENUITEM "8ビット(octet)(&O)",							IDM_EDIT_NUM2OCT
+			MENUITEM "8ビット(オクテット)(&O)",							IDM_EDIT_NUM2OCT
 		END
 		POPUP "挿入(&N)"
 		BEGIN
@@ -328,12 +340,10 @@ BEGIN
 		BEGIN
 			MENUITEM "16進数表記へ(&H)\tCtrl+Alt+X",				IDM_EDIT_CHAR2HEX
 			MENUITEM "16進数表記を文字へ(&R)\tCtrl+Alt+C",				IDM_EDIT_HEX2CHAR
-			MENUITEM "文字列型中のエスケープ文字変換(&P)\tCtrl+Alt+E",				IDM_EDIT_ESCAPECCHARS
-			MENUITEM "文字列型中の上記アンエスケープ(&U)\tCtrl+Alt+R",			IDM_EDIT_UNESCAPECCHARS
 			MENUITEM "16進コードを表示(&S)",							IDM_EDIT_SHOW_HEX
 			MENUITEM SEPARATOR
-			MENUITEM "URLエンコード(&E)\tCtrl+Shift+E",				IDM_EDIT_URLENCODE
-			MENUITEM "URLデコード(&D)\tCtrl+Shift+R",				IDM_EDIT_URLDECODE
+			MENUITEM "文字列型中のエスケープ文字変換(&P)\tCtrl+Alt+E",				IDM_EDIT_ESCAPECCHARS
+			MENUITEM "文字列型中の上記アンエスケープ(&U)\tCtrl+Alt+R",			IDM_EDIT_UNESCAPECCHARS
 			MENUITEM "HTML/XMLをエスケープ(&M)\tAlt+Shift+X",		IDM_EDIT_XHTML_ESCAPE_CHAR
 			MENUITEM "HTML/XMLをアンエスケープ(&X)\tAlt+Shift+H",	IDM_EDIT_XHTML_UNESCAPE_CHAR
 			MENUITEM SEPARATOR
@@ -343,18 +353,6 @@ BEGIN
 			MENUITEM "単語の右を削除(&G)\tCtrl+Del",			CMD_CTRLDEL
 			MENUITEM SEPARATOR
 			MENUITEM "タイムスタンプの更新(&T)\tShift+F5",			CMD_TIMESTAMPS
-		END
-		POPUP "選択範囲を実行(&O)"
-		BEGIN
-			MENUITEM "ファイル"		CMD_OPEN_PATH_OR_LINK
-			MENUITEM "このフォルダを開く(&F)",				CMD_OPEN_CONTAINING_FOLDER
-			MENUITEM SEPARATOR
-			MENUITEM "&Google 検索",					CMD_ONLINE_SEARCH_GOOGLE
-			MENUITEM "&Bing 検索",					CMD_ONLINE_SEARCH_BING
-			MENUITEM "&Wikipedia 検索",				CMD_ONLINE_SEARCH_WIKI
-			MENUITEM SEPARATOR
-			MENUITEM "ウェブ1 で開く (&1)\tCtrl+Shift+1",		CMD_CUSTOM_ACTION1
-			MENUITEM "ウェブ2 で開く (&2)\tCtrl+Shift+2",		CMD_CUSTOM_ACTION2
 		END
 		MENUITEM SEPARATOR
 		POPUP "検索/置換(&F)"
@@ -422,14 +420,14 @@ BEGIN
 			MENUITEM "ブロックでの選択状態は内側に表示(&S)",		IDM_VIEW_CARET_STYLE_SELECTION
 		END
 		MENUITEM SEPARATOR
-		MENUITEM "右端で折り返す(&R)\tCtrl+W",						IDM_VIEW_WORDWRAP
+		MENUITEM "右端で折り返す(&R)\tCtrl+Shift+W",			IDM_VIEW_WORDWRAP
 		MENUITEM "行の長さガイド(&L)\tCtrl+Shift+L",			IDM_VIEW_LONGLINEMARKER
 		MENUITEM "インデントのガイド(&G)\tCtrl+Shift+G",		IDM_VIEW_SHOWINDENTGUIDES
 		MENUITEM SEPARATOR
 		MENUITEM "空白(&W)\tCtrl+Shift+8",			IDM_VIEW_SHOWWHITESPACE
 		MENUITEM "改行コード(&E)\tCtrl+Shift+9",		IDM_VIEW_SHOWEOLS
 		MENUITEM "折り返し記号(&Y)\tCtrl+Shift+0",		IDM_VIEW_WORDWRAPSYMBOLS
-		MENUITEM "Unicode 制御文字(&I)",				IDM_VIEW_UNICODE_CONTROL_CHAR
+		MENUITEM "Unicode制御文字(&I)",				IDM_VIEW_UNICODE_CONTROL_CHAR
 		//MENUITEM "コールチップ(&H)",						IDM_VIEW_SHOWCALLTIPS
 		MENUITEM SEPARATOR
 		MENUITEM "対応括弧を強調表示(&V)\tCtrl+Shift+V",	IDM_VIEW_MATCHBRACES
@@ -501,12 +499,13 @@ BEGIN
 			MENUITEM "テキストファイル(&T)",					IDM_LEXER_TEXTFILE
 			MENUITEM "テキストファイル2(&2)",				IDM_LEXER_2NDTEXTFILE
 		END
+		MENUITEM "CSVファイル...",						IDM_LEXER_CSV
 		POPUP "CSSスタイルシート(&H)"
 		BEGIN
-			MENUITEM "CSSスタイルシート(&C)",			IDM_LEXER_CSS
-			MENUITEM "SCSSスタイルシート(&S)",			IDM_LEXER_SCSS
-			MENUITEM "Lessスタイルシート(&L)",			IDM_LEXER_LESS
-			MENUITEM "HSSスタイルシート(&H)",			IDM_LEXER_HSS
+			MENUITEM "CSS スタイルシート(&C)",			IDM_LEXER_CSS
+			MENUITEM "SCSS スタイルシート(&S)",			IDM_LEXER_SCSS
+			MENUITEM "Less スタイルシート(&L)",			IDM_LEXER_LESS
+			MENUITEM "HSS スタイルシート(&H)",			IDM_LEXER_HSS
 		END
 		POPUP "Webソースコード(&W)"
 		BEGIN
@@ -587,22 +586,34 @@ BEGIN
 		MENUITEM "行の長さガイドの設定(&L)...",			IDM_VIEW_LONGLINESETTINGS
 		MENUITEM "自動補完の設定(&A)...",	IDM_VIEW_AUTOCOMPLETION_SETTINGS
 		MENUITEM "自動補完/大文字小文字無視(&G)",	IDM_VIEW_AUTOCOMPLETION_IGNORECASE
-		MENUITEM "LaTeX 入力方式を使用(&X)",		IDM_SET_LATEX_INPUT_METHOD
-		POPUP "行選択の方法(&M)"
+		MENUITEM "LaTeX入力方式を使用(&X)",		IDM_SET_LATEX_INPUT_METHOD
+		POPUP "選択や編集の方法(&E)"
 		BEGIN
-			MENUITEM "なし(&N)",						IDM_LINE_SELECTION_MODE_NONE
-			MENUITEM "Visual Studio(&V)",				IDM_LINE_SELECTION_MODE_VS
-			MENUITEM "通常(&M)",						IDM_LINE_SELECTION_MODE_NORMAL
+			MENUITEM "複数選択を使用(&M)",		IDM_SET_MULTIPLE_SELECTION
+			MENUITEM "検索文字列に選択範囲をコピー(&S)",	IDM_SET_SELECTIONASFINDTEXT
+			MENUITEM "検索文字列に貼り付け用バッファをコピー(&P)",	IDM_SET_PASTEBUFFERASFINDTEXT
+			POPUP "行選択の方法(&M)"
+			BEGIN
+				MENUITEM "なし(&N)",						IDM_LINE_SELECTION_MODE_NONE
+				MENUITEM "Visual Studio(&V)",				IDM_LINE_SELECTION_MODE_VS
+				MENUITEM "通常(&M)",						IDM_LINE_SELECTION_MODE_NORMAL
+			END
 		END
 		MENUITEM SEPARATOR
-		POPUP "表示(&E)"
+		POPUP "表示(&R)"
 		BEGIN
+			MENUITEM "メニューを表示(&M)\tAlt+F11",			IDM_VIEW_MENU
 			MENUITEM "ツールバーを表示(&H)\tCtrl+F11",		IDM_VIEW_TOOLBAR
 			MENUITEM "ツールバーの編集(&Z)...",		IDM_VIEW_CUSTOMIZE_TOOLBAR
 			MENUITEM "ツールバーの自動縮尺(&A)",			IDM_VIEW_AUTO_SCALE_TOOLBAR
 			MENUITEM "ステータスバーを表示(&U)\tShift+F11",	IDM_VIEW_STATUSBAR
 			MENUITEM SEPARATOR
-			MENUITEM "ウィンドウ透化(&M)\tCtrl+0",	IDM_VIEW_TRANSPARENT
+			MENUITEM "ウィンドウ透化(&T)\tCtrl+0",	IDM_VIEW_TRANSPARENT
+			POPUP "全画面モード(&N)"
+			BEGIN
+				MENUITEM "起動時(&S)",					IDM_VIEW_FULLSCREEN_ON_START
+				MENUITEM "隠す/タイトル(&T)",					IDM_VIEW_FULLSCREEN_HIDE_TITLE
+			END
 			POPUP "最終行以降へスクロール(&P)"
 			BEGIN
 				MENUITEM "なし(&N)",						IDM_VIEW_SCROLLPASTLASTLINE_NO
@@ -618,6 +629,7 @@ BEGIN
 				MENUITEM "システムの規定(&S)",		IDM_LANG_USER_DEFAULT
 				MENUITEM "Deutsch",					IDM_LANG_GERMAN
 				MENUITEM "English",					IDM_LANG_ENGLISH_US
+				MENUITEM "Français (France)",		IDM_LANG_FRENCH_FRANCE
 				MENUITEM "Italiano",				IDM_LANG_ITALIAN
 				MENUITEM "Português (Brasil)",		IDM_LANG_PORTUGUESE_BRAZIL
 				MENUITEM "日本語",					IDM_LANG_JAPANESE
@@ -626,13 +638,7 @@ BEGIN
 				MENUITEM "中文(简体)",				IDM_LANG_CHINESE_SIMPLIFIED
 			END
 #endif
-		END
-		POPUP "全画面モード(&N)"
-		BEGIN
-			MENUITEM "起動時(&S)",					IDM_VIEW_FULLSCREEN_ON_START
-			MENUITEM SEPARATOR
-			MENUITEM "隠す/タイトル(&T)",					IDM_VIEW_FULLSCREEN_HIDE_TITLE
-			MENUITEM "隠す/メニュー(&M)\tAlt+F11",			IDM_VIEW_FULLSCREEN_HIDE_MENU
+			MENUITEM "開く/保存ダイアログをXP風に(&X)",	IDM_SET_USE_XP_FILE_DIALOG
 		END
 		POPUP "ウィンドウオプション(&P)"
 		BEGIN
@@ -664,10 +670,6 @@ BEGIN
 		BEGIN
 			MENUITEM "保存/最近使ったファイルの履歴(&F)",		IDM_VIEW_NOSAVERECENT
 			MENUITEM "保存/検索文字列(&S)",	IDM_VIEW_NOSAVEFINDREPL
-			MENUITEM "ツールを実行する前に保存(&V)",	IDM_VIEW_SAVEBEFORERUNNINGTOOLS
-			MENUITEM SEPARATOR
-			MENUITEM "開く/保存ダイアログをXP風に(&U)",	IDM_SET_USE_XP_FILE_DIALOG
-			MENUITEM "フォルダを開くのにメタパスを使用(&M)",IDM_SET_OPEN_FOLDER_METAPATH
 		END
 		MENUITEM SEPARATOR
 		POPUP "高度(&D)"
@@ -705,6 +707,62 @@ BEGIN
 		MENUITEM "設定を保存/終了時(&O)",			IDM_VIEW_SAVESETTINGS
 		MENUITEM "設定の保存/今すぐ(&V)\tF7",			IDM_VIEW_SAVESETTINGSNOW
 	END
+	POPUP "ツール(&T)"
+	BEGIN
+		MENUITEM "ツールを実行する前に保存(&V)",	IDM_VIEW_SAVEBEFORERUNNINGTOOLS
+		MENUITEM "フォルダを開くのにメタパスを使用(&M)",IDM_SET_OPEN_FOLDER_METAPATH
+		MENUITEM SEPARATOR
+		MENUITEM "管理者権限で再起動(&A)",		IDM_FILE_RELAUNCH_ELEVATED
+		MENUITEM "再起動(&R)",					IDM_FILE_RESTART
+		MENUITEM "同じファイルを開く(&N)\tAlt+N",			IDM_FILE_NEWWINDOW
+		MENUITEM "新規ウィンドウ(&E)\tAlt+0",		IDM_FILE_NEWWINDOW2
+		MENUITEM SEPARATOR
+		MENUITEM "開いている文書を実行(&D)\tCtrl+L",	IDM_FILE_LAUNCH
+		MENUITEM "別のプログラムで開く(&W)...",				IDM_FILE_OPENWITH
+		MENUITEM "ファイル名を指定して実行(&C)...\tCtrl+R",			IDM_FILE_RUN
+		MENUITEM SEPARATOR
+		POPUP "選択範囲を実行(&O)"
+		BEGIN
+			MENUITEM "ファイル"		CMD_OPEN_PATH_OR_LINK
+			MENUITEM "このフォルダを開く(&F)",				CMD_OPEN_CONTAINING_FOLDER
+			MENUITEM SEPARATOR
+			MENUITEM "&Google 検索",					CMD_ONLINE_SEARCH_GOOGLE
+			MENUITEM "&Bing 検索",					CMD_ONLINE_SEARCH_BING
+			MENUITEM "&Wikipedia 検索",				CMD_ONLINE_SEARCH_WIKI
+			MENUITEM SEPARATOR
+			MENUITEM "ウェブ1 で開く (&1)\tCtrl+Shift+1",		CMD_CUSTOM_ACTION1
+			MENUITEM "ウェブ2 で開く (&2)\tCtrl+Shift+2",		CMD_CUSTOM_ACTION2
+		END
+		POPUP "Base64(&B)"
+		BEGIN
+			MENUITEM "普通のエンコード(&E)",							IDM_EDIT_BASE64_ENCODE
+			MENUITEM "URLに適したエンコード(&S)",							IDM_EDIT_BASE64_SAFE_ENCODE
+			MENUITEM "HTML埋め込み画像としてエンコード(&I)",				IDM_EDIT_BASE64_HTML_EMBEDDED_IMAGE
+			MENUITEM "デコード(&D)",										IDM_EDIT_BASE64_DECODE
+			MENUITEM "16進数にデコード(&H)",								IDM_EDIT_BASE64_DECODE_AS_HEX
+		END
+		POPUP "文字列の変換(&T)"
+		BEGIN
+			MENUITEM "半角を全角に(&W)",		IDM_EDIT_MAP_FULLWIDTH
+			MENUITEM "全角を半角に(&A)",		IDM_EDIT_MAP_HALFWIDTH
+			MENUITEM SEPARATOR
+			MENUITEM "繁体字を簡体字に(&S)(中国)",	IDM_EDIT_MAP_SIMPLIFIED_CHINESE
+			MENUITEM "簡体字を繁体字に(&T)",	IDM_EDIT_MAP_TRADITIONAL_CHINESE
+			MENUITEM SEPARATOR
+			MENUITEM "カタカナをひらがなに(&H)",		IDM_EDIT_MAP_HIRAGANA
+			MENUITEM "ひらがなをカタカナに(&K)",		IDM_EDIT_MAP_KATAKANA
+			MENUITEM SEPARATOR
+			MENUITEM "韓国漢字をハングルに(&J)",		        IDM_EDIT_MAP_HANJA_HANGUL
+			MENUITEM "ハングルを分解(&G)",		IDM_EDIT_MAP_HANGUL_DECOMPOSITION
+			MENUITEM SEPARATOR
+			MENUITEM "ベンガル語をラテンに(&B)",					IDM_EDIT_MAP_BENGALI_LATIN
+			MENUITEM "キリル文字を以下同(&Y)",					IDM_EDIT_MAP_CYRILLIC_LATIN
+			MENUITEM "デバナーガリ文字を(&D)",				IDM_EDIT_MAP_DEVANAGARI_LATIN
+			MENUITEM "マラヤーラム語を(&M)",					IDM_EDIT_MAP_MALAYALAM_LATIN
+		END
+		MENUITEM "URLエンコード(&U)\tCtrl+Shift+E",				IDM_EDIT_URLENCODE
+		MENUITEM "URLデコード(&L)\tCtrl+Shift+R",				IDM_EDIT_URLDECODE
+	END
 	POPUP "ヘルプ(&H)"
 	BEGIN
 		MENUITEM "ホームページ(英web)(&H)",				IDM_HELP_PROJECT_HOME
@@ -740,6 +798,7 @@ BEGIN
 	END
 	POPUP "+"
 	BEGIN
+		MENUITEM "メニューを表示(&M)",					IDM_VIEW_MENU
 		MENUITEM "ツールバーの表示(&T)",				IDM_VIEW_TOOLBAR
 		MENUITEM "ツールバーの編集(&C)...",		IDM_VIEW_CUSTOMIZE_TOOLBAR
 		MENUITEM "ツールバーの自動縮尺(&A)",			IDM_VIEW_AUTO_SCALE_TOOLBAR
@@ -893,7 +952,7 @@ BEGIN
     VK_F10,         IDM_FILE_READONLY_MODE,     VIRTKEY, NOINVERT
     VK_F11,         IDM_VIEW_TOGGLE_FULLSCREEN, VIRTKEY, NOINVERT
     VK_F11,         IDM_VIEW_TOOLBAR,           VIRTKEY, CONTROL, NOINVERT
-    VK_F11,         IDM_VIEW_FULLSCREEN_HIDE_MENU,VIRTKEY, ALT, NOINVERT
+    VK_F11,         IDM_VIEW_MENU,              VIRTKEY, ALT, NOINVERT
     VK_F11,         IDM_VIEW_STATUSBAR,         VIRTKEY, SHIFT, NOINVERT
     VK_F12,         IDM_VIEW_SCHEME,            VIRTKEY, NOINVERT
     VK_F12,         IDM_VIEW_SCHEME_CONFIG,     VIRTKEY, CONTROL, NOINVERT
@@ -960,8 +1019,8 @@ BEGIN
     VK_TAB,         CMD_CTRLTAB,                VIRTKEY, CONTROL, NOINVERT
     VK_UP,          IDM_EDIT_MOVELINEUP,        VIRTKEY, ALT, NOINVERT
     "W",            IDM_EDIT_COMPRESSWS,        VIRTKEY, ALT, NOINVERT
-    "W",            IDM_VIEW_WORDWRAP,          VIRTKEY, CONTROL, NOINVERT
-    "W",            IDM_EDIT_COLUMNWRAP,        VIRTKEY, SHIFT, CONTROL, NOINVERT
+    "W",            IDM_FILE_EXIT,              VIRTKEY, CONTROL, NOINVERT
+    "W",            IDM_VIEW_WORDWRAP,          VIRTKEY, SHIFT, CONTROL, NOINVERT
     "X",            IDM_EDIT_CUT,               VIRTKEY, CONTROL, NOINVERT
     "X",            IDM_EDIT_INSERT_XMLTAG,     VIRTKEY, ALT, NOINVERT
     "X",            IDM_EDIT_XHTML_ESCAPE_CHAR, VIRTKEY, SHIFT, ALT, NOINVERT
@@ -1008,7 +1067,7 @@ BEGIN
     LTEXT           "Copyright © 2010-2017 XhmikosR and all contributors.",IDC_STATIC,45,60,200,8
     LTEXT           "",IDC_MOD_PAGE_TEXT,45,68,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_MOD_PAGE_LINK,"SysLink",WS_TABSTOP,45,68,200,10
-    LTEXT           "Copyright © 2011-2022 Zufu Liu and all contributors.",IDC_STATIC,45,80,200,8
+    LTEXT           "Copyright © 2011-2023 Zufu Liu and all contributors.",IDC_STATIC,45,80,200,8
     LTEXT           "",IDC_NEW_PAGE_TEXT,45,80,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_NEW_PAGE_LINK,"SysLink",WS_TABSTOP,45,88,200,10
     LTEXT           "Florian Balmer の連絡先:",IDC_STATIC,45,100,94,8
@@ -1201,7 +1260,7 @@ CAPTION "最近使ったファイル"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     CONTROL         "",IDC_FILEMRU,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS | LVS_AUTOARRANGE | LVS_NOCOLUMNHEADER | WS_BORDER | WS_TABSTOP,7,7,212,158
-    AUTOCHECKBOX    "終了時に最近使ったファイル一覧を保存(&R)",IDC_SAVEMRU,7,169,114,10,WS_TABSTOP
+    AUTOCHECKBOX    "終了時に最近使ったファイル一覧を保存(&R)",IDC_SAVEMRU,7,169,155,10,WS_TABSTOP
     CONTROL         "<a>履歴を消去</a>",IDC_EMPTY_MRU,"SysLink",WS_TABSTOP,172,169,48,10
     DEFPUSHBUTTON   "OK",IDOK,113,183,50,14,WS_DISABLED
     PUSHBUTTON     "キャンセル",IDCANCEL,169,183,50,14
@@ -1481,21 +1540,22 @@ BEGIN
     AUTOCHECKBOX    "このメッセージを再び表示しない(&D)",IDC_INFOBOXCHECK,7,55,120,10,WS_TABSTOP
 END
 
-IDD_SORT DIALOGEX 0, 0, 184, 152
+IDD_SORT DIALOGEX 0, 0, 184, 164
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "行の並べ替え"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
-    AUTORADIOBUTTON "昇順ソート(&A)",IDC_SORT_ASC,7,7,85,10,WS_GROUP | WS_TABSTOP
-    AUTORADIOBUTTON "降順ソート(&D)",IDC_SORT_DESC,7,19,84,10,WS_TABSTOP
-    AUTORADIOBUTTON "シャッフル(&F)",IDC_SORT_SHUFFLE,7,31,70,10,WS_TABSTOP
-    AUTOCHECKBOX    "重複行を合併(&M)",IDC_SORT_MERGE_DUP,7,50,100,10,WS_TABSTOP
-    AUTOCHECKBOX    "重複行を削除(&R)",IDC_SORT_REMOVE_DUP,7,62,100,10,WS_TABSTOP
-    AUTOCHECKBOX    "それしかない行を削除(&U)",IDC_SORT_REMOVE_UNIQUE,7,74,100,10,WS_TABSTOP
-    AUTOCHECKBOX    "大/小文字の区別なし(&C)",IDC_SORT_IGNORE_CASE,7,92,81,10,WS_TABSTOP
-    AUTOCHECKBOX    "論理番号で比較(&N)",IDC_SORT_LOGICAL_NUMBER,7,104,130,10,WS_TABSTOP
-    AUTOCHECKBOX    "ファイル種別で集合(&T)",IDC_SORT_GROUPBY_FILE_TYPE,7,116,130,10,WS_TABSTOP
-    AUTOCHECKBOX    "列でソート (Altで矩形選択) (&S)",IDC_SORT_COLUMN,7,135,150,10,WS_TABSTOP
+    AUTORADIOBUTTON "並べ替えない(&S)",IDC_SORT_NONE,7,7,85,10,WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "昇順に並べ替え(&A)",IDC_SORT_ASC,7,19,85,10,WS_TABSTOP
+    AUTORADIOBUTTON "降順に並べ替え(&D)",IDC_SORT_DESC,7,31,84,10,WS_TABSTOP
+    AUTORADIOBUTTON "シャッフル(&F)",IDC_SORT_SHUFFLE,7,43,70,10,WS_TABSTOP
+    AUTOCHECKBOX    "重複行を合併(&M)",IDC_SORT_MERGE_DUP,7,62,100,10,WS_TABSTOP
+    AUTOCHECKBOX    "重複行を削除(&R)",IDC_SORT_REMOVE_DUP,7,74,100,10,WS_TABSTOP
+    AUTOCHECKBOX    "それしかない行を削除(&U)",IDC_SORT_REMOVE_UNIQUE,7,86,100,10,WS_TABSTOP
+    AUTOCHECKBOX    "大/小文字の区別なし(&I)",IDC_SORT_IGNORE_CASE,7,104,81,10,WS_TABSTOP
+    AUTOCHECKBOX    "論理番号で比較(&N)",IDC_SORT_LOGICAL_NUMBER,7,116,130,10,WS_TABSTOP
+    AUTOCHECKBOX    "ファイル種別で集合(&T)",IDC_SORT_GROUPBY_FILE_TYPE,7,128,130,10,WS_TABSTOP
+    AUTOCHECKBOX    "列でソート (Altで矩形選択) (&C)",IDC_SORT_COLUMN,7,147,150,10,WS_TABSTOP
     DEFPUSHBUTTON   "OK",IDOK,127,7,50,14
     PUSHBUTTON     "キャンセル",IDCANCEL,127,24,50,14
 END
@@ -1594,7 +1654,7 @@ BEGIN
     PUSHBUTTON      "キャンセル",IDCANCEL,399,145,50,14
 END
 
-IDD_AUTOSAVE DIALOGEX 0, 0, 184, 81
+IDD_AUTOSAVE DIALOGEX 0, 0, 184, 93
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "自動保存の設定"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
@@ -1604,9 +1664,32 @@ BEGIN
     EDITTEXT        IDC_AUTOSAVE_PERIOD,140,17,30,12,ES_AUTOHSCROLL
     AUTOCHECKBOX    "システム休止時にバックアップを保存",IDC_AUTOSAVE_SUSPEND,7,31,170,10,WS_GROUP | WS_TABSTOP
     AUTOCHECKBOX    "システムシャットダウン時にバックアップを保存",IDC_AUTOSAVE_SHUTDOWN,7,43,170,10,WS_TABSTOP
-    PUSHBUTTON      "フォルダを開く",IDC_AUTOSAVE_OPENFOLDER,7,60,60,14
-    DEFPUSHBUTTON   "OK",IDOK,71,60,50,14
-    PUSHBUTTON      "キャンセル",IDCANCEL,127,60,50,14
+    AUTOCHECKBOX    "バックアップの削除は手動で行う",IDC_AUTOSAVE_MANUALLYDELETE,7,55,170,10,WS_TABSTOP
+    PUSHBUTTON      "フォルダを開く",IDC_AUTOSAVE_OPENFOLDER,7,72,60,14
+    DEFPUSHBUTTON   "OK",IDOK,71,72,50,14
+    PUSHBUTTON      "キャンセル",IDCANCEL,127,72,50,14
+END
+
+IDD_CSV_OPTIONS DIALOGEX 0, 0, 220, 118
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "CSV オプション"
+FONT 8, "MS Shell Dlg", 0, 0, 0x0
+BEGIN
+    GROUPBOX        "区切り文字",IDC_STATIC,7,7,206,50
+    AUTORADIOBUTTON "カンマ (,)",IDC_CSV_DELIMITER_COMMA,14,19,60,10,WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "タブ",IDC_CSV_DELIMITER_TAB,84,19,60,10,WS_TABSTOP
+    AUTORADIOBUTTON "パイプ (|)",IDC_CSV_DELIMITER_PIPE,154,19,55,10,WS_TABSTOP
+    AUTORADIOBUTTON "セミコロン (;)",IDC_CSV_DELIMITER_SEMICOLON,14,31,60,10,WS_TABSTOP
+    AUTORADIOBUTTON "スペース",IDC_CSV_DELIMITER_SPACE,84,31,60,10,WS_TABSTOP
+    AUTORADIOBUTTON "ほか:",IDC_CSV_DELIMITER_OTHER,154,31,55,10,WS_TABSTOP
+    EDITTEXT        IDC_CSV_DELIMITER_OTHER_TEXT,166,42,40,11,ES_AUTOHSCROLL|WS_TABSTOP
+    AUTOCHECKBOX    "連続する区切り文字は1区切りとして処理",IDC_CSV_MERGE_DELIMITER,14,43,150,10,WS_TABSTOP
+    GROUPBOX        "文字列を囲む方法",IDC_STATIC,7,63,206,26
+    AUTORADIOBUTTON "ダブルクォート",IDC_CSV_QUALIFIER_DOUBLE,14,75,60,10,WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "シングルクォート",IDC_CSV_QUALIFIER_SINGLE,84,75,60,10,WS_TABSTOP
+    AUTORADIOBUTTON "なし",IDC_CSV_QUALIFIER_NONE,154,75,55,10,WS_TABSTOP
+    AUTOCHECKBOX    "バックスラッシュでエスケープ",IDC_CSV_BACKSLASH_ESCAPE,14,97,140,10,WS_TABSTOP
+    DEFPUSHBUTTON   "OK",IDOK,163,97,50,14
 END
 
 
@@ -1618,214 +1701,6 @@ END
 #ifdef APSTUDIO_INVOKED
 GUIDELINES DESIGNINFO
 BEGIN
-    IDD_ABOUT, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 245
-        VERTGUIDE, 45
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 95
-    END
-
-    IDD_FIND, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 283
-        VERTGUIDE, 7
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 94
-    END
-
-    IDD_REPLACE, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 283
-        VERTGUIDE, 7
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 123
-    END
-
-    IDD_RUN, DIALOG
-    BEGIN
-        RIGHTMARGIN, 224
-        BOTTOMMARGIN, 85
-    END
-
-    IDD_OPENWITH, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 221
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 199
-    END
-
-    IDD_DEFENCODING, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 202
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 102
-    END
-
-    IDD_DEFEOLMODE, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 189
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 71
-    END
-
-    IDD_LINENUM, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 179
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 40
-    END
-
-    IDD_FILEMRU, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 219
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 197
-    END
-
-    IDD_CHANGENOTIFY, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 177
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 58
-    END
-
-    IDD_STYLESELECT, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 158
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 208
-    END
-
-    IDD_STYLECONFIG, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 461
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 231
-    END
-
-    IDD_TABSETTINGS, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 167
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 83
-    END
-
-    IDD_LONGLINES, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 177
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 48
-    END
-
-    IDD_WORDWRAP, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 243
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 93
-    END
-
-    IDD_PAGESETUP, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 349
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 253
-    END
-
-    IDD_FAVORITES, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 286
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 146
-    END
-
-    IDD_ADDTOFAV, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 247
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 59
-    END
-
-    IDD_COLUMNWRAP, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 123
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 40
-    END
-
-    IDD_MODIFYLINES, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 253
-        TOPMARGIN, 6
-        BOTTOMMARGIN, 114
-    END
-
-    IDD_INSERTTAG, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 257
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 83
-    END
-
-    IDD_ENCLOSESELECTION, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 241
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 87
-    END
-
-    IDD_INFOBOX, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 237
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 64
-    END
-
-    IDD_SORT, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 177
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 133
-    END
-
-    IDD_SELECT_ENCODING, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 180
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 231
-    END
-
-    IDD_ALIGN, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 177
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 67
-    END
 END
 #endif    // APSTUDIO_INVOKED
 
@@ -1844,7 +1719,7 @@ BEGIN
     IDS_TITLEEXCERPT        """%s"""
     IDS_READONLY_FILE       "(読み取り専用ファイル)"
     IDS_READONLY_MODE       "(読み取り専用モード)"
-    IDS_STATUSITEM_FORMAT   "行 %s / %s\n列 %s / %s\n字 %s / %s\n選 %s / %s\n選行 %s\n見 %s"
+    IDS_STATUSITEM_FORMAT   "行 %s / %s \n列 %s / %s \n字 %s / %s \n選 %s / %s \n選行 %s \n見 %s "
     IDS_LOADFILE            "読込中 ""%s"" ..."
     IDS_SAVEFILE            "保存中 ""%s"" ..."
     IDS_PRINTFILE           "%s ページを印刷中..."
@@ -1986,7 +1861,7 @@ BEGIN
 /c\t新規ウインドウを開きクリップボードの内容を貼り付け\n\
 /b\tクリップボード履歴表示モードで開く\n\
 /n\t新規ウィンドウで開く (/ns ファイルは単一のインスタンス)\n\
-/r\tひとつウインドウを再利用 (/rs 同じく単一のインスタンス\n\
+/r\tウインドウを再利用 (/rs 同じく単一のインスタンス\n\
 /p\tウィンドウの位置とサイズを指定  (/p0, /ps, /pf,l,t,r,b,m).\n\
 /t タイトル\tタイトルバーの文字列を指定 [/t text]\n\
 /i\tシステムトレイ内に起動\n\

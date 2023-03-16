@@ -15,7 +15,7 @@
 *
 *                                              (c) Florian Balmer 1996-2011
 *                                                  florian.balmer@gmail.com
-*                                               http://www.flos-freeware.ch
+*                                              https://www.flos-freeware.ch
 *
 *
 ******************************************************************************/
@@ -110,9 +110,9 @@ bool IniSectionParseArray(IniSection *section, LPWSTR lpCachedIniSection, BOOL q
 		return false;
 	}
 
-	const int capacity = section->capacity;
+	const UINT capacity = section->capacity;
 	LPWSTR p = lpCachedIniSection;
-	int count = 0;
+	UINT count = 0;
 
 	do {
 		LPWSTR v = StrChr(p, L'=');
@@ -143,9 +143,9 @@ bool IniSectionParse(IniSection *section, LPWSTR lpCachedIniSection) {
 		return false;
 	}
 
-	const int capacity = section->capacity;
+	const UINT capacity = section->capacity;
 	LPWSTR p = lpCachedIniSection;
-	int count = 0;
+	UINT count = 0;
 
 	do {
 		LPWSTR v = StrChr(p, L'=');
@@ -444,14 +444,25 @@ HBITMAP EnlargeImageForDPI(HBITMAP hbmp, UINT dpi) {
 	return hbmp;
 }
 
-HBITMAP ResizeImageForDPI(HBITMAP hbmp, UINT dpi, int height) {
+HBITMAP ResizeImageForCurrentDPI(HBITMAP hbmp) {
 	BITMAP bmp;
-	if (dpi > USER_DEFAULT_SCREEN_DPI && GetObject(hbmp, sizeof(BITMAP), &bmp)) {
-		height = MulDiv(dpi, height, USER_DEFAULT_SCREEN_DPI);
+	if (GetObject(hbmp, sizeof(BITMAP), &bmp)) {
+		// assume 16x16 at 100% scaling
+		const int height = (g_uCurrentDPI*16) / USER_DEFAULT_SCREEN_DPI;
+		if (height == bmp.bmHeight && bmp.bmBitsPixel == 32) {
+			return hbmp;
+		}
 		// keep aspect ratio
 		const int width = MulDiv(height, bmp.bmWidth, bmp.bmHeight);
 		HBITMAP hCopy = (HBITMAP)CopyImage(hbmp, IMAGE_BITMAP, width, height, LR_COPYRETURNORG | LR_COPYDELETEORG);
 		if (hCopy != NULL) {
+#if 0
+			BITMAP bmp2;
+			if (GetObject(hCopy, sizeof(BITMAP), &bmp2)) {
+				printf("%s %u: (%d x %d, %d) => (%d x %d, %d)\n", __func__, g_uCurrentDPI,
+				bmp.bmWidth, bmp.bmHeight, bmp.bmBitsPixel, bmp2.bmWidth, bmp2.bmHeight, bmp2.bmBitsPixel);
+			}
+#endif
 			hbmp = hCopy;
 		}
 	}
@@ -1247,10 +1258,15 @@ void MultilineEditSetup(HWND hwndDlg, int nCtlId) {
 //
 // MakeBitmapButton()
 //
-void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, WORD wBmpId) {
+void MakeBitmapButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, int wBmpId) {
+#if NP2_ENABLE_HIDPI_IMAGE_RESOURCE
+	if (hInstance) {
+		wBmpId = GetBitmapResourceIdForCurrentDPI(wBmpId);
+	}
+#endif
 	HWND hwndCtl = GetDlgItem(hwnd, nCtlId);
 	HBITMAP hBmp = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(wBmpId), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
-	hBmp = ResizeButtonImageForCurrentDPI(hBmp);
+	hBmp = ResizeImageForCurrentDPI(hBmp);
 	BITMAP bmp;
 	GetObject(hBmp, sizeof(BITMAP), &bmp);
 	BUTTON_IMAGELIST bi;
@@ -1279,12 +1295,6 @@ void MakeColorPickButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, COLORREF cr
 	if (IsWindowEnabled(hwndCtl) && crColor != (COLORREF)(-1)) {
 		colormap[0].from = RGB(0x00, 0x00, 0x00);
 		colormap[0].to	 = GetSysColor(COLOR_3DSHADOW);
-	} else {
-		colormap[0].from = RGB(0x00, 0x00, 0x00);
-		colormap[0].to	 = RGB(0xFF, 0xFF, 0xFF);
-	}
-
-	if (IsWindowEnabled(hwndCtl) && crColor != (COLORREF)(-1)) {
 		if (crColor == RGB(0xFF, 0xFF, 0xFF)) {
 			crColor = RGB(0xFF, 0xFF, 0xFE);
 		}
@@ -1292,13 +1302,18 @@ void MakeColorPickButton(HWND hwnd, int nCtlId, HINSTANCE hInstance, COLORREF cr
 		colormap[1].from = RGB(0xFF, 0xFF, 0xFF);
 		colormap[1].to	 = crColor;
 	} else {
+		colormap[0].from = RGB(0x00, 0x00, 0x00);
+		colormap[0].to	 = RGB(0xFF, 0xFF, 0xFF);
 		colormap[1].from = RGB(0xFF, 0xFF, 0xFF);
 		colormap[1].to	 = RGB(0xFF, 0xFF, 0xFF);
 	}
 
 	HBITMAP hBmp = CreateMappedBitmap(hInstance, IDB_PICK, 0, colormap, 2);
+	hBmp = ResizeImageForCurrentDPI(hBmp);
+	BITMAP bmp;
+	GetObject(hBmp, sizeof(BITMAP), &bmp);
 
-	bi.himl = ImageList_Create(16, 16, ILC_COLORDDB | ILC_MASK, 1, 0);
+	bi.himl = ImageList_Create(bmp.bmWidth, bmp.bmHeight, ILC_COLOR32 | ILC_MASK, 1, 0);
 	ImageList_AddMasked(bi.himl, hBmp, RGB(0xFF, 0xFF, 0xFF));
 	DeleteObject(hBmp);
 
@@ -1458,6 +1473,9 @@ HMODULE LoadLocalizedResourceDLL(LANGID lang, LPCWSTR dllName) {
 	case LANG_CHINESE:
 		folder = IsChineseTraditionalSubLang(subLang) ? L"zh-Hant" : L"zh-Hans";
 		break;
+	case LANG_FRENCH:
+		folder = L"fr-FR";
+		break;
 	case LANG_GERMAN:
 		folder = L"de";
 		break;
@@ -1582,7 +1600,7 @@ bool PathGetRealPath(HANDLE hFile, LPCWSTR lpszSrc, LPWSTR lpszDest) {
 }
 
 #if _WIN32_WINNT < _WIN32_WINNT_WIN8
-#if defined(_MSC_BUILD) && (_WIN32_WINNT < _WIN32_WINNT_VISTA)
+#if defined(_MSC_BUILD) && !defined(FILE_INVALID_FILE_ID)
 typedef struct FILE_ID_128 {
 	BYTE Identifier[16];
 } FILE_ID_128;
@@ -2207,15 +2225,11 @@ void StripMnemonic(LPWSTR pszMenu) {
 
 //=============================================================================
 //
-// FormatNumberStr()
+// FormatNumber()
 //
 #ifndef _WIN64
-void FormatNumberStr(LPWSTR lpNumberStr) {
-	const int i = lstrlen(lpNumberStr);
-	if (i <= 3) {
-		return;
-	}
-
+void FormatNumber64(LPWSTR lpNumberStr, uint64_t value) {
+	_i64tow(value, lpNumberStr, 10);
 	// https://docs.microsoft.com/en-us/windows/desktop/Intl/locale-sthousand
 	// https://docs.microsoft.com/en-us/windows/desktop/Intl/locale-sgrouping
 	WCHAR szSep[4];
@@ -2225,7 +2239,7 @@ void FormatNumberStr(LPWSTR lpNumberStr) {
 	const WCHAR sep = GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, szSep, COUNTOF(szSep))? szSep[0] : L',';
 #endif
 
-	WCHAR *c = lpNumberStr + i;
+	WCHAR *c = lpNumberStr + lstrlen(lpNumberStr);
 	WCHAR *end = c;
 	lpNumberStr += 3;
 	do {
@@ -2237,33 +2251,52 @@ void FormatNumberStr(LPWSTR lpNumberStr) {
 }
 #endif
 
-void FormatNumber(LPWSTR lpNumberStr, ptrdiff_t value) {
-#ifdef _WIN64
-	_i64tow(value, lpNumberStr, 10);
-	if (value < 1000) {
+void FormatNumber(LPWSTR lpNumberStr, size_t value) {
+	if (value < 10) {
+		lpNumberStr[0] = (WCHAR)(value + L'0');
+		lpNumberStr[1] = L'\0';
 		return;
 	}
 
-	WCHAR szSep[4];
-	const WCHAR sep = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STHOUSAND, szSep, COUNTOF(szSep))? szSep[0] : L',';
-
-	WCHAR *c = lpNumberStr + lstrlen(lpNumberStr);
-	WCHAR *end = c;
-	lpNumberStr += 3;
-	do {
-		c -= 3;
-		memmove(c + 1, c, sizeof(WCHAR) * (end - c + 1));
-		*c = sep;
-		++end;
-	} while (c > lpNumberStr);
-
+	WCHAR sep = L',';
+	if (value >= 1000) {
+		WCHAR szSep[4];
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+		if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STHOUSAND, szSep, COUNTOF(szSep))) {
+			sep = szSep[0];
+		}
 #else
-	_ltow(value, lpNumberStr, 10);
-	if (value < 1000) {
-		return;
-	}
-	FormatNumberStr(lpNumberStr);
+		if (GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, szSep, COUNTOF(szSep))) {
+			sep = szSep[0];
+		}
 #endif
+	}
+
+#if defined(_WIN64)
+	uint32_t len = np2_ilog10_upper64(value);
+#else
+	uint32_t len = np2_ilog10_upper(value);
+#endif
+	len += (len - 1)/3;
+
+	WCHAR * const end = lpNumberStr + len;
+	WCHAR *ptr = end;
+	int count = 0;
+	*ptr = L'\0';
+	do {
+		if (count == 3) {
+			count = 0;
+			*--ptr = sep;
+		}
+		++count;
+		*--ptr = (WCHAR)((value % 10) + L'0');
+		value /= 10;
+	} while (value != 0);
+	if (ptr != lpNumberStr) {
+		do {
+			*lpNumberStr++ = *ptr++;
+		} while (ptr <= end);
+	}
 }
 
 //=============================================================================
@@ -2475,10 +2508,10 @@ bool MRU_Load(LPMRULIST pmru) {
 
 	LoadIniSection(pmru->szRegKey, pIniSectionBuf, cchIniSection);
 	IniSectionParseArray(pIniSection, pIniSectionBuf, pmru->iFlags & MRUFlags_QuoteValue);
-	const int count = pIniSection->count;
-	const int size = pmru->iSize;
+	const UINT count = pIniSection->count;
+	const UINT size = pmru->iSize;
 
-	for (int i = 0, n = 0; i < count && n < size; i++) {
+	for (UINT i = 0, n = 0; i < count && n < size; i++) {
 		const IniKeyValueNode *node = &pIniSection->nodeList[i];
 		LPCWSTR tchItem = node->value;
 		if (StrNotEmpty(tchItem)) {
@@ -3028,6 +3061,85 @@ bool AddBackslashW(LPWSTR pszOut, LPCWSTR pszInput) {
 		lstrcpy(pszOut, pszInput);
 	}
 	return hasEscapeChar;
+}
+
+size_t Base64Encode(char *output, const uint8_t *src, size_t length, bool urlSafe) {
+	char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	if (urlSafe) {
+		table[62] = '-';
+		table[63] = '_';
+	}
+
+	char *p = output;
+	size_t i = 0;
+	while (i + 3 <= length) {
+		i += 3;
+		const uint8_t C0 = *src++;
+		const uint8_t C1 = *src++;
+		const uint8_t C2 = *src++;
+		*p++ = table[(C0 >> 2)];
+		*p++ = table[((C0 & 3) << 4) | (C1 >> 4)];
+		*p++ = table[((C1 & 15) << 2) | (C2 >> 6)];
+		*p++ = table[C2 & 0x3f];
+	}
+	if (i < length) {
+		i++;
+		const uint8_t C0 = src[0];
+		const uint8_t C1 = (i < length) ? src[1] : 0;
+		*p++ = table[(C0 >> 2)];
+		*p++ = table[((C0 & 3) << 4) | (C1 >> 4)];
+		*p++ = (i < length) ? table[((C1 & 15) << 2)] : '=';
+		*p++ = '=';
+	}
+	return p - output;
+}
+
+// see tools/GenerateTable.py
+static const uint8_t Base64DecodingTable[128] = {
+128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,  62, 128,  62, 128,  63,
+ 52,  53,  54,  55,  56,  57,  58,  59,  60,  61, 128, 128, 128, 128, 128, 128,
+128,   0,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,
+ 15,  16,  17,  18,  19,  20,  21,  22,  23,  24,  25, 128, 128, 128, 128,  63,
+128,  26,  27,  28,  29,  30,  31,  32,  33,  34,  35,  36,  37,  38,  39,  40,
+ 41,  42,  43,  44,  45,  46,  47,  48,  49,  50,  51, 128, 128, 128, 128, 128,
+};
+
+size_t Base64Decode(uint8_t *output, const uint8_t *src, size_t length) {
+	uint32_t value = 0;
+	uint8_t *p = output;
+	size_t i = 0;
+	while(i < length) {
+		uint8_t ch = *src;
+		if ((signed char)(ch) < 0) {
+			break;
+		}
+		ch = Base64DecodingTable[ch];
+		if ((signed char)(ch) < 0) {
+			break;
+		}
+		value = (value << 6) | ch;
+		++src;
+		i++;
+		if ((i & 3) == 0) {
+			*p++ = (uint8_t)(value >> 16);
+			*p++ = (uint8_t)(value >> 8);
+			*p++ = (uint8_t)(value);
+			value = 0;
+		}
+	}
+	i &= 3;
+	if (i != 0) {
+		if (i == 3) {
+			value >>= (8 - 6);
+			*p++ = (uint8_t)(value >> 8);
+			*p++ = (uint8_t)(value);
+		} else {
+			*p++ = (uint8_t)(value >> (16 - 12));
+		}
+	}
+	return p - output;
 }
 
 /*

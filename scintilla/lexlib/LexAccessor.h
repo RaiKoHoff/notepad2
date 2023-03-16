@@ -24,12 +24,12 @@ class LexAccessor {
 		bufferSize = 4096,
 		slopSize = bufferSize / 8,
 	};
-	char buf[bufferSize + 1];
+	char buf[bufferSize + 4];
+	const EncodingType encodingType;
 	Sci_Position startPos = 0;
 	Sci_Position endPos = 0;
 	//const int codePage;
 	//const int documentVersion;
-	const EncodingType encodingType;
 	const Sci_Position lenDoc;
 	unsigned char styleBuf[bufferSize];
 	Sci_Position validLen = 0;
@@ -61,8 +61,10 @@ public:
 		encodingType(EncodingTypeForCodePage(pAccess->CodePage())),
 		lenDoc(pAccess->Length()) {
 		// Prevent warnings by static analyzers about uninitialized buf and styleBuf.
-		buf[0] = 0;
-		styleBuf[0] = 0;
+		// zero unused padding to prevent potential out of bounds bug.
+		memset(buf, 0, 4);
+		memset(buf + bufferSize, 0, 4);
+		memset(styleBuf, 0, 4);
 	}
 	char operator[](Sci_Position position) noexcept {
 		if (position < startPos || position >= endPos) {
@@ -120,13 +122,13 @@ public:
 	}
 
 	bool MatchLower(Sci_Position pos, char ch0) noexcept {
-		const char ch = SafeGetCharAt(pos);
+		const char ch = (*this)[pos];
 		return (ch | 0x20) == ch0;
 	}
 
 	bool Match(Sci_Position pos, const char *s) noexcept {
 		for (; *s; s++, pos++) {
-			if (*s != SafeGetCharAt(pos)) {
+			if (*s != (*this)[pos]) {
 				return false;
 			}
 		}

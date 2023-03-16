@@ -44,6 +44,14 @@ public:
 		return (start != Sci::invalidPosition) && (end != Sci::invalidPosition);
 	}
 
+	[[nodiscard]] bool Empty() const noexcept {
+		return start == end;
+	}
+
+	[[nodiscard]] Sci::Position Length() const noexcept {
+		return (start <= end) ? (end - start) : (start - end);
+	}
+
 	Sci::Position First() const noexcept {
 		return std::min(start, end);
 	}
@@ -224,6 +232,29 @@ public:
 	int ActionsInAllowedTime(double secondsAllowed) const noexcept;
 };
 
+ /**
+ * A whole character (code point) with a value and width in bytes.
+ * For UTF-8, the value is the code point value.
+ * For DBCS, its jamming the lead and trail bytes together.
+ * For 8 bit encodings, is just the byte value.
+ */
+struct CharacterExtracted {
+	unsigned int character;
+	unsigned int widthBytes;
+
+	constexpr CharacterExtracted(unsigned int character_, unsigned int widthBytes_) noexcept :
+		character(character_), widthBytes(widthBytes_) {
+	}
+
+	// For UTF-8:
+	CharacterExtracted(const unsigned char *charBytes, size_t widthCharBytes) noexcept;
+
+	// For DBCS characters turn 2 bytes into an int
+	static constexpr CharacterExtracted DBCS(unsigned char lead, unsigned char trail) noexcept {
+		return CharacterExtracted((lead << 8) | trail, 2);
+	}
+};
+
 /**
  */
 class Document : PerLine, public Scintilla::IDocument, public Scintilla::ILoader {
@@ -254,6 +285,7 @@ private:
 	int enteredStyling;
 	int enteredReadOnlyCount;
 
+	bool matchesValid;
 	bool insertionSet;
 	std::string insertion;
 
@@ -271,23 +303,11 @@ private:
 	LineAnnotation *Annotations() const noexcept;
 	LineAnnotation *EOLAnnotations() const noexcept;
 
-	bool matchesValid;
 	std::unique_ptr<RegexSearchBase> regex;
 	std::unique_ptr<LexInterface> pli;
-	const DBCSCharClassify *dbcsCharClass;
+	std::unique_ptr<DBCSCharClassify> dbcsCharClass;
 
 public:
-
-	struct CharacterExtracted {
-		int character;
-		int widthBytes;
-		constexpr CharacterExtracted(int character_, int widthBytes_) noexcept :
-			character(character_), widthBytes(widthBytes_) {}
-		// For DBCS characters turn 2 bytes into an int
-		static constexpr CharacterExtracted DBCS(unsigned char lead, unsigned char trail) noexcept {
-			return CharacterExtracted((lead << 8) | trail, 2);
-		}
-	};
 
 	Scintilla::EndOfLine eolMode;
 	/// Can also be SC_CP_UTF8 to enable UTF-8 mode
@@ -349,8 +369,8 @@ public:
 	Sci::Position MovePositionOutsideChar(Sci::Position pos, Sci::Position moveDir, bool checkLineEnd = true) const noexcept;
 	Sci::Position NextPosition(Sci::Position pos, int moveDir) const noexcept;
 	bool NextCharacter(Sci::Position &pos, int moveDir) const noexcept;	// Returns true if pos changed
-	Document::CharacterExtracted CharacterAfter(Sci::Position position) const noexcept;
-	Document::CharacterExtracted CharacterBefore(Sci::Position position) const noexcept;
+	CharacterExtracted CharacterAfter(Sci::Position position) const noexcept;
+	CharacterExtracted CharacterBefore(Sci::Position position) const noexcept;
 	Sci_Position SCI_METHOD GetRelativePosition(Sci_Position positionStart, Sci_Position characterOffset) const noexcept override;
 	Sci::Position GetRelativePositionUTF16(Sci::Position positionStart, Sci::Position characterOffset) const noexcept;
 	int SCI_METHOD GetCharacterAndWidth(Sci_Position position, Sci_Position *pWidth) const noexcept override;
@@ -371,8 +391,10 @@ public:
 	// Gateways to modifying document
 	void ModifiedAt(Sci::Position pos) noexcept;
 	void CheckReadOnly() noexcept;
+	void TrimReplacement(std::string_view &text, Range &range) const noexcept;
 	bool DeleteChars(Sci::Position pos, Sci::Position len);
 	Sci::Position InsertString(Sci::Position position, const char *s, Sci::Position insertLength);
+	Sci::Position InsertString(Sci::Position position, std::string_view sv);
 	void ChangeInsertion(const char *s, Sci::Position length);
 	int SCI_METHOD AddData(const char *data, Sci_Position length) override;
 	void * SCI_METHOD ConvertToDocument() noexcept override;
@@ -458,6 +480,7 @@ public:
 	void Indent(bool forwards, Sci::Line lineBottom, Sci::Line lineTop);
 	static std::string TransformLineEnds(const char *s, size_t len, Scintilla::EndOfLine eolModeWanted);
 	void ConvertLineEnds(Scintilla::EndOfLine eolModeSet);
+	std::string_view EOLString() const noexcept;
 	void SetReadOnly(bool set) noexcept {
 		cb.SetReadOnly(set);
 	}
@@ -501,6 +524,7 @@ public:
 	int MarkerNumberFromLine(Sci::Line line, int which) const noexcept;
 	int MarkerHandleFromLine(Sci::Line line, int which) const noexcept;
 	Sci_Position SCI_METHOD LineStart(Sci_Line line) const noexcept override;
+	[[nodiscard]] Range LineRange(Sci::Line line) const noexcept;
 	bool IsLineStartPosition(Sci::Position position) const noexcept;
 	Sci_Position SCI_METHOD LineEnd(Sci_Line line) const noexcept override;
 	Sci::Position LineEndPosition(Sci::Position position) const noexcept;
@@ -516,7 +540,7 @@ public:
 	Scintilla::FoldLevel GetFoldLevel(Sci_Position line) const noexcept;
 	void ClearLevels();
 	Sci::Line GetLastChild(Sci::Line lineParent, Scintilla::FoldLevel level = Scintilla::FoldLevel::None, Sci::Line lastLine = -1);
-	Sci::Line GetFoldParent(Sci::Line line, Scintilla::FoldLevel level = Scintilla::FoldLevel::None) const noexcept;
+	Sci::Line GetFoldParent(Sci::Line line) const noexcept;
 	void GetHighlightDelimiters(HighlightDelimiter &highlightDelimiter, Sci::Line line, Sci::Line lastLine);
 
 	Sci::Position ExtendWordSelect(Sci::Position pos, int delta, bool onlyWordCharacters = false) const noexcept;

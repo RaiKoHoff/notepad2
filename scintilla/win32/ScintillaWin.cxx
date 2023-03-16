@@ -23,7 +23,6 @@
 #include <optional>
 #include <algorithm>
 #include <memory>
-#include <chrono>
 //#include <mutex>
 
 // WIN32_LEAN_AND_MEAN is defined to avoid including commdlg.h
@@ -39,6 +38,7 @@
 #include <shlobj.h>
 #include <shellapi.h>
 
+#define DebugCopyAsRichTextFormat		0
 #define DebugDragAndDropDataFormat		0
 #define MaxDragAndDropDataFormatCount	6
 /*
@@ -52,6 +52,7 @@ Used by VSCode, Atom etc.
 */
 #define Enable_ChromiumWebCustomMIMEDataFormat	0
 
+#include "ParallelSupport.h"
 #include "ScintillaTypes.h"
 #include "ScintillaMessages.h"
 #include "ScintillaStructures.h"
@@ -89,7 +90,7 @@ Used by VSCode, Atom etc.
 #include "MarginView.h"
 #include "EditView.h"
 #include "Editor.h"
-#include "ElapsedPeriod.h"
+//#include "ElapsedPeriod.h"
 
 #include "AutoComplete.h"
 #include "ScintillaBase.h"
@@ -386,20 +387,6 @@ public:
 	}
 };
 
-class MouseWheelDelta {
-	int wheelDelta = 0;
-public:
-	bool Accumulate(WPARAM wParam) noexcept {
-		wheelDelta -= GET_WHEEL_DELTA_WPARAM(wParam);
-		return std::abs(wheelDelta) >= WHEEL_DELTA;
-	}
-	int Actions() noexcept {
-		const int actions = wheelDelta / WHEEL_DELTA;
-		wheelDelta = wheelDelta % WHEEL_DELTA;
-		return actions;
-	}
-};
-
 struct HorizontalScrollRange {
 	int pageWidth;
 	int documentWidth;
@@ -447,6 +434,9 @@ class ScintillaWin final :
 #endif
 #if Enable_ChromiumWebCustomMIMEDataFormat
 	CLIPFORMAT cfChromiumCustomMIME;
+#endif
+#if DebugCopyAsRichTextFormat
+	CLIPFORMAT cfRTF;
 #endif
 
 	// supported drag & drop format
@@ -540,17 +530,17 @@ class ScintillaWin final :
 	std::string UTF8FromEncoded(std::string_view encoded) const override;
 	std::string EncodedFromUTF8(std::string_view utf8) const override;
 
-	std::string EncodeWString(std::wstring_view wsv);
+	std::string EncodeWString(std::wstring_view wsv) const;
 	sptr_t DefWndProc(Message iMessage, uptr_t wParam, sptr_t lParam) noexcept override;
 	void IdleWork() override;
 	void QueueIdleWork(WorkItems items, Sci::Position upTo) noexcept override;
 	bool SetIdle(bool on) noexcept override;
 	UINT_PTR timers[static_cast<int>(TickReason::dwell) + 1]{};
-	bool FineTickerRunning(TickReason reason) noexcept override;
+	bool FineTickerRunning(TickReason reason) const noexcept override;
 	void FineTickerStart(TickReason reason, int millis, int tolerance) noexcept override;
 	void FineTickerCancel(TickReason reason) noexcept override;
 	void SetMouseCapture(bool on) noexcept override;
-	bool HaveMouseCapture() noexcept override;
+	bool HaveMouseCapture() const noexcept override;
 	void SetTrackMouseLeaveEvent(bool on) noexcept;
 	void UpdateBaseElements() override;
 	bool SCICALL PaintContains(PRectangle rc) const noexcept override;
@@ -570,8 +560,8 @@ class ScintillaWin final :
 	void NotifyDoubleClick(Point pt, KeyMod modifiers) override;
 	void NotifyURIDropped(const char *list) noexcept;
 	std::unique_ptr<CaseFolder> CaseFolderForEncoding() override;
-	std::string CaseMapString(const std::string &s, CaseMapping caseMapping) override;
-	void Copy(bool asBinary) override;
+	std::string CaseMapString(const std::string &s, CaseMapping caseMapping) const override;
+	void Copy(bool asBinary) const override;
 	bool CanPaste() noexcept override;
 	void Paste(bool asBinary) override;
 	void SCICALL CreateCallTipWindow(PRectangle rc) noexcept override;
@@ -587,8 +577,8 @@ class ScintillaWin final :
 	};
 
 	void GetIntelliMouseParameters() noexcept;
-	void CopyToGlobal(GlobalMemory &gmUnicode, const SelectionText &selectedText, CopyEncoding encoding);
-	void CopyToClipboard(const SelectionText &selectedText) override;
+	void CopyToGlobal(GlobalMemory &gmUnicode, const SelectionText &selectedText, CopyEncoding encoding) const;
+	void CopyToClipboard(const SelectionText &selectedText) const override;
 	void ScrollMessage(WPARAM wParam);
 	void HorizontalScrollMessage(WPARAM wParam);
 	void FullPaint();
@@ -692,6 +682,9 @@ ScintillaWin::ScintillaWin(HWND hwnd) noexcept {
 #if Enable_ChromiumWebCustomMIMEDataFormat
 	cfChromiumCustomMIME = GetClipboardFormat(L"Chromium Web Custom MIME Data Format");
 #endif
+#if DebugCopyAsRichTextFormat
+	cfRTF = GetClipboardFormat(L"Rich Text Format");
+#endif
 
 	UINT index = 0;
 	dropFormat[index++] = CF_HDROP;
@@ -746,7 +739,10 @@ void ScintillaWin::Finalise() noexcept {
 }
 
 bool ScintillaWin::UpdateRenderingParams(bool force) noexcept {
-	HMONITOR monitor = ::MonitorFromWindow(MainHWND(), MONITOR_DEFAULTTONEAREST);
+	// see https://sourceforge.net/p/scintilla/bugs/2344/?page=2
+	//HWND topLevel = ::GetAncestor(MainHWND(), GA_ROOT);
+	HWND topLevel = ::GetParent(MainHWND()); // our main window
+	HMONITOR monitor = ::MonitorFromWindow(topLevel, MONITOR_DEFAULTTONEAREST);
 	if (!force && monitor == hCurrentMonitor && (technology == Technology::Default || defaultRenderingParams)) {
 		return false;
 	}
@@ -781,17 +777,9 @@ void ScintillaWin::EnsureRenderTarget(HDC hdc) noexcept {
 		renderTargetValid = true;
 	}
 	if (!pRenderTarget) {
-		HWND hw = MainHWND();
-		RECT rc;
-		::GetClientRect(hw, &rc);
-
-		const D2D1_SIZE_U size = D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top);
-
 		// Create a Direct2D render target.
 		D2D1_RENDER_TARGET_PROPERTIES drtp {};
 		drtp.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
-		drtp.pixelFormat.format = DXGI_FORMAT_UNKNOWN;
-		drtp.pixelFormat.alphaMode = D2D1_ALPHA_MODE_UNKNOWN;
 		drtp.dpiX = 96.0;
 		drtp.dpiY = 96.0;
 		drtp.usage = D2D1_RENDER_TARGET_USAGE_NONE;
@@ -799,8 +787,7 @@ void ScintillaWin::EnsureRenderTarget(HDC hdc) noexcept {
 
 		if (technology == Technology::DirectWriteDC) {
 			// Explicit pixel format needed.
-			drtp.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-				D2D1_ALPHA_MODE_IGNORE);
+			drtp.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE);
 
 			ID2D1DCRenderTarget *pDCRT = nullptr;
 			const HRESULT hr = pD2DFactory->CreateDCRenderTarget(&drtp, &pDCRT);
@@ -813,11 +800,15 @@ void ScintillaWin::EnsureRenderTarget(HDC hdc) noexcept {
 				//Platform::DebugPrintf("Failed CreateDCRenderTarget 0x%lx\n", hr);
 				pRenderTarget = nullptr;
 			}
-
 		} else {
+			drtp.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_UNKNOWN);
+
+			HWND hw = MainHWND();
+			RECT rc;
+			::GetClientRect(hw, &rc);
 			D2D1_HWND_RENDER_TARGET_PROPERTIES dhrtp {};
 			dhrtp.hwnd = hw;
-			dhrtp.pixelSize = size;
+			dhrtp.pixelSize = D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top);
 			dhrtp.presentOptions = (technology == Technology::DirectWriteRetain) ?
 				D2D1_PRESENT_OPTIONS_RETAIN_CONTENTS : D2D1_PRESENT_OPTIONS_NONE;
 
@@ -974,7 +965,7 @@ inline int WideCharLenFromMultiByte(UINT codePage, std::string_view sv) noexcept
 
 std::string StringEncode(const std::wstring_view wsv, int codePage) {
 	const int cchMulti = wsv.length() ? MultiByteLenFromWideChar(codePage, wsv) : 0;
-	std::string sMulti(cchMulti, 0);
+	std::string sMulti(cchMulti, '\0');
 	if (cchMulti) {
 		MultiByteFromWideChar(codePage, wsv, sMulti.data(), cchMulti);
 	}
@@ -991,6 +982,15 @@ std::wstring StringDecode(const std::string_view sv, int codePage) {
 }
 
 std::wstring StringMapCase(const std::wstring_view wsv, DWORD mapFlags) {
+#if _WIN32_WINNT >= _WIN32_WINNT_VISTA
+	const int charsConverted = ::LCMapStringEx(LOCALE_NAME_USER_DEFAULT, mapFlags,
+		wsv.data(), static_cast<int>(wsv.length()), nullptr, 0, nullptr, nullptr, 0);
+	std::wstring wsConverted(charsConverted, 0);
+	if (charsConverted) {
+		::LCMapStringEx(LOCALE_NAME_USER_DEFAULT, mapFlags,
+			wsv.data(), static_cast<int>(wsv.length()), wsConverted.data(), charsConverted, nullptr, nullptr, 0);
+	}
+#else
 	const int charsConverted = ::LCMapStringW(LOCALE_USER_DEFAULT, mapFlags,
 		wsv.data(), static_cast<int>(wsv.length()), nullptr, 0);
 	std::wstring wsConverted(charsConverted, 0);
@@ -998,6 +998,7 @@ std::wstring StringMapCase(const std::wstring_view wsv, DWORD mapFlags) {
 		::LCMapStringW(LOCALE_USER_DEFAULT, mapFlags,
 			wsv.data(), static_cast<int>(wsv.length()), wsConverted.data(), charsConverted);
 	}
+#endif
 	return wsConverted;
 }
 
@@ -1428,7 +1429,10 @@ bool ScintillaWin::HandleLaTeXTabCompletion() {
 	wclen = main - pos - 1;
 #endif
 
+	//const ElapsedPeriod elapsed;
 	const uint32_t wch = GetLaTeXInputUnicodeCharacter(ptr, wclen);
+	//const double duration = elapsed.Duration()*1e6;
+	//printf("LaTeXInput(%s) => %04X, %.3f\n", ptr, wch, duration);
 	if (wch == 0) {
 		return false;
 	}
@@ -1442,7 +1446,7 @@ bool ScintillaWin::HandleLaTeXTabCompletion() {
 
 	targetRange.start.SetPosition(pos);
 	targetRange.end.SetPosition(main);
-	ReplaceTarget(false, buffer, len);
+	ReplaceTarget(ReplaceType::basic, std::string_view(buffer, len));
 	// move caret after character
 	SetEmptySelection(pos + len);
 	return true;
@@ -1587,10 +1591,10 @@ UINT ScintillaWin::CodePageOfDocument() const noexcept {
 	return pdoc->dbcsCodePage; // see Message::GetCodePage in Editor.cxx
 }
 
-std::string ScintillaWin::EncodeWString(std::wstring_view wsv) {
+std::string ScintillaWin::EncodeWString(std::wstring_view wsv) const {
 	if (IsUnicodeMode()) {
 		const size_t len = UTF8Length(wsv);
-		std::string putf(len, 0);
+		std::string putf(len, '\0');
 		UTF8FromUTF16(wsv, putf.data(), len);
 		return putf;
 	} else {
@@ -2381,20 +2385,17 @@ sptr_t ScintillaWin::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		case WM_NCLBUTTONDOWN:
 		case WM_SYSCOMMAND:
 		case WM_WINDOWPOSCHANGING:
+		case WM_WINDOWPOSCHANGED:
 			return ::DefWindowProc(MainHWND(), msg, wParam, lParam);
 
-		case WM_WINDOWPOSCHANGED: {
-			HMONITOR current = hCurrentMonitor;
+#if 0 // we don't use Scintilla as top level window
+		case WM_WINDOWPOSCHANGED:
 			if (UpdateRenderingParams(false)) {
 				DropGraphics();
 				Redraw();
-				if (current) {
-					// recreate toolbar after monitor changed
-					::PostMessage(::GetParent(MainHWND()), WM_THEMECHANGED, 0, 0);
-				}
 			}
 			return ::DefWindowProc(MainHWND(), msg, wParam, lParam);
-		}
+#endif
 
 		case WM_GETTEXTLENGTH:
 			return GetTextLength();
@@ -2494,7 +2495,7 @@ sptr_t ScintillaWin::DefWndProc(Message iMessage, uptr_t wParam, sptr_t lParam) 
 	return ::DefWindowProc(MainHWND(), static_cast<unsigned int>(iMessage), wParam, lParam);
 }
 
-bool ScintillaWin::FineTickerRunning(TickReason reason) noexcept {
+bool ScintillaWin::FineTickerRunning(TickReason reason) const noexcept {
 	return timers[static_cast<size_t>(reason)] != 0;
 }
 
@@ -2567,7 +2568,7 @@ void ScintillaWin::SetMouseCapture(bool on) noexcept {
 	capturedMouse = on;
 }
 
-bool ScintillaWin::HaveMouseCapture() noexcept {
+bool ScintillaWin::HaveMouseCapture() const noexcept {
 	// Cannot just see if GetCapture is this window as the scroll bar also sets capture for the window
 	return capturedMouse;
 	//return capturedMouse && (::GetCapture() == MainHWND());
@@ -2587,7 +2588,7 @@ void ScintillaWin::SetTrackMouseLeaveEvent(bool on) noexcept {
 
 void ScintillaWin::UpdateBaseElements() {
 	struct ElementToIndex { Element element; int nIndex; };
-	const ElementToIndex eti[] = {
+	constexpr ElementToIndex eti[] = {
 		{ Element::List, COLOR_WINDOWTEXT },
 		{ Element::ListBack, COLOR_WINDOW },
 		{ Element::ListSelected, COLOR_HIGHLIGHTTEXT },
@@ -2595,7 +2596,9 @@ void ScintillaWin::UpdateBaseElements() {
 	};
 	bool changed = false;
 	for (const ElementToIndex &ei : eti) {
-		changed = vs.SetElementBase(ei.element, ColourRGBA::FromRGB(::GetSysColor(ei.nIndex))) || changed;
+		if (vs.SetElementBase(ei.element, ColourRGBA::FromRGB(::GetSysColor(ei.nIndex)))) {
+			changed = true;
+		}
 	}
 	if (changed) {
 		Redraw();
@@ -2843,10 +2846,9 @@ std::unique_ptr<CaseFolder> ScintillaWin::CaseFolderForEncoding() {
 			std::unique_ptr<CaseFolderTable> pcf = std::make_unique<CaseFolderTable>();
 			// Only for single byte encodings
 			for (int i = 0x80; i < 0x100; i++) {
-				char sCharacter[2] = "A";
-				sCharacter[0] = static_cast<char>(i);
+				const char sCharacter[2] = {static_cast<char>(i), '\0'};
 				wchar_t wCharacter[20];
-				const unsigned int lengthUTF16 = WideCharFromMultiByte(cpDest, sCharacter,
+				const unsigned int lengthUTF16 = WideCharFromMultiByte(cpDest, std::string_view(sCharacter, 1),
 					wCharacter, std::size(wCharacter));
 				if (lengthUTF16 == 1) {
 					const char *caseFolded = CaseConvert(wCharacter[0], CaseConversion::fold);
@@ -2873,7 +2875,7 @@ std::unique_ptr<CaseFolder> ScintillaWin::CaseFolderForEncoding() {
 	}
 }
 
-std::string ScintillaWin::CaseMapString(const std::string &s, CaseMapping caseMapping) {
+std::string ScintillaWin::CaseMapString(const std::string &s, CaseMapping caseMapping) const {
 	if (s.empty() || (caseMapping == CaseMapping::same))
 		return s;
 
@@ -2897,12 +2899,12 @@ std::string ScintillaWin::CaseMapString(const std::string &s, CaseMapping caseMa
 	return sConverted;
 }
 
-void ScintillaWin::Copy(bool asBinary) {
+void ScintillaWin::Copy(bool asBinary) const {
 	//Platform::DebugPrintf("Copy\n");
 	if (!sel.Empty()) {
 		SelectionText selectedText;
 		selectedText.asBinary = asBinary;
-		CopySelectionRange(&selectedText);
+		CopySelectionRange(selectedText);
 		CopyToClipboard(selectedText);
 	}
 }
@@ -2910,6 +2912,11 @@ void ScintillaWin::Copy(bool asBinary) {
 bool ScintillaWin::CanPaste() noexcept {
 	if (!Editor::CanPaste())
 		return false;
+#if DebugCopyAsRichTextFormat
+	if (::IsClipboardFormatAvailable(cfRTF)) {
+		return true;
+	}
+#endif
 	return ::IsClipboardFormatAvailable(CF_UNICODETEXT);
 }
 
@@ -3020,6 +3027,18 @@ void ScintillaWin::Paste(bool asBinary) {
 			return;
 		}
 	}
+
+#if DebugCopyAsRichTextFormat
+	if (::IsClipboardFormatAvailable(cfRTF)) {
+		GlobalMemory memUSelection(::GetClipboardData(cfRTF));
+		if (const char *ptr = static_cast<const char *>(memUSelection.ptr)) {
+			NewLine();
+			InsertPasteShape(ptr, strlen(ptr), PasteShape::stream);
+			memUSelection.Unlock();
+			NewLine();
+		}
+	}
+#endif
 
 	// Use CF_UNICODETEXT if available
 	GlobalMemory memUSelection(::GetClipboardData(CF_UNICODETEXT));
@@ -3399,7 +3418,7 @@ void ScintillaWin::GetIntelliMouseParameters() noexcept {
 	}
 }
 
-void ScintillaWin::CopyToGlobal(GlobalMemory &gmUnicode, const SelectionText &selectedText, CopyEncoding encoding) {
+void ScintillaWin::CopyToGlobal(GlobalMemory &gmUnicode, const SelectionText &selectedText, CopyEncoding encoding) const {
 	const std::string_view svSelected(selectedText.Data(), selectedText.LengthWithTerminator());
 	switch (encoding) {
 	case CopyEncoding::Unicode: {
@@ -3438,7 +3457,7 @@ void ScintillaWin::CopyToGlobal(GlobalMemory &gmUnicode, const SelectionText &se
 	}
 }
 
-void ScintillaWin::CopyToClipboard(const SelectionText &selectedText) {
+void ScintillaWin::CopyToClipboard(const SelectionText &selectedText) const {
 	if (!::OpenClipboardRetry(MainHWND())) {
 		return;
 	}
@@ -4059,11 +4078,11 @@ LRESULT CALLBACK ScintillaWin::CTWndProc(HWND hWnd, UINT iMessage, WPARAM wParam
 				::BeginPaint(hWnd, &ps);
 				const std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(sciThis->technology));
 				ID2D1HwndRenderTarget *pCTRenderTarget = nullptr;
-				RECT rc;
-				GetClientRect(hWnd, &rc);
 				if (sciThis->technology == Technology::Default) {
 					surfaceWindow->Init(ps.hdc, hWnd);
 				} else {
+					RECT rc;
+					GetClientRect(hWnd, &rc);
 					// Create a Direct2D render target.
 					D2D1_HWND_RENDER_TARGET_PROPERTIES dhrtp {};
 					dhrtp.hwnd = hWnd;
@@ -4073,8 +4092,7 @@ LRESULT CALLBACK ScintillaWin::CTWndProc(HWND hWnd, UINT iMessage, WPARAM wParam
 
 					D2D1_RENDER_TARGET_PROPERTIES drtp {};
 					drtp.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
-					drtp.pixelFormat.format = DXGI_FORMAT_UNKNOWN;
-					drtp.pixelFormat.alphaMode = D2D1_ALPHA_MODE_UNKNOWN;
+					drtp.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_UNKNOWN);
 					drtp.dpiX = 96.0;
 					drtp.dpiY = 96.0;
 					drtp.usage = D2D1_RENDER_TARGET_USAGE_NONE;

@@ -85,6 +85,7 @@ JSON Document
 
 PHP Script
 	php
+	phps			PHP Source
 	phpt			PHP Test Script
 	phtml			PHP Web Page
 	php_cs			PHP-CS-Fixer
@@ -252,6 +253,9 @@ Config File
 	Kconfig			Linux Kernel Build Configuration
 	Doxyfile		Doxygen Configuration
 	.*				dot-file
+
+CSV File
+	csv
 
 
 D Source

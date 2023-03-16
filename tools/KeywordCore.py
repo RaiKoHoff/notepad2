@@ -5,7 +5,7 @@ import re
 import string
 
 sys.path.append('../scintilla/scripts')
-from FileGenerator import Regenerate
+from FileGenerator import Regenerate, MakeKeywordLines
 from LexerConfig import *
 
 SinglyWordMap = {
@@ -24,66 +24,6 @@ ColorNameList = set()
 JavaKeywordMap = {}
 JavaScriptKeywordMap = {}
 GroovyKeyword = []
-
-def MakeKeywordGroups(items, maxLineLength=120, prefixLen=1, makeLower=False):
-	groups = {}
-	for item in items:
-		if item.endswith('()'):
-			# ')' is not used by lexer or auto-completion:
-			# 1. use InListPrefixed(s, '(') in lexer to match the word
-			# 2. ')' is auto added in WordList_AddListEx()
-			item = item[:-1]
-		key = item[:prefixLen]
-		if makeLower:
-			key = key.lower()
-		if key in groups:
-			groups[key]['items'].append(item)
-			groups[key]['len'] += len(item) + 1
-		else:
-			groups[key] = {'items': [item], 'len': len(item) + 1}
-
-	if prefixLen > 1:
-		removed = []
-		subs = []
-		for key, group in groups.items():
-			if group['len'] > maxLineLength:
-				removed.append(key)
-				sub = MakeKeywordGroups(group['items'], maxLineLength, prefixLen + 1, makeLower)
-				subs.append(sub)
-		for key in removed:
-			del groups[key]
-		for sub in subs:
-			groups.update(sub)
-		groups = dict(sorted(groups.items()))
-	return groups
-
-def MakeKeywordLines(items, maxLineLength=120, prefixLen=1, makeLower=False):
-	if not items:
-		return []
-	groups = MakeKeywordGroups(items, maxLineLength, prefixLen, makeLower)
-	groups = list(groups.values())
-	count = len(groups)
-	lines = []
-	index = 0
-	while index < count:
-		group = groups[index]
-		index += 1
-		lineLen = group['len']
-		items = group['items']
-		if lineLen > maxLineLength and prefixLen == 1:
-			sub = MakeKeywordLines(items, maxLineLength, 2, makeLower)
-			lines.extend(sub)
-		else:
-			while index < count:
-				group = groups[index]
-				lineLen += group['len']
-				if lineLen > maxLineLength:
-					break
-				index += 1
-				items.extend(group['items'])
-			lines.append(' '.join(items))
-
-	return lines
 
 def RemoveDuplicateKeyword(keywordMap, orderedKeys):
 	unique = set()
@@ -149,6 +89,9 @@ def BuildKeywordContent(rid, lexer, keywordList, keywordCount=16):
 		if index != 0:
 			output.append(f", // {index} {comment}")
 		if lines:
+			length = len(lines) + sum(len(line) for line in lines)
+			if length >= 0xffff:
+				print(rid, comment, 'string exceeds 64 KiB:', length)
 			output.extend('"' + line + ' "' for line in lines)
 		else:
 			output.append('NULL')
@@ -359,6 +302,60 @@ def parse_autohotkey_api_file(pathList):
 		('built-in variables', keywordMap['built-in variables'], KeywordAttr.MakeLower),
 		('keys', keywordMap['keys'], KeywordAttr.MakeLower),
 		('functions', keywordMap['functions'], KeywordAttr.MakeLower),
+		('misc', keywordMap['misc'], KeywordAttr.NoLexer),
+	]
+
+def parse_autoit3_api_file(path):
+	sections = read_api_file(path, ';')
+	keywordMap = {}
+	for key, doc in sections:
+		if key in ('functions', 'user defined functions'):
+			items = re.findall(r'(\w+\()', doc)
+			if key == 'user defined functions':
+				prefixList = ['_GDIPlus_', '_GUICtrl']
+				items = set(items)
+				result = [item for item in items if item.startswith('_WinAPI_')]
+				keywordMap['user defined functions 3'] = result
+				items -= set(result)
+				result = [item for item in items if any(item.startswith(prefix) for prefix in prefixList)]
+				keywordMap['user defined functions 2'] = result
+				items -= set(result)
+				prefixList.append('_WinAPI_')
+				items |= set('^' + prefix for prefix in prefixList)
+		elif key == 'sent keys':
+			items = re.findall(r'\{(\w+)\}', doc)
+		elif key in ('directives', 'special'):
+			items = re.findall(r'#([\w\-]+)', doc)
+		elif key == 'macros':
+			items = re.findall(r'@(\w+)', doc)
+		else:
+			items = doc.split()
+		keywordMap[key] = items
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'functions',
+		'user defined functions',
+		'user defined functions 2',
+		'user defined functions 3',
+		'misc',
+	])
+	RemoveDuplicateKeyword(keywordMap, [
+		'directives',
+		'special',
+	])
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.MakeLower),
+		('functions', keywordMap['functions'], KeywordAttr.MakeLower),
+		('macros', keywordMap['macros'], KeywordAttr.MakeLower | KeywordAttr.Special),
+		('sent keys', keywordMap['sent keys'], KeywordAttr.MakeLower),
+		('directives', keywordMap['directives'], KeywordAttr.MakeLower | KeywordAttr.NoAutoComp | KeywordAttr.Special),
+		('special', keywordMap['special'], KeywordAttr.MakeLower | KeywordAttr.NoAutoComp | KeywordAttr.Special),
+		('user defined functions', keywordMap['user defined functions'], KeywordAttr.MakeLower),
+		#('user defined functions 2', keywordMap['user defined functions 2'], KeywordAttr.NoLexer),
+		('user defined functions 2', [], KeywordAttr.NoLexer),
+		#('user defined functions 3', keywordMap['user defined functions 3'], KeywordAttr.NoLexer),
+		('user defined functions 3', [], KeywordAttr.NoLexer),
 		('misc', keywordMap['misc'], KeywordAttr.NoLexer),
 	]
 
@@ -606,6 +603,8 @@ def parse_cmake_api_file(path):
 			keywordMap[key] = commands
 		elif key == 'generator expressions':
 			items = re.findall(r'\$\<(?P<name>[\w\-]+)[:>]', doc, re.MULTILINE)
+			parameters.update(items)
+			items = re.findall(r'\<[A-Z]\w+:([A-Z]\w+)\W', doc)
 			parameters.update(items)
 		elif key == 'values':
 			keywordMap[key] = doc.split()
@@ -1068,7 +1067,7 @@ def parse_graphviz_api_file(path):
 			keywordMap['attributes'].extend(attributes)
 			keywordMap['values'].extend(values)
 		elif key == 'color names':
-			items = [item for item in doc.split() if not item[-1] in string.digits]
+			items = [item for item in doc.split() if item[-1] not in string.digits]
 			ColorNameList.update(items)
 		elif key == 'labels':
 			labels = re.findall(r'<(\w+)', doc)
@@ -1390,7 +1389,7 @@ def parse_javascript_api_file(path):
 			items = re.findall(r'@(\w+)', doc)
 			keywordMap[key] = items
 		elif key == 'api':
-			classes = set(['JSON', 'jQuery'])
+			classes = set(['JSON'])
 			constant = set()
 			functions = set()
 			properties = set(['URL'])
@@ -1739,9 +1738,8 @@ def parse_powershell_api_file(path):
 		elif key == 'cmdlet':
 			items = re.findall(r'^([\w\-]+)\s', doc, re.MULTILINE)
 			keywordMap[key] = items
-			# parameter
-			#items = re.findall(r'(-\w+)', doc)
-			#keywordMap['misc'].extend(items)
+			items = re.findall(r'\W(-\w+)', doc)
+			keywordMap['parameters'] = items
 		elif key == 'variables':
 			items = doc.split()
 			keywordMap[key] = [item[1:] for item in items]
@@ -1754,6 +1752,7 @@ def parse_powershell_api_file(path):
 		'type',
 		'cmdlet',
 		'alias',
+		'parameters',
 		'misc',
 	])
 	return [
@@ -1762,6 +1761,8 @@ def parse_powershell_api_file(path):
 		('cmdlet', keywordMap['cmdlet'], KeywordAttr.MakeLower),
 		('alias', keywordMap['alias'], KeywordAttr.MakeLower),
 		('pre-defined variables', keywordMap['variables'], KeywordAttr.MakeLower | KeywordAttr.Special),
+		#('parameters', keywordMap['parameters'], KeywordAttr.NoLexer),
+		('parameters', [], KeywordAttr.NoLexer),
 		('misc', keywordMap['misc'], KeywordAttr.NoLexer),
 	]
 
