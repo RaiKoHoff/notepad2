@@ -1637,17 +1637,8 @@ static INT_PTR CALLBACK TabSettingsDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, 
 	switch (umsg) {
 	case WM_INITDIALOG: {
 		WCHAR wch[MAX_EDITLEXER_NAME_SIZE];
-		LPCWSTR pszName;
 		Style_LoadTabSettings(pLexCurrent);
-#if NP2_ENABLE_LOCALIZE_LEXER_NAME
-		if (GetString(pLexCurrent->rid, wch, COUNTOF(wch))) {
-			pszName = wch;
-		} else {
-			pszName = pLexCurrent->pszName;
-		}
-#else
-		pszName = pLexCurrent->pszName;
-#endif
+		LPCWSTR pszName = Style_GetCurrentLexerName(wch, COUNTOF(wch));
 		SetDlgItemText(hwnd, IDC_SCHEME_TAB_GROUPBOX, pszName);
 		if (StrIsEmpty(szCurFile)) {
 			GetString(IDS_UNTITLED, wch, COUNTOF(wch));
@@ -2309,17 +2300,38 @@ static INT_PTR CALLBACK AutoCompletionSettingsDlgProc(HWND hwnd, UINT umsg, WPAR
 		wsprintf(wch, L"%u ms", autoCompletionConfig.dwScanWordsTimeout);
 		SetDlgItemText(hwnd, IDC_AUTOC_SCAN_WORDS_TIMEOUT, wch);
 
-		int mask = autoCompletionConfig.fAutoCompleteFillUpMask;
-		if (mask & AutoCompleteFillUpEnter) {
+		int mask = autoCompletionConfig.fCompleteScope;
+		if (mask & AutoCompleteScope_Commont) {
+			CheckDlgButton(hwnd, IDC_AUTO_COMPLETE_INSIDE_COMMONT, BST_CHECKED);
+		}
+		if (mask & AutoCompleteScope_String) {
+			CheckDlgButton(hwnd, IDC_AUTO_COMPLETE_INSIDE_STRING, BST_CHECKED);
+		}
+		if (mask & AutoCompleteScope_PlainText) {
+			CheckDlgButton(hwnd, IDC_AUTO_COMPLETE_INSIDE_PLAINTEXT, BST_CHECKED);
+		}
+		mask = autoCompletionConfig.fScanWordScope;
+		if (mask & AutoCompleteScope_Commont) {
+			CheckDlgButton(hwnd, IDC_SCAN_WORD_INSIDE_COMMONT, BST_CHECKED);
+		}
+		if (mask & AutoCompleteScope_String) {
+			CheckDlgButton(hwnd, IDC_SCAN_WORD_INSIDE_STRING, BST_CHECKED);
+		}
+		if (mask & AutoCompleteScope_PlainText) {
+			CheckDlgButton(hwnd, IDC_SCAN_WORD_INSIDE_PLAINTEXT, BST_CHECKED);
+		}
+
+		mask = autoCompletionConfig.fAutoCompleteFillUpMask;
+		if (mask & AutoCompleteFillUpMask_Enter) {
 			CheckDlgButton(hwnd, IDC_AUTOC_FILLUP_ENTER, BST_CHECKED);
 		}
-		if (mask & AutoCompleteFillUpTab) {
+		if (mask & AutoCompleteFillUpMask_Tab) {
 			CheckDlgButton(hwnd, IDC_AUTOC_FILLUP_TAB, BST_CHECKED);
 		}
-		if (mask & AutoCompleteFillUpSpace) {
+		if (mask & AutoCompleteFillUpMask_Space) {
 			CheckDlgButton(hwnd, IDC_AUTOC_FILLUP_SPACE, BST_CHECKED);
 		}
-		if (mask & AutoCompleteFillUpPunctuation) {
+		if (mask & AutoCompleteFillUpMask_Punctuation) {
 			CheckDlgButton(hwnd, IDC_AUTOC_FILLUP_PUNCTUATION, BST_CHECKED);
 		}
 
@@ -2327,28 +2339,28 @@ static INT_PTR CALLBACK AutoCompletionSettingsDlgProc(HWND hwnd, UINT umsg, WPAR
 		SendDlgItemMessage(hwnd, IDC_AUTOC_FILLUP_PUNCTUATION_LIST, EM_LIMITTEXT, MAX_AUTO_COMPLETION_FILLUP_LENGTH, 0);
 
 		mask = autoCompletionConfig.fAutoInsertMask;
-		if (mask & AutoInsertParenthesis) {
+		if (mask & AutoInsertMask_Parenthesis) {
 			CheckDlgButton(hwnd, IDC_AUTO_INSERT_PARENTHESIS, BST_CHECKED);
 		}
-		if (mask & AutoInsertBrace) {
+		if (mask & AutoInsertMask_Brace) {
 			CheckDlgButton(hwnd, IDC_AUTO_INSERT_BRACE, BST_CHECKED);
 		}
-		if (mask & AutoInsertSquareBracket) {
+		if (mask & AutoInsertMask_SquareBracket) {
 			CheckDlgButton(hwnd, IDC_AUTO_INSERT_SQUARE_BRACKET, BST_CHECKED);
 		}
-		if (mask & AutoInsertAngleBracket) {
+		if (mask & AutoInsertMask_AngleBracket) {
 			CheckDlgButton(hwnd, IDC_AUTO_INSERT_ANGLE_BRACKET, BST_CHECKED);
 		}
-		if (mask & AutoInsertDoubleQuote) {
+		if (mask & AutoInsertMask_DoubleQuote) {
 			CheckDlgButton(hwnd, IDC_AUTO_INSERT_DOUBLE_QUOTE, BST_CHECKED);
 		}
-		if (mask & AutoInsertSingleQuote) {
+		if (mask & AutoInsertMask_SingleQuote) {
 			CheckDlgButton(hwnd, IDC_AUTO_INSERT_SINGLE_QUOTE, BST_CHECKED);
 		}
-		if (mask & AutoInsertBacktick) {
+		if (mask & AutoInsertMask_Backtick) {
 			CheckDlgButton(hwnd, IDC_AUTO_INSERT_BACKTICK, BST_CHECKED);
 		}
-		if (mask & AutoInsertSpaceAfterComma) {
+		if (mask & AutoInsertMask_SpaceAfterComma) {
 			CheckDlgButton(hwnd, IDC_AUTO_INSERT_SPACE_COMMA, BST_CHECKED);
 		}
 
@@ -2385,18 +2397,42 @@ static INT_PTR CALLBACK AutoCompletionSettingsDlgProc(HWND hwnd, UINT umsg, WPAR
 				autoCompletionConfig.dwScanWordsTimeout = max_i(mask, AUTOC_SCAN_WORDS_MIN_TIMEOUT);
 			}
 
+			mask = AutoCompleteScope_Other;
+			if (IsButtonChecked(hwnd, IDC_AUTO_COMPLETE_INSIDE_COMMONT)) {
+				mask |= AutoCompleteScope_Commont;
+			}
+			if (IsButtonChecked(hwnd, IDC_AUTO_COMPLETE_INSIDE_STRING)) {
+				mask |= AutoCompleteScope_String;
+			}
+			if (IsButtonChecked(hwnd, IDC_AUTO_COMPLETE_INSIDE_PLAINTEXT)) {
+				mask |= AutoCompleteScope_PlainText;
+			}
+			autoCompletionConfig.fCompleteScope = mask;
+
+			mask = AutoCompleteScope_Other;
+			if (IsButtonChecked(hwnd, IDC_SCAN_WORD_INSIDE_COMMONT)) {
+				mask |= AutoCompleteScope_Commont;
+			}
+			if (IsButtonChecked(hwnd, IDC_SCAN_WORD_INSIDE_STRING)) {
+				mask |= AutoCompleteScope_String;
+			}
+			if (IsButtonChecked(hwnd, IDC_SCAN_WORD_INSIDE_PLAINTEXT)) {
+				mask |= AutoCompleteScope_PlainText;
+			}
+			autoCompletionConfig.fScanWordScope = mask;
+
 			mask = 0;
 			if (IsButtonChecked(hwnd, IDC_AUTOC_FILLUP_ENTER)) {
-				mask |= AutoCompleteFillUpEnter;
+				mask |= AutoCompleteFillUpMask_Enter;
 			}
 			if (IsButtonChecked(hwnd, IDC_AUTOC_FILLUP_TAB)) {
-				mask |= AutoCompleteFillUpTab;
+				mask |= AutoCompleteFillUpMask_Tab;
 			}
 			if (IsButtonChecked(hwnd, IDC_AUTOC_FILLUP_SPACE)) {
-				mask |= AutoCompleteFillUpSpace;
+				mask |= AutoCompleteFillUpMask_Space;
 			}
 			if (IsButtonChecked(hwnd, IDC_AUTOC_FILLUP_PUNCTUATION)) {
-				mask |= AutoCompleteFillUpPunctuation;
+				mask |= AutoCompleteFillUpMask_Punctuation;
 			}
 
 			autoCompletionConfig.fAutoCompleteFillUpMask = mask;
@@ -2404,33 +2440,34 @@ static INT_PTR CALLBACK AutoCompletionSettingsDlgProc(HWND hwnd, UINT umsg, WPAR
 
 			mask = 0;
 			if (IsButtonChecked(hwnd, IDC_AUTO_INSERT_PARENTHESIS)) {
-				mask |= AutoInsertParenthesis;
+				mask |= AutoInsertMask_Parenthesis;
 			}
 			if (IsButtonChecked(hwnd, IDC_AUTO_INSERT_BRACE)) {
-				mask |= AutoInsertBrace;
+				mask |= AutoInsertMask_Brace;
 			}
 			if (IsButtonChecked(hwnd, IDC_AUTO_INSERT_SQUARE_BRACKET)) {
-				mask |= AutoInsertSquareBracket;
+				mask |= AutoInsertMask_SquareBracket;
 			}
 			if (IsButtonChecked(hwnd, IDC_AUTO_INSERT_ANGLE_BRACKET)) {
-				mask |= AutoInsertAngleBracket;
+				mask |= AutoInsertMask_AngleBracket;
 			}
 			if (IsButtonChecked(hwnd, IDC_AUTO_INSERT_DOUBLE_QUOTE)) {
-				mask |= AutoInsertDoubleQuote;
+				mask |= AutoInsertMask_DoubleQuote;
 			}
 			if (IsButtonChecked(hwnd, IDC_AUTO_INSERT_SINGLE_QUOTE)) {
-				mask |= AutoInsertSingleQuote;
+				mask |= AutoInsertMask_SingleQuote;
 			}
 			if (IsButtonChecked(hwnd, IDC_AUTO_INSERT_BACKTICK)) {
-				mask |= AutoInsertBacktick;
+				mask |= AutoInsertMask_Backtick;
 			}
 			if (IsButtonChecked(hwnd, IDC_AUTO_INSERT_SPACE_COMMA)) {
-				mask |= AutoInsertSpaceAfterComma;
+				mask |= AutoInsertMask_SpaceAfterComma;
 			}
 
 			autoCompletionConfig.fAutoInsertMask = mask;
 			autoCompletionConfig.iAsmLineCommentChar = GetCheckedRadioButton(hwnd, IDC_ASM_LINE_COMMENT_SEMICOLON, IDC_ASM_LINE_COMMENT_AT) - IDC_ASM_LINE_COMMENT_SEMICOLON;
 			EditCompleteUpdateConfig();
+			SciCall_SetAutoInsertMask(mask);
 			EndDialog(hwnd, IDOK);
 		}
 		break;

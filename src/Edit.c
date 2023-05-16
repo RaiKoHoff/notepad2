@@ -1645,12 +1645,12 @@ void EditMapTextCase(int menu) {
 			charsConverted = LCMapString(LOCALE_USER_DEFAULT, flags, pszTextW, cchTextW, NULL, 0);
 #endif
 			if (charsConverted) {
+				pszMappedW = (LPWSTR)NP2HeapAlloc((charsConverted + 1)*sizeof(WCHAR));
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 				charsConverted = LCMapStringEx(LOCALE_NAME_USER_DEFAULT, flags, pszTextW, cchTextW, pszMappedW, charsConverted, NULL, NULL, 0);
 #else
-				pszMappedW = (LPWSTR)NP2HeapAlloc((charsConverted + 1)*sizeof(WCHAR));
-#endif
 				charsConverted = LCMapString(LOCALE_USER_DEFAULT, flags, pszTextW, cchTextW, pszMappedW, charsConverted);
+#endif
 			}
 		}
 
@@ -7603,16 +7603,16 @@ void FileVars_Init(LPCSTR lpData, DWORD cbData, LPFILEVARS lpfv) {
 void EditSetWrapStartIndent(int tabWidth, int indentWidth) {
 	int indent = 0;
 	switch (iWordWrapIndent) {
-	case EditWrapIndentOneCharacter:
+	case EditWrapIndent_OneCharacter:
 		indent = 1;
 		break;
-	case EditWrapIndentTwoCharacter:
+	case EditWrapIndent_TwoCharacter:
 		indent = 2;
 		break;
-	case EditWrapIndentOneLevel:
+	case EditWrapIndent_OneLevel:
 		indent = indentWidth ? indentWidth : tabWidth;
 		break;
-	case EditWrapIndentTwoLevel:
+	case EditWrapIndent_TwoLevel:
 		indent = indentWidth ? 2 * indentWidth : 2 * tabWidth;
 		break;
 	}
@@ -7622,13 +7622,13 @@ void EditSetWrapStartIndent(int tabWidth, int indentWidth) {
 void EditSetWrapIndentMode(int tabWidth, int indentWidth) {
 	int indentMode;
 	switch (iWordWrapIndent) {
-	case EditWrapIndentSameAsSubline:
+	case EditWrapIndent_SameAsSubline:
 		indentMode = SC_WRAPINDENT_SAME;
 		break;
-	case EditWrapIndentOneLevelThanSubline:
+	case EditWrapIndent_OneLevelThanSubline:
 		indentMode = SC_WRAPINDENT_INDENT;
 		break;
-	case EditWrapIndentTwoLevelThanSubline:
+	case EditWrapIndent_TwoLevelThanSubline:
 		indentMode = SC_WRAPINDENT_DEEPINDENT;
 		break;
 	default:
@@ -8081,7 +8081,7 @@ void FoldToggleDefault(FOLD_ACTION action) {
 				level &= SC_FOLDLEVELNUMBERMASK;
 				FoldLevelStack_Push(&levelStack, level);
 				const int lev = levelStack.levelCount;
-				if ((levelMask >> lev) & 1) {
+				if (levelMask & (1U << lev)) {
 					action = FoldToggleNode(line, action);
 					if (lev == maxLevel || (ignoreInner && EditIsLineContainsStyle(line, ignoreInner))) {
 						line = SciCall_GetLastChildEx(line, level);
@@ -8096,7 +8096,7 @@ void FoldToggleDefault(FOLD_ACTION action) {
 			if (level & SC_FOLDLEVELHEADERFLAG) {
 				level &= SC_FOLDLEVELNUMBERMASK;
 				const int lev = level - SC_FOLDLEVELBASE;
-				if ((levelMask >> lev) & 1) {
+				if (levelMask & (1U << lev)) {
 					action = FoldToggleNode(line, action);
 					if (lev == maxLevel || (ignoreInner && EditIsLineContainsStyle(line, ignoreInner))) {
 						line = SciCall_GetLastChildEx(line, level);
