@@ -143,6 +143,7 @@ Editor::Editor() {
 	selectionUnit = TextUnit::character;
 
 	lastXChosen = 0;
+	autoInsertMask = 0;
 	lineAnchorPos = 0;
 	originalAnchorPos = 0;
 	wordSelectAnchorStartPos = 0;
@@ -1955,25 +1956,6 @@ void Editor::FilterSelections() {
 	}
 }
 
-static constexpr char EncloseSelectionCharacter(char ch) noexcept {
-	switch (ch) {
-	case '(':
-		return ')';
-	case '[':
-		return ']';
-	case '{':
-		return '}';
-	//case '<':
-	//	return '>';
-	case '\"':
-	case '\'':
-	case '`':
-		return ch;
-	default:
-		return '\0';
-	}
-}
-
 // InsertCharacter inserts a character encoded in document code page.
 void Editor::InsertCharacter(std::string_view sv, CharacterSource charSource) {
 	if (sv.empty()) {
@@ -1985,8 +1967,18 @@ void Editor::InsertCharacter(std::string_view sv, CharacterSource charSource) {
 	{
 		const UndoGroup ug(pdoc, (sel.Count() > 1) || !sel.Empty() || inOverstrike);
 		// enclose selection on typing punctuation, empty selection will be handled in Notification::CharAdded.
-		const char encloseCh = (charSource != CharacterSource::DirectInput || sv.length() != 1
-			|| sel.IsRectangular() || sel.Empty()) ? '\0' : EncloseSelectionCharacter(sv[0]);
+		char encloseCh = '\0';
+		if (charSource == CharacterSource::DirectInput && sv.length() == 1 && !sel.Empty() && !sel.IsRectangular()) {
+			const uint8_t ch = sv[0];
+			uint32_t index = ch - '\"';
+			if (index == '{' - '\"' || (index < 63 && (UINT64_C(0x4200000000000061) & (UINT64_C(1) << index)))) {
+				index = (index + (index >> 5)) & 7;
+				index = (0x60501204U >> (4*index)) & 15;
+				if (autoInsertMask & (1U << index)) {
+					encloseCh = ch + ((41U >> (index*2)) & 3); // 0b101001
+				}
+			}
+		}
 
 		// Vector elements point into selection in order to change selection.
 		std::vector<SelectionRange *> selPtrs;
@@ -4901,7 +4893,7 @@ void Editor::ButtonMoveWithModifiers(Point pt, unsigned int, KeyMod modifiers) {
 	if (HaveMouseCapture()) {
 
 		// Slow down autoscrolling/selection
-		autoScrollTimer.ticksToWait -= timer.tickSize;
+		autoScrollTimer.ticksToWait -= Timer::tickSize;
 		if (autoScrollTimer.ticksToWait > 0)
 			return;
 		autoScrollTimer.ticksToWait = autoScrollDelay;
@@ -8647,6 +8639,10 @@ sptr_t Editor::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 
 	case Message::GetTechnology:
 		return static_cast<sptr_t>(technology);
+
+	case Message::SetAutoInsertMask:
+		autoInsertMask = static_cast<int>(wParam);
+		break;
 
 	case Message::CountCharacters:
 		return pdoc->CountCharacters(PositionFromUPtr(wParam), lParam);

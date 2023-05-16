@@ -49,7 +49,6 @@ public:
 	WorkItems items = WorkItems::none;
 	Sci::Position upTo = 0;
 
-	WorkNeeded() noexcept = default;
 	void Reset() noexcept {
 		items = WorkItems::none;
 		upTo = 0;
@@ -254,6 +253,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	SelectionPosition posDrop;
 	Sci::Position hotSpotClickPos;
 	int lastXChosen;
+	int autoInsertMask;
 	Sci::Position lineAnchorPos;
 	Sci::Position originalAnchorPos;
 	Sci::Position wordSelectAnchorStartPos;

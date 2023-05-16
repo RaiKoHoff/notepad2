@@ -209,7 +209,6 @@ class FormatEnumerator final : public IEnumFORMATETC {
 
 public:
 	FormatEnumerator(ULONG pos_, const CLIPFORMAT formats_[], size_t formatsLen_);
-	virtual ~FormatEnumerator() = default;
 
 	// IUnknown
 	STDMETHODIMP QueryInterface(REFIID riid, PVOID *ppv) noexcept override;
@@ -228,8 +227,6 @@ public:
 class DropSource final : public IDropSource {
 public:
 	ScintillaWin *sci = nullptr;
-	DropSource() noexcept = default;
-	virtual ~DropSource() = default;
 
 	// IUnknown
 	STDMETHODIMP QueryInterface(REFIID riid, PVOID *ppv) noexcept override;
@@ -246,8 +243,6 @@ public:
 class DataObject final : public IDataObject {
 public:
 	ScintillaWin *sci = nullptr;
-	DataObject() noexcept = default;
-	virtual ~DataObject() = default;
 
 	// IUnknown
 	STDMETHODIMP QueryInterface(REFIID riid, PVOID *ppv) noexcept override;
@@ -271,8 +266,6 @@ public:
 class DropTarget final : public IDropTarget {
 public:
 	ScintillaWin *sci = nullptr;
-	DropTarget() noexcept = default;
-	virtual ~DropTarget() = default;
 
 	// IUnknown
 	STDMETHODIMP QueryInterface(REFIID riid, PVOID *ppv) noexcept override;
@@ -287,8 +280,8 @@ public:
 };
 
 // InputLanguage() and SetCandidateWindowPos() are based on Chromium's IMM32Manager and InputMethodWinImm32.
-// https://github.com/chromium/chromium/blob/master/ui/base/ime/win/imm32_manager.cc
-// See License.txt or https://github.com/chromium/chromium/blob/master/LICENSE for license details.
+// https://github.com/chromium/chromium/blob/main/ui/base/ime/win/imm32_manager.cc
+// See License.txt or https://github.com/chromium/chromium/blob/main/LICENSE for license details.
 
 // See Chromium's IMM32Manager::SetInputLanguage()
 LANGID InputLanguage() noexcept {
@@ -508,6 +501,7 @@ class ScintillaWin final :
 	void ImeStartComposition();
 	void ImeEndComposition();
 	LRESULT ImeOnReconvert(LPARAM lParam);
+	LRESULT ImeOnDocumentFeed(LPARAM lParam) const;
 	sptr_t HandleCompositionWindowed(uptr_t wParam, sptr_t lParam);
 	sptr_t HandleCompositionInline(uptr_t wParam, sptr_t lParam);
 
@@ -1313,35 +1307,23 @@ void ScintillaWin::ToggleHanja() {
 namespace {
 
 // https://docs.microsoft.com/en-us/windows/desktop/Intl/composition-string
-std::vector<int> MapImeIndicators(const std::vector<BYTE> &inputStyle, int &indicatorMask) {
-	const size_t attrLen = inputStyle.size();
-	std::vector<int> imeIndicator(attrLen, IndicatorUnknown);
+int MapImeIndicators(std::vector<BYTE> &inputStyle) noexcept {
 	int mask = 0;
-
-	for (size_t i = 0; i < attrLen; i++) {
-		switch (inputStyle.at(i)) {
-		case ATTR_INPUT:
-			imeIndicator[i] = IndicatorInput;
-			mask |= 1 << (IndicatorInput - IndicatorInput);
-			break;
-		case ATTR_TARGET_NOTCONVERTED:
-		case ATTR_TARGET_CONVERTED:
-			imeIndicator[i] = IndicatorTarget;
-			mask |= 1 << (IndicatorTarget - IndicatorInput);
-			break;
-		case ATTR_CONVERTED:
-			imeIndicator[i] = IndicatorConverted;
-			mask |= 1 << (IndicatorConverted - IndicatorInput);
-			break;
-		default:
-			imeIndicator[i] = IndicatorUnknown;
+	static_assert(ATTR_INPUT < 4 && ATTR_TARGET_CONVERTED < 4 && ATTR_CONVERTED < 4 && ATTR_TARGET_NOTCONVERTED < 4);
+	constexpr unsigned indicatorMask = (IndicatorInput << (8*ATTR_INPUT))
+		| (IndicatorTarget << (8*ATTR_TARGET_CONVERTED))
+		| (IndicatorConverted << (8*ATTR_CONVERTED))
+		| (IndicatorTarget << (8*ATTR_TARGET_NOTCONVERTED));
+	for (BYTE &style : inputStyle) {
+		if (style > 3) {
+			style = IndicatorUnknown;
 			mask |= 1 << (IndicatorUnknown - IndicatorInput);
-			break;
+		} else {
+			style = (indicatorMask >> (8*style)) & 0xff;
+			mask |= 1 << (style - IndicatorInput);
 		}
 	}
-
-	indicatorMask = mask;
-	return imeIndicator;
+	return mask;
 }
 
 }
@@ -1503,8 +1485,8 @@ sptr_t ScintillaWin::HandleCompositionInline(uptr_t, sptr_t lParam) {
 		SetCandidateWindowPos();
 		pdoc->TentativeStart(); // TentativeActive from now on.
 
-		int indicatorMask = 0;
-		std::vector<int> imeIndicator = MapImeIndicators(imc.GetImeAttributes(), indicatorMask);
+		std::vector<BYTE> imeIndicator = imc.GetImeAttributes();
+		const int indicatorMask = MapImeIndicators(imeIndicator);
 
 		const UINT codePage = CodePageOfDocument();
 		char inBufferCP[16];
@@ -1520,7 +1502,7 @@ sptr_t ScintillaWin::HandleCompositionInline(uptr_t, sptr_t lParam) {
 			i += ucWidth;
 		}
 
-		// Japanese IME after pressing Tab replaces input string with first candidate item (target string);
+		// Japanese IME after pressing Space or Tab replaces input string with first candidate item (target string);
 		// when selecting other candidate item, previous item will be replaced with current one.
 		// After candidate item been added, it's looks like been full selected, it's better to keep caret
 		// at end of "selection" (end of input) instead of jump to beginning of input ("selection").
@@ -1939,6 +1921,9 @@ sptr_t ScintillaWin::IMEMessage(unsigned int iMessage, uptr_t wParam, sptr_t lPa
 	case WM_IME_REQUEST: {
 		if (wParam == IMR_RECONVERTSTRING) {
 			return ImeOnReconvert(lParam);
+		}
+		if (wParam == IMR_DOCUMENTFEED) {
+			return ImeOnDocumentFeed(lParam);
 		}
 		return ::DefWindowProc(MainHWND(), iMessage, wParam, lParam);
 	}
@@ -3333,12 +3318,14 @@ LRESULT ScintillaWin::ImeOnReconvert(LPARAM lParam) {
 	const Sci::Position mainStart = sel.RangeMain().Start().Position();
 	const Sci::Position mainEnd = sel.RangeMain().End().Position();
 	const Sci::Line curLine = pdoc->SciLineFromPosition(mainStart);
-	if (curLine != pdoc->SciLineFromPosition(mainEnd))
+	if (curLine != pdoc->SciLineFromPosition(mainEnd)) {
 		return 0;
+	}
 	const Sci::Position baseStart = pdoc->LineStart(curLine);
 	const Sci::Position baseEnd = pdoc->LineEnd(curLine);
-	if ((baseStart == baseEnd) || (mainEnd > baseEnd))
+	if ((baseStart == baseEnd) || (mainEnd > baseEnd)) {
 		return 0;
+	}
 
 	const UINT codePage = CodePageOfDocument();
 	const std::wstring rcFeed = StringDecode(RangeText(baseStart, baseEnd), codePage);
@@ -3346,8 +3333,9 @@ LRESULT ScintillaWin::ImeOnReconvert(LPARAM lParam) {
 	const DWORD rcSize = sizeof(RECONVERTSTRING) + rcFeedLen + sizeof(wchar_t);
 
 	RECONVERTSTRING *rc = static_cast<RECONVERTSTRING *>(PtrFromSPtr(lParam));
-	if (!rc)
+	if (!rc) {
 		return rcSize; // Immediately be back with rcSize of memory block.
+	}
 
 	wchar_t *rcFeedStart = reinterpret_cast<wchar_t*>(rc + 1);
 	memcpy(rcFeedStart, rcFeed.data(), rcFeedLen);
@@ -3368,11 +3356,13 @@ LRESULT ScintillaWin::ImeOnReconvert(LPARAM lParam) {
 	rc->dwTargetStrOffset = rc->dwCompStrOffset;
 
 	const IMContext imc(MainHWND());
-	if (!imc.hIMC)
+	if (!imc.hIMC) {
 		return 0;
+	}
 
-	if (!::ImmSetCompositionStringW(imc.hIMC, SCS_QUERYRECONVERTSTRING, rc, rcSize, nullptr, 0))
+	if (!::ImmSetCompositionStringW(imc.hIMC, SCS_QUERYRECONVERTSTRING, rc, rcSize, nullptr, 0)) {
 		return 0;
+	}
 
 	// No selection asks IME to fill target fields with its own value.
 	const DWORD tgWlen = rc->dwTargetStrLen;
@@ -3407,6 +3397,52 @@ LRESULT ScintillaWin::ImeOnReconvert(LPARAM lParam) {
 	}
 	// Immediately Target Input or candidate box choice with GCS_COMPSTR.
 	return rcSize;
+}
+
+LRESULT ScintillaWin::ImeOnDocumentFeed(LPARAM lParam) const {
+	// This is called while typing preedit string in.
+	// So there is no selection.
+	// Limit feed within one line without EOL.
+	// Look around:   lineStart |<--  |compStart| - caret - compEnd|  -->| lineEnd.
+
+	const Sci::Position curPos = CurrentPosition();
+	const Sci::Line curLine = pdoc->SciLineFromPosition(curPos);
+	const Sci::Position lineStart = pdoc->LineStart(curLine);
+	const Sci::Position lineEnd = pdoc->LineEnd(curLine);
+
+	const std::wstring rcFeed = StringDecode(RangeText(lineStart, lineEnd), CodePageOfDocument());
+	const size_t rcFeedLen = rcFeed.length() * sizeof(wchar_t);
+	const size_t rcSize = sizeof(RECONVERTSTRING) + rcFeedLen + sizeof(wchar_t);
+
+	RECONVERTSTRING *rc = static_cast<RECONVERTSTRING *>(PtrFromSPtr(lParam));
+	if (!rc) {
+		return rcSize;
+	}
+
+	wchar_t *rcFeedStart = reinterpret_cast<wchar_t*>(rc + 1);
+	memcpy(rcFeedStart, &rcFeed[0], rcFeedLen);
+
+	const IMContext imc(MainHWND());
+	if (!imc.hIMC) {
+		return 0;
+	}
+
+	const size_t compStrLen = imc.GetCompositionString(GCS_COMPSTR).size();
+	const int imeCaretPos = imc.GetImeCaretPos();
+	const Sci::Position compStart = pdoc->GetRelativePositionUTF16(curPos, -imeCaretPos);
+	const Sci::Position compStrOffset = pdoc->CountUTF16(lineStart, compStart);
+
+	// Fill in reconvert structure.
+	// Let IME to decide what the target is.
+	rc->dwVersion = 0; //constant
+	rc->dwStrLen = static_cast<DWORD>(rcFeed.length());
+	rc->dwStrOffset = sizeof(RECONVERTSTRING); //constant
+	rc->dwCompStrLen = static_cast<DWORD>(compStrLen);
+	rc->dwCompStrOffset = static_cast<DWORD>(compStrOffset) * sizeof(wchar_t);
+	rc->dwTargetStrLen = rc->dwCompStrLen;
+	rc->dwTargetStrOffset = rc->dwCompStrOffset;
+
+	return rcSize; // MS API says reconv structure to be returned.
 }
 
 void ScintillaWin::GetIntelliMouseParameters() noexcept {
