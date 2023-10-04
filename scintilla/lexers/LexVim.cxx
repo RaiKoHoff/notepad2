@@ -110,9 +110,9 @@ void ColouriseVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 		case SCE_VIM_IDENTIFIER:
 			if (!IsIdentifierChar(sc.ch)) {
 				char s[128];
-				sc.GetCurrent(s, sizeof(s));
 				const KeywordType kwPrev = kwType;
 				kwType = KeywordType::None;
+				sc.GetCurrent(s, sizeof(s));
 				if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 					if (!(lineState & VimLineStateMaskAutoCommand) && logicalVisibleChars == sc.LengthCurrent()) {
 						sc.ChangeState(SCE_VIM_WORD);
@@ -250,7 +250,7 @@ void ColouriseVimDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			} else if (sc.ch == '/' && preferRegex && !IsEOLChar(sc.chNext)) {
 				insideRegexRange = false;
 				sc.SetState(SCE_VIM_REGEX);
-			} else if (isoperator(sc.ch)) {
+			} else if (IsAGraphic(sc.ch)) {
 				sc.SetState(SCE_VIM_OPERATOR);
 				if (sc.ch == '|' && sc.chNext != '|' && !(lineState & VimLineStateMaskAutoCommand)) {
 					// pipe, change logicalVisibleChars to 0 in next block

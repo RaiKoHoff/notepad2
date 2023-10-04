@@ -90,7 +90,7 @@ void ClassifyPascalWord(LexerWordList keywordLists, StyleContext &sc, int &curLi
 	} else if (curLineState & stateInAsm) {
 		sc.ChangeState(SCE_PAS_ASM);
 	}
-	while (!sc.atLineEnd && sc.ch == ' ')
+	while (sc.ch == ' ')
 		sc.Forward();
 	if (sc.ch == '(') {
 		if (funwords.InList(s) || prcwords.InList(s)) {
@@ -109,11 +109,12 @@ constexpr bool IsPascalOperator(int ch) noexcept {
 
 void ColourisePascalDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	constexpr bool bSmartHighlighting = true; //styler.GetPropertyBool("lexer.pascal.smart.highlighting", true);
-
-	Sci_Line curLine = styler.GetLine(startPos);
-	int curLineState = curLine > 0 ? styler.GetLineState(curLine - 1) : 0;
+	int curLineState = 0;
 
 	StyleContext sc(startPos, length, initStyle, styler);
+	if (sc.currentLine > 0) {
+		curLineState = styler.GetLineState(sc.currentLine - 1);
+	}
 
 	for (; sc.More(); sc.Forward()) {
 		if (sc.atLineEnd) {
@@ -191,20 +192,22 @@ void ColourisePascalDoc(Sci_PositionU startPos, Sci_Position length, int initSty
 			//			if (IsADigit(sc.ch) && !(curLineState & stateInAsm)) {
 			if (IsADigit(sc.ch)) {
 				sc.SetState(SCE_PAS_NUMBER);
-				if (sc.ch == '0' && (sc.chNext =='x' || sc.chNext == 'X')) {
-					sc.SetState(SCE_PAS_HEXNUMBER);
-					sc.Advance(2);
-					while (IsHexDigit(sc.ch))
-						sc.Forward();
+				if (sc.ch == '0' && (sc.chNext == 'x' || sc.chNext == 'X')) {
+					sc.ChangeState(SCE_PAS_HEXNUMBER);
+					sc.Forward();
 				}
 			} else if (IsIdentifierStartEx(sc.ch)) {
 				sc.SetState(SCE_PAS_IDENTIFIER);
 				//			} else if (sc.ch == '$' && !(curLineState & stateInAsm)) {
-			} else if (sc.ch == '$') {
-				sc.SetState(SCE_PAS_HEXNUMBER);
-				if (curLineState & stateInAsm) {
-					if (sc.chNext == '0' && styler.MatchLower(sc.currentPos + 2, 'x'))
-						sc.Advance(2);
+			} else if (sc.ch == '$' || sc.ch == '#') {
+				sc.SetState((sc.ch == '$' || (curLineState & stateInAsm) != 0)? SCE_PAS_HEXNUMBER : SCE_PAS_CHARACTER);
+				if (sc.state == SCE_PAS_HEXNUMBER) {
+					if (sc.chNext == '0') {
+						sc.Forward();
+						if (sc.chNext == 'x' || sc.chNext == 'X') {
+							sc.Forward();
+						}
+					}
 				}
 			} else if (sc.Match('{', '$')) {
 				sc.SetState(SCE_PAS_PREPROCESSOR);
@@ -219,13 +222,6 @@ void ColourisePascalDoc(Sci_PositionU startPos, Sci_Position length, int initSty
 				sc.SetState(SCE_PAS_COMMENTLINE);
 			} else if (sc.ch == '\'') {
 				sc.SetState(SCE_PAS_STRING_DQ);
-			} else if (sc.ch == '#') {
-				if (curLineState & stateInAsm) {
-					sc.SetState(SCE_PAS_HEXNUMBER);
-					if (sc.chNext == '0' && styler.MatchLower(sc.currentPos + 2, 'x'))
-						sc.Advance(2);
-				} else
-					sc.SetState(SCE_PAS_CHARACTER);
 			} else if (IsPascalOperator(sc.ch) && !(curLineState & stateInAsm)) {
 				sc.SetState(SCE_PAS_OPERATOR);
 			} else if (curLineState & stateInAsm) {

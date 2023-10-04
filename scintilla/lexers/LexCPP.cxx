@@ -170,11 +170,6 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 	while (sc.More()) {
 
 		if (sc.atLineStart) {
-			if (sc.state == SCE_C_STRING || sc.state == SCE_C_CHARACTER) {
-				// Prevent SCE_C_STRINGEOL from leaking back to previous line which
-				// ends with a line continuation by locking in the state upto this position.
-				sc.SetState(sc.state);
-			}
 			// Reset states to begining of colourise so no surprises
 			// if different sets of lines lexed.
 			visibleChars = 0;
@@ -376,17 +371,7 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 					}
 				}
 
-				if ((isIncludePreprocessor && (sc.ch == '<' || sc.ch == '\"'))
-					|| (isMessagePreprocessor && !(sc.ch == '\n' || sc.ch == '\r'))) {
-					sc.SetState(SCE_C_STRING);
-					if (sc.ch == '\"') {
-						isIncludePreprocessor = false;
-						//isMessagePreprocessor = false;
-					}
-					sc.Forward();
-				} else {
-					sc.SetState(SCE_C_DEFAULT);
-				}
+				sc.SetState(isMessagePreprocessor ? SCE_C_STRING : SCE_C_DEFAULT);
 			}
 			break;
 
@@ -482,42 +467,18 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 			break;
 
 		case SCE_C_CHARACTER:
-			if (sc.atLineEnd) {
-				sc.ChangeState(SCE_C_STRINGEOL);
-			} else if (sc.ch == '\\') {
-				if (!IsEOLChar(sc.chNext)) {
-					escSeq.resetEscapeState(sc.state, sc.chNext);
-					sc.SetState(SCE_C_ESCAPECHAR);
-					sc.Forward();
-					if (sc.chNext == '{' && AnyOf(sc.ch, 'o', 'x', 'u')) {
-						escSeq.brace = true;
-						escSeq.digitsLeft = 9;
-					}
-				}
-			} else if (sc.ch == '\'') {
-				sc.ForwardSetState(SCE_C_DEFAULT);
-			}
-			break;
-		case SCE_C_STRINGEOL:
-			if (sc.atLineStart) {
+		case SCE_C_STRING:
+			if (sc.atLineStart && !continuationLine) {
+				isMessagePreprocessor = false;
+				isIncludePreprocessor = false;
 				outerStyle = SCE_C_DEFAULT;
 				sc.SetState(SCE_C_DEFAULT);
-			}
-			break;
-		case SCE_C_STRING:
-			if (sc.atLineEnd) {
-				sc.ChangeState(SCE_C_STRINGEOL);
-			} else if (isIncludePreprocessor && sc.ch == '>') {
+			} else if (sc.ch == '>' && sc.state == SCE_C_STRING && isIncludePreprocessor) {
+				isIncludePreprocessor = false;
 				outerStyle = SCE_C_DEFAULT;
 				sc.ForwardSetState(SCE_C_DEFAULT);
-				isIncludePreprocessor = false;
-			} else if (isMessagePreprocessor && sc.atLineEnd) {
-				sc.ChangeState(SCE_C_STRINGEOL);
-				isMessagePreprocessor = false;
 			} else if (sc.ch == '\\') {
-				if (isIncludePreprocessor) {
-					sc.Forward();
-				} else if (!IsEOLChar(sc.chNext)) {
+				if (!isIncludePreprocessor && !isMessagePreprocessor && !IsEOLChar(sc.chNext)) {
 					escSeq.resetEscapeState(sc.state, sc.chNext);
 					sc.SetState(SCE_C_ESCAPECHAR);
 					sc.Forward();
@@ -526,8 +487,8 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 						escSeq.digitsLeft = 9;
 					}
 				}
-			} else if (sc.ch == '\"') {
-				if (lexType == LEX_RC && sc.chNext == '\"') {
+			} else if (sc.ch == ((sc.state == SCE_C_CHARACTER) ? '\'' : '\"')) {
+				if (sc.state == SCE_C_STRING && lexType == LEX_RC && sc.chNext == '\"') {
 					escSeq.resetEscapeState(sc.state, sc.chNext);
 					sc.SetState(SCE_C_ESCAPECHAR);
 					sc.Forward();
@@ -635,8 +596,6 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 						sc.SetState(SCE_C_STRINGRAW);
 						sc.Forward();
 					} else if (sc.ch == '\"') {
-						isIncludePreprocessor = false;
-						//isMessagePreprocessor = false;
 						sc.SetState(SCE_C_STRING);
 					} else if (sc.ch == '\'') {
 						sc.SetState(SCE_C_CHARACTER);
@@ -671,7 +630,7 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 						} else {
 							sc.SetState(SCE_C_OPERATOR);
 						}
-					} else if (isoperator(sc.ch) || sc.ch == '@') {
+					} else if (IsAGraphic(sc.ch) && sc.ch != '\\') {
 						sc.SetState(SCE_C_OPERATOR);
 						isPragmaPreprocessor = false;
 

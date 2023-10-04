@@ -22,6 +22,8 @@ Latest development builds (artifacts in Release configuration for each compiler 
 * [Context-based auto-completion for some words](https://github.com/zufuliu/notepad2/wiki/Auto-Completion-in-Notepad2#context-based-auto-completion)
 * [Enhanced auto indentation](https://github.com/zufuliu/notepad2/wiki/Auto-Completion-in-Notepad2#auto-indent-text)
 * [Auto completion for braces, brackets and quotes](https://github.com/zufuliu/notepad2/wiki/Auto-Completion-in-Notepad2#auto-insert-text)
+* [Color preview via CallTip and click CallTip to open color dialog](https://github.com/zufuliu/notepad2/wiki/CallTip)
+* Support Base64 encoding and decoding
 * Syntax highlighting, code folding and API list for (see built-in [file extension list](doc/FileExt.txt)):
 	* Plain Text
 	* [ABAQUS](tools/lang/ABAQUS.inp)
@@ -42,13 +44,13 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* [AWK](tools/lang/Awk.awk), up to GNU AWK 5.2.
 	* [Batch Script](tools/lang/Batch.bat), [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#batch)
 	* [blockdiag](tools/lang/blockdiag.diag), seqdiag, actdiag and nwdiag
-	* [C#](tools/lang/CSharp.cs), up to C# 11.0. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#c)
+	* [C#](tools/lang/CSharp.cs), up to C# 12.0. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#c)
 		* [Vala](https://wiki.gnome.org/Projects/Vala) 0.54
 	* C/C++, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#cc)
 		* Objective-C/C++, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#objective-cc)
 		* [C Standard Library](tools/lang/C.c), up to C2x.
 		* [C++ STL](tools/lang/CPP.cpp), up to C++20.
-	* [CSS Style Sheet](tools/lang/CSS.css), up to April 2023 snapshot.
+	* [CSS Style Sheet](tools/lang/CSS.css), up to August 2023 snapshot.
 		* [SCSS Style Sheet](tools/lang/SCSS.scss), up to Dart Sass 1.50.
 		* [Less Style Sheet](tools/lang/Less.less), up to Less 4.1.
 		* [HSS Style Sheet](tools/lang/HSS.hss)
@@ -59,18 +61,19 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* Apache Configuration File
 	* [CSV File](https://www.rfc-editor.org/rfc/rfc4180)
 	* [D](tools/lang/D.d), up to D language 2.0.
-	* [Dart](tools/lang/Dart.dart), up to Dart 2.12.
+	* [Dart](tools/lang/Dart.dart), up to Dart 3.0.
 	* Diff/Patch File
-	* F#
+	* [F#](tools/lang/FSharp.fs), up to F# 7.0.
 	* [Fortran](tools/lang/Fortran.f), up to Fortran 2018.
 	* [GN Build](tools/lang/GN.gn), up to GN 2019-03-13.
-	* [Go](tools/lang/Go.go), up to Go 1.14.
+	* [Go](tools/lang/Go.go), up to Go 1.21.
 		* [Go+ (GoPlus)](https://goplus.org/) and the Q language
-	* [Gradle](tools/lang/Gradle.gradle), up to Gradle 6.8, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#gradle)
+	* [Gradle](tools/lang/Gradle.gradle), up to Gradle 8.3, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#gradle)
 	* [GraphViz Dot](tools/lang/GraphViz.dot), up to GraphViz 2.49, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#graphviz)
-	* [Groovy](tools/lang/Groovy.groovy), up to Groovy 4.0.
-	* [Haxe](tools/lang/Haxe.hx), up to Haxe 4.2
-	* [HTML](tools/lang/html.html), up to [WHATWG](https://html.spec.whatwg.org/multipage/) April 2023. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#html)
+	* [Groovy](tools/lang/Groovy.groovy), up to Groovy 5.0.
+	* [Haskell](tools/lang/Haskell.hs), up to GHC 9.6.
+	* [Haxe](tools/lang/Haxe.hx), up to Haxe 4.3.
+	* [HTML](tools/lang/html.html), up to [WHATWG](https://html.spec.whatwg.org/multipage/) June 2023. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#html)
 		* ASP
 		* ASP.NET
 		* JSP
@@ -82,8 +85,8 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* [BeanShell](https://github.com/beanshell/beanshell)
 	* [JavaScript](tools/lang/JavaScript.js), up to ECMAScript 2023 with [JSX](https://facebook.github.io/jsx/) and [Web APIs](https://developer.mozilla.org/en-US/docs/Web/API).
 	* [JSON](https://www.json.org) and [JSON5](https://json5.org/) Document
-	* [Julia Script](tools/lang/Julia.jl), up to Julia 1.2. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#julia)
-	* [Kotlin](tools/lang/Kotlin.kt), up to Kotlin 1.7.
+	* [Julia Script](tools/lang/Julia.jl), up to Julia 1.9. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#julia)
+	* [Kotlin](tools/lang/Kotlin.kt), up to Kotlin 1.9.
 	* LaTeX
 	* Lisp Script (Common Lisp, Clojure, Scheme, etc.)
 	* [LLVM IR](tools/lang/LLVM.ll), up to LLVM 16.
@@ -98,15 +101,18 @@ Latest development builds (artifacts in Release configuration for each compiler 
 		* [GitHub Flavored Markdown](https://github.github.com/gfm/)
 		* [GitLab Flavored Markdown](https://docs.gitlab.com/ee/user/markdown.html)
 		* [Pandoc’s Markdown](https://pandoc.org/MANUAL.html#pandocs-markdown)
+	* [Mathematica](tools/lang/Mathematica.nb) and [WolframScript](https://www.wolfram.com/wolframscript/)
 	* MATLAB, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#matlab-octave)
 		* Octave
 		* Scilab
 		* Gnuplot
+	* [Nim Script](tools/lang/Nim.nim), up to Nim 2.0.
 	* [Nullsoft Scriptable Install System](tools/lang/NSIS.nsi), up to NSIS 3.09.
+	* [OCaml](tools/lang/OCaml.ml), up to OCaml 5.0.
 	* Pascal, Delphi
 	* [Perl](tools/lang/Perl.pl), up to Perl 5.36. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#perl)
 	* [PowerShell](tools/lang/PowerShell.ps1), up to PowerShell 7.2.
-	* [Python](tools/lang/Python.py), up to Python 3.11. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#python)
+	* [Python](tools/lang/Python.py), up to Python 3.12. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#python)
 	* [PHP Script](tools/lang/PHP.php), up to PHP 8.2. [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#php)
 	* Windows Rescouce Script
 	* [R](tools/lang/R.r), up to R 4.2.
@@ -129,32 +135,21 @@ Latest development builds (artifacts in Release configuration for each compiler 
 	* TCL, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#tcl)
 	* [Texinfo](tools/lang/Texinfo.texi), up to Texinfo 7.0.
 	* [TOML File](https://toml.io/)
-	* [TypeScript](tools/lang/TypeScript.ts), TypeScript 5.0.
+	* [TypeScript](tools/lang/TypeScript.ts), TypeScript 5.2.
 	* Visual Basic, VB6, VB.NET
 	* VBScript
 	* [VHDL](tools/lang/VHDL.vhdl), up to VHDL 2019.
 	* Verilog HDL, up to [Verilog](tools/lang/Verilog.v) 2005 and [SystemVerilog](tools/lang/SystemVerilog.sv) 2017.
 	* [Vim Script](tools/lang/Vim.vim)
 	* [WebAssembly](https://github.com/WebAssembly/wabt/blob/main/src/lexer-keywords.txt), up to wabt 1.0.
+	* [WinHex Script](tools/lang/WinHex.whs) and template, up to WinHex 20.9.
 	* XML Document, [Screenshots](https://github.com/zufuliu/notepad2/wiki/Screenshots#xml)
 		* XML Schema
 		* XML Stylesheet
 		* SGML and DTD
-		* Ant Build
-		* Maven POM
-		* Maven Settings
-		* Ivy Module
-		* Ivy Settings
-		* PMD Ruleset
-		* Checkstyle Module
-		* Tomcat Config
-		* Java web.xml
-		* Struts config
-		* Hibernate config and mapping
-		* Spring Beans
 		* Apple Property List
-		* Android Manifest
 	* [YAML Document](https://yaml.org/)
+	* [Zig](tools/lang/Zig.zig), up to Zig 0.11.
 	* Many Others
 * Toggle fold for specific level, shortcuts: <kbd>Alt</kbd>+<kbd>Number</kbd>
 * Toggle fold for current block without scrolling back to the block start line, shortcut: <kbd>Alt</kbd>+<kbd>C</kbd>, or context menu "Toggle Fold"
@@ -164,14 +159,15 @@ Latest development builds (artifacts in Release configuration for each compiler 
 * Display caret location and length of selected text in count of characters
 * Improved support for NFO ANSI art
 * Support various [Windows system integration](https://github.com/zufuliu/notepad2/wiki/System-Integration)
-* Per-Monitor DPI-Aware, improved high DPI display
+* Support high DPI display with HD version
 * Support rendering using Direct2D DirectWrite, and switch between GDI and Direct2D
 * Support font ligature with font like [FiraCode](https://github.com/tonsky/FiraCode) in Direct2D mode
 * Support color font (Windows 8.1 and above) in Direct2D mode, useful to display color [Emoji](https://unicode.org/emoji/charts/full-emoji-list.html) 😊 and others
 * Experimental support for RTL layout (GDI) and bidirectional (Direct2D), useful for Arabic and Hebrew
 * Support using fractional font size
 * Support full screen mode
-* Extra support for drag and drop file from Visual Studio, Android Studio, IntelliJ IDEA, etc.
+* Support copy as RTF
+* Support drag and drop file from Visual Studio, Android Studio, IntelliJ IDEA, etc.
 * Other various major or minor changes and tweaks
 
 ## Supported Operating Systems:

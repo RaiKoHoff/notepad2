@@ -101,6 +101,9 @@ public:
 		}
 		return buf[position - startPos];
 	}
+	unsigned char SafeGetUCharAt(Sci_Position position) noexcept {
+		return SafeGetCharAt(position);
+	}
 #if 0
 	[[deprecated]]
 	char SafeGetCharAt(Sci_Position position, char chDefault) noexcept {
@@ -113,17 +116,15 @@ public:
 		}
 		return buf[position - startPos];
 	}
+	unsigned char SafeGetUCharAt(Sci_Position position, char chDefault) noexcept {
+		return SafeGetCharAt(position, chDefault);
+	}
 #endif
 	bool IsLeadByte(unsigned char ch) const noexcept {
 		return encodingType == EncodingType::dbcs && (ch & 0x80) != 0 && pAccess->IsDBCSLeadByte(ch);
 	}
 	constexpr EncodingType Encoding() const noexcept {
 		return encodingType;
-	}
-
-	bool MatchLower(Sci_Position pos, char ch0) noexcept {
-		const char ch = (*this)[pos];
-		return (ch | 0x20) == ch0;
 	}
 
 	bool Match(Sci_Position pos, const char *s) noexcept {

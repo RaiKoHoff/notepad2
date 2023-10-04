@@ -164,15 +164,12 @@ constexpr bool IsInterpolatedString(int state) noexcept {
 		|| state == SCE_JULIA_TRIPLE_BACKTICKS;
 }
 
-constexpr bool IsTripleQuotedString(int state) noexcept {
-	return (state & 1) == 0;
+constexpr int GetStringQuote(int state) noexcept {
+	return (state < SCE_JULIA_STRING) ? '`' : '\"';
 }
 
-inline bool IsStringEnd(const StyleContext &sc) noexcept {
-	if (sc.state < SCE_JULIA_STRING) {
-		return sc.ch == '`' && (sc.state == SCE_JULIA_BACKTICKS || sc.MatchNext('`', '`'));
-	}
-	return sc.ch == '\"' && (!IsTripleQuotedString(sc.state) || sc.MatchNext('"', '"'));
+constexpr bool IsTripleQuotedString(int state) noexcept {
+	return (state & 1) == 0;
 }
 
 void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
@@ -243,6 +240,14 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 				if (sc.state == SCE_JULIA_IDENTIFIER) {
 					char s[128];
 					sc.GetCurrent(s, sizeof(s));
+					if (sc.ch == '\"' && StrEqual(s, "raw")) {
+						sc.ChangeState(SCE_JULIA_RAWSTRING);
+						if (sc.MatchNext('"', '"')) {
+							sc.ChangeState(SCE_JULIA_TRIPLE_RAWSTRING);
+							sc.Advance(2);
+						}
+						break;
+					}
 					if (keywordLists[KeywordIndex_Keyword].InList(s)) {
 						if (StrEqual(s, "type")) {
 							// only in `abstract type` or `primitive type`
@@ -296,6 +301,7 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 			}
 			break;
 
+		case SCE_JULIA_CHARACTER:
 		case SCE_JULIA_STRING:
 		case SCE_JULIA_TRIPLE_STRING:
 		case SCE_JULIA_BACKTICKS:
@@ -305,48 +311,7 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 		case SCE_JULIA_TRIPLE_RAWSTRING:
 		case SCE_JULIA_BYTESTRING:
 		case SCE_JULIA_TRIPLE_BYTESTRING:
-			if (sc.ch == '\\') {
-				if (escSeq.resetEscapeState(sc.state, sc.chNext)) {
-					sc.SetState(SCE_JULIA_ESCAPECHAR);
-					sc.Forward();
-				}
-			} else if (sc.ch == '%') {
-				if (sc.state >= SCE_JULIA_STRING) {
-					const Sci_Position length = CheckFormatSpecifier(sc, styler, insideUrl);
-					if (length != 0) {
-						const int state = sc.state;
-						sc.SetState(SCE_JULIA_FORMAT_SPECIFIER);
-						sc.Advance(length);
-						sc.SetState(state);
-						continue;
-					}
-				}
-			} else if (sc.ch == '$') {
-				if (IsInterpolatedString(sc.state)) {
-					if (sc.chNext == '(') {
-						++braceCount;
-						nestedState.push_back(sc.state);
-						sc.SetState(SCE_JULIA_OPERATOR2);
-						sc.Forward();
-					} else if (IsIdentifierStartEx(sc.chNext)) {
-						escSeq.outerState = sc.state;
-						sc.SetState(SCE_JULIA_VARIABLE2);
-					}
-				}
-			} else if (IsStringEnd(sc)) {
-				if (IsTripleQuotedString(sc.state)) {
-					sc.Advance(2);
-				}
-				sc.ForwardSetState(SCE_JULIA_DEFAULT);
-			} else if (sc.Match(':', '/', '/') && IsLowerCase(sc.chPrev)) {
-				insideUrl = true;
-			} else if (insideUrl && IsInvalidUrlChar(sc.ch)) {
-				insideUrl = false;
-			}
-			break;
-
-		case SCE_JULIA_CHARACTER:
-			if (sc.atLineStart) {
+			if (sc.atLineStart && sc.state == SCE_JULIA_CHARACTER) {
 				// multiline when inside backticks
 				sc.SetState(SCE_JULIA_DEFAULT);
 			} else if (sc.ch == '\\') {
@@ -354,8 +319,42 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 					sc.SetState(SCE_JULIA_ESCAPECHAR);
 					sc.Forward();
 				}
-			} else if (sc.ch == '\'') {
+			} else if (sc.ch == '\'' && sc.state == SCE_JULIA_CHARACTER) {
 				sc.ForwardSetState(SCE_JULIA_DEFAULT);
+			} else if (sc.state != SCE_JULIA_CHARACTER) {
+				if (sc.ch == '%') {
+					if (sc.state >= SCE_JULIA_STRING) {
+						const Sci_Position length = CheckFormatSpecifier(sc, styler, insideUrl);
+						if (length != 0) {
+							const int state = sc.state;
+							sc.SetState(SCE_JULIA_FORMAT_SPECIFIER);
+							sc.Advance(length);
+							sc.SetState(state);
+							continue;
+						}
+					}
+				} else if (sc.ch == '$') {
+					if (IsInterpolatedString(sc.state)) {
+						if (sc.chNext == '(') {
+							++braceCount;
+							nestedState.push_back(sc.state);
+							sc.SetState(SCE_JULIA_OPERATOR2);
+							sc.Forward();
+						} else if (IsIdentifierStartEx(sc.chNext)) {
+							escSeq.outerState = sc.state;
+							sc.SetState(SCE_JULIA_VARIABLE2);
+						}
+					}
+				} else if (sc.ch == GetStringQuote(sc.state) && (!IsTripleQuotedString(sc.state) || sc.MatchNext())) {
+					if (IsTripleQuotedString(sc.state)) {
+						sc.Advance(2);
+					}
+					sc.ForwardSetState(SCE_JULIA_DEFAULT);
+				} else if (sc.Match(':', '/', '/') && IsLowerCase(sc.chPrev)) {
+					insideUrl = true;
+				} else if (insideUrl && IsInvalidUrlChar(sc.ch)) {
+					insideUrl = false;
+				}
 			}
 			break;
 
@@ -449,14 +448,6 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 					sc.ChangeState(SCE_JULIA_TRIPLE_REGEX);
 					sc.Advance(2);
 				}
-			} else if (sc.Match('r', 'a', 'w', '"')) {
-				insideUrl = false;
-				sc.SetState(SCE_JULIA_RAWSTRING);
-				sc.Advance(3);
-				if (sc.MatchNext('"', '"')) {
-					sc.ChangeState(SCE_JULIA_TRIPLE_RAWSTRING);
-					sc.Advance(2);
-				}
 			} else if (sc.Match('b', '\"')) {
 				insideUrl = false;
 				sc.SetState(SCE_JULIA_BYTESTRING);
@@ -495,7 +486,7 @@ void ColouriseJuliaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 				chBeforeIdentifier = sc.chPrev;
 				isTransposeOperator = true;
 				sc.SetState(SCE_JULIA_IDENTIFIER);
-			} else if (isoperator(sc.ch) || sc.ch == '@' || sc.ch == '\\' || sc.ch == '$') {
+			} else if (IsAGraphic(sc.ch)) {
 				if (sc.ch == '{' || sc.ch == '[' || sc.ch == '(') {
 					++braceCount;
 				} else if (sc.ch == '}' || sc.ch == ']' || sc.ch == ')') {

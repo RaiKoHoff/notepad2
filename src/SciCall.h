@@ -956,7 +956,7 @@ NP2_inline void SciCall_SetTabIndents(bool tabIndents) NP2_noexcept {
 	SciCall(SCI_SETTABINDENTS, tabIndents, 0);
 }
 
-NP2_inline void SciCall_SetBackSpaceUnIndents(bool bsUnIndents) NP2_noexcept {
+NP2_inline void SciCall_SetBackSpaceUnIndents(uint8_t bsUnIndents) NP2_noexcept {
 	SciCall(SCI_SETBACKSPACEUNINDENTS, bsUnIndents, 0);
 }
 
@@ -1158,6 +1158,14 @@ NP2_inline void SciCall_CallTipCancel(void) NP2_noexcept {
 
 NP2_inline bool SciCall_CallTipActive(void) NP2_noexcept {
 	return (bool)SciCall(SCI_CALLTIPACTIVE, 0, 0);
+}
+
+NP2_inline void SciCall_CallTipSetBack(COLORREF back) NP2_noexcept {
+	SciCall(SCI_CALLTIPSETBACK, back, 0);
+}
+
+NP2_inline void SciCall_CallTipSetFore(COLORREF fore) NP2_noexcept {
+	SciCall(SCI_CALLTIPSETFORE, fore, 0);
 }
 
 NP2_inline void SciCall_CallTipUseStyle(int tabSize) NP2_noexcept {

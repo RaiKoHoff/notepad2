@@ -59,11 +59,6 @@ constexpr bool IsYAMLAnchorChar(int ch) noexcept {
 	return IsGraphic(ch) && !IsYAMLFlowIndicator(ch);
 }
 
-constexpr bool IsYAMLDateTime(int ch, int chNext) noexcept {
-	return ((ch == '-' || ch == ':' || ch == '.') && IsADigit(chNext))
-		|| (ch == ' ' && (chNext == '-' || IsADigit(chNext)));
-}
-
 bool IsYAMLText(StyleContext& sc, int braceCount, const WordList *kwList) {
 	const int state = sc.state;
 	const Sci_Position endPos = braceCount? sc.styler.Length() : sc.lineStartNext;
@@ -216,7 +211,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_YAML_NUMBER:
 			if (!IsDecimalNumber(sc.chPrev, sc.ch, sc.chNext)) {
-				if (IsYAMLDateTime(sc.ch, sc.chNext)) {
+				if (IsISODateTime(sc.ch, sc.chNext)) {
 					sc.ChangeState(SCE_YAML_DATETIME);
 				} else if (IsYAMLText(sc, braceCount, nullptr)) {
 					continue;
@@ -225,7 +220,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			break;
 
 		case SCE_YAML_DATETIME:
-			if (!(IsIdentifierChar(sc.ch) || IsYAMLDateTime(sc.ch, sc.chNext))) {
+			if (!(IsIdentifierChar(sc.ch) || IsISODateTime(sc.ch, sc.chNext))) {
 				 if (IsYAMLText(sc, braceCount, nullptr)) {
 					continue;
 				}
@@ -249,10 +244,8 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				}
 			} else if (braceCount && IsYAMLFlowIndicator(sc.ch)) {
 				sc.SetState(SCE_YAML_OPERATOR);
-				if (sc.ch == '{' || sc.ch == '[') {
-					++braceCount;
-				} else if (sc.ch == '}' || sc.ch == ']') {
-					--braceCount;
+				if (sc.ch != ',') {
+					braceCount += (('[' + ']')/2 + (sc.ch & 32)) - sc.ch;
 				}
 			} else if (sc.ch == '#' && isspacechar(sc.chPrev)) {
 				sc.SetState(SCE_YAML_COMMENT);
@@ -276,8 +269,15 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			break;
 
 		case SCE_YAML_STRING_SQ:
-			if (sc.ch == '\'') {
-				if (sc.chNext == '\'') {
+		case SCE_YAML_STRING_DQ:
+			if (sc.ch == '\\' && sc.state == SCE_YAML_STRING_DQ) {
+				if (!IsEOLChar(sc.chNext)) {
+					escSeq.resetEscapeState(sc.chNext);
+					sc.SetState(SCE_YAML_ESCAPECHAR);
+					sc.Forward();
+				}
+			} else if (sc.ch == ((sc.state == SCE_YAML_STRING_SQ) ? '\'' : '\"')) {
+				if (sc.chNext == '\'' && sc.state == SCE_YAML_STRING_SQ) {
 					sc.SetState(SCE_YAML_ESCAPECHAR);
 					sc.Advance(2);
 					sc.SetState(SCE_YAML_STRING_SQ);
@@ -285,22 +285,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				}
 
 				sc.Forward();
-				if (sc.GetDocNextChar() == ':') {
-					hasKey = true;
-					sc.ChangeState(SCE_YAML_KEY);
-				}
-				sc.SetState((sc.ch == ':')? SCE_YAML_OPERATOR : SCE_YAML_DEFAULT);
-			}
-			break;
-
-		case SCE_YAML_STRING_DQ:
-			if (sc.ch == '\\' && !IsEOLChar(sc.chNext)) {
-				escSeq.resetEscapeState(sc.chNext);
-				sc.SetState(SCE_YAML_ESCAPECHAR);
-				sc.Forward();
-			} else if (sc.ch == '\"') {
-				sc.Forward();
-				if (sc.GetDocNextChar() == ':') {
+				if (sc.GetLineNextChar() == ':') {
 					hasKey = true;
 					sc.ChangeState(SCE_YAML_KEY);
 				}
@@ -333,7 +318,7 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					indentCount = 0;
 					lineType = YAMLLineType::CommentLine;
 				}
-			} else if (sc.atLineStart && (sc.Match('-', '-', '-') || sc.Match('.', '.', '.'))) {
+			} else if (sc.atLineStart && (sc.ch == '-' || sc.ch == '.') && sc.MatchNext()) {
 				// reset document state
 				braceCount = 0;
 				visibleChars = 1;
@@ -374,10 +359,8 @@ void ColouriseYAMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				sc.SetState(SCE_YAML_IDENTIFIER);
 			} else if (IsYAMLOperator(sc.ch, braceCount) || (sc.ch == '?' && sc.chNext == ' ') || (sc.ch == ':' && isspacechar(sc.chNext))) {
 				sc.SetState(SCE_YAML_OPERATOR);
-				if (sc.ch == '{' || sc.ch == '[') {
-					++braceCount;
-				} else if (sc.ch == '}' || sc.ch == ']') {
-					--braceCount;
+				if (AnyOf<'[', ']', '{', '}'>(sc.ch)) {
+					braceCount += (('[' + ']')/2 + (sc.ch & 32)) - sc.ch;
 				}
 			} else if (sc.ch == '+' || sc.ch == '-' || sc.ch == '.') {
 				if ((sc.ch == '-' && isspacechar(sc.chNext))) {

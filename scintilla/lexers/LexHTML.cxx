@@ -62,7 +62,7 @@ script_type segIsScriptingIndicator(LexAccessor &styler, Sci_PositionU start, Sc
 }
 
 script_type ScriptOfState(int state) noexcept {
-	if ((state >= SCE_HB_START) && (state <= SCE_HB_OPERATOR)) {
+	if ((state >= SCE_HB_START && state <= SCE_HB_OPERATOR) || state == SCE_H_ASPAT || state == SCE_H_XCCOMMENT) {
 		return eScriptVBS;
 	}
 	if ((state >= SCE_HJ_START) && (state <= SCE_HJ_TEMPLATELITERAL)) {
@@ -105,6 +105,11 @@ constexpr bool IsNumberChar(char ch) noexcept {
 	return IsADigit(ch) || ch == '.' || ch == '-' || ch == '#';
 }
 
+constexpr bool IsEntityChar(int ch) noexcept {
+	// Only allow [A-Za-z0-9.#-_:] in entities
+	return IsAlphaNumeric(ch) || AnyOf(ch, '#', '.', '-', '_', ':');
+}
+
 constexpr bool isStringState(int state) noexcept {
 	switch (state) {
 	case SCE_HJ_DOUBLESTRING:
@@ -121,15 +126,14 @@ constexpr bool isStringState(int state) noexcept {
 	}
 }
 
-constexpr bool stateAllowsTermination(int state) noexcept {
-	bool allowTermination = !isStringState(state);
-	if (allowTermination) {
-		switch (state) {
-		case SCE_HB_COMMENTLINE:
-			allowTermination = false;
+constexpr bool stateAllowsTermination(int state, int ch) noexcept {
+	if (!isStringState(state)) {
+		if (state == SCE_H_ASP || state == SCE_H_ASPAT || state == SCE_H_XCCOMMENT || state >= SCE_HJ_START) {
+			return ch == '%'; // ASP, JSP %>
 		}
+		return ch == '?'; // XML ?>
 	}
-	return allowTermination;
+	return false;
 }
 
 // not really well done, since it's only comments that should lex the %> and <%
@@ -165,31 +169,32 @@ bool classifyAttribHTML(script_mode inScriptType, Sci_PositionU start, Sci_Posit
 }
 
 // https://html.spec.whatwg.org/multipage/custom-elements.html#custom-elements-core-concepts
-bool isHTMLCustomElement(const char *tag, size_t length) noexcept {
+bool isHTMLCustomElement(const char *tag, size_t length, bool dashColon) noexcept {
 	// check valid HTML custom element name: starts with an ASCII lower alpha and contains hyphen.
 	// IsAlpha() is used for `html.tags.case.sensitive=1`.
 	if (length < 2 || !IsAlpha(tag[0])) {
 		return false;
 	}
-	if (strchr(tag, '-') == nullptr) {
-		return false;
-	}
-	return true;
+	return dashColon;
 }
 
 int classifyTagHTML(Sci_PositionU start, Sci_PositionU end, const WordList &keywords, LexAccessor &styler, bool &tagDontFold,
-	bool caseSensitive, bool isXml, bool allowScripts) {
+	bool isXml, bool allowScripts) {
 	char withSpace[126 + 2] = " ";
 	const char *tag = withSpace + 1;
 	// Copy after the '<' and stop before space
 	Sci_PositionU i = 1;
+	bool dashColon = false;
 	for (Sci_PositionU cPos = start; cPos < end && i < sizeof(withSpace) - 2; cPos++) {
 		const char ch = styler[cPos];
-		if (IsASpace(ch)) {
+		if (static_cast<unsigned char>(ch) <= ' ') {
 			break;
 		}
 		if ((ch != '<') && (ch != '/')) {
-			withSpace[i++] = caseSensitive ? ch : MakeLowerCase(ch);
+			withSpace[i++] = isXml ? ch : MakeLowerCase(ch);
+			if (ch == ':' || ch == '-') {
+				dashColon = true;
+			}
 		}
 	}
 
@@ -213,7 +218,7 @@ int classifyTagHTML(Sci_PositionU start, Sci_PositionU end, const WordList &keyw
 		chAttr = SCE_H_SGML_DEFAULT;
 	} else if (!keywords || keywords.InList(tag)) {
 		chAttr = SCE_H_TAG;
-	} else if (!isXml && isHTMLCustomElement(tag, i - 1)) {
+	} else if (!isXml && isHTMLCustomElement(tag, i - 1, dashColon)) {
 		customElement = true;
 		chAttr = SCE_H_TAG;
 	}
@@ -420,11 +425,6 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 	//	The default is on.
 	const bool foldXmlAtTagOpen = isXml & fold;// && styler.GetPropertyBool("fold.xml.at.tag.open", true);
 
-	// property html.tags.case.sensitive
-	//	For XML and HTML, setting this property to 1 will make tags match in a case
-	//	sensitive way which is the expected behaviour for XML and XHTML.
-	constexpr bool caseSensitive = false;//styler.GetPropertyBool("html.tags.case.sensitive", false);
-
 	// property lexer.xml.allow.scripts
 	//	Set to 0 to disable scripts in XML.
 	const bool allowScripts = styler.GetPropertyBool("lexer.xml.allow.scripts", true);
@@ -446,7 +446,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				break;
 		}
 		if (style == SCE_HJ_SYMBOLS) {
-			chPrevNonWhite = static_cast<unsigned char>(styler.SafeGetCharAt(back));
+			chPrevNonWhite = styler.SafeGetUCharAt(back);
 		}
 	}
 
@@ -459,8 +459,8 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			state != SCE_HJ_COMMENTLINE && state != SCE_HJ_COMMENTDOC)
 			chPrevNonWhite = ch;
 		ch = static_cast<unsigned char>(styler[i]);
-		int chNext = static_cast<unsigned char>(styler.SafeGetCharAt(i + 1));
-		const int chNext2 = static_cast<unsigned char>(styler.SafeGetCharAt(i + 2));
+		int chNext = styler.SafeGetUCharAt(i + 1);
+		const int chNext2 = styler.SafeGetUCharAt(i + 2);
 
 		// Handle DBCS codepages
 		if (styler.IsLeadByte(static_cast<unsigned char>(ch))) {
@@ -540,7 +540,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			case SCE_HJ_COMMENTDOC:
 			//case SCE_HJ_COMMENTLINE: // removed as this is a common thing done to hide
 			// the end of script marker from some JS interpreters.
-			case SCE_HB_COMMENTLINE:
+			//case SCE_HB_COMMENTLINE:
 			case SCE_HBA_COMMENTLINE:
 			case SCE_HJ_DOUBLESTRING:
 			case SCE_HJ_SINGLESTRING:
@@ -552,7 +552,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			default :
 				// check if the closing tag is a script tag
 				{
-					const bool match = (state == SCE_HJ_COMMENTLINE || isXml) ? styler.MatchLowerCase(i + 2, "script")
+					const bool match = (state == SCE_HJ_COMMENTLINE || state == SCE_HB_COMMENTLINE || isXml) ? styler.MatchLowerCase(i + 2, "script")
 						: ((state == SCE_H_COMMENT) ? styler.MatchLowerCase(i + 2, "comment") : true);
 					if (!match) {
 						break;
@@ -600,7 +600,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				levelCurrent++;
 			}
 			// should be better
-			ch = static_cast<unsigned char>(styler.SafeGetCharAt(i));
+			ch = styler.SafeGetUCharAt(i);
 			continue;
 		}
 
@@ -612,7 +612,10 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				inScriptType = eNonHtmlScriptPreProc;
 			else
 				inScriptType = eNonHtmlPreProc;
-
+			// fold whole script
+			if (foldHTMLPreprocessor) {
+				levelCurrent++;
+			}
 			if (chNext2 == '@') {
 				i += 2; // place as if it was the second next char treated
 				state = SCE_H_ASPAT;
@@ -633,11 +636,8 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				scriptLanguage = aspScript;
 			}
 			styler.ColorTo(i + 1, SCE_H_ASP);
-			// fold whole script
-			if (foldHTMLPreprocessor)
-				levelCurrent++;
 			// should be better
-			ch = static_cast<unsigned char>(styler.SafeGetCharAt(i));
+			ch = styler.SafeGetUCharAt(i);
 			continue;
 		}
 
@@ -671,8 +671,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 
 		// handle the end of a pre-processor = Non-HTML
 		else if ((((inScriptType == eNonHtmlPreProc) || (inScriptType == eNonHtmlScriptPreProc)) &&
-				  (((scriptLanguage != eScriptNone) && stateAllowsTermination(state))) &&
-				  (((ch == '%') || (ch == '?')) && (chNext == '>'))) ||
+				  ((scriptLanguage != eScriptNone) && (chNext == '>') && stateAllowsTermination(state, ch))) ||
 		         ((scriptLanguage == eScriptSGML) && (ch == '>') && (state != SCE_H_SGML_COMMENT))) {
 			if (state == SCE_H_ASPAT) {
 				aspScript = segIsScriptingIndicator(styler, styler.GetStartSegment(), i, aspScript);
@@ -732,7 +731,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				styler.ColorTo(i, StateToPrint);
 				if (chNext != '!')
 					state = SCE_H_TAGUNKNOWN;
-			} else if (ch == '&') {
+			} else if (ch == '&' && (IsAlpha(chNext) || chNext == '#')) {
 				styler.ColorTo(i, SCE_H_DEFAULT);
 				state = SCE_H_ENTITY;
 			}
@@ -805,11 +804,11 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				styler.ColorTo(i, defaultStateForSGML(scriptLanguage));
 				// find the length of the word
 				int size = 1;
-				while (IsHTMLWordChar(static_cast<unsigned char>(styler.SafeGetCharAt(i + size))))
+				while (IsHTMLWordChar(styler.SafeGetUCharAt(i + size)))
 					size++;
 				styler.ColorTo(i + size, StateToPrint);
 				i += size - 1;
-				ch = static_cast<unsigned char>(styler.SafeGetCharAt(i));
+				ch = styler.SafeGetUCharAt(i);
 				state = defaultStateForSGML(scriptLanguage);
 				continue;
 			} else if (ch == '\"' || ch == '\'') {
@@ -827,13 +826,8 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			}
 			break;
 		case SCE_H_SGML_DOUBLESTRING:
-			if (ch == '\"') {
-				styler.ColorTo(i + 1, StateToPrint);
-				state = SCE_H_SGML_DEFAULT;
-			}
-			break;
 		case SCE_H_SGML_SIMPLESTRING:
-			if (ch == '\'') {
+			if (ch == ((state == SCE_H_SGML_DOUBLESTRING) ? '\"' : '\'')) {
 				styler.ColorTo(i + 1, StateToPrint);
 				state = SCE_H_SGML_DEFAULT;
 			}
@@ -875,32 +869,27 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			}
 			break;
 		case SCE_H_SGML_ENTITY:
-			if (ch == ';') {
-				styler.ColorTo(i + 1, StateToPrint);
-				state = SCE_H_SGML_DEFAULT;
-			} else if (!(IsAlphaNumeric(ch) || ch == '-' || ch == '.')) {
-				styler.ColorTo(i + 1, SCE_H_SGML_ERROR);
+			if (!(IsAlphaNumeric(ch) || ch == '-' || ch == '.')) {
+				styler.ColorTo(i + 1, ((ch == ';') ? StateToPrint : SCE_H_SGML_ERROR));
 				state = SCE_H_SGML_DEFAULT;
 			}
 			break;
 		case SCE_H_ENTITY:
-			if (ch == ';') {
-				styler.ColorTo(i + 1, StateToPrint);
+			if (!IsEntityChar(ch)) {
+				styler.ColorTo(i + (ch == ';'), ((ch == ';') ? StateToPrint : SCE_H_TAGUNKNOWN));
 				state = SCE_H_DEFAULT;
-			}
-			if (ch != '#' && !IsAlphaNumeric(ch)	// Should check that '#' follows '&', but it is unlikely anyway...
-				&& ch != '.' && ch != '-' && ch != '_' && ch != ':') { // valid in XML
-				if (ch >= 0x80)	// Possibly start of a multibyte character so don't allow this byte to be in entity style
-					styler.ColorTo(i, SCE_H_TAGUNKNOWN);
-				else
-					styler.ColorTo(i + 1, SCE_H_TAGUNKNOWN);
-				state = SCE_H_DEFAULT;
+				if (ch != ';' && IsAGraphic(ch)) {
+					// Retreat one byte so the character that is invalid inside entity
+					// may start something else like a tag.
+					--i;
+					continue;
+				}
 			}
 			break;
 		case SCE_H_TAGUNKNOWN:
 			if (!IsTagContinue(ch) && !((ch == '/') && (chPrev == '<'))) {
 				int eClass = classifyTagHTML(styler.GetStartSegment(),
-					i, keywordsTag, styler, tagDontFold, caseSensitive, isXml, allowScripts);
+					i, keywordsTag, styler, tagDontFold, isXml, allowScripts);
 				if (eClass == SCE_H_SCRIPT || eClass == SCE_H_COMMENT) {
 					if (!tagClosing) {
 						inScriptType = eNonHtmlScript;
@@ -1031,24 +1020,14 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			}
 			break;
 		case SCE_H_DOUBLESTRING:
-			if (ch == '\"') {
-				if (isLanguageType) {
-					scriptLanguage = segIsScriptingIndicator(styler, styler.GetStartSegment(), i + 1, scriptLanguage);
-					clientScript = scriptLanguage;
-					isLanguageType = false;
-				}
-				styler.ColorTo(i + 1, SCE_H_DOUBLESTRING);
-				state = SCE_H_OTHER;
-			}
-			break;
 		case SCE_H_SINGLESTRING:
-			if (ch == '\'') {
+			if (ch == ((state == SCE_H_DOUBLESTRING) ? '\"' : '\'')) {
 				if (isLanguageType) {
 					scriptLanguage = segIsScriptingIndicator(styler, styler.GetStartSegment(), i + 1, scriptLanguage);
 					clientScript = scriptLanguage;
 					isLanguageType = false;
 				}
-				styler.ColorTo(i + 1, SCE_H_SINGLESTRING);
+				styler.ColorTo(i + 1, state);
 				state = SCE_H_OTHER;
 			}
 			break;
@@ -1190,31 +1169,18 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			}
 			break;
 		case SCE_HJ_DOUBLESTRING:
+		case SCE_HJ_SINGLESTRING:
+		case SCE_HJ_TEMPLATELITERAL:
 			if (ch == '\\') {
-				if (chNext == '\"' || chNext == '\'' || chNext == '\\') {
+				if (IsAGraphic(chNext)) {
 					i++;
 				}
-			} else if (ch == '\"') {
-				styler.ColorTo(i + 1, statePrintForState(SCE_HJ_DOUBLESTRING, inScriptType));
+			} else if (ch == ((state == SCE_HJ_DOUBLESTRING) ? '\"' : ((state == SCE_HJ_SINGLESTRING) ? '\'' : '`'))) {
+				styler.ColorTo(i + 1, statePrintForState(state, inScriptType));
 				state = SCE_HJ_DEFAULT;
-			} else if (IsEOLChar(ch)) {
+			} else if (state != SCE_HJ_TEMPLATELITERAL && IsEOLChar(ch)) {
 				styler.ColorTo(i, StateToPrint);
 				state = SCE_HJ_STRINGEOL;
-			}
-			break;
-		case SCE_HJ_SINGLESTRING:
-			if (ch == '\\') {
-				if (chNext == '\"' || chNext == '\'' || chNext == '\\') {
-					i++;
-				}
-			} else if (ch == '\'') {
-				styler.ColorTo(i + 1, statePrintForState(SCE_HJ_SINGLESTRING, inScriptType));
-				state = SCE_HJ_DEFAULT;
-			} else if (IsEOLChar(ch)) {
-				styler.ColorTo(i, StateToPrint);
-				if (chPrev != '\\' && (chPrev2 != '\\' || chPrev != '\r' || ch != '\n')) {
-					state = SCE_HJ_STRINGEOL;
-				}
 			}
 			break;
 		case SCE_HJ_STRINGEOL:
@@ -1232,7 +1198,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 					while (IsLowerCase(chNext)) {   // gobble regex flags
 						i++;
 						ch = chNext;
-						chNext = static_cast<unsigned char>(styler.SafeGetCharAt(i + 1));
+						chNext = styler.SafeGetUCharAt(i + 1);
 					}
 				}
 				styler.ColorTo(i + 1, StateToPrint);
@@ -1242,14 +1208,8 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				if (chNext == '\\' || chNext == '/') {
 					i++;
 					ch = chNext;
-					chNext = static_cast<unsigned char>(styler.SafeGetCharAt(i + 1));
+					chNext = styler.SafeGetUCharAt(i + 1);
 				}
-			}
-			break;
-		case SCE_HJ_TEMPLATELITERAL:
-			if (ch == '`') {
-				styler.ColorTo(i + 1, statePrintForState(SCE_HJ_TEMPLATELITERAL, inScriptType));
-				state = SCE_HJ_DEFAULT;
 			}
 			break;
 

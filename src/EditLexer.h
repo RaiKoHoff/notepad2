@@ -40,6 +40,7 @@ enum {
 	LexerAttr_CppPreprocessor = 1 << 8,
 	LexerAttr_CharacterPrefix = 1 << 9,
 	LexerAttr_EscapePunctuation = 1 << 10,
+	LexerAttr_PlainTextFile = 1 << 11,
 };
 
 enum {
@@ -97,14 +98,16 @@ typedef struct EDITLEXER {
 		const uint64_t keywordAttr;
 
 		const uint8_t commentStyleMarker;
+		const uint8_t stringStyleFirst;
+		const uint8_t stringStyleLast;
 	// set with EDITLEXER_HOLE() or EDITLEXER_TEXT()
 		uint8_t iStyleTheme;
 		bool bStyleChanged;
 		bool bUseDefaultCodeStyle;
 		int iFavoriteOrder;
 
-		const unsigned int iStyleCount;
-		const int iNameLen;
+		const uint16_t iStyleCount;
+		const uint16_t iNameLen;
 		const wchar_t * const pszName;
 		wchar_t *szExtensions;
 		wchar_t *szStyleBuf;
@@ -179,6 +182,7 @@ typedef const EDITLEXER *LPCEDITLEXER;
 #define NP2LEX_OCTAVE		63061	// SCLEX_MATLAB		Octave Code
 #define NP2LEX_SCILAB		63062	// SCLEX_MATLAB		SciLab Code
 #define NP2LEX_RLANG		63063	// SCLEX_RLANG		R Code
+#define NP2LEX_MATHEMATICA	63064	// SCLEX_MATHEMATICA	Mathematica
 
 #define NP2LEX_JULIA		63066	// SCLEX_JULIA		Julia Script
 #define NP2LEX_RUST			63067	// SCLEX_RUST		Rust Source
@@ -195,7 +199,12 @@ typedef const EDITLEXER *LPCEDITLEXER;
 #define NP2LEX_ABAQUS		63078	// SCLEX_APDL		ABAQUS
 #define NP2LEX_BLOCKDIAG	63079	// SCLEX_GRAPHVIZ	blockdiag
 #define NP2LEX_CSV			63080	// SCLEX_CSV		CSV File
+#define NP2LEX_NIM			63081	// SCLEX_NIM		Nim Script
+#define NP2LEX_ZIG			63082	// SCLEX_ZIG		Zig Source
+#define NP2LEX_OCAML		63083	// SCLEX_OCAML		OCaml Source
+#define NP2LEX_HASKELL		63084	// SCLEX_HASKELL	Haskell Source
 
+#define NP2LEX_WINHEX		63086	// SCLEX_WINHEX		WinHex Script
 #define NP2LEX_AVISYNTH		63087	// SCLEX_AVISYNTH	AviSynth Script
 #define NP2LEX_TEKEXTHEX	63088	// SCLEX_TEKEXTHEX	Tektronix extended HEX
 #define NP2LEX_INTELHEX		63089	// SCLEX_INTELHEX	Intel HEX
