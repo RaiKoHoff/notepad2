@@ -108,6 +108,7 @@ Python Script
 	bzl				Bazel BUILD file, https://docs.bazel.build/versions/main/build-ref.html
 	bazel
 	BUILD
+	mojo			https://docs.modular.com/mojo/programming-manual.html
 
 Ruby Script
 	rb
@@ -290,11 +291,6 @@ F# Source
 	fsscript		F# Script
 	fsl
 	fsy
-	m				Mathematica Module
-	ml				OCaml
-	mli				OCaml
-	sml				OCaml
-	nb				Mathematica Notebook
 
 
 GN Build Script
@@ -321,6 +317,10 @@ Groovy Script
 	gpp				Groovy Parallel Pattern
 	grunit			GrUnit
 
+
+Haskell Source
+	hs
+	lhs				Literate Haskell
 
 Haxe Script
 	hx
@@ -389,7 +389,7 @@ LLVM IR
 Lua Script
 	lua
 	wlua
-	nse
+	nse				https://nmap.org
 	luadoc
 	luax
 
@@ -417,6 +417,13 @@ Markdown
 	mkd
 
 	litcoffee		Literate CoffeeScript
+	Rmd				R Markdown, https://rmarkdown.rstudio.com/
+
+Mathematica
+	m				Module
+	nb				Notebook
+	wl				WolframScript
+	wls				WolframScript
 
 MATLAB Code
 	m				MATLAB / Octave
@@ -424,10 +431,24 @@ MATLAB Code
 	sci				Scilab
 
 
+Nim Script
+	nim
+	nimble
+	nims
+	nimrod
+
 Nsis Setup Script
 	nsi				NSIS Script
 	nsh				NSIS Header File
 	nlf				NSIS Language File
+
+
+OCaml Source
+	ml
+	mli
+	mll
+	mly
+	sml				Standard ML
 
 
 Pascal Source
@@ -564,6 +585,10 @@ WebAssembly
 	wat
 	wast
 
+WinHex Script
+	whs
+	tpl				Template Definition
+
 YAML Document
 	yml
 	yaml
@@ -574,6 +599,8 @@ YAML Document
 	apinotes		Swift API Notes
 	ifs				LLVM IFS (Interface Stubs)
 
+Zig Source
+	zig
 
 https://en.wikipedia.org/wiki/List_of_filename_extensions
 https://fileinfo.com/

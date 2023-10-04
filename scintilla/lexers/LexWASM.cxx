@@ -72,7 +72,7 @@ void ColouriseWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 		1: lineStateLineComment
 		8: commentLevel
 		*/
-		commentLevel = (lineState >> 1) & 0xff;
+		commentLevel = lineState >> 1;
 	}
 
 	while (sc.More()) {
@@ -155,7 +155,7 @@ void ColouriseWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				sc.Forward();
 				--commentLevel;
 				if (commentLevel == 0) {
-					sc.ForwardSetState(SCE_KOTLIN_DEFAULT);
+					sc.ForwardSetState(SCE_WASM_DEFAULT);
 				}
 			} else if (sc.Match('(', ';')) {
 				sc.Forward();
@@ -192,7 +192,7 @@ void ColouriseWASMDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			++visibleChars;
 		}
 		if (sc.atLineEnd) {
-			const int lineState = commentLevel | lineStateLineComment;
+			const int lineState = (commentLevel << 1) | lineStateLineComment;
 			styler.SetLineState(sc.currentLine, lineState);
 			visibleChars = 0;
 			lineStateLineComment = 0;

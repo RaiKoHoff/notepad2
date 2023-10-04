@@ -26,7 +26,7 @@ class OptionSet {
 		const char *description;
 		std::string value;
 		Option() noexcept :
-			opType(SC_TYPE_BOOLEAN), pb(false), description("") {
+			opType(SC_TYPE_BOOLEAN), pb(nullptr), description("") {
 		}
 		Option(plcob pb_, const char *description_ = "") noexcept :
 			opType(SC_TYPE_BOOLEAN), pb(pb_), description(description_) {
@@ -37,11 +37,11 @@ class OptionSet {
 		Option(plcos ps_, const char *description_) noexcept :
 			opType(SC_TYPE_STRING), ps(ps_), description(description_) {
 		}
-		bool Set(T *base, std::string_view val) {
+		bool Set(T *base, const char *val) {
 			value = val;
 			switch (opType) {
 			case SC_TYPE_BOOLEAN: {
-				bool option = atoi(val.data()) != 0;
+				bool option = atoi(val) != 0;
 				if ((*base).*pb != option) {
 					(*base).*pb = option;
 					return true;
@@ -49,7 +49,7 @@ class OptionSet {
 				break;
 			}
 			case SC_TYPE_INTEGER: {
-				int option = atoi(val.data());
+				int option = atoi(val);
 				if ((*base).*pi != option) {
 					(*base).*pi = option;
 					return true;
@@ -81,8 +81,9 @@ class OptionSet {
 			it->second = option;
 		} else {
 			nameToDef.emplace(name, option);
-			if (!names.empty())
-				names += "\n";
+			if (!names.empty()) {
+				names += '\n';
+			}
 			names += name;
 		}
 	}
@@ -133,8 +134,9 @@ public:
 	void DefineWordListSets(const char *const wordListDescriptions[]) {
 		if (wordListDescriptions) {
 			for (size_t wl = 0; wordListDescriptions[wl]; wl++) {
-				if (!wordLists.empty())
-					wordLists += "\n";
+				if (wl != 0) {
+					wordLists += '\n';
+				}
 				wordLists += wordListDescriptions[wl];
 			}
 		}

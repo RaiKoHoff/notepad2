@@ -64,7 +64,7 @@ constexpr bool IsEscapeSequence(int ch) noexcept {
 
 constexpr bool FollowExpression(int chPrevNonWhite, int stylePrevNonWhite) noexcept {
 	return chPrevNonWhite == ')' || chPrevNonWhite == ']'
-		|| stylePrevNonWhite == SCE_SWIFT_OPERATOR_PF
+		|| (stylePrevNonWhite >= SCE_SWIFT_OPERATOR_PF && stylePrevNonWhite <= SCE_SWIFT_NUMBER)
 		|| IsIdentifierCharEx(chPrevNonWhite);
 }
 
@@ -283,7 +283,7 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 
 		case SCE_SWIFT_STRING:
 		case SCE_SWIFT_TRIPLE_STRING:
-			if (sc.state == SCE_SWIFT_STRING && sc.atLineStart) {
+			if (sc.atLineStart && sc.state == SCE_SWIFT_STRING) {
 				sc.SetState(SCE_SWIFT_DEFAULT);
 			} else if (sc.ch == '\\') {
 				if (sc.chNext == '(') {
@@ -297,8 +297,7 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 					sc.ForwardSetState(state);
 					continue;
 				}
-			} else if (sc.ch == '"' && (sc.state == SCE_SWIFT_STRING
-				|| (sc.state == SCE_SWIFT_TRIPLE_STRING && sc.MatchNext('"', '"')))) {
+			} else if (sc.ch == '"' && (sc.state == SCE_SWIFT_STRING || sc.MatchNext('"', '"'))) {
 				if (sc.state == SCE_SWIFT_TRIPLE_STRING) {
 					sc.Advance(2);
 				}
@@ -308,13 +307,13 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 
 		case SCE_SWIFT_STRING_ED:
 		case SCE_SWIFT_TRIPLE_STRING_ED:
-			if (sc.state == SCE_SWIFT_STRING_ED && sc.atLineStart) {
+			if (sc.atLineStart && sc.state == SCE_SWIFT_STRING_ED) {
 				sc.SetState(SCE_SWIFT_DEFAULT);
 			} else if (sc.Match('\\', '#')) {
 				const int state = sc.state;
 				sc.SetState(SCE_SWIFT_ESCAPECHAR);
 				sc.Forward();
-				const DelimiterResult result =  CheckSwiftStringDelimiter(styler, sc.currentPos, DelimiterCheck::Escape, delimiterCount);
+				const DelimiterResult result = CheckSwiftStringDelimiter(styler, sc.currentPos, DelimiterCheck::Escape, delimiterCount);
 				if (result != DelimiterResult::False) {
 					sc.Advance(delimiterCount);
 					if (sc.ch == '(') {
@@ -342,7 +341,7 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 
 		case SCE_SWIFT_REGEX:
 		case SCE_SWIFT_REGEX_ED:
-			if (sc.state == SCE_SWIFT_REGEX && sc.atLineStart) {
+			if (sc.atLineStart && sc.state == SCE_SWIFT_REGEX) {
 				sc.SetState(SCE_SWIFT_DEFAULT);
 			} else if (sc.ch == '\\') {
 				sc.Forward();
@@ -401,8 +400,8 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 				sc.SetState(SCE_SWIFT_NUMBER);
 			} else if ((sc.ch == '@' || sc.ch == '`') && IsIdentifierStartEx(sc.chNext)) {
 				chBefore = chPrevNonWhite;
-				if (sc.chPrev != '.') {
-					chBeforeIdentifier = sc.chPrev;
+				if (chPrevNonWhite != '.') {
+					chBeforeIdentifier = chPrevNonWhite;
 				}
 				sc.SetState((sc.ch == '@') ? SCE_SWIFT_ATTRIBUTE : SCE_SWIFT_IDENTIFIER_BT);
 			} else if (sc.ch == '$' && IsIdentifierCharEx(sc.chNext)) {
@@ -427,8 +426,8 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 				}
 			} else if (IsIdentifierStartEx(sc.ch)) {
 				chBefore = chPrevNonWhite;
-				if (sc.chPrev != '.') {
-					chBeforeIdentifier = sc.chPrev;
+				if (chPrevNonWhite != '.') {
+					chBeforeIdentifier = chPrevNonWhite;
 				}
 				sc.SetState(SCE_SWIFT_IDENTIFIER);
 			} else if (sc.ch == '+' || sc.ch == '-') {
@@ -439,7 +438,7 @@ void ColouriseSwiftDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initS
 				} else {
 					sc.SetState(SCE_SWIFT_OPERATOR);
 				}
-			} else if (isoperator(sc.ch) || sc.ch == '\\') {
+			} else if (IsAGraphic(sc.ch)) {
 				sc.SetState(SCE_SWIFT_OPERATOR);
 				if (!nestedState.empty()) {
 					if (sc.ch == '(') {

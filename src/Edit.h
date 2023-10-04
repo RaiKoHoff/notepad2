@@ -160,10 +160,10 @@ void	EditSpacesToTabs(int nTabWidth, bool bOnlyIndentingWS);
 
 void	EditMoveUp(void);
 void	EditMoveDown(void);
-void	EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend);
+void	EditModifyLines(LPCWSTR pwszPrefix, LPCWSTR pwszAppend, bool skipEmptyLine);
 void	EditAlignText(EditAlignMode nMode);
 void	EditEncloseSelection(LPCWSTR pwszOpen, LPCWSTR pwszClose);
-void	EditToggleLineComments(LPCWSTR pwszComment, bool bInsertAtStart);
+void	EditToggleLineComments(LPCWSTR pwszComment, int commentFlag);
 void	EditPadWithSpaces(bool bSkipEmpty, bool bNoUndoGroup);
 void	EditStripFirstCharacter(void);
 void	EditStripLastCharacter(void);
@@ -311,8 +311,10 @@ enum {
 	AutoInsertMask_SingleQuote = 32,		// ''
 	AutoInsertMask_Backtick = 64,			// ``
 	AutoInsertMask_SpaceAfterComma = 128,	// ', '
+	AutoInsertMask_CommentAtStart = true,	// '// '
+	AutoInsertMask_SpaceAfterComment = 256,	// '// '
 	// default settings
-	AutoInsertMask_Default = 255,
+	AutoInsertMask_Default = 511,
 };
 
 // asm line comment
@@ -364,10 +366,36 @@ bool	EditIsOpenBraceMatched(Sci_Position pos, Sci_Position startPos);
 void	EditAutoCloseBraceQuote(int ch, AutoInsertCharacter what);
 void	EditAutoCloseXMLTag(void);
 void	EditAutoIndent(void);
-void	EditToggleCommentLine(void);
-void	EditToggleCommentBlock(void);
+void	EditToggleCommentLine(bool alternative);
+void	EditToggleCommentBlock(bool alternative);
 void	EditInsertScriptShebangLine(void);
-void	EditShowCallTips(Sci_Position position);
+
+typedef enum CallTipType {
+	CallTipType_None,
+	CallTipType_Notification,
+	CallTipType_ColorHex,
+} CallTipType;
+
+typedef enum ShowCallTip {
+	ShowCallTip_None,
+	ShowCallTip_ColorRGBA,
+	ShowCallTip_ColorARGB,
+	ShowCallTip_ColorBGRA,
+	ShowCallTip_ColorABGR,
+} ShowCallTip;
+
+struct CallTipInfo {
+	ShowCallTip showCallTip;
+	CallTipType type;
+	Sci_Position startPos;
+	Sci_Position endPos;
+	Sci_Position hexStart;
+	COLORREF currentColor;
+	//COLORREF backColor;
+	//COLORREF foreColor;
+};
+void	EditShowCallTip(Sci_Position position);
+void	EditClickCallTip(HWND hwnd);
 
 #define NCP_DEFAULT					1
 #define NCP_UTF8					2
@@ -554,7 +582,7 @@ typedef struct EditTabSettings {
 	int 	globalIndentWidth;
 	bool	globalTabsAsSpaces;
 	bool	bTabIndents;
-	bool	bBackspaceUnindents;
+	uint8_t	bBackspaceUnindents;
 	bool	bDetectIndentation;
 
 	int		schemeTabWidth;

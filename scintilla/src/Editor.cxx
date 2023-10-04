@@ -129,15 +129,15 @@ Editor::Editor() {
 	mouseDownCaptures = true;
 	mouseWheelCaptures = true;
 
-	lastClickTime = 0;
 	doubleClickCloseThreshold = Point(3, 3);
+	lastClickTime = 0;
 	dwellDelay = TimeForever;
 	ticksToDwell = TimeForever;
 	dwelling = false;
+	dropWentOutside = false;
+	inDragDrop = DragDrop::none;
 	ptMouseLast.x = 0;
 	ptMouseLast.y = 0;
-	inDragDrop = DragDrop::none;
-	dropWentOutside = false;
 	posDrop = SelectionPosition(Sci::invalidPosition);
 	hotSpotClickPos = Sci::invalidPosition;
 	selectionUnit = TextUnit::character;
@@ -188,15 +188,15 @@ Editor::Editor() {
 	idleStyling = IdleStyling::None;
 	needIdleStyling = false;
 
+	recordingMacro = false;
+	convertPastes = true;
+
 	commandEvents = true;
 	modEventMask = ModificationFlags::EventMaskAll;
 
-	pdoc->AddWatcher(this, nullptr);
-
-	recordingMacro = false;
-	convertPastes = true;
 	foldAutomatic = AutomaticFold::None;
 
+	pdoc->AddWatcher(this, nullptr);
 	SetRepresentations();
 }
 
@@ -912,7 +912,7 @@ SelectionPosition Editor::MovePositionSoVisible(Sci::Position pos, int moveDir) 
 }
 
 Point Editor::PointMainCaret() {
-	return LocationFromPosition(sel.Range(sel.Main()).caret);
+	return LocationFromPosition(sel.RangeMain().caret);
 }
 
 /**
@@ -1554,7 +1554,7 @@ bool Editor::WrapBlock(Surface *surface, Sci::Line lineToWrap, Sci::Line lineToW
 		}
 		wrapPending.Wrapped(lineNumber);
 	}
-	return wrapOccurred;;
+	return wrapOccurred;
 }
 
 // Perform  wrapping for a subset of the lines needing wrapping.
@@ -2378,12 +2378,12 @@ bool Editor::BackspaceUnindent(Sci::Position lineCurrentPos, Sci::Position caret
 		if (indentationChange == 0) {
 			indentationChange = indentationStep;
 		}
-		if (column <= indentation && pdoc->backspaceUnindents) {
+		if (column <= indentation && (pdoc->backspaceUnindents & 1)) {
 			//const UndoGroup ugInner(pdoc, !ug.Needed());
 			*posSelect = pdoc->SetLineIndentation(lineCurrentPos, indentation - indentationChange);
 			return true;
 		}
-		if (indentationChange > 1) {
+		if (indentationChange > 1 && (pdoc->backspaceUnindents & 2)) {
 			const Sci_Position minPos = std::max(lineCurrentPos, caretPosition - indentationChange);
 			Sci::Position pos = caretPosition - 1;
 			while (pos >= minPos && pdoc->CharAt(pos) == ' ') {
@@ -3308,7 +3308,7 @@ void Editor::CursorUpOrDown(int direction, Selection::SelTypes selt) {
 	if ((selt == Selection::SelTypes::none) && sel.MoveExtends()) {
 		selt = !sel.IsRectangular() ? Selection::SelTypes::stream : Selection::SelTypes::rectangle;
 	}
-	SelectionPosition caretToUse = sel.Range(sel.Main()).caret;
+	SelectionPosition caretToUse = sel.RangeMain().caret;
 	if (sel.IsRectangular()) {
 		if (selt == Selection::SelTypes::none) {
 			caretToUse = (direction > 0) ? sel.Limits().end : sel.Limits().start;
@@ -3332,7 +3332,7 @@ void Editor::CursorUpOrDown(int direction, Selection::SelTypes selt) {
 		// Calculate new caret position and call SetSelection(), which will ensure whole lines are selected.
 		const SelectionPosition posNew = MovePositionSoVisible(
 			PositionUpOrDown(caretToUse, direction, -1), direction);
-		SetSelection(posNew, sel.Range(sel.Main()).anchor);
+		SetSelection(posNew, sel.RangeMain().anchor);
 	} else {
 		InvalidateWholeSelection();
 		if (!additionalSelectionTyping || (sel.IsRectangular())) {
@@ -6857,7 +6857,7 @@ sptr_t Editor::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		return pdoc->tabIndents;
 
 	case Message::SetBackSpaceUnIndents:
-		pdoc->backspaceUnindents = wParam != 0;
+		pdoc->backspaceUnindents = static_cast<uint8_t>(wParam);
 		break;
 
 	case Message::GetBackSpaceUnIndents:
@@ -7955,7 +7955,7 @@ sptr_t Editor::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		InvalidateStyleRedraw();
 		break;
 
-	case  Message::GetEdgeColour:
+	case Message::GetEdgeColour:
 		return vs.theEdge.colour.OpaqueRGB();
 
 	case Message::SetEdgeColour:
@@ -8319,7 +8319,7 @@ sptr_t Editor::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 			return st.style;
 		}
 
-	case  Message::MarginSetStyles:
+	case Message::MarginSetStyles:
 		pdoc->MarginSetStyles(LineFromUPtr(wParam), ConstUCharPtrFromSPtr(lParam));
 		break;
 

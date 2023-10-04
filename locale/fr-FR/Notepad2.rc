@@ -217,7 +217,7 @@ BEGIN
 			MENUITEM "&Dupliquer\tAlt+D",				IDM_EDIT_SELECTIONDUPLICATE
 			MENUITEM SEPARATOR
 			MENUITEM "Déplier les commentaires\tCtrl+/",	IDM_EDIT_LINECOMMENT
-			MENUITEM "Commenter un bloc\tCtrl+Q",			IDM_EDIT_STREAMCOMMENT
+			MENUITEM "Toggle Block &Comment\tCtrl+Q",	IDM_EDIT_STREAMCOMMENT
 			MENUITEM "&Indenter\tTab",					IDM_EDIT_INDENT
 			MENUITEM "&Désindenter\tShift+Tab",			IDM_EDIT_UNINDENT
 			MENUITEM SEPARATOR
@@ -428,7 +428,6 @@ BEGIN
 		MENUITEM "Afficher les fin de lignes\tCtrl+Shift+9",		IDM_VIEW_SHOWEOLS
 		MENUITEM "Afficher la marque de retour à la ligne automatique\tCtrl+Shift+0",		IDM_VIEW_WORDWRAPSYMBOLS
 		MENUITEM "Afficher les caractères de contrôle unicode",				IDM_VIEW_UNICODE_CONTROL_CHAR
-		//MENUITEM "Afficher les astuces de call",						IDM_VIEW_SHOWCALLTIPS
 		MENUITEM SEPARATOR
 		MENUITEM "Visualisation de la paranthèse fermante\tCtrl+Shift+V",	IDM_VIEW_MATCHBRACES
 		MENUITEM "Surligner la ligne courante",				IDM_VIEW_HIGHLIGHTCURRENT_BLOCK
@@ -446,6 +445,14 @@ BEGIN
 			MENUITEM "Casse correspondante",					IDM_VIEW_MARKOCCURRENCES_CASE
 			MENUITEM "Mot correspondant seulement",		IDM_VIEW_MARKOCCURRENCES_WORD
 			MENUITEM "Marque-page ligne correspondante",		IDM_VIEW_MARKOCCURRENCES_BOOKMARK
+		END
+		POPUP "Show CallTi&p"
+		BEGIN
+			MENUITEM "&Off",						IDM_VIEW_SHOWCALLTIP_OFF
+			MENUITEM "&RGBA Color",					IDM_VIEW_SHOWCALLTIP_RGBA
+			MENUITEM "AR&GB Color",					IDM_VIEW_SHOWCALLTIP_ARGB
+			MENUITEM "&BGRA Color",					IDM_VIEW_SHOWCALLTIP_BGRA
+			MENUITEM "&ABGR Color",					IDM_VIEW_SHOWCALLTIP_ABGR
 		END
 		MENUITEM SEPARATOR
 		MENUITEM "Voir les numéros de ligne\tCtrl+Shift+N",		IDM_VIEW_LINENUMBERS
@@ -507,6 +514,13 @@ BEGIN
 			MENUITEM "&Less Style Sheet",			IDM_LEXER_LESS
 			MENUITEM "&HSS Style Sheet",			IDM_LEXER_HSS
 		END
+		POPUP "&JavaScript"
+		BEGIN
+			MENUITEM "&JavaScript",				IDM_LEXER_JAVASCRIPT
+			MENUITEM "Java&Script JSX",			IDM_LEXER_JAVASCRIPT_JSX
+			MENUITEM "&TypeScript",				IDM_LEXER_TYPESCRIPT
+			MENUITEM "TypeScript TS&X",			IDM_LEXER_TYPESCRIPT_TSX
+		END
 		POPUP "Code source Web "
 		BEGIN
 			MENUITEM "Code source Web",			IDM_LEXER_WEB
@@ -516,6 +530,7 @@ BEGIN
 			MENUITEM "ASP.NET (&VB.NET)",			IDM_LEXER_ASPX_VB
 			MENUITEM "ASP (V&BScript)",				IDM_LEXER_ASP_VBS
 			MENUITEM "ASP (J&Script)",				IDM_LEXER_ASP_JS
+			MENUITEM "Configuration Apache",				IDM_LEXER_APACHE
 		END
 		POPUP "Mark&down"
 		BEGIN
@@ -525,6 +540,7 @@ BEGIN
 		END
 		POPUP "&Math"
 		BEGIN
+			MENUITEM "Mathematica",					IDM_LEXER_MATHEMATICA
 			MENUITEM "&MATLAB",						IDM_LEXER_MATLAB
 			MENUITEM "&Octave",						IDM_LEXER_OCTAVE
 			MENUITEM "&Scilab",						IDM_LEXER_SCILAB
@@ -542,39 +558,7 @@ BEGIN
 			MENUITEM "Schéma XML",					IDM_LEXER_XSD
 			MENUITEM "Feuille de style XSLT",			IDM_LEXER_XSLT
 			MENUITEM "DTD XML",					IDM_LEXER_DTD
-		END
-		POPUP "XML (&Java)"
-		BEGIN
-			MENUITEM "Ant &Build",					IDM_LEXER_ANT_BUILD
-			MENUITEM "Maven &POM",					IDM_LEXER_MAVEN_POM
-			MENUITEM "Réglages Maven",				IDM_LEXER_MAVEN_SETTINGS
-			MENUITEM "Module I&vy",					IDM_LEXER_IVY_MODULE
-			MENUITEM "régalges &Ivy",				IDM_LEXER_IVY_SETTINGS
-			MENUITEM "Ensemble de règles PMD",				IDM_LEXER_PMD_RULESET
-			MENUITEM "&Checkstyle",					IDM_LEXER_CHECKSTYLE
-		END
-		POPUP "Configuration Web"
-		BEGIN
-			MENUITEM "Configuration Apache",				IDM_LEXER_APACHE
-			MENUITEM "Configuration Tomcat",				IDM_LEXER_TOMCAT
-			MENUITEM "Configuration web",					IDM_LEXER_WEB_JAVA
-			MENUITEM "Configuration struts",				IDM_LEXER_STRUTS
-			MENUITEM "Configuration Hibernate",			IDM_LEXER_HIB_CFG
-			MENUITEM "Mapping Hibernate",			IDM_LEXER_HIB_MAP
-			MENUITEM "Spring &Beans",				IDM_LEXER_SPRING_BEANS
-			MENUITEM "Configuration &JBoss",				IDM_LEXER_JBOSS
-		END
-		//POPUP "XML (.&NET)"
-		//BEGIN
-		//	MENUITEM "Configuration web",					IDM_LEXER_WEB_NET
-		//	MENUITEM "Ressources &ResX",				IDM_LEXER_RESX
-		//	MENUITEM "WPF &XAML",					IDM_LEXER_XAML
-		//END
-		POPUP "XML (Autres)"
-		BEGIN
 			MENUITEM "Liste de propriétés",				IDM_LEXER_PROPERTY_LIST
-			MENUITEM "Manifest Android",			IDM_LEXER_ANDROID_MANIFEST
-			MENUITEM "Mise en page Android",				IDM_LEXER_ANDROID_LAYOUT
 			//MENUITEM "Document SV&G",				IDM_LEXER_SVG
 		END
 	END
@@ -737,6 +721,7 @@ BEGIN
 		BEGIN
 			MENUITEM "Encodage standard",							IDM_EDIT_BASE64_ENCODE
 			MENUITEM "Encodage sans risque des URL",							IDM_EDIT_BASE64_SAFE_ENCODE
+			MENUITEM "Encode as HTML Embedded &Image",		IDM_EDIT_BASE64_HTML_EMBEDDED_IMAGE
 			MENUITEM "&Décoder",										IDM_EDIT_BASE64_DECODE
 			MENUITEM "Decoder (forme hexadécimale)",								IDM_EDIT_BASE64_DECODE_AS_HEX
 		END
@@ -1274,7 +1259,7 @@ BEGIN
     AUTORADIOBUTTON "Aucune.",IDC_CHANGENOTIFY_NONE,7,7,35,10,WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "Afficher le message.",IDC_CHANGENOTIFY_SHOW_MSG,7,19,71,10,WS_TABSTOP
     AUTORADIOBUTTON "Recharger automatiquement la version actuelle (aucune modification).",IDC_CHANGENOTIFY_AUTO_RELOAD,7,31,114,10,WS_TABSTOP
-    AUTOCHECKBOX    "Détecter le changement extérieur dans un fichier par sondage plutôt que par notification.",IDC_CHANGENOTIFY_USE_POLLING,7,48,184,10,WS_TABSTOP
+    AUTOCHECKBOX    "&Monitor continuously updated file (e.g. log file).",IDC_CHANGENOTIFY_LOG_FILE,7,48,184,10,WS_TABSTOP
     AUTOCHECKBOX    "Garder à la fin du document après rechargement.",IDC_CHANGENOTIFY_KEEP_AT_END,7,60,184,10,WS_TABSTOP
     AUTOCHECKBOX    "Remettre à zéro si le document est ouvert.",IDC_CHANGENOTIFY_RESET_WATCH,7,72,184,10,WS_TABSTOP
     DEFPUSHBUTTON   "OK",IDOK,139,7,50,14
@@ -1324,7 +1309,7 @@ BEGIN
     SCROLLBAR       IDC_RESIZEGRIP3,7,217,10,10
 END
 
-IDD_TABSETTINGS DIALOGEX 0, 0, 232, 197
+IDD_TABSETTINGS DIALOGEX 0, 0, 232, 209
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Réglage de tabulation"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
@@ -1351,9 +1336,10 @@ BEGIN
     AUTOCHECKBOX    "Utiliser les réglages du thème.",IDC_FILE_USE_SCHEME_TAB,118,114,101,10,WS_TABSTOP
     AUTOCHECKBOX    "La touche tabulation permet de reformater les indentations.",IDC_TAB_INDENT,7,135,160,10,WS_TABSTOP
     AUTOCHECKBOX    "La touche retour arrière permet de reformater les indentations.",IDC_BACKSPACE_UNINDENT,7,147,160,10,WS_TABSTOP
-    AUTOCHECKBOX    "Détecter automatiquement les réglages de tabulation et d'indentation.",IDC_DETECT_INDENTATION,7,159,160,10,WS_TABSTOP
-    DEFPUSHBUTTON   "OK",IDOK,119,176,50,14
-    PUSHBUTTON      "Annuler",IDCANCEL,175,176,50,14
+    AUTOCHECKBOX    "Backspace key sma&rt delete spaces.",IDC_BACKSPACE_SMARTDEL,7,159,160,10,WS_TABSTOP
+    AUTOCHECKBOX    "Détecter automatiquement les réglages de tabulation et d'indentation.",IDC_DETECT_INDENTATION,7,171,160,10,WS_TABSTOP
+    DEFPUSHBUTTON   "OK",IDOK,119,188,50,14
+    PUSHBUTTON      "Annuler",IDCANCEL,175,188,50,14
 END
 
 IDD_LONGLINES DIALOGEX 0, 0, 184, 55
@@ -1473,6 +1459,7 @@ BEGIN
     LTEXT           "&Ajouter le text aux lignes:",IDC_MODIFY_LINE_TIP2,7,41,97,8
     EDITTEXT        IDC_MODIFY_LINE_APPEND,7,52,246,18,ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL | ES_WANTRETURN
     DEFPUSHBUTTON   "OK",IDOK,147,108,50,14
+    AUTOCHECKBOX    "&Skip empty lines.",IDC_MODIFY_LINE_SKIP_EMPTY,7,108,96,14,WS_TABSTOP
     PUSHBUTTON      "Annuler",IDCANCEL,203,108,50,14
     LTEXT           "$(L)",IDC_MODIFY_LINE_DLN_NP,7,76,21,8
     LTEXT           "$(0L)",IDC_MODIFY_LINE_DLN_ZP,27,76,27,8
@@ -1642,13 +1629,14 @@ BEGIN
     AUTOCHECKBOX    "Indentation automatique du texte.",IDC_AUTO_INDENT_TEXT,231,7,200,10,WS_TABSTOP
     AUTOCHECKBOX    "Fermeture automatique des balises HTML et XML.",IDC_AUTO_CLOSE_TAGS,231,19,200,10,WS_TABSTOP
     AUTOCHECKBOX    "Instertion automatique d'espace après avoir tapé une virgule (,) si approprié.",IDC_AUTO_INSERT_SPACE_COMMA,231,31,218,10,WS_TABSTOP
-    GROUPBOX        "Ajout automatique des parenthèses et guillemets fermants",IDC_STATIC,231,44,218,61
-    AUTOCHECKBOX    "( )",IDC_AUTO_INSERT_PARENTHESIS,238,56,40,10,WS_TABSTOP
-    AUTOCHECKBOX    "{ }",IDC_AUTO_INSERT_BRACE,290,56,40,10,WS_TABSTOP
-    AUTOCHECKBOX    "[ ]",IDC_AUTO_INSERT_SQUARE_BRACKET,342,56,40,10,WS_TABSTOP
-    AUTOCHECKBOX    "< >",IDC_AUTO_INSERT_ANGLE_BRACKET,394,56,40,10,WS_TABSTOP
-    AUTOCHECKBOX    "Double guillemets ("""").",IDC_AUTO_INSERT_DOUBLE_QUOTE,238,68,100,10,WS_TABSTOP
-    AUTOCHECKBOX    "Simple guillemets ('').",IDC_AUTO_INSERT_SINGLE_QUOTE,238,80,100,10,WS_TABSTOP
+    AUTOCHECKBOX    "Insert space after comment marker on toggle line comment.",IDC_AUTO_INSERT_SPACE_COMMENT,231,43,218,10,WS_TABSTOP
+    GROUPBOX        "Ajout automatique des parenthèses et guillemets fermants",IDC_STATIC,231,56,218,49
+    AUTOCHECKBOX    "( )",IDC_AUTO_INSERT_PARENTHESIS,238,68,40,10,WS_TABSTOP
+    AUTOCHECKBOX    "{ }",IDC_AUTO_INSERT_BRACE,290,68,40,10,WS_TABSTOP
+    AUTOCHECKBOX    "[ ]",IDC_AUTO_INSERT_SQUARE_BRACKET,342,68,40,10,WS_TABSTOP
+    AUTOCHECKBOX    "< >",IDC_AUTO_INSERT_ANGLE_BRACKET,394,68,40,10,WS_TABSTOP
+    AUTOCHECKBOX    "Double guillemets ("""").",IDC_AUTO_INSERT_DOUBLE_QUOTE,238,80,100,10,WS_TABSTOP
+    AUTOCHECKBOX    "Simple guillemets ('').",IDC_AUTO_INSERT_SINGLE_QUOTE,342,80,100,10,WS_TABSTOP
     AUTOCHECKBOX    "Backticks (``).",IDC_AUTO_INSERT_BACKTICK,238,92,100,10,WS_TABSTOP
 
     GROUPBOX        "Auto completion scanning word inside:",IDC_STATIC,231,111,218,26

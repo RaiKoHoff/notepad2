@@ -1332,7 +1332,7 @@ static INT_PTR CALLBACK ChangeNotifyDlgProc(HWND hwnd, UINT umsg, WPARAM wParam,
 	case WM_INITDIALOG:
 		CheckRadioButton(hwnd, IDC_CHANGENOTIFY_NONE, IDC_CHANGENOTIFY_AUTO_RELOAD, IDC_CHANGENOTIFY_NONE + (int)iFileWatchingMode);
 		if (iFileWatchingMethod) {
-			CheckDlgButton(hwnd, IDC_CHANGENOTIFY_USE_POLLING, BST_CHECKED);
+			CheckDlgButton(hwnd, IDC_CHANGENOTIFY_LOG_FILE, BST_CHECKED);
 		}
 		if (bFileWatchingKeepAtEnd) {
 			CheckDlgButton(hwnd, IDC_CHANGENOTIFY_KEEP_AT_END, BST_CHECKED);
@@ -1347,7 +1347,7 @@ static INT_PTR CALLBACK ChangeNotifyDlgProc(HWND hwnd, UINT umsg, WPARAM wParam,
 		switch (LOWORD(wParam)) {
 		case IDOK:
 			iFileWatchingMode = (FileWatchingMode)(GetCheckedRadioButton(hwnd, IDC_CHANGENOTIFY_NONE, IDC_CHANGENOTIFY_AUTO_RELOAD) - IDC_CHANGENOTIFY_NONE);
-			iFileWatchingMethod = IsButtonChecked(hwnd, IDC_CHANGENOTIFY_USE_POLLING);
+			iFileWatchingMethod = IsButtonChecked(hwnd, IDC_CHANGENOTIFY_LOG_FILE);
 			bFileWatchingKeepAtEnd = IsButtonChecked(hwnd, IDC_CHANGENOTIFY_KEEP_AT_END);
 			bResetFileWatching = IsButtonChecked(hwnd, IDC_CHANGENOTIFY_RESET_WATCH);
 			EndDialog(hwnd, IDOK);
@@ -1684,7 +1684,10 @@ static INT_PTR CALLBACK TabSettingsDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, 
 		if (fvCurFile.bTabIndents) {
 			CheckDlgButton(hwnd, IDC_TAB_INDENT, BST_CHECKED);
 		}
-		if (tabSettings.bBackspaceUnindents) {
+		if (tabSettings.bBackspaceUnindents & 2) {
+			CheckDlgButton(hwnd, IDC_BACKSPACE_SMARTDEL, BST_CHECKED);
+		}
+		if (tabSettings.bBackspaceUnindents & 1) {
 			CheckDlgButton(hwnd, IDC_BACKSPACE_UNINDENT, BST_CHECKED);
 		}
 		if (tabSettings.bDetectIndentation) {
@@ -1759,6 +1762,9 @@ static INT_PTR CALLBACK TabSettingsDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, 
 			fvCurFile.bTabIndents = IsButtonChecked(hwnd, IDC_TAB_INDENT);
 			tabSettings.bTabIndents = fvCurFile.bTabIndents;
 			tabSettings.bBackspaceUnindents = IsButtonChecked(hwnd, IDC_BACKSPACE_UNINDENT);
+			if (IsButtonChecked(hwnd, IDC_BACKSPACE_SMARTDEL)) {
+				tabSettings.bBackspaceUnindents |= 2;
+			}
 			tabSettings.bDetectIndentation = IsButtonChecked(hwnd, IDC_DETECT_INDENTATION);
 			Style_SaveTabSettings(pLexCurrent);
 			EndDialog(hwnd, IDOK);
@@ -2363,6 +2369,9 @@ static INT_PTR CALLBACK AutoCompletionSettingsDlgProc(HWND hwnd, UINT umsg, WPAR
 		if (mask & AutoInsertMask_SpaceAfterComma) {
 			CheckDlgButton(hwnd, IDC_AUTO_INSERT_SPACE_COMMA, BST_CHECKED);
 		}
+		if (mask & AutoInsertMask_SpaceAfterComment) {
+			CheckDlgButton(hwnd, IDC_AUTO_INSERT_SPACE_COMMENT, BST_CHECKED);
+		}
 
 		mask = autoCompletionConfig.iAsmLineCommentChar;
 		CheckRadioButton(hwnd, IDC_ASM_LINE_COMMENT_SEMICOLON, IDC_ASM_LINE_COMMENT_AT, IDC_ASM_LINE_COMMENT_SEMICOLON + mask);
@@ -2462,6 +2471,9 @@ static INT_PTR CALLBACK AutoCompletionSettingsDlgProc(HWND hwnd, UINT umsg, WPAR
 			}
 			if (IsButtonChecked(hwnd, IDC_AUTO_INSERT_SPACE_COMMA)) {
 				mask |= AutoInsertMask_SpaceAfterComma;
+			}
+			if (IsButtonChecked(hwnd, IDC_AUTO_INSERT_SPACE_COMMENT)) {
+				mask |= AutoInsertMask_SpaceAfterComment;
 			}
 
 			autoCompletionConfig.fAutoInsertMask = mask;
