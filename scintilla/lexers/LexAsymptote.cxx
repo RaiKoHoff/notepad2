@@ -182,10 +182,10 @@ void ColouriseAsyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 
 		if (sc.state == SCE_ASY_DEFAULT) {
 			if (sc.Match('/', '/')) {
+				sc.SetState(SCE_ASY_COMMENTLINE);
 				if (visibleChars == 0) {
 					lineStateLineType = AsymptoteLineStateMaskLineComment;
 				}
-				sc.SetState(SCE_ASY_COMMENTLINE);
 			} else if (sc.Match('/', '*')) {
 				sc.SetState(SCE_ASY_COMMENTBLOCK);
 				sc.Forward();
@@ -230,13 +230,7 @@ struct FoldLineState {
 	}
 };
 
-constexpr bool IsMultilineStringStyle(int style) noexcept {
-	return style == SCE_ASY_STRING_SQ
-		|| style == SCE_ASY_STRING_DQ
-		|| style == SCE_ASY_ESCAPECHAR;
-}
-
-void FoldAsyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
+void FoldAsyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList /*keywordLists*/, Accessor &styler) {
 	const Sci_PositionU endPos = startPos + lengthDoc;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	FoldLineState foldPrev(0);
@@ -266,18 +260,12 @@ void FoldAsyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 
 		switch (style) {
 		case SCE_ASY_COMMENTBLOCK:
-			if (style != stylePrev) {
-				levelNext++;
-			} else if (style != styleNext) {
-				levelNext--;
-			}
-			break;
-
 		case SCE_ASY_STRING_SQ:
 		case SCE_ASY_STRING_DQ:
-			if (!IsMultilineStringStyle(stylePrev)) {
+			if (style != stylePrev) {
 				levelNext++;
-			} else if (!IsMultilineStringStyle(styleNext)) {
+			}
+			if (style != styleNext) {
 				levelNext--;
 			}
 			break;
@@ -297,6 +285,7 @@ void FoldAsyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 		}
 		if (startPos == lineStartNext) {
 			const FoldLineState foldNext(styler.GetLineState(lineCurrent + 1));
+			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
 			} else if (foldCurrent.moduleImport) {
@@ -316,9 +305,7 @@ void FoldAsyDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 			if (levelUse < levelNext) {
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			}
-			if (lev != styler.LevelAt(lineCurrent)) {
-				styler.SetLevel(lineCurrent, lev);
-			}
+			styler.SetLevel(lineCurrent, lev);
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);

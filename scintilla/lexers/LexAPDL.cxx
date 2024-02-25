@@ -141,10 +141,10 @@ void ColouriseAPDLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				}
 			} else if (IsNumberStart(sc.ch, sc.chNext)) {
 				sc.SetState(SCE_APDL_NUMBER);
+				commandValue = 0;
 				if (visibleChars == 0) {
 					lineStateLineType = APDLLineStateDataLine;
 				}
-				commandValue = 0;
 			} else if (sc.ch == '"' || sc.ch == '\'') {
 				sc.SetState(SCE_APDL_STRING);
 				stringStartChar = sc.ch;
@@ -234,6 +234,7 @@ void FoldAPDLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle
 
 		if (startPos == lineStartNext) {
 			const FoldLineState foldNext(styler.GetLineState(lineCurrent + 1));
+			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
 			} else if (foldCurrent.dataLine) {
@@ -245,9 +246,7 @@ void FoldAPDLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle
 			if (levelUse < levelNext) {
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			}
-			if (lev != styler.LevelAt(lineCurrent)) {
-				styler.SetLevel(lineCurrent, lev);
-			}
+			styler.SetLevel(lineCurrent, lev);
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);

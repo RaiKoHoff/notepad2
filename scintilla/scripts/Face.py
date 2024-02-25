@@ -3,8 +3,6 @@
 # Released to the public domain.
 
 def sanitiseLine(line):
-	if line[-1:] == '\n':
-		line = line[:-1]
 	index = line.find("##")
 	if index >= 0:
 		line = line[:index]
@@ -105,7 +103,7 @@ class Face:
 							"Category": currentCategory, "Comment": currentComment
 						}
 						if currentCategory != 'Deprecated' and value in self.values:
-							raise Exception("Duplicate value " + value + " " + name + " on line:" + str(lineno))
+							raise Exception(f"Duplicate value {value} {name} on line: {lineno}")
 						self.values[value] = 1
 						self.order.append(name)
 						currentComment = []
@@ -118,7 +116,7 @@ class Face:
 							"Category": currentCategory, "Comment": currentComment
 						}
 						if value in self.events:
-							raise Exception("Duplicate event " + value + " " + name + " on line:" + str(lineno))
+							raise Exception(f"Duplicate event {value} {name} on line: {lineno}")
 						self.events[value] = 1
 						self.order.append(name)
 					elif featureType == "cat":

@@ -209,8 +209,7 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_SETMARGINS 2252
 #define SCI_GETMARGINS 2253
 #define STYLE_DEFAULT 0
-#define STYLE_LINK 32
-#define STYLE_LINENUMBER 33
+#define STYLE_LINENUMBER 32
 #define STYLE_BRACELIGHT 34
 #define STYLE_BRACEBAD 35
 #define STYLE_CONTROLCHAR 36
@@ -426,7 +425,7 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_AUTOCGETOPTIONS 2639
 #define SCI_AUTOCSETDROPRESTOFWORD 2270
 #define SCI_AUTOCGETDROPRESTOFWORD 2271
-#define SCI_SETAUTOINSERTMASK 2474
+#define SCI_SETAUTOINSERTMASK 2109
 #define SCI_REGISTERIMAGE 2405
 #define SCI_CLEARREGISTEREDIMAGES 2408
 #define SCI_AUTOCGETTYPESEPARATOR 2285
@@ -478,6 +477,7 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCFIND_NONE 0x0
 #define SCFIND_WHOLEWORD 0x2
 #define SCFIND_MATCHCASE 0x4
+#define SCFIND_MATCH_TO_WORD_END 0x8
 #define SCFIND_WORDSTART 0x00100000
 #define SCFIND_REGEXP 0x00200000
 #define SCFIND_POSIX 0x00400000
@@ -868,7 +868,9 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SC_SEL_LINES 2
 #define SC_SEL_THIN 3
 #define SCI_SETSELECTIONMODE 2422
+#define SCI_CHANGESELECTIONMODE 2659
 #define SCI_GETSELECTIONMODE 2423
+#define SCI_SETMOVEEXTENDSSELECTION 2719
 #define SCI_GETMOVEEXTENDSSELECTION 2706
 #define SCI_GETLINESELSTARTPOSITION 2424
 #define SCI_GETLINESELENDPOSITION 2425
@@ -1010,6 +1012,7 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_CLEARSELECTIONS 2571
 #define SCI_SETSELECTION 2572
 #define SCI_ADDSELECTION 2573
+#define SCI_SELECTIONFROMPOINT 2474
 #define SCI_DROPSELECTIONN 2671
 #define SCI_SETMAINSELECTION 2574
 #define SCI_GETMAINSELECTION 2575

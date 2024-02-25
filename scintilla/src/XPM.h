@@ -1,6 +1,6 @@
 // Scintilla source code edit control
 /** @file XPM.h
- ** Define a classes to hold image data in the X Pixmap (XPM) and RGBA formats.
+ ** Define classes to hold image data in the X Pixmap (XPM) and RGBA formats.
  **/
 // Copyright 1998-2003 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
@@ -15,9 +15,9 @@ class XPM final {
 	int height = 1;
 	int width = 1;
 	int nColours = 1;
+	int codeTransparent = ' ';
 	std::vector<unsigned char> pixels;
 	ColourRGBA colourCodeTable[256];
-	char codeTransparent = ' ';
 	ColourRGBA ColourFromCode(int ch) const noexcept;
 	void FillRun(Surface *surface, int code, int startX, int y, int x) const;
 public:

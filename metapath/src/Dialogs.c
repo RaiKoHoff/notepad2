@@ -195,7 +195,7 @@ INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) 
 		DLITEM dli;
 		dli.mask = DLI_FILENAME;
 		if (DirList_GetItem(hwndDirList, -1, &dli) >= 0) {
-			LPWSTR psz = (LPWSTR)PathFindFileName(dli.szFileName);
+			LPWSTR psz = PathFindFileName(dli.szFileName);
 			PathQuoteSpaces(psz);
 			Edit_SetText(hwndCtl, psz);
 		}
@@ -239,8 +239,9 @@ INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) 
 			WCHAR szFile[MAX_PATH * 2];
 
 			GetDlgItemText(hwnd, IDC_COMMANDLINE, szArgs, COUNTOF(szArgs));
-			ExpandEnvironmentStringsEx(szArgs, COUNTOF(szArgs));
 			ExtractFirstArgument(szArgs, szFile, szArg2);
+			ExpandEnvironmentStringsEx(szFile, COUNTOF(szFile));
+			ExpandEnvironmentStringsEx(szArg2, COUNTOF(szArg2));
 
 			WCHAR szTitle[32];
 			WCHAR szFilter[256];
@@ -302,13 +303,13 @@ INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam) 
 					ExtractFirstArgument(arg1 + 1, arg1, arg2);
 					DisplayPath(arg1, IDS_ERR_CMDLINE);
 				} else {
-					ExpandEnvironmentStringsEx(arg1, COUNTOF(arg1));
 					ExtractFirstArgument(arg1, arg1, arg2);
+					ExpandEnvironmentStringsEx(arg2, COUNTOF(arg2));
 
 					SHELLEXECUTEINFO sei;
 					memset(&sei, 0, sizeof(SHELLEXECUTEINFO));
 					sei.cbSize = sizeof(SHELLEXECUTEINFO);
-					sei.fMask = 0;
+					sei.fMask = SEE_MASK_DOENVSUBST;
 					sei.hwnd = hwnd;
 					sei.lpVerb = NULL;
 					sei.lpFile = arg1;
@@ -363,12 +364,13 @@ INT_PTR CALLBACK GotoDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 		ComboBox_SetExtendedUI(hwndGoto, TRUE);
 
 		for (int i = 0; i < HISTORY_ITEMS; i++) {
-			if (mHistory.psz[i]) {
-				const int iItem = ComboBox_FindStringExact(hwndGoto, -1, mHistory.psz[i]);
+			LPCWSTR path = mHistory.psz[i];
+			if (path) {
+				const int iItem = ComboBox_FindStringExact(hwndGoto, -1, path);
 				if (iItem != CB_ERR) {
 					ComboBox_DeleteString(hwndGoto, iItem);
 				}
-				ComboBox_InsertString(hwndGoto, 0, mHistory.psz[i]);
+				ComboBox_InsertString(hwndGoto, 0, path);
 			}
 		}
 
@@ -1541,6 +1543,7 @@ bool GetFilterDlg(HWND hwnd) {
 typedef struct FILEOPDLGDATA {
 	WCHAR szSource[MAX_PATH];
 	WCHAR szDestination[MAX_PATH];
+	LPMRULIST pmru;
 	UINT wFunc;
 } FILEOPDLGDATA, *LPFILEOPDLGDATA;
 
@@ -1651,7 +1654,7 @@ bool RenameFileDlg(HWND hwnd) {
 
 		// Generate fully qualified destination
 		lstrcpy(szFullDestination, dli.szFileName);
-		*((LPWSTR)PathFindFileName(szFullDestination)) = L'\0';
+		*(PathFindFileName(szFullDestination)) = L'\0';
 		lstrcat(szFullDestination, fod.szDestination);
 
 		// Double null terminated strings are essential!!!
@@ -1693,7 +1696,7 @@ INT_PTR CALLBACK CopyMoveDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lPa
 		SetDlgItemText(hwnd, IDC_SOURCE, lpfod->szSource);
 
 		HWND hwndDest = GetDlgItem(hwnd, IDC_DESTINATION);
-		MRU_LoadToCombobox(hwndDest, MRU_KEY_COPY_MOVE_HISTORY);
+		MRU_AddToCombobox(lpfod->pmru, hwndDest);
 		ComboBox_SetCurSel(hwndDest, 0);
 		ComboBox_LimitText(hwndDest, MAX_PATH - 1);
 		ComboBox_SetExtendedUI(hwndDest, TRUE);
@@ -1742,10 +1745,12 @@ INT_PTR CALLBACK CopyMoveDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lPa
 	case WM_NOTIFY: {
 		LPNMHDR pnmhdr = (LPNMHDR)lParam;
 		if (pnmhdr->idFrom == IDC_EMPTY_MRU && (pnmhdr->code == NM_CLICK || pnmhdr->code == NM_RETURN)) {
+			const LPCFILEOPDLGDATA lpfod = (LPCFILEOPDLGDATA)lParam;
 			WCHAR tch[MAX_PATH];
 			HWND hwndDest = GetDlgItem(hwnd, IDC_DESTINATION);
 			ComboBox_GetText(hwndDest, tch, COUNTOF(tch));
-			MRU_ClearCombobox(hwndDest, MRU_KEY_COPY_MOVE_HISTORY);
+			ComboBox_ResetContent(hwnd);
+			MRU_Empty(lpfod->pmru, true);
 			ComboBox_SetText(hwndDest, tch);
 		}
 	}
@@ -1807,10 +1812,14 @@ bool CopyMoveDlg(HWND hwnd, UINT *wFunc) {
 	}
 
 	FILEOPDLGDATA fod;
+	MRULIST mru;
+	fod.pmru = &mru;
 	fod.wFunc = *wFunc;
+	MRU_Init(&mru, MRU_KEY_COPY_MOVE_HISTORY, MRUFlags_FilePath);
 	lstrcpy(fod.szSource, PathFindFileName(dli.szFileName));
 
-	if (IDOK == ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_COPYMOVE), hwnd, CopyMoveDlgProc, (LPARAM)&fod)) {
+	const INT_PTR result = ThemedDialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_COPYMOVE), hwnd, CopyMoveDlgProc, (LPARAM)&fod);
+	if (IDOK == result) {
 		WCHAR tchSource[MAX_PATH + 4];
 		WCHAR tchDestination[MAX_PATH + 4];
 
@@ -1826,7 +1835,8 @@ bool CopyMoveDlg(HWND hwnd, UINT *wFunc) {
 		}
 
 		// Save item
-		MRU_AddOneItem(MRU_KEY_COPY_MOVE_HISTORY, fod.szDestination);
+		MRU_Add(&mru, fod.szDestination);
+		MRU_Save(&mru);
 		ExpandEnvironmentStringsEx(fod.szDestination, COUNTOF(fod.szDestination));
 
 		// Double null terminated strings are essential!!!
@@ -1860,9 +1870,10 @@ bool CopyMoveDlg(HWND hwnd, UINT *wFunc) {
 		}
 
 		*wFunc = fod.wFunc; // save state for next call
-		return true;
 	}
-	return false;
+
+	MRU_Empty(&mru, false);
+	return result == IDOK;
 }
 
 extern WCHAR tchOpenWithDir[MAX_PATH];

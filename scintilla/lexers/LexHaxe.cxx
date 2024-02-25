@@ -198,6 +198,7 @@ void ColouriseHaxeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 								// type[]
 								// type<type>
 								// type<type<type>>
+								// type<type, type>
 								sc.ChangeState(SCE_HAXE_CLASS);
 							}
 						}
@@ -330,13 +331,11 @@ void ColouriseHaxeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			} else if (IsAGraphic(sc.ch)) {
 				sc.SetState(SCE_HAXE_OPERATOR);
 				if (!nestedState.empty()) {
+					sc.ChangeState(SCE_HAXE_OPERATOR2);
 					if (sc.ch == '{') {
 						nestedState.push_back(SCE_HAXE_DEFAULT);
 					} else if (sc.ch == '}') {
 						const int outerState = TakeAndPop(nestedState);
-						if (outerState != SCE_HAXE_DEFAULT) {
-							sc.ChangeState(SCE_HAXE_OPERATOR2);
-						}
 						sc.ForwardSetState(outerState);
 						continue;
 					}
@@ -376,22 +375,7 @@ struct FoldLineState {
 	}
 };
 
-constexpr bool IsStreamCommentStyle(int style) noexcept {
-	return style == SCE_HAXE_COMMENTBLOCK
-		|| style == SCE_HAXE_COMMENTBLOCKDOC
-		|| style == SCE_HAXE_COMMENTTAGAT
-		|| style == SCE_HAXE_TASKMARKER;
-}
-
-constexpr bool IsMultilineStringStyle(int style) noexcept {
-	return style == SCE_HAXE_STRINGDQ
-		|| style == SCE_HAXE_STRINGSQ
-		|| style == SCE_HAXE_OPERATOR2
-		|| style == SCE_HAXE_VARIABLE2
-		|| style == SCE_HAXE_ESCAPECHAR;
-}
-
-void FoldHaxeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
+void FoldHaxeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList /*keywordLists*/, Accessor &styler) {
 	const Sci_PositionU endPos = startPos + lengthDoc;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	FoldLineState foldPrev(0);
@@ -425,31 +409,19 @@ void FoldHaxeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 		switch (style) {
 		case SCE_HAXE_COMMENTBLOCK:
 		case SCE_HAXE_COMMENTBLOCKDOC:
-			if (!IsStreamCommentStyle(stylePrev)) {
-				levelNext++;
-			} else if (!IsStreamCommentStyle(styleNext)) {
-				levelNext--;
-			}
-			break;
-
 		case SCE_HAXE_REGEX:
-			if (style != stylePrev) {
-				levelNext++;
-			} else if (style != styleNext) {
-				levelNext--;
-			}
-			break;
-
 		case SCE_HAXE_STRINGSQ:
 		case SCE_HAXE_STRINGDQ:
-			if (!IsMultilineStringStyle(stylePrev)) {
+			if (style != stylePrev) {
 				levelNext++;
-			} else if (!IsMultilineStringStyle(styleNext)) {
+			}
+			if (style != styleNext) {
 				levelNext--;
 			}
 			break;
 
 		case SCE_HAXE_OPERATOR:
+		case SCE_HAXE_OPERATOR2:
 			if (ch == '{' || ch == '[' || ch == '(') {
 				levelNext++;
 			} else if (ch == '}' || ch == ']' || ch == ')') {
@@ -473,6 +445,7 @@ void FoldHaxeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 		}
 		if (startPos == lineStartNext) {
 			const FoldLineState foldNext(styler.GetLineState(lineCurrent + 1));
+			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
 			} else if (foldCurrent.packageImport) {
@@ -493,9 +466,7 @@ void FoldHaxeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 			if (levelUse < levelNext) {
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			}
-			if (lev != styler.LevelAt(lineCurrent)) {
-				styler.SetLevel(lineCurrent, lev);
-			}
+			styler.SetLevel(lineCurrent, lev);
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);

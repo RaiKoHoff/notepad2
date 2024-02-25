@@ -1,11 +1,12 @@
 @ECHO OFF
 @rem used for GitHub Actions
-@rem need adjust path for MSYS2, mingw64, mingw32 and llvm-mingw for local use.
+@rem adjust path for MSYS2, mingw64, mingw32 and llvm-mingw for local use.
 
 SETLOCAL ENABLEEXTENSIONS
 CD /D %~dp0
 
-SET "JOBS=-j%NUMBER_OF_PROCESSORS%"
+SET /A "JOB_COUNT=(%NUMBER_OF_PROCESSORS% - 1) | 1"
+SET "JOBS=-j%JOB_COUNT%"
 SET "CLANG="
 SET "UCRT="
 SET "COMPILER=x86_64"

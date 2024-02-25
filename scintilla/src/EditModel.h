@@ -1,6 +1,6 @@
 // Scintilla source code edit control
 /** @file EditModel.h
- ** Defines the editor state that must be visible to EditorView.
+ ** Defines the editor state that must be visible to EditView.
  **/
 // Copyright 1998-2014 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
@@ -24,6 +24,8 @@ public:
 	Document *pdoc;
 	bool inOverstrike;
 	bool trackLineWidth;
+	bool hasFocus;
+	bool primarySelection;
 	int xOffset;		///< Horizontal scrolled amount in pixels
 
 	SpecialRepresentations reprs;
@@ -32,8 +34,6 @@ public:
 	Sci::Position braces[2];
 	int bracesMatchStyle;
 	int highlightGuideColumn;
-	bool hasFocus;
-	bool primarySelection;
 	Selection sel;
 
 	Scintilla::IMEInteraction imeInteraction;
@@ -58,7 +58,6 @@ public:
 	ActionDuration durationWrapOneUnit;
 	ActionDuration durationWrapOneThread;
 	static constexpr uint32_t IdleLineWrapTime = 250;
-	static constexpr uint32_t ActiveLineWrapTime = 500;
 	void *idleTaskTimer;
 
 	EditModel();

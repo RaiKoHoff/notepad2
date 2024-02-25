@@ -445,8 +445,9 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 			WCHAR szFile[MAX_PATH * 2];
 
 			GetDlgItemText(hwnd, IDC_COMMANDLINE, szArgs, COUNTOF(szArgs));
-			ExpandEnvironmentStringsEx(szArgs, COUNTOF(szArgs));
 			ExtractFirstArgument(szArgs, szFile, szArg2);
+			ExpandEnvironmentStringsEx(szFile, COUNTOF(szFile));
+			ExpandEnvironmentStringsEx(szArg2, COUNTOF(szArg2));
 
 			WCHAR szFilter[256];
 			GetString(IDS_FILTER_EXE, szFilter, COUNTOF(szFilter));
@@ -501,8 +502,8 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 				bool bQuickExit = false;
 				WCHAR arg2[MAX_PATH];
 
-				ExpandEnvironmentStringsEx(arg1, COUNTOF(arg1));
 				ExtractFirstArgument(arg1, arg1, arg2);
+				ExpandEnvironmentStringsEx(arg2, COUNTOF(arg2));
 
 				if (StrCaseEqual(arg1, L"notepad2") || StrCaseEqual(arg1, L"notepad2.exe")) {
 					GetModuleFileName(NULL, arg1, COUNTOF(arg1));
@@ -518,7 +519,7 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM l
 				SHELLEXECUTEINFO sei;
 				memset(&sei, 0, sizeof(SHELLEXECUTEINFO));
 				sei.cbSize = sizeof(SHELLEXECUTEINFO);
-				sei.fMask = 0;
+				sei.fMask = SEE_MASK_DOENVSUBST;
 				sei.hwnd = hwnd;
 				sei.lpVerb = NULL;
 				sei.lpFile = arg1;
@@ -980,7 +981,7 @@ bool AddToFavDlg(HWND hwnd, LPCWSTR lpszName, LPCWSTR lpszTarget) {
 // FileMRUDlgProc()
 //
 //
-extern LPMRULIST pFileMRU;
+extern MRULIST mruFile;
 extern bool bSaveRecentFiles;
 extern int cxFileMRUDlg;
 extern int cyFileMRUDlg;
@@ -1208,11 +1209,11 @@ static INT_PTR CALLBACK FileMRUDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 			}
 		} else if (pnmhdr->idFrom == IDC_EMPTY_MRU) {
 			if ((pnmhdr->code == NM_CLICK || pnmhdr->code == NM_RETURN)) {
-				MRU_Empty(pFileMRU);
+				MRU_Empty(&mruFile, false);
 				if (StrNotEmpty(szCurFile)) {
-					MRU_Add(pFileMRU, szCurFile);
+					MRU_Add(&mruFile, szCurFile);
 				}
-				MRU_Save(pFileMRU);
+				MRU_Save(&mruFile);
 				SendWMCommand(hwnd, IDC_FILEMRU_UPDATE_VIEW);
 			}
 		}
@@ -1237,12 +1238,10 @@ static INT_PTR CALLBACK FileMRUDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 						  SHGFI_USEFILEATTRIBUTES | SHGFI_SMALLICON | SHGFI_SYSICONINDEX);
 			lvi.iImage = shfi.iIcon;
 
-			WCHAR tch[MAX_PATH];
-			for (int i = 0; i < MRU_GetCount(pFileMRU); i++) {
-				MRU_Enum(pFileMRU, i, tch, COUNTOF(tch));
-				PathAbsoluteFromApp(tch, tch, true);
+			for (int i = 0; i < mruFile.iSize; i++) {
+				LPWSTR path = mruFile.pszItems[i];
 				lvi.iItem = i;
-				lvi.pszText = tch;
+				lvi.pszText = path;
 				ListView_InsertItem(hwndLV, &lvi);
 			}
 
@@ -1276,8 +1275,8 @@ static INT_PTR CALLBACK FileMRUDlgProc(HWND hwnd, UINT umsg, WPARAM wParam, LPAR
 				if (!PathIsFile(tch)) {
 					// Ask...
 					if (IDYES == MsgBoxWarn(MB_YESNO, IDS_ERR_MRUDLG)) {
-						MRU_Delete(pFileMRU, lvi.iItem);
-						MRU_DeleteFileFromStore(pFileMRU, tch);
+						MRU_DeleteFileFromStore(&mruFile, tch);
+						MRU_Delete(&mruFile, lvi.iItem);
 
 						// must use recreate the list, index might change...
 						//ListView_DeleteItem(hwndLV, lvi.iItem);

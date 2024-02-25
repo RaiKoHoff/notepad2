@@ -43,26 +43,26 @@ def buildGraphemeClusterBoundary():
 	table = graphemeClusterBoundary
 
 	# https://www.unicode.org/Public/UCD/latest/ucd/auxiliary/GraphemeBreakTest.html
-	notBreak = [
-		['Other', 'Extend', 'SpacingMark', 'ZWJ'],
-		['CR', 'LF'],
-		['Extend', 'Extend', 'SpacingMark', 'ZWJ'],
-		['RI', 'Extend', 'RI', 'SpacingMark', 'ZWJ'],
-		['Prepend', 'Other', 'Extend', 'RI', 'Prepend', 'SpacingMark', 'L', 'V', 'T', 'LV', 'LVT', 'ExtPict', 'ZWJ'],
-		['SpacingMark', 'Extend', 'SpacingMark', 'ZWJ'],
-		['L', 'Extend', 'SpacingMark', 'L', 'V', 'LV', 'LVT', 'ZWJ'],
-		['V', 'Extend', 'SpacingMark', 'V', 'T', 'ZWJ'],
-		['T', 'Extend', 'SpacingMark', 'T', 'ZWJ'],
-		['LV', 'Extend', 'SpacingMark', 'V', 'T', 'ZWJ'],
-		['LVT', 'Extend', 'SpacingMark', 'T', 'ZWJ'],
-		['ExtPict', 'Extend', 'SpacingMark', 'ZWJ'],
-		#['ZWJ', 'Extend', 'SpacingMark', 'ZWJ'],
-		['ZWJ', 'Extend', 'SpacingMark', 'ExtPict', 'ZWJ'],
-	]
+	notBreak = {
+		'Other': ['Extend', 'SpacingMark', 'ZWJ'],
+		'CR': ['LF'],
+		'Extend': ['Extend', 'SpacingMark', 'ZWJ'],
+		'RI': ['Extend', 'RI', 'SpacingMark', 'ZWJ'],
+		'Prepend': ['Other', 'Extend', 'RI', 'Prepend', 'SpacingMark', 'L', 'V', 'T', 'LV', 'LVT', 'ExtPict', 'ZWJ'],
+		'SpacingMark': ['Extend', 'SpacingMark', 'ZWJ'],
+		'L': ['Extend', 'SpacingMark', 'L', 'V', 'LV', 'LVT', 'ZWJ'],
+		'V': ['Extend', 'SpacingMark', 'V', 'T', 'ZWJ'],
+		'T': ['Extend', 'SpacingMark', 'T', 'ZWJ'],
+		'LV': ['Extend', 'SpacingMark', 'V', 'T', 'ZWJ'],
+		'LVT': ['Extend', 'SpacingMark', 'T', 'ZWJ'],
+		'ExtPict': ['Extend', 'SpacingMark', 'ZWJ'],
+		#'ZWJ': ['Extend', 'SpacingMark', 'ZWJ'],
+		'ZWJ': ['Extend', 'SpacingMark', 'ExtPict', 'ZWJ'],
+	}
 
-	for row in notBreak:
-		first = GraphemeBreakPropertyMap[row[0]]
-		for item in row[1:]:
+	for key, row in notBreak.items():
+		first = GraphemeBreakPropertyMap[key]
+		for item in row:
 			second = GraphemeBreakPropertyMap[item]
 			table[first] &= ~(1 << second)
 
@@ -76,19 +76,19 @@ def buildGraphemeClusterBoundary():
 					current = GraphemeBreakProperty(j)
 					print('same row and column:', prev.name, current.name)
 
-def findLongestCharacterSquence(path):
-	longestSquenceCount = 0
-	longestSquenceBytes = 0
+def findLongestCharacterSequence(path):
+	longestSequenceCount = 0
+	longestSequenceBytes = 0
 	version, propertyList = readUnicodePropertyFile(path)
 	for codeList in propertyList.values():
-		for squence in codeList:
-			character = ''.join(chr(code) for code in squence)
-			assert len(squence) == len(character)
-			longestSquenceCount = max(longestSquenceCount, len(squence))
-			longestSquenceBytes = max(longestSquenceBytes, len(character.encode('utf-8')))
+		for sequence in codeList:
+			character = ''.join(chr(code) for code in sequence)
+			assert len(sequence) == len(character)
+			longestSequenceCount = max(longestSequenceCount, len(sequence))
+			longestSequenceBytes = max(longestSequenceBytes, len(character.encode('utf-8')))
 
-	print(path, 'longest character squence:', longestSquenceCount, longestSquenceBytes)
-	return longestSquenceCount, longestSquenceBytes
+	print(path, 'longest character sequence:', longestSequenceCount, longestSequenceBytes)
+	return longestSequenceCount, longestSequenceBytes
 
 def testGraphemeBreak(path, graphemeBreakTable):
 	opportunity = '×÷'
@@ -103,21 +103,21 @@ def testGraphemeBreak(path, graphemeBreakTable):
 			if not line or line[0] == '#':
 				continue
 
-			squence = line.split('#', 2)[0].split()
+			sequence = line.split('#', 2)[0].split()
 			# break at the start and end of text
-			assert squence[0] == allow, (lineno, squence)
-			assert squence[-1] == allow, (lineno, squence)
-			for index in range(1, len(squence) - 2, 2):
-				ch = squence[index]
-				offcial = squence[index + 1]
-				chNext = squence[index + 2]
+			assert sequence[0] == allow, (lineno, sequence)
+			assert sequence[-1] == allow, (lineno, sequence)
+			for index in range(1, len(sequence) - 2, 2):
+				ch = sequence[index]
+				official = sequence[index + 1]
+				chNext = sequence[index + 2]
 				prop = GraphemeBreakProperty(graphemeBreakTable[int(ch, 16)])
 				propNext = GraphemeBreakProperty(graphemeBreakTable[int(chNext, 16)])
 				value = opportunity[(graphemeClusterBoundary[prop] >> propNext) & 1]
 				totalCount += 1
-				if value != offcial:
+				if value != official:
 					failCount += 1
-					print(f'test fail on line {lineno}: {ch} {offcial} {chNext} => {prop.name} {value} {propNext.name}')
+					print(f'test fail on line {lineno}: {ch} {official} {chNext} => {prop.name} {value} {propNext.name}')
 	print(f'{path} total test: {totalCount}, failed test: {failCount}')
 
 def updateGraphemeBreakTable(headerFile, sourceFile):
@@ -135,7 +135,7 @@ def updateGraphemeBreakTable(headerFile, sourceFile):
 
 	# https://www.unicode.org/emoji/charts/full-emoji-modifiers.html
 	# https://www.unicode.org/Public/emoji/latest/emoji-zwj-sequences.txt
-	longestSquenceCount, longestSquenceBytes = findLongestCharacterSquence('emoji-zwj-sequences.txt')
+	longestSequenceCount, longestSequenceBytes = findLongestCharacterSequence('emoji-zwj-sequences.txt')
 	buildGraphemeClusterBoundary()
 
 	valueMap = {
@@ -157,8 +157,8 @@ def updateGraphemeBreakTable(headerFile, sourceFile):
 
 	output.append('')
 	output.append(f'constexpr int maxUnicodeGraphemeBreakCharacter = {hex(len(graphemeBreakTable))};')
-	output.append(f'constexpr int longestUnicodeCharacterSquenceCount = {longestSquenceCount};')
-	output.append(f'constexpr int longestUnicodeCharacterSquenceBytes = {longestSquenceBytes};')
+	output.append(f'constexpr int longestUnicodeCharacterSequenceCount = {longestSequenceCount};')
+	output.append(f'constexpr int longestUnicodeCharacterSequenceBytes = {longestSequenceBytes};')
 
 	output.append('')
 	output.append('constexpr uint16_t graphemeClusterBoundary[] = {')

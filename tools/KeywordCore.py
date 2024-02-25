@@ -129,6 +129,8 @@ def BuildKeywordContent(rid, lexer, keywordList, keywordCount=16):
 	return output, attrList
 
 def UpdateKeywordFile(rid, path, lexer, keywordList, keywordCount=16, suffix=''):
+	if keywordList is None:
+		return
 	attrList = []
 	if keywordList:
 		output, attrList = BuildKeywordContent(rid, lexer, keywordList, keywordCount=keywordCount)
@@ -1598,13 +1600,15 @@ def parse_kotlin_api_file(path):
 
 	if True:
 		# for JVM target
-		keywordMap['class'].update(JavaKeywordMap['class'])
-		keywordMap['interface'].extend(JavaKeywordMap['interface'])
+		keywordMap['Java class'] = JavaKeywordMap['class']
+		keywordMap['Java interface'] = JavaKeywordMap['interface']
 		keywordMap['enumeration'].update(JavaKeywordMap['enumeration'])
 		keywordMap['annotation'].update(JavaKeywordMap['annotation'])
 
 	RemoveDuplicateKeyword(keywordMap, [
 		'keywords',
+		'Java class',
+		'Java interface',
 		'class',
 		'interface',
 		'enumeration',
@@ -1612,7 +1616,9 @@ def parse_kotlin_api_file(path):
 	])
 	return [
 		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('Java class', keywordMap['Java class'], KeywordAttr.Default),
 		('class', keywordMap['class'], KeywordAttr.Default),
+		('Java interface', keywordMap['Java interface'], KeywordAttr.Default),
 		('interface', keywordMap['interface'], KeywordAttr.Default),
 		('enumeration', keywordMap['enumeration'], KeywordAttr.Default),
 		('annotation', keywordMap['annotation'], KeywordAttr.NoLexer | KeywordAttr.Special),
@@ -2525,12 +2531,7 @@ def parse_verilog_api_file(pathList):
 def parse_wasm_lexer_keywords(path):
 	if not os.path.isfile(path):
 		print('missing file:', path)
-		return [
-			('keywords', [], KeywordAttr.Default),
-			('type', [], KeywordAttr.Default),
-			('instruction', [], KeywordAttr.Default),
-			('full instruction',[], KeywordAttr.NoLexer),
-		]
+		return None
 
 	keywordMap = {
 		'keywords': [],

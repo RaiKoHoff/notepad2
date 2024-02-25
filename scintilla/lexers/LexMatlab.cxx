@@ -287,7 +287,7 @@ constexpr bool IsStreamCommentStyle(int style) noexcept {
 
 #define IsCommentLine(line)		IsLexCommentLine(styler, line, SCE_MAT_COMMENT)
 
-void FoldMatlabDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
+void FoldMatlabDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList /*keywordLists*/, Accessor &styler) {
 	const int lexType = styler.GetPropertyInt("lexer.lang", LEX_MATLAB);
 
 	const Sci_PositionU endPos = startPos + length;
@@ -382,13 +382,12 @@ void FoldMatlabDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, L
 			visibleChars++;
 
 		if (atEOL || (i == endPos - 1)) {
+			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			const int levelUse = levelCurrent;
 			int lev = levelUse | levelNext << 16;
 			if (levelUse < levelNext)
 				lev |= SC_FOLDLEVELHEADERFLAG;
-			if (lev != styler.LevelAt(lineCurrent)) {
-				styler.SetLevel(lineCurrent, lev);
-			}
+			styler.SetLevel(lineCurrent, lev);
 			lineCurrent++;
 			levelCurrent = levelNext;
 			visibleChars = 0;
