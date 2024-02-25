@@ -44,7 +44,7 @@ enum {
 #define HERE_DELIM_MAX			256
 
 // state constants for parts of a bash command segment
-enum class CmdState {
+enum class CmdState : uint8_t {
 	Body,
 	Start,
 	Word,
@@ -57,7 +57,7 @@ enum class CmdState {
 
 // state constants for nested delimiter pairs, used by
 // SCE_SH_STRING, SCE_SH_PARAM and SCE_SH_BACKTICKS processing
-enum class QuoteStyle {
+enum class QuoteStyle : uint8_t {
 	Literal,		// ''
 	CString,		// $''
 	String,			// ""
@@ -203,7 +203,7 @@ public:
 	int Up = '\0';
 	int Down = '\0';
 	QuoteStyle Style = QuoteStyle::Literal;
-	int Outer = SCE_SH_DEFAULT;
+	uint8_t Outer = SCE_SH_DEFAULT;
 	CmdState State = CmdState::Body;
 	void Clear() noexcept {
 		Count = 0;
@@ -218,7 +218,7 @@ public:
 		Up    = u;
 		Down  = opposite(Up);
 		Style = s;
-		Outer = outer;
+		Outer = static_cast<uint8_t>(outer);
 		State = state;
 	}
 };
@@ -272,7 +272,7 @@ public:
 	}
 	bool CountDown(StyleContext &sc, CmdState &cmdState) {
 		Current.Count--;
-		if (Current.Count == 1 && sc.Match(')', ')')) {
+		while (Current.Count > 0 && sc.chNext == Current.Down) {
 			Current.Count--;
 			sc.Forward();
 		}
@@ -313,10 +313,6 @@ public:
 				style = QuoteStyle::Command;
 				cmdState = CmdState::Delimiter;
 			}
-			if (current == CmdState::Body && sc.ch == '(' && state == SCE_SH_DEFAULT && Depth == 0) {
-				// optimized to avoid track nested delimiter pairs
-				return;
-			}
 		} else {
 			// scalar has no delimiter pair
 			if (!IsBashParamStart(sc.ch, isCShell)) {
@@ -342,6 +338,7 @@ public:
 			return;
 		}
 		if (backtickLevel > 0 && !isCShell) {
+			// see https://github.com/ScintillaOrg/lexilla/issues/194
 			/*
 			for $k$ level substitution with $N$ backslashes:
 			* when $N/2^k$ is odd, following dollar is escaped.
@@ -655,7 +652,9 @@ void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle
 					continue;
 				}
 			} else if (sc.ch == QuoteStack.Current.Up) {
-				QuoteStack.Current.Count++;
+				if (QuoteStack.Current.Style != QuoteStyle::Parameter) {
+					QuoteStack.Current.Count++;
+				}
 			} else {
 				if (QuoteStack.Current.Style == QuoteStyle::String ||
 					QuoteStack.Current.Style == QuoteStyle::HereDoc ||
@@ -950,13 +949,14 @@ void FoldBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lex
 			break;
 
 		case SCE_SH_HERE_Q:
-			if (style == SCE_SH_HERE_Q && styleNext == SCE_SH_DEFAULT) {
+			if (styleNext == SCE_SH_DEFAULT) {
 				levelCurrent--;
 			}
 			break;
 		}
 
 		if (startPos == lineStartNext) {
+			levelCurrent = sci::max(levelCurrent, SC_FOLDLEVELBASE);
 			// Comment folding
 			if (IsCommentLine(lineCurrent)) {
 				levelCurrent += IsCommentLine(lineCurrent + 1) - IsCommentLine(lineCurrent - 1);
@@ -966,9 +966,7 @@ void FoldBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lex
 			if ((levelCurrent > levelPrev)) {
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			}
-			if (lev != styler.LevelAt(lineCurrent)) {
-				styler.SetLevel(lineCurrent, lev);
-			}
+			styler.SetLevel(lineCurrent, lev);
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
 			lineStartNext = sci::min(lineStartNext, endPos);

@@ -309,7 +309,9 @@ void ColouriseFortranDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int ini
 				if (sc.ch == '(' || sc.ch == '[' || sc.ch == '{') {
 					++parenCount;
 				} else if (sc.ch == ')' || sc.ch == ']' || sc.ch == '}') {
-					--parenCount;
+					if (parenCount > 0) {
+						--parenCount;
+					}
 				}
 				sc.SetState(SCE_F_OPERATOR);
 			}
@@ -334,7 +336,7 @@ constexpr int GetLineCommentState(int lineState) noexcept {
 	return lineState & FortranLineStateMaskLineComment;
 }
 
-void FoldFortranDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*/, LexerWordList, Accessor &styler) {
+void FoldFortranDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle*/, LexerWordList /*keywordLists*/, Accessor &styler) {
 	const Sci_PositionU endPos = startPos + lengthDoc;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
@@ -381,6 +383,7 @@ void FoldFortranDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initSt
 
 		if (++startPos == lineStartNext) {
 			const int lineCommentNext = GetLineCommentState(styler.GetLineState(lineCurrent + 1));
+			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			if (lineCommentCurrent) {
 				levelNext += lineCommentNext - lineCommentPrev;
 			}
@@ -390,9 +393,7 @@ void FoldFortranDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initSt
 			if (levelUse < levelNext) {
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			}
-			if (lev != styler.LevelAt(lineCurrent)) {
-				styler.SetLevel(lineCurrent, lev);
-			}
+			styler.SetLevel(lineCurrent, lev);
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);

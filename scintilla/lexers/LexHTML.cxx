@@ -469,7 +469,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			continue;
 		}
 
-		// decide what is the current state to print (depending of the script tag)
+		// decide what is the current state to print (depending on the script tag)
 		StateToPrint = statePrintForState(state, inScriptType);
 
 		// handle script folding
@@ -511,6 +511,7 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 			// Avoid triggering two times on Dos/Win
 			// New line -> record any line state onto /next/ line
 			if (fold) {
+				levelCurrent = sci::max(levelCurrent, SC_FOLDLEVELBASE);
 				int lev = levelPrev;
 				if ((levelCurrent > levelPrev))
 					lev |= SC_FOLDLEVELHEADERFLAG;
@@ -1180,7 +1181,9 @@ void ColouriseHyperTextDoc(Sci_PositionU startPos, Sci_Position length, int init
 				state = SCE_HJ_DEFAULT;
 			} else if (state != SCE_HJ_TEMPLATELITERAL && IsEOLChar(ch)) {
 				styler.ColorTo(i, StateToPrint);
-				state = SCE_HJ_STRINGEOL;
+				if (chPrev != '\\' && (chPrev2 != '\\' || chPrev != '\r' || ch != '\n')) {
+					state = SCE_HJ_STRINGEOL;
+				}
 			}
 			break;
 		case SCE_HJ_STRINGEOL:

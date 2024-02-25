@@ -333,7 +333,7 @@ constexpr int GetLineCommentState(int lineState) noexcept {
 	return lineState & SimpleLineStateMaskLineComment;
 }
 
-void FoldCMakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
+void FoldCMakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList /*keywordLists*/, Accessor &styler) {
 	const Sci_PositionU endPos = startPos + lengthDoc;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
@@ -397,6 +397,7 @@ void FoldCMakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 
 		if (++startPos == lineStartNext) {
 			const int lineCommentNext = GetLineCommentState(styler.GetLineState(lineCurrent + 1));
+			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			if (lineCommentCurrent) {
 				levelNext += lineCommentNext - lineCommentPrev;
 			}
@@ -406,9 +407,7 @@ void FoldCMakeDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle,
 			if (levelUse < levelNext) {
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			}
-			if (lev != styler.LevelAt(lineCurrent)) {
-				styler.SetLevel(lineCurrent, lev);
-			}
+			styler.SetLevel(lineCurrent, lev);
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);

@@ -473,7 +473,7 @@ constexpr bool IsCommentStyle (int style) noexcept {
 
 #define IsCommentLine(line)			IsLexCommentLine(styler, line, MultiStyle(SCE_SQL_COMMENTLINE, SCE_SQL_COMMENTLINEDOC))
 
-void FoldSqlDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
+void FoldSqlDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList /*keywordLists*/, Accessor &styler) {
 	constexpr bool foldOnlyBegin = false;// styler.GetPropertyBool("fold.sql.only.begin", false);
 	constexpr bool foldAtElse = false;// styler.GetPropertyBool("fold.sql.at.else", false);
 
@@ -761,13 +761,12 @@ void FoldSqlDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lexe
 			}
 		}
 		if (atEOL || (i == endPos - 1)) {
+			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			const int levelUse = levelCurrent;
 			int lev = levelUse | levelNext << 16;
 			if (levelUse < levelNext)
 				lev |= SC_FOLDLEVELHEADERFLAG;
-			if (lev != styler.LevelAt(lineCurrent)) {
-				styler.SetLevel(lineCurrent, lev);
-			}
+			styler.SetLevel(lineCurrent, lev);
 			lineCurrent++;
 			levelCurrent = levelNext;
 			statementFound = false;

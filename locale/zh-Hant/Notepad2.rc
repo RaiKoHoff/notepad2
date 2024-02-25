@@ -580,6 +580,7 @@ BEGIN
 			BEGIN
 				MENUITEM "無(&N)",						IDM_LINE_SELECTION_MODE_NONE
 				MENUITEM "&Visual Studio",				IDM_LINE_SELECTION_MODE_VS
+				MENUITEM "舊版 Visual Studio(&O)",		IDM_LINE_SELECTION_MODE_OLDVS
 				MENUITEM "正常(&M)",						IDM_LINE_SELECTION_MODE_NORMAL
 			END
 		END
@@ -1051,7 +1052,7 @@ BEGIN
     LTEXT           "版權所有 © 2010-2017 XhmikosR 和所有貢獻者.",IDC_STATIC,45,60,200,8
     LTEXT           "",IDC_MOD_PAGE_TEXT,45,68,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_MOD_PAGE_LINK,"SysLink",WS_TABSTOP,45,68,200,10
-    LTEXT           "版權所有 © 2011-2023 Zufu Liu 和所有貢獻者.",IDC_STATIC,45,80,200,8
+    LTEXT           "版權所有 © 2011-2024 Zufu Liu 和所有貢獻者.",IDC_STATIC,45,80,200,8
     LTEXT           "",IDC_NEW_PAGE_TEXT,45,80,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_NEW_PAGE_LINK,"SysLink",WS_TABSTOP,45,88,200,10
     LTEXT           "連絡 Florian Balmer:",IDC_STATIC,45,100,94,8
@@ -1764,12 +1765,7 @@ $\t行結束。\n\
 *? 或 +?\t對限量詞 ""?"" 和 ""+"" 做非貪婪比對。\n\
 (\t區域開始。\n\
 )\t區域結束。\n\
-\\n\t取代時參考的區域(n 為 1-9)。\n\n\
-實驗性語法:\n\
-\\h\t單詞開始，根據 IsWordStartAt()。\n\
-\\H\t單詞結束，根據 IsWordEndAt()。\n\
-\\i\t符合 1 個或多個字元到單詞結束。\n\
-\\i?\t符合 0 個或多個字元到單詞結束。"
+\\n\t取代時參考的區域(n 為 1-9)。"
 
 	IDS_WILDCARDHELP		"通配符搜尋\n\n\
 *\t符合 0 個或多個字元。\n\

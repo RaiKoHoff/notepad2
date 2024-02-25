@@ -7,6 +7,7 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "ILexer.h"
 #include "Scintilla.h"
@@ -19,6 +20,7 @@
 #include "CharacterSet.h"
 #include "StringUtils.h"
 #include "LexerModule.h"
+#include "LexerUtils.h"
 
 using namespace Lexilla;
 
@@ -89,12 +91,15 @@ enum class KeywordType {
 	While,
 };
 
+static_assert(DefaultNestedStateBaseStyle + 1 == SCE_JAVA_TEMPLATE);
+static_assert(DefaultNestedStateBaseStyle + 2 == SCE_JAVA_TRIPLE_TEMPLATE);
+
 constexpr bool IsSpaceEquiv(int state) noexcept {
 	return state <= SCE_JAVA_TASKMARKER;
 }
 
 // for java.util.Formatter
-// https://docs.oracle.com/en/java/javase/20/docs/api/java.base/java/util/Formatter.html
+// https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Formatter.html
 
 constexpr bool IsFormatSpecifier(char ch) noexcept {
 	return AnyOf(ch, 'a', 'A',
@@ -186,6 +191,7 @@ void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 	KeywordType kwType = KeywordType::None;
 	int chBeforeIdentifier = 0;
+	std::vector<int> nestedState;	// string template STR."\{}"
 
 	int visibleChars = 0;
 	int chBefore = 0;
@@ -195,6 +201,18 @@ void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 	EscapeSequence escSeq;
 
 	StyleContext sc(startPos, lengthDoc, initStyle, styler);
+	if (sc.currentLine > 0) {
+		int lineState = styler.GetLineState(sc.currentLine - 1);
+		/*
+		2: lineStateLineType
+		3: nestedState count
+		3*4: nestedState
+		*/
+		lineState >>= 8;
+		if (lineState) {
+			UnpackLineState(lineState, nestedState);
+		}
+	}
 	if (startPos == 0) {
 		if (sc.Match('#', '!')) {
 			// Shell Shebang at beginning of file
@@ -209,6 +227,7 @@ void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 	while (sc.More()) {
 		switch (sc.state) {
 		case SCE_JAVA_OPERATOR:
+		case SCE_JAVA_OPERATOR2:
 			sc.SetState(SCE_JAVA_DEFAULT);
 			break;
 
@@ -319,6 +338,8 @@ void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 								// type<>, type<?>, type<? super T>
 								// type<type>
 								// type<type<type>>
+								// type<type, type>
+								// class type implements interface, interface {}
 								// type identifier
 								sc.ChangeState(SCE_JAVA_CLASS);
 							}
@@ -407,11 +428,17 @@ void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_JAVA_CHARACTER:
 		case SCE_JAVA_STRING:
+		case SCE_JAVA_TEMPLATE:
+		case SCE_JAVA_TRIPLE_TEMPLATE:
 		case SCE_JAVA_TRIPLE_STRING:
-			if (sc.atLineStart && sc.state != SCE_JAVA_TRIPLE_STRING) {
+			if (sc.atLineStart && sc.state <= SCE_JAVA_TEMPLATE) {
 				sc.SetState(SCE_JAVA_DEFAULT);
 			} else if (sc.ch == '\\') {
-				if (escSeq.resetEscapeState(sc.state, sc.chNext)) {
+				if (sc.chNext == '{' && AnyOf(sc.state, SCE_JAVA_TEMPLATE, SCE_JAVA_TRIPLE_TEMPLATE)) {
+					nestedState.push_back(sc.state);
+					sc.SetState(SCE_JAVA_OPERATOR2);
+					sc.Forward();
+				} else if (escSeq.resetEscapeState(sc.state, sc.chNext)) {
 					sc.SetState(SCE_JAVA_ESCAPECHAR);
 					sc.Forward();
 				}
@@ -432,8 +459,8 @@ void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 						escSeq.outerState = sc.state;
 						sc.SetState(SCE_JAVA_PLACEHOLDER);
 					}
-				} else if (sc.ch == '"' && (sc.state == SCE_JAVA_STRING || sc.MatchNext('"', '"'))) {
-					if (sc.state == SCE_JAVA_TRIPLE_STRING) {
+				} else if (sc.ch == '"' && (sc.state <= SCE_JAVA_TEMPLATE || sc.MatchNext('"', '"'))) {
+					if (sc.state > SCE_JAVA_TEMPLATE) {
 						sc.Advance(2);
 					}
 					sc.ForwardSetState(SCE_JAVA_DEFAULT);
@@ -454,7 +481,7 @@ void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_JAVA_PLACEHOLDER:
 			// for java.text.MessageFormat, only simplest form: {num}
-			// https://docs.oracle.com/en/java/javase/20/docs/api/java.base/java/text/MessageFormat.html
+			// https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/text/MessageFormat.html
 			if (!IsADigit(sc.ch)) {
 				if (sc.ch != '}') {
 					sc.Rewind();
@@ -486,10 +513,10 @@ void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			} else if (sc.ch == '\"') {
 				insideUrl = false;
 				if (sc.MatchNext('"', '"')) {
-					sc.SetState(SCE_JAVA_TRIPLE_STRING);
+					sc.SetState((sc.chPrev == '.') ? SCE_JAVA_TRIPLE_TEMPLATE : SCE_JAVA_TRIPLE_STRING);
 					sc.Advance(2);
 				} else {
-					sc.SetState(SCE_JAVA_STRING);
+					sc.SetState((sc.chPrev == '.') ? SCE_JAVA_TEMPLATE : SCE_JAVA_STRING);
 				}
 			} else if (sc.ch == '\'') {
 				sc.SetState(SCE_JAVA_CHARACTER);
@@ -505,6 +532,16 @@ void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				sc.SetState(SCE_JAVA_ANNOTATION);
 			} else if (IsAGraphic(sc.ch) && sc.ch != '\\') {
 				sc.SetState(SCE_JAVA_OPERATOR);
+				if (!nestedState.empty()) {
+					sc.ChangeState(SCE_JAVA_OPERATOR2);
+					if (sc.ch == '{') {
+						nestedState.push_back(SCE_JAVA_DEFAULT);
+					} else if (sc.ch == '}') {
+						const int outerState = TakeAndPop(nestedState);
+						sc.ForwardSetState(outerState);
+						continue;
+					}
+				}
 			}
 		}
 
@@ -515,6 +552,9 @@ void ColouriseJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			}
 		}
 		if (sc.atLineEnd) {
+			if (!nestedState.empty()) {
+				lineStateLineType |= PackLineState(nestedState) << 8;
+			}
 			styler.SetLineState(sc.currentLine, lineStateLineType);
 			lineStateLineType = 0;
 			visibleChars = 0;
@@ -537,22 +577,7 @@ struct FoldLineState {
 	}
 };
 
-constexpr bool IsStreamCommentStyle(int style) noexcept {
-	return style == SCE_JAVA_COMMENTBLOCK
-		|| style == SCE_JAVA_COMMENTBLOCKDOC
-		|| style == SCE_JAVA_COMMENTTAGAT
-		|| style == SCE_JAVA_COMMENTTAGHTML
-		|| style == SCE_JAVA_TASKMARKER;
-}
-
-constexpr bool IsMultilineStringStyle(int style) noexcept {
-	return style == SCE_JAVA_TRIPLE_STRING
-		|| style == SCE_JAVA_ESCAPECHAR
-		|| style == SCE_JAVA_FORMAT_SPECIFIER
-		|| style == SCE_JAVA_PLACEHOLDER;
-}
-
-void FoldJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
+void FoldJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList /*keywordLists*/, Accessor &styler) {
 	const Sci_PositionU endPos = startPos + lengthDoc;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	FoldLineState foldPrev(0);
@@ -583,22 +608,18 @@ void FoldJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 		switch (style) {
 		case SCE_JAVA_COMMENTBLOCK:
 		case SCE_JAVA_COMMENTBLOCKDOC:
-			if (!IsStreamCommentStyle(stylePrev)) {
-				levelNext++;
-			} else if (!IsStreamCommentStyle(styleNext)) {
-				levelNext--;
-			}
-			break;
-
 		case SCE_JAVA_TRIPLE_STRING:
-			if (!IsMultilineStringStyle(stylePrev)) {
+		case SCE_JAVA_TRIPLE_TEMPLATE:
+			if (style != stylePrev) {
 				levelNext++;
-			} else if (!IsMultilineStringStyle(styleNext)) {
+			}
+			if (style != styleNext) {
 				levelNext--;
 			}
 			break;
 
-		case SCE_JAVA_OPERATOR: {
+		case SCE_JAVA_OPERATOR:
+		case SCE_JAVA_OPERATOR2: {
 			const char ch = styler[startPos - 1];
 			if (ch == '{' || ch == '[' || ch == '(') {
 				levelNext++;
@@ -613,6 +634,7 @@ void FoldJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 		}
 		if (startPos == lineStartNext) {
 			const FoldLineState foldNext(styler.GetLineState(lineCurrent + 1));
+			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
 			} else if (foldCurrent.packageImport) {
@@ -632,9 +654,7 @@ void FoldJavaDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, 
 			if (levelUse < levelNext) {
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			}
-			if (lev != styler.LevelAt(lineCurrent)) {
-				styler.SetLevel(lineCurrent, lev);
-			}
+			styler.SetLevel(lineCurrent, lev);
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);

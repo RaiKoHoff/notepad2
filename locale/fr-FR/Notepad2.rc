@@ -580,6 +580,7 @@ BEGIN
 			BEGIN
 				MENUITEM "Aucun",					IDM_LINE_SELECTION_MODE_NONE
 				MENUITEM "&Visual Studio",			IDM_LINE_SELECTION_MODE_VS
+				MENUITEM "&Old Visual Studio",		IDM_LINE_SELECTION_MODE_OLDVS
 				MENUITEM "Nor&mal",					IDM_LINE_SELECTION_MODE_NORMAL
 			END
 		END
@@ -1051,7 +1052,7 @@ BEGIN
     LTEXT           "Copyright © 2010-2017 XhmikosR et tous les contributors.",IDC_STATIC,45,60,200,8
     LTEXT           "",IDC_MOD_PAGE_TEXT,45,68,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_MOD_PAGE_LINK,"SysLink",WS_TABSTOP,45,68,200,10
-    LTEXT           "Copyright © 2011-2022 Zufu Liu et tous les contributors.",IDC_STATIC,45,80,200,8
+    LTEXT           "Copyright © 2011-2024 Zufu Liu et tous les contributors.",IDC_STATIC,45,80,200,8
     LTEXT           "",IDC_NEW_PAGE_TEXT,45,80,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_NEW_PAGE_LINK,"SysLink",WS_TABSTOP,45,88,200,10
     LTEXT           "Contacter Florian Balmer :",IDC_STATIC,45,100,94,8
@@ -1764,12 +1765,7 @@ $\tfind e ligne\n\
 *? or +?\tNon-greedy matching of quantifiers ""?"" and ""+""\n\
 (\tDébut d'une région\n\
 )\tFin  d'une région\n\
-\\n\tSe réfère à une région lors du remplacement (avec n étant compris entre 1 et 9)\n\n\
-Syntaxe expérimentale :\n\
-\\h\tDébut d'un mot, en accord avec IsWordStartAt()\n\
-\\H\tFin d'un mot, en accord avec IsWordEndAt()\n\
-\\i\tTrouvera 1 caractère ou plus jusqu'à la fin du mot\n\
-\\i?\tTrouvera 0 caractère ou plus jusqu'à la fin du mot"
+\\n\tSe réfère à une région lors du remplacement (avec n étant compris entre 1 et 9)"
 
 	IDS_WILDCARDHELP		"Jocker de recherche\n\n\
 *\tTrouvera zéro ou plus de caractères.\n\

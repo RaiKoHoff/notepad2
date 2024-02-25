@@ -30,7 +30,7 @@ constexpr bool IsLSpecial(int ch) noexcept {
 
 #define IsCmdEnd(pos)	(!IsAlphaNumeric(sc.GetRelative(pos)))
 
-void ColouriseLatexDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
+void ColouriseLatexDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList /*keywordLists*/, Accessor &styler) {
 	if (initStyle == SCE_L_COMMENT)
 		initStyle = SCE_L_DEFAULT;
 
@@ -261,7 +261,7 @@ bool IsLEnd(LexAccessor &styler, Sci_Line line) noexcept {
 #define IsSubsubsection(line)	IsLBegin(styler, line, "subsubsection", 13)
 #define IsEndDoc(line)			IsLEnd(styler, line)
 
-void FoldLatexDoc(Sci_PositionU startPos, Sci_Position length, int /*initStyle*/, LexerWordList, Accessor &styler) {
+void FoldLatexDoc(Sci_PositionU startPos, Sci_Position length, int /*initStyle*/, LexerWordList /*keywordLists*/, Accessor &styler) {
 	const Sci_PositionU endPos = startPos + length;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
@@ -352,13 +352,12 @@ void FoldLatexDoc(Sci_PositionU startPos, Sci_Position length, int /*initStyle*/
 		}
 
 		if (atEOL || (i == endPos - 1)) {
+			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			const int levelUse = levelCurrent;
 			int lev = levelUse | levelNext << 16;
 			if (levelUse < levelNext)
 				lev |= SC_FOLDLEVELHEADERFLAG;
-			if (lev != styler.LevelAt(lineCurrent)) {
-				styler.SetLevel(lineCurrent, lev);
-			}
+			styler.SetLevel(lineCurrent, lev);
 			lineCurrent++;
 			levelCurrent = levelNext;
 		}

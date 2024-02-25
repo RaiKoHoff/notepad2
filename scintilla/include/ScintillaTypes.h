@@ -114,8 +114,7 @@ enum class MarginType {
 
 enum class StylesCommon {
 	Default = 0,
-	Link = 32,
-	LineNumber = 33,
+	LineNumber = 32,
 	BraceLight = 34,
 	BraceBad = 35,
 	ControlChar = 36,
@@ -271,6 +270,7 @@ enum class FindOption {
 	None = 0x0,
 	WholeWord = 0x2,
 	MatchCase = 0x4,
+	MatchToWordEnd = 0x8,
 	WordStart = 0x00100000,
 	RegExp = 0x00200000,
 	Posix = 0x00400000,
@@ -819,7 +819,7 @@ inline ModificationFlags &operator|=(ModificationFlags &self, ModificationFlags 
 	return self;
 }
 
-// Functions to manipulate fields from a Update
+// Functions to manipulate fields from an Update
 
 constexpr Update operator|(Update a, Update b) noexcept {
 	return static_cast<Update>(static_cast<int>(a) | static_cast<int>(b));

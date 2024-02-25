@@ -331,7 +331,9 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 					break;
 				case ']':
 					levelNext--;
-					bracketCount--;
+					if (bracketCount > 0) {
+						bracketCount--;
+					}
 					break;
 				case '(':
 					levelNext++;
@@ -339,7 +341,9 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 					break;
 				case ')':
 					levelNext--;
-					parenCount--;
+					if (parenCount > 0) {
+						parenCount--;
+					}
 					break;
 				case ':':
 					if (parenCount == 0 && !IsProperty(stylePrevNonWhite)) {
@@ -361,14 +365,13 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 		}
 		if (sc.atLineEnd) {
 			if (fold) {
+				levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 				const int levelUse = levelCurrent;
 				int lev = levelUse | levelNext << 16;
 				if (levelUse < levelNext) {
 					lev |= SC_FOLDLEVELHEADERFLAG;
 				}
-				if (lev != styler.LevelAt(sc.currentLine)) {
-					styler.SetLevel(sc.currentLine, lev);
-				}
+				styler.SetLevel(sc.currentLine, lev);
 			}
 
 			const int lineState = (propertyValue & true) | (bracketCount << 1) | (parenCount << 8);

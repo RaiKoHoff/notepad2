@@ -1,6 +1,6 @@
 // This file is part of Notepad2.
 // See License.txt for details about distribution and modification.
-//! Lexer for C/C++, Rescouce Script, Objective C/C++, IDL/ODL
+//! Lexer for C/C++, Resource Script, Objective C/C++, IDL/ODL
 
 #include <cassert>
 #include <cstring>
@@ -25,7 +25,7 @@ using namespace Lexilla;
 namespace {
 
 #define		LEX_CPP		0	// C/C++
-#define		LEX_RC		1	// Resouce Script
+#define		LEX_RC		1	// Resource Script
 #define		LEX_OBJC	2	// Objective C/C++
 
 struct EscapeSequence {
@@ -145,7 +145,7 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 	bool isAssignStmt = false;
 	EscapeSequence escSeq;
 
-	if (initStyle == SCE_C_COMMENTLINE || initStyle == SCE_C_COMMENTLINEDOC || initStyle == SCE_C_PREPROCESSOR) {
+	if (AnyOf(initStyle, SCE_C_COMMENTLINE, SCE_C_COMMENTLINEDOC, SCE_C_PREPROCESSOR, SCE_C_STRING, SCE_C_CHARACTER)) {
 		// Set continuationLine if last character of previous line is '\'
 		if (lineCurrent > 0) {
 			const char chBack = styler.SafeGetCharAt(startPos - 1);
@@ -170,7 +170,7 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 	while (sc.More()) {
 
 		if (sc.atLineStart) {
-			// Reset states to begining of colourise so no surprises
+			// Reset states to beginning of colourise so no surprises
 			// if different sets of lines lexed.
 			visibleChars = 0;
 			docTagType = 0;
@@ -835,7 +835,7 @@ bool IsOpenBraceLine(LexAccessor &styler, Sci_Line line) noexcept {
 	return false;
 }
 
-void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList, Accessor &styler) {
+void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, LexerWordList /*keywordLists*/, Accessor &styler) {
 	const int lexType = styler.GetPropertyInt("lexer.lang", LEX_CPP);
 
 	const Sci_PositionU endPos = startPos + length;
@@ -935,7 +935,7 @@ void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lexe
 		}
 
 		if (style == SCE_C_OPERATOR && !(IsCppInDefine(styler, i))) {
-			// maybe failed in multi-line define section, MFC's afx.h is a example
+			// maybe failed in multi-line define section, MFC's afx.h is an example
 			if (ch == '{' && !(lineCurrent > 0 && visibleChars == 0 && IsOpenBraceLine(styler, lineCurrent))) {
 				levelNext++;
 			} else if (ch == '}') {
@@ -965,13 +965,12 @@ void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lexe
 		if (visibleChars == 0 && !isspacechar(ch))
 			visibleChars++;
 		if (atEOL || (i == endPos - 1)) {
+			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			const int levelUse = levelCurrent;
 			int lev = levelUse | levelNext << 16;
 			if (levelUse < levelNext)
 				lev |= SC_FOLDLEVELHEADERFLAG;
-			if (lev != styler.LevelAt(lineCurrent)) {
-				styler.SetLevel(lineCurrent, lev);
-			}
+			styler.SetLevel(lineCurrent, lev);
 			lineCurrent++;
 			levelCurrent = levelNext;
 			visibleChars = 0;

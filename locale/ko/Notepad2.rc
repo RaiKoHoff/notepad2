@@ -580,6 +580,7 @@ BEGIN
 			BEGIN
 				MENUITEM "없음(&N)",						IDM_LINE_SELECTION_MODE_NONE
 				MENUITEM "Visual Studio(&V)",				IDM_LINE_SELECTION_MODE_VS
+				MENUITEM "&Old Visual Studio",		IDM_LINE_SELECTION_MODE_OLDVS
 				MENUITEM "일반(&M)",						IDM_LINE_SELECTION_MODE_NORMAL
 			END
 		END
@@ -1051,7 +1052,7 @@ BEGIN
     LTEXT           "Copyright © 2010-2017 XhmikosR 및 모든 기여자들",IDC_STATIC,45,60,200,8
     LTEXT           "",IDC_MOD_PAGE_TEXT,45,68,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_MOD_PAGE_LINK,"SysLink",WS_TABSTOP,45,68,200,10
-    LTEXT           "Copyright © 2011-2023 Zufu Liu 및 모든 기여자들",IDC_STATIC,45,80,200,8
+    LTEXT           "Copyright © 2011-2024 Zufu Liu 및 모든 기여자들",IDC_STATIC,45,80,200,8
     LTEXT           "",IDC_NEW_PAGE_TEXT,45,80,200,8,NOT WS_VISIBLE | WS_DISABLED
     CONTROL         "",IDC_NEW_PAGE_LINK,"SysLink",WS_TABSTOP,45,88,200,10
     LTEXT           "Florian Balmer에게 연락:",IDC_STATIC,45,100,94,8
@@ -1764,12 +1765,7 @@ $\t줄의 끝\n\
 *? or +?\t""?"" 및 ""+""의 게으른 수량자\n\
 (\t그룹의 시작\n\
 )\t그룹의 끝\n\
-\\n\t교체시 영역을 나타냄 (n은 1-9)\n\n\
-시험적 구문:\n\
-\\h\tIsWordStartAt()에 따른 단어 시작\n\
-\\H\tIsWordEndAt()에 따른 단어의 끝\n\
-\\i\t단어의 끝까지 1개 이상의 문자를 찾습니다\n\
-\\i?\t단어의 끝까지 0개 이상의 문자를 찾습니다"
+\\n\t교체시 영역을 나타냄 (n은 1-9)"
 
 	IDS_WILDCARDHELP        "와일드카드 검색\n\n\
 *\t0개 이상의 문자와 일치합니다.\n\

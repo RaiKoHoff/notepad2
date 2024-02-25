@@ -106,11 +106,6 @@ constexpr uint8_t GetPHPStringQuote(int state) noexcept {
 		: ((state == SCE_PHP_STRING_DQ) ? '\"' : '`');
 }
 
-constexpr int GetPHPTagStyle(int outer) noexcept {
-	// use different style to simplify code folding
-	return (outer == SCE_H_COMMENT || outer == SCE_H_CDATA) ? SCE_H_XMLSTART : SCE_H_QUESTION;
-}
-
 enum class VariableType {
 	Normal,
 	Simple,		// $variable
@@ -278,7 +273,7 @@ bool PHPLexer::HandleBlockEnd(HtmlTextBlock block) {
 		lineStateLineType = nestedState.empty() ? 0 : LineStateNestedStateLine;
 		nestedState.clear();
 		nestedExpansion.clear();
-		sc.SetState(GetPHPTagStyle(outer));
+		sc.SetState(SCE_H_QUESTION);
 		sc.Forward();
 		sc.ForwardSetState(outer);
 		return true;
@@ -321,7 +316,7 @@ void PHPLexer::HandlePHPTag() {
 	}
 	if (offset != 0) {
 		const int outer = sc.state;
-		sc.SetState(GetPHPTagStyle(outer));
+		sc.SetState(SCE_H_QUESTION);
 		sc.Advance(offset);
 		sc.SetState(SCE_PHP_DEFAULT);
 		if (outer != SCE_H_DEFAULT) {
@@ -607,13 +602,11 @@ bool PHPLexer::HighlightOperator(HtmlTextBlock block, int stylePrevNonWhite) {
 	} else if (block == HtmlTextBlock::Script) {
 		sc.SetState(js_style(SCE_JS_OPERATOR));
 		if (!nestedState.empty() && nestedState.back() > SCE_PHP_LABEL) {
+			sc.ChangeState(js_style(SCE_JS_OPERATOR2));
 			if (sc.ch == '{') {
 				SaveOuterStyle(js_style(SCE_JS_DEFAULT));
 			} else if (sc.ch == '}') {
 				const int outerState = TakeOuterStyle();
-				if (outerState != js_style(SCE_JS_DEFAULT)) {
-					sc.ChangeState(js_style(SCE_JS_OPERATOR2));
-				}
 				sc.ForwardSetState(outerState);
 				return true;
 			}
@@ -626,8 +619,12 @@ bool PHPLexer::HighlightOperator(HtmlTextBlock block, int stylePrevNonWhite) {
 			parenCount = 0;
 		} else if (AnyOf<'[', ']'>(sc.ch)) {
 			lineStateAttribute = (sc.ch & 4) ? 0 : LineStateAttributeLine;
-		} else if (AnyOf<'(', ')'>(sc.ch)) {
-			parenCount += ('(' - sc.ch) | 1;
+		} else if (sc.ch == '(') {
+			++parenCount;
+		} else if (sc.ch == ')') {
+			if (parenCount > 0) {
+				--parenCount;
+			}
 		} else if (AnyOf<':', ';'>(sc.ch) && parenCount == 0) {
 			if (sc.ch == ':') {
 				if (!IsCssProperty(stylePrevNonWhite)) {
@@ -1421,18 +1418,7 @@ struct FoldLineState {
 	}
 };
 
-constexpr bool IsMultilinePHPStringStyle(int style) noexcept {
-	return style >= SCE_PHP_OPERATOR2 && style <= SCE_PHP_IDENTIFIER2;
-}
-
-constexpr bool IsMultilineJsStringStyle(int style) noexcept {
-	return style == js_style(SCE_JS_STRING_BT)
-		|| style == js_style(SCE_JS_OPERATOR2)
-		|| style == js_style(SCE_JS_ESCAPECHAR)
-		|| style == SCE_H_QUESTION;
-}
-
-void FoldPHPDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList, Accessor &styler) {
+void FoldPHPDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList /*keywordLists*/, Accessor &styler) {
 	const Sci_PositionU endPos = startPos + lengthDoc;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	int levelCurrent = SC_FOLDLEVELBASE;
@@ -1474,18 +1460,27 @@ void FoldPHPDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 		case SCE_PHP_COMMENTBLOCKDOC:
 		case js_style(SCE_JS_COMMENTBLOCK):
 		case js_style(SCE_JS_COMMENTBLOCKDOC):
-		case css_style(SCE_CSS_COMMENTBLOCK): {
-			const int level = (ch == '/' && chNext == '*') ? 1 : ((ch == '*' && chNext == '/') ? -1 : 0);
-			if (level != 0) {
-				levelNext += level;
-				startPos++;
-				chNext = styler[startPos];
-				styleNext = styler.StyleAt(startPos);
+		case css_style(SCE_CSS_COMMENTBLOCK):
+		case SCE_H_COMMENT:
+		case SCE_H_CDATA:
+		case SCE_PHP_STRING_SQ:
+		case SCE_PHP_STRING_BT:
+		case SCE_PHP_STRING_DQ:
+		case SCE_PHP_HEREDOC:
+		case SCE_PHP_NOWDOC:
+		case js_style(SCE_JS_STRING_BT):
+			if (style != stylePrev) {
+				levelNext++;
 			}
-		} break;
+			if (style != styleNext) {
+				levelNext--;
+			}
+			break;
 
 		case SCE_PHP_OPERATOR:
+		case SCE_PHP_OPERATOR2:
 		case js_style(SCE_JS_OPERATOR):
+		case js_style(SCE_JS_OPERATOR2):
 		case css_style(SCE_CSS_OPERATOR):
 			if (ch == '{' || ch == '[' || ch == '(') {
 				levelNext++;
@@ -1507,39 +1502,9 @@ void FoldPHPDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 			break;
 
 		case SCE_H_QUESTION:
-		case SCE_H_XMLSTART:
 			if (ch == '<' && chNext == '?') {
 				levelNext++;
 			} else if (ch == '?' && chNext == '>') {
-				levelNext--;
-			}
-			break;
-
-		case SCE_H_COMMENT:
-		case SCE_H_CDATA:
-			if (style != stylePrev && stylePrev != SCE_H_XMLSTART) {
-				levelNext++;
-			} else if (style != styleNext && styleNext != SCE_H_XMLSTART) {
-				levelNext--;
-			}
-			break;
-
-		case SCE_PHP_STRING_SQ:
-		case SCE_PHP_STRING_BT:
-		case SCE_PHP_STRING_DQ:
-		case SCE_PHP_HEREDOC:
-		case SCE_PHP_NOWDOC:
-			if (!IsMultilinePHPStringStyle(stylePrev)) {
-				levelNext++;
-			} else if (!IsMultilinePHPStringStyle(styleNext)) {
-				levelNext--;
-			}
-			break;
-
-		case js_style(SCE_JS_STRING_BT):
-			if (!IsMultilineJsStringStyle(stylePrev)) {
-				levelNext++;
-			} else if (!IsMultilineJsStringStyle(styleNext)) {
 				levelNext--;
 			}
 			break;
@@ -1550,6 +1515,7 @@ void FoldPHPDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 		}
 		if (startPos == lineStartNext) {
 			const FoldLineState foldNext(styler.GetLineState(lineCurrent + 1));
+			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			if (foldCurrent.lineComment) {
 				levelNext += foldNext.lineComment - foldPrev.lineComment;
 			} else if (foldCurrent.useNamespace) {
@@ -1575,9 +1541,7 @@ void FoldPHPDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, L
 			if (levelUse < levelNext) {
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			}
-			if (lev != styler.LevelAt(lineCurrent)) {
-				styler.SetLevel(lineCurrent, lev);
-			}
+			styler.SetLevel(lineCurrent, lev);
 
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
