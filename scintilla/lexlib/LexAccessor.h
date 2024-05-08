@@ -96,6 +96,7 @@ public:
 			if (position < startPos || position >= endPos) {
 				// Position is outside range of document
 				//! different from official Lexilla which returns space.
+				// returns zero is consistent of GetCharacterAndWidth() method.
 				return '\0';
 			}
 		}

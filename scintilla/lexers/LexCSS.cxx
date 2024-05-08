@@ -79,10 +79,13 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 	const Preprocessor preprocessor = static_cast<Preprocessor>(styler.GetPropertyInt("lexer.lang"));
 	const bool fold = styler.GetPropertyBool("fold");
 	bool propertyValue = false;
+	bool attributeSelector = false;
+	bool calcFunc = false;
 	int variableInterpolation = 0;
 
-	int bracketCount = 0;	// attribute selector
 	int parenCount = 0;		// function
+	int calcLevel = 0;		// calc() function
+	int selectorLevel = 0;	// nested selector
 	int chBefore = 0;
 	int chPrevNonWhite = 0;
 	int stylePrevNonWhite = SCE_CSS_DEFAULT;
@@ -95,12 +98,16 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 		const uint32_t lineState = styler.GetLineState(sc.currentLine - 1);
 		/*
 		1: propertyValue
-		7: bracketCount
+		1: attributeSelector
+		6: calcLevel
 		8: parenCount
+		8: selectorLevel
 		*/
 		propertyValue = lineState & true;
-		bracketCount = (lineState >> 1) & 0x7f;
-		parenCount = lineState >> 8;
+		attributeSelector = lineState & 2;
+		calcLevel = (lineState >> 2) & 0x3f;
+		parenCount = (lineState >> 8) & 0xff;
+		selectorLevel = lineState >> 16;
 	}
 	if (startPos != 0 && IsSpaceEquiv(initStyle)) {
 		LookbackNonWhite(styler, startPos, SCE_CSS_CDO_CDC, chPrevNonWhite, stylePrevNonWhite);
@@ -110,6 +117,7 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 	while (sc.More()) {
 		switch (sc.state) {
 		case SCE_CSS_OPERATOR:
+		case SCE_CSS_OPERATOR2:
 		case SCE_CSS_CDO_CDC:
 			sc.SetState(SCE_CSS_DEFAULT);
 			break;
@@ -158,7 +166,9 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 						const int chNext = sc.GetDocNextChar(sc.ch == '(');
 						if (sc.ch == '(') {
 							sc.ChangeState(SCE_CSS_FUNCTION);
-							if (StrEqualsAny(s, "url", "url-prefix")
+							if (StrEqual(s, "calc")) {
+								calcFunc = true;
+							} else if (StrEqualsAny(s, "url", "url-prefix")
 								&& !(chNext == '\'' || chNext == '\"' || (chNext == '$' && preprocessor == Preprocessor::Scss))) {
 								levelNext++;
 								parenCount++;
@@ -179,7 +189,7 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 							// [attribute = value]
 							sc.ChangeState(SCE_CSS_VALUE);
 						} else if (!propertyValue) {
-							if (bracketCount) {
+							if (attributeSelector) {
 								sc.ChangeState(SCE_CSS_ATTRIBUTE);
 							} else if (chBefore == '.') {
 								sc.ChangeState(SCE_CSS_CLASS);
@@ -195,7 +205,7 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 								} else {
 									sc.ChangeState(SCE_CSS_UNKNOWN_PROPERTY);
 								}
-							} else if (parenCount == 0 && !(chNext == '(')) {
+							} else if (parenCount == selectorLevel && !(chNext == '(')) {
 								sc.ChangeState(SCE_CSS_TAG);
 							}
 						}
@@ -210,6 +220,10 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 					case SCE_CSS_PSEUDOCLASS:
 						if (!keywordLists[KeywordIndex_PseudoClass].InListPrefixed(s + 1, '(')) {
 							sc.ChangeState(SCE_CSS_UNKNOWN_PSEUDOCLASS);
+						} else if (sc.ch == '(') {
+							if (StrEqualsAny(s + 1, "is", "has", "not", "where", "current")) {
+								++selectorLevel;
+							}
 						}
 						break;
 
@@ -282,7 +296,7 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 				sc.SetState(SCE_CSS_CDO_CDC);
 				sc.Advance((sc.ch == '<') ? 3 : 2);
 			} else if (IsNumberStart(sc.ch, sc.chNext)
-				|| (sc.ch == '#' && (propertyValue || parenCount) && IsHexDigit(sc.chNext))) {
+				|| (sc.ch == '#' && (propertyValue || parenCount > selectorLevel) && IsHexDigit(sc.chNext))) {
 				sc.SetState(SCE_CSS_NUMBER);
 			} else if (sc.chNext == '+' && UnsafeLower(sc.ch) == 'u'
 				&& propertyValue && (chPrevNonWhite == ':' || chPrevNonWhite == ',')
@@ -310,8 +324,10 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 						variableInterpolation = SCE_CSS_DEFAULT + 1;
 					} else {
 						propertyValue = false;
-						bracketCount = 0;
+						attributeSelector = false;
 						parenCount = 0;
+						calcLevel = 0;
+						selectorLevel = 0;
 					}
 					break;
 				case '}':
@@ -322,27 +338,37 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 						continue;
 					}
 					propertyValue = false;
-					bracketCount = 0;
+					attributeSelector = false;
 					parenCount = 0;
+					calcLevel = 0;
+					selectorLevel = 0;
 					break;
 				case '[':
 					levelNext++;
-					bracketCount++;
+					attributeSelector = true;
 					break;
 				case ']':
 					levelNext--;
-					if (bracketCount > 0) {
-						bracketCount--;
-					}
+					attributeSelector = false;
 					break;
 				case '(':
 					levelNext++;
 					parenCount++;
+					if (calcLevel != 0 || calcFunc) {
+						calcFunc = false;
+						++calcLevel;
+					}
 					break;
 				case ')':
 					levelNext--;
 					if (parenCount > 0) {
 						parenCount--;
+					}
+					if (calcLevel > 0) {
+						--calcLevel;
+					}
+					if (selectorLevel > 0) {
+						selectorLevel--;
 					}
 					break;
 				case ':':
@@ -351,8 +377,16 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 					}
 					break;
 				case ';':
-					if (parenCount == 0 && bracketCount == 0) {
+					if (parenCount == 0 && !attributeSelector) {
 						propertyValue = false;
+					}
+					break;
+				case '+':
+				case '-':
+				case '*':
+				case '/':
+					if (calcLevel != 0 && (chPrevNonWhite == ')' || AnyOf(stylePrevNonWhite, SCE_CSS_NUMBER, SCE_CSS_DIMENSION))) {
+						sc.ChangeState(SCE_CSS_OPERATOR2); // operator inside calc() function
 					}
 					break;
 				}
@@ -374,7 +408,8 @@ void ColouriseCssDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 				styler.SetLevel(sc.currentLine, lev);
 			}
 
-			const int lineState = (propertyValue & true) | (bracketCount << 1) | (parenCount << 8);
+			const int lineState = static_cast<int>(propertyValue) | (static_cast<int>(attributeSelector) << 1)
+				| (calcLevel << 2) | (parenCount << 8) | (selectorLevel << 16);
 			styler.SetLineState(sc.currentLine, lineState);
 			levelCurrent = levelNext;
 		}

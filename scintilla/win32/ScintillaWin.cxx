@@ -28,6 +28,7 @@
 // WIN32_LEAN_AND_MEAN is defined to avoid including commdlg.h
 // (which defined FindText) to fix GCC LTO ODR violation warning.
 
+struct IUnknown;
 #include <windows.h>
 #include <commctrl.h>
 #include <richedit.h>
@@ -144,6 +145,10 @@ constexpr const WCHAR *callClassName = L"CallTip";
 inline void SetWindowID(HWND hWnd, int identifier) noexcept {
 	::SetWindowLongPtr(hWnd, GWLP_ID, identifier);
 }
+
+constexpr POINT POINTFromLParam(sptr_t lParam) noexcept {
+	return { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+};
 
 constexpr Point PointFromLParam(LPARAM lParam) noexcept {
 	return Point::FromInts(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
@@ -312,8 +317,9 @@ public:
 	IMContext &operator=(const IMContext &) = delete;
 	IMContext &operator=(IMContext &&) = delete;
 	~IMContext() {
-		if (hIMC)
+		if (hIMC) {
 			::ImmReleaseContext(hwnd, hIMC);
+		}
 	}
 
 	operator bool() const noexcept {
@@ -335,6 +341,11 @@ public:
 		return ::ImmGetCompositionStringW(hIMC, dwIndex, nullptr, 0) > 0;
 	}
 
+	LONG GetCompositionStringLength(DWORD dwIndex) const noexcept {
+		const LONG byteLen = ::ImmGetCompositionStringW(hIMC, dwIndex, nullptr, 0);
+		return byteLen / sizeof(wchar_t);
+	}
+
 	std::wstring GetCompositionString(DWORD dwIndex) const {
 		const LONG byteLen = ::ImmGetCompositionStringW(hIMC, dwIndex, nullptr, 0);
 		std::wstring wcs(byteLen / sizeof(wchar_t), 0);
@@ -347,7 +358,7 @@ class GlobalMemory;
 
 class ReverseArrowCursor {
 	HCURSOR cursor {};
-	UINT dpi = USER_DEFAULT_SCREEN_DPI;
+	bool valid = false;
 
 public:
 	ReverseArrowCursor() noexcept = default;
@@ -362,17 +373,22 @@ public:
 		}
 	}
 
-	HCURSOR Load(UINT dpi_) noexcept {
-		if (cursor)	 {
-			if (dpi == dpi_) {
+	void Invalidate() noexcept {
+		valid = false;
+	}
+
+	HCURSOR Load(UINT dpi) noexcept {
+		if (cursor)	{
+			if (valid) {
 				return cursor;
 			}
 			::DestroyCursor(cursor);
 		}
 
-		dpi = dpi_;
-		cursor = LoadReverseArrowCursor(dpi_);
-		return cursor ? cursor : ::LoadCursor({}, IDC_ARROW);
+		valid = true;
+		HCURSOR arrow = ::LoadCursor({}, IDC_ARROW);
+		cursor = LoadReverseArrowCursor(arrow, dpi);
+		return cursor ? cursor : arrow;
 	}
 };
 
@@ -717,7 +733,6 @@ ScintillaWin::ScintillaWin(HWND hwnd) noexcept {
 ScintillaWin::~ScintillaWin() {
 	if (sysCaretBitmap) {
 		::DeleteObject(sysCaretBitmap);
-		sysCaretBitmap = {};
 	}
 }
 
@@ -1484,9 +1499,8 @@ sptr_t ScintillaWin::HandleCompositionInline(uptr_t, sptr_t lParam) {
 		const int indicatorMask = MapImeIndicators(imeIndicator);
 
 		const UINT codePage = CodePageOfDocument();
-		char inBufferCP[16];
 		const std::wstring_view wsv = wcs;
-
+		char inBufferCP[16];
 		for (size_t i = 0; i < wsv.size(); ) {
 			const size_t ucWidth = UTF16CharLength(wsv[i]);
 			const int size = MultiByteFromWideChar(codePage, wsv.substr(i, ucWidth), inBufferCP, sizeof(inBufferCP) - 1);
@@ -1638,19 +1652,21 @@ Window::Cursor ScintillaWin::ContextCursor(Point pt) {
 
 #if SCI_EnablePopupMenu
 sptr_t ScintillaWin::ShowContextMenu(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
-	Point pt = PointFromLParam(lParam);
-	POINT rpt = POINTFromPoint(pt);
-	::ScreenToClient(MainHWND(), &rpt);
-	const Point ptClient = PointFromPOINT(rpt);
+	Point ptScreen = PointFromLParam(lParam);
+	Point ptClient;
+	POINT point = POINTFromLParam(lParam);
+	if ((point.x == -1) && (point.y == -1)) {
+		// Caused by keyboard so display menu near caret
+		ptClient = PointMainCaret();
+		point = POINTFromPoint(ptClient);
+		::ClientToScreen(MainHWND(), &point);
+		ptScreen = PointFromPOINT(point);
+	} else {
+		::ScreenToClient(MainHWND(), &point);
+		ptClient = PointFromPOINT(point);
+	}
 	if (ShouldDisplayPopup(ptClient)) {
-		if ((pt.x == -1) && (pt.y == -1)) {
-			// Caused by keyboard so display menu near caret
-			pt = PointMainCaret();
-			POINT spt = POINTFromPoint(pt);
-			::ClientToScreen(MainHWND(), &spt);
-			pt = PointFromPOINT(spt);
-		}
-		ContextMenu(pt);
+		ContextMenu(ptScreen);
 		return 0;
 	}
 	return ::DefWindowProc(MainHWND(), iMessage, wParam, lParam);
@@ -1730,7 +1746,7 @@ sptr_t ScintillaWin::MouseMessage(unsigned int iMessage, uptr_t wParam, sptr_t l
 			// handle the message but pass it on.
 			RECT rc;
 			GetWindowRect(MainHWND(), &rc);
-			const POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+			const POINT pt = POINTFromLParam(lParam);
 			if (!PtInRect(&rc, pt)) {
 				return ::DefWindowProc(MainHWND(), iMessage, wParam, lParam);
 			}
@@ -2319,6 +2335,7 @@ sptr_t ScintillaWin::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 
 		case WM_DPICHANGED:
 			dpi = HIWORD(wParam);
+			reverseArrowCursor.Invalidate();
 			vs.fontsValid = false;
 			InvalidateStyleRedraw();
 			break;
@@ -2327,6 +2344,7 @@ sptr_t ScintillaWin::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 			const UINT dpiNow = GetWindowDPI(MainHWND());
 			if (dpi != dpiNow) {
 				dpi = dpiNow;
+				reverseArrowCursor.Invalidate();
 				vs.fontsValid = false;
 				InvalidateStyleRedraw();
 			}
@@ -2753,10 +2771,11 @@ void ScintillaWin::NotifyDoubleClick(Point pt, KeyMod modifiers) {
 	//Platform::DebugPrintf("ScintillaWin Double click 0\n");
 	ScintillaBase::NotifyDoubleClick(pt, modifiers);
 	// Send myself a WM_LBUTTONDBLCLK, so the container can handle it too.
+	const POINT point = POINTFromPoint(pt);
 	::SendMessage(MainHWND(),
 		WM_LBUTTONDBLCLK,
 		FlagSet(modifiers, KeyMod::Shift) ? MK_SHIFT : 0,
-		MAKELPARAM(pt.x, pt.y));
+		MAKELPARAM(point.x, point.y));
 }
 
 namespace {
@@ -3426,9 +3445,14 @@ LRESULT ScintillaWin::ImeOnDocumentFeed(LPARAM lParam) const {
 		return 0;
 	}
 
-	const size_t compStrLen = imc.GetCompositionString(GCS_COMPSTR).size();
-	const int imeCaretPos = imc.GetImeCaretPos();
-	const Sci::Position compStart = pdoc->GetRelativePositionUTF16(curPos, -imeCaretPos);
+	DWORD compStrLen = 0;
+	Sci::Position compStart = curPos;
+	if (pdoc->TentativeActive()) {
+		// rcFeed contains current composition string
+		compStrLen = imc.GetCompositionStringLength(GCS_COMPSTR);
+		const int imeCaretPos = imc.GetImeCaretPos();
+		compStart = pdoc->GetRelativePositionUTF16(curPos, -imeCaretPos);
+	}
 	const Sci::Position compStrOffset = pdoc->CountUTF16(lineStart, compStart);
 
 	// Fill in reconvert structure.
@@ -3436,7 +3460,7 @@ LRESULT ScintillaWin::ImeOnDocumentFeed(LPARAM lParam) const {
 	rc->dwVersion = 0; //constant
 	rc->dwStrLen = static_cast<DWORD>(rcFeed.length());
 	rc->dwStrOffset = sizeof(RECONVERTSTRING); //constant
-	rc->dwCompStrLen = static_cast<DWORD>(compStrLen);
+	rc->dwCompStrLen = compStrLen;
 	rc->dwCompStrOffset = static_cast<DWORD>(compStrOffset) * sizeof(wchar_t);
 	rc->dwTargetStrLen = rc->dwCompStrLen;
 	rc->dwTargetStrOffset = rc->dwCompStrOffset;
@@ -3445,6 +3469,8 @@ LRESULT ScintillaWin::ImeOnDocumentFeed(LPARAM lParam) const {
 }
 
 void ScintillaWin::GetMouseParameters() noexcept {
+	// mouse pointer size and colour may changed
+	reverseArrowCursor.Invalidate();
 	::SystemParametersInfo(SPI_GETMOUSEVANISH, 0, &typingWithoutCursor, 0);
 	// This retrieves the number of lines per scroll as configured in the Mouse Properties sheet in Control Panel
 	::SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &linesPerScroll, 0);
@@ -4138,7 +4164,7 @@ LRESULT CALLBACK ScintillaWin::CTWndProc(HWND hWnd, UINT iMessage, WPARAM wParam
 				::EndPaint(hWnd, &ps);
 				return 0;
 			} else if ((iMessage == WM_NCLBUTTONDOWN) || (iMessage == WM_NCLBUTTONDBLCLK)) {
-				POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+				POINT pt = POINTFromLParam(lParam);
 				ScreenToClient(hWnd, &pt);
 				sciThis->ct.MouseClick(PointFromPOINTEx(pt));
 				sciThis->CallTipClick();

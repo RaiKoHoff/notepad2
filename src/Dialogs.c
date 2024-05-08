@@ -93,7 +93,7 @@ int MsgBox(UINT uType, UINT uIdMsg, ...) {
 			0,
 			NULL);
 		StrTrim(lpMsgBuf, L" \a\b\f\n\r\t\v");
-		StrCatBuff(szText, L"\n", COUNTOF(szText));
+		StrCatBuff(szText, L"\r\n", COUNTOF(szText));
 		StrCatBuff(szText, lpMsgBuf, COUNTOF(szText));
 		LocalFree(lpMsgBuf);
 		const WCHAR wcht = szText[lstrlen(szText) - 1];
@@ -2762,7 +2762,7 @@ int GetSystemIntegrationStatus(struct SystemIntegrationInfo *info) {
 	}
 
 	// replace Windows Notepad
-	status = RegOpenKeyEx(HKEY_LOCAL_MACHINE, NP2RegSubKey_ReplaceNotepad, 0, KEY_READ, &hKey);
+	status = RegOpenKeyEx(HKEY_LOCAL_MACHINE, NP2RegSubKey_ReplaceNotepad, 0, KEY_QUERY_VALUE, &hKey);
 	if (status == ERROR_SUCCESS) {
 		LPWSTR command = Registry_GetString(hKey, L"Debugger");
 		if (command != NULL) {

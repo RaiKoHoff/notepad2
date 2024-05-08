@@ -168,6 +168,7 @@ struct PHPLexer {
 	int lineContinuation = 0;
 	int propertyValue = 0;
 	int parenCount = 0;
+	int selectorLevel = 0;	// nested selector
 	int chBefore = 0;
 
 	PHPLexer(Sci_PositionU startPos, Sci_PositionU lengthDoc, int initStyle, Accessor &styler):
@@ -194,7 +195,7 @@ struct PHPLexer {
 
 	int LineState() const noexcept {
 		int lineState = lineStateLineType | lineStateAttribute | lineContinuation
-			| propertyValue | (parenCount << 8);
+			| propertyValue | (parenCount << 8) | (selectorLevel << 16);
 		if (tagType == HtmlTagType::Question || StyleNeedsBacktrack(sc.state) || !nestedState.empty()) {
 			lineState |= LineStateNestedStateLine;
 		}
@@ -286,6 +287,7 @@ bool PHPLexer::HandleBlockEnd(HtmlTextBlock block) {
 		lineStateAttribute = 0;
 		propertyValue = 0;
 		parenCount = 0;
+		selectorLevel = 0;
 		lineStateLineType = nestedState.empty() ? 0 : LineStateNestedStateLine;
 		nestedState.clear();
 		sc.SetState(SCE_H_TAG);
@@ -617,6 +619,7 @@ bool PHPLexer::HighlightOperator(HtmlTextBlock block, int stylePrevNonWhite) {
 			propertyValue = 0;
 			lineStateAttribute = 0;
 			parenCount = 0;
+			selectorLevel = 0;
 		} else if (AnyOf<'[', ']'>(sc.ch)) {
 			lineStateAttribute = (sc.ch & 4) ? 0 : LineStateAttributeLine;
 		} else if (sc.ch == '(') {
@@ -624,6 +627,9 @@ bool PHPLexer::HighlightOperator(HtmlTextBlock block, int stylePrevNonWhite) {
 		} else if (sc.ch == ')') {
 			if (parenCount > 0) {
 				--parenCount;
+			}
+			if (selectorLevel > 0) {
+				selectorLevel--;
 			}
 		} else if (AnyOf<':', ';'>(sc.ch) && parenCount == 0) {
 			if (sc.ch == ':') {
@@ -750,6 +756,13 @@ void PHPLexer::HighlightJsInnerString() {
 bool PHPLexer::ClassifyCssWord() {
 	char s[16];
 	sc.GetCurrentLowered(s, sizeof(s));
+	if (sc.state == css_style(SCE_CSS_PSEUDOCLASS)) {
+		if (sc.ch == '(' && StrEqualsAny(s + 1, "is", "has", "not", "where", "current")) {
+			++selectorLevel;
+		}
+		return false;
+	}
+
 	const int chNext = sc.GetDocNextChar(sc.ch == '(');
 	if (sc.ch == '(') {
 		sc.ChangeState(css_style(SCE_CSS_FUNCTION));
@@ -778,7 +791,7 @@ bool PHPLexer::ClassifyCssWord() {
 			// {property: value;}
 			propertyValue = CssLineStatePropertyValue;
 			sc.ChangeState(css_style(SCE_CSS_PROPERTY));
-		} else if (parenCount == 0 && !(chNext == '(')) {
+		} else if (parenCount == selectorLevel && !(chNext == '(')) {
 			sc.ChangeState(css_style(SCE_CSS_TAG));
 		}
 	}
@@ -809,11 +822,15 @@ void ColourisePHPDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 		1: lineStateAttribute
 		1: lineContinuation
 		1: propertyValue
+		2: unused
+		8: parenCount
+		8: selectorLevel
 		*/
 		lexer.lineStateAttribute = lineState & LineStateAttributeLine;
 		lexer.lineContinuation = lineState & JsLineStateLineContinuation;
 		lexer.propertyValue = lineState & CssLineStatePropertyValue;
-		lexer.parenCount = lineState >> 8;
+		lexer.parenCount = (lineState >> 8) & 0xff;
+		lexer.selectorLevel = lineState >> 16;
 	}
 	if (startPos == 0) {
 		if (sc.Match('#', '!')) {
@@ -1052,9 +1069,16 @@ void ColourisePHPDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			break;
 
 		case SCE_H_COMMENT:
-			if (sc.Match('-', '-', '>')) {
-				sc.Advance(3);
-				sc.SetState(SCE_H_DEFAULT);
+			if (sc.Match('-', '-')) {
+				do {
+					sc.Forward();
+				} while (sc.ch == '-');
+				// close HTML comment with --!>
+				// https://html.spec.whatwg.org/multipage/parsing.html#parse-error-incorrectly-closed-comment
+				if (sc.ch == '>' || sc.Match('!', '>')) {
+					sc.Forward((sc.ch == '>') ? 1 : 2);
+					sc.SetState(SCE_H_DEFAULT);
+				}
 			}
 			break;
 
@@ -1159,7 +1183,7 @@ void ColourisePHPDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 		case css_style(SCE_CSS_PSEUDOCLASS):
 		case css_style(SCE_CSS_PSEUDOELEMENT):
 			if (!IsCssIdentifierChar(sc.ch)) {
-				if (sc.state == css_style(SCE_CSS_IDENTIFIER) && lexer.ClassifyCssWord()) {
+				if (AnyOf(sc.state, css_style(SCE_CSS_IDENTIFIER), css_style(SCE_CSS_PSEUDOCLASS)) && lexer.ClassifyCssWord()) {
 					continue;
 				}
 
@@ -1204,6 +1228,13 @@ void ColourisePHPDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 					if (chNext == '-' && sc.GetRelative(3) == '-') {
 						sc.SetState(SCE_H_COMMENT);
 						sc.Advance(3);
+						// handle empty comment: <!-->, <!--->
+						// https://html.spec.whatwg.org/multipage/parsing.html#parse-error-abrupt-closing-of-empty-comment
+						if (sc.chNext == '>' || sc.MatchNext('-', '>')) {
+							sc.Forward((sc.chNext == '>') ? 2 : 3);
+							sc.SetState(SCE_H_DEFAULT);
+							continue;
+						}
 					} else if (chNext == '[' && styler.Match(sc.currentPos + 3, "CDATA[")) {
 						// <![CDATA[ ]]>
 						sc.SetState(SCE_H_CDATA);
@@ -1363,7 +1394,7 @@ void ColourisePHPDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 				sc.SetState(css_style(SCE_CSS_CDO_CDC));
 				sc.Advance((sc.ch == '<') ? 3 : 2);
 			} else if (IsNumberStart(sc.ch, sc.chNext)
-				|| (sc.ch == '#' && (lexer.propertyValue || lexer.parenCount) && IsHexDigit(sc.chNext))) {
+				|| (sc.ch == '#' && (lexer.propertyValue || lexer.parenCount > lexer.selectorLevel) && IsHexDigit(sc.chNext))) {
 				escSeq.outerState = css_style(SCE_CSS_DEFAULT);
 				sc.SetState(css_style(SCE_CSS_NUMBER));
 			} else if (sc.chNext == '+' && UnsafeLower(sc.ch) == 'u'
