@@ -86,7 +86,7 @@ class UndoHistory final {
 	int savePoint = 0;
 	int tentativePoint = -1;
 	std::optional<int> detach;	// Never set if savePoint set (>= 0)
-	std::unique_ptr<ScrapStack> scraps;
+	const std::unique_ptr<ScrapStack> scraps;
 	struct actPos { int act; size_t position; };
 	std::optional<actPos> memory;
 
@@ -100,6 +100,7 @@ public:
 
 	void BeginUndoAction(bool mayCoalesce = false) noexcept;
 	void EndUndoAction() noexcept;
+	int UndoSequenceDepth() const noexcept;
 	void DropUndoSequence() noexcept;
 	void DeleteUndoHistory() noexcept;
 

@@ -21,6 +21,7 @@
 #define NP2STYLE_CallTip				63219
 #define NP2STYLE_CodeFolding			63220
 #define NP2STYLE_Link					63221
+#define NP2STYLE_ChangeHistoryMarker	63222
 
 #define NP2STYLE_Default				63226
 #define NP2STYLE_Comment				63227
@@ -111,7 +112,7 @@
 #define NP2STYLE_FunctionDefinition		63436
 #define NP2STYLE_Protocol				63437
 #define NP2STYLE_MethodDefinition		63438
-
+#define NP2STYLE_MacroKeyword			63439
 #define NP2STYLE_Label					63440
 #define NP2STYLE_Command				63441
 #define NP2STYLE_RawString				63442
@@ -122,6 +123,7 @@
 #define NP2STYLE_TripleQuotedString		63447
 #define NP2STYLE_BasicFunction			63448
 #define NP2STYLE_PredefinedVariable		63449
+#define NP2STYLE_MacroFunction			63450
 
 #define NP2STYLE_ReservedWord			63451
 #define NP2STYLE_EscapeSequence			63452
@@ -192,6 +194,7 @@
 #define NP2STYLE_Parameter				63603
 #define NP2STYLE_InlineExpansion		63604
 #define NP2STYLE_Pragma					63605
+#define NP2STYLE_HardLineBreak			63606
 
 #define NP2STYLE_Section				63611
 #define NP2STYLE_Assignment				63612

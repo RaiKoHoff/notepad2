@@ -9,9 +9,7 @@
  * file which contains any comments about the definitions. HFacer.py does the generation. */
 #pragma once
 
-#ifdef __cplusplus
 extern "C" {
-#endif
 
 #if defined(_WIN32)
 void Scintilla_LoadDpiForWindow(void);
@@ -20,16 +18,10 @@ int Scintilla_RegisterClasses(void *hInstance);
 int Scintilla_ReleaseResources(void);
 #endif
 
-#ifdef __cplusplus
 }
-#endif
 
 // Include header that defines basic numeric types.
-#if defined(__cplusplus)
 #include <cstdint>
-#else
-#include <stdint.h>
-#endif
 
 // Define uptr_t, an unsigned integer type large enough to hold a pointer.
 typedef uintptr_t uptr_t;
@@ -169,6 +161,7 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SC_MARKNUM_FOLDERSUB 29
 #define SC_MARKNUM_FOLDER 30
 #define SC_MARKNUM_FOLDEROPEN 31
+#define SC_MASK_HISTORY 0x01E00000
 #define SC_MASK_FOLDERS 0xFE000000U
 #define SCI_MARKERDEFINE 2040
 #define SCI_MARKERSETFORETRANSLUCENT 2294
@@ -285,6 +278,17 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_STYLESETHOTSPOT 2409
 #define SCI_STYLESETCHECKMONOSPACED 2254
 #define SCI_STYLEGETCHECKMONOSPACED 2255
+#define SC_STRETCH_ULTRA_CONDENSED 1
+#define SC_STRETCH_EXTRA_CONDENSED 2
+#define SC_STRETCH_CONDENSED 3
+#define SC_STRETCH_SEMI_CONDENSED 4
+#define SC_STRETCH_NORMAL 5
+#define SC_STRETCH_SEMI_EXPANDED 6
+#define SC_STRETCH_EXPANDED 7
+#define SC_STRETCH_EXTRA_EXPANDED 8
+#define SC_STRETCH_ULTRA_EXPANDED 9
+#define SCI_STYLESETSTRETCH 2258
+#define SCI_STYLEGETSTRETCH 2259
 #define SCI_STYLESETINVISIBLEREPRESENTATION 2256
 #define SCI_STYLEGETINVISIBLEREPRESENTATION 2257
 #define SC_ELEMENT_LIST 0
@@ -343,6 +347,7 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_GETCHARACTERCATEGORYOPTIMIZATION 2721
 #define SCI_BEGINUNDOACTION 2078
 #define SCI_ENDUNDOACTION 2079
+#define SCI_GETUNDOSEQUENCE 2799
 #define SCI_GETUNDOACTIONS 2790
 #define SCI_SETUNDOSAVEPOINT 2791
 #define SCI_GETUNDOSAVEPOINT 2792
@@ -443,7 +448,7 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_AUTOCGETOPTIONS 2639
 #define SCI_AUTOCSETDROPRESTOFWORD 2270
 #define SCI_AUTOCGETDROPRESTOFWORD 2271
-#define SCI_SETAUTOINSERTMASK 2109
+#define SCI_SETAUTOINSERTMASK 2521
 #define SCI_REGISTERIMAGE 2405
 #define SCI_CLEARREGISTEREDIMAGES 2408
 #define SCI_AUTOCGETTYPESEPARATOR 2285
@@ -452,6 +457,8 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_AUTOCGETMAXWIDTH 2209
 #define SCI_AUTOCSETMAXHEIGHT 2210
 #define SCI_AUTOCGETMAXHEIGHT 2211
+#define SCI_AUTOCSETSTYLE 2109
+#define SCI_AUTOCGETSTYLE 2120
 #define SCI_SETINDENT 2122
 #define SCI_GETINDENT 2123
 #define SCI_SETUSETABS 2124
@@ -461,7 +468,7 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_GETLINEINDENTPOSITION 2128
 #define SCI_GETCOLUMN 2129
 #define SCI_COUNTCHARACTERS 2633
-#define SCI_COUNTCHARACTERSANDCOLUMNS 2120
+#define SCI_COUNTCHARACTERSANDCOLUMNS 2522
 #define SCI_COUNTCODEUNITS 2715
 #define SCI_SETHSCROLLBAR 2130
 #define SCI_GETHSCROLLBAR 2131
@@ -496,10 +503,11 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCFIND_WHOLEWORD 0x2
 #define SCFIND_MATCHCASE 0x4
 #define SCFIND_MATCH_TO_WORD_END 0x8
-#define SCFIND_WORDSTART 0x00100000
-#define SCFIND_REGEXP 0x00200000
-#define SCFIND_POSIX 0x00400000
-#define SCFIND_CXX11REGEX 0x00800000
+#define SCFIND_WORDSTART 0x10
+#define SCFIND_REGEXP 0x20
+#define SCFIND_POSIX 0x40
+#define SCFIND_CXX11REGEX 0x80
+#define SCFIND_REGEX_DOT_ALL 0x100
 #define SCI_FINDTEXTFULL 2196
 #define SCI_FORMATRANGEFULL 2777
 #define SC_CHANGE_HISTORY_DISABLED 0
@@ -579,8 +587,10 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_CALLTIPSETFOREHLT 2207
 #define SCI_CALLTIPUSESTYLE 2212
 #define SCI_CALLTIPSETPOSITION 2213
-#define SC_NOTIFICATIONPOSITION_BOTTOMRIGHT 0
-#define SC_NOTIFICATIONPOSITION_CENTER 1
+#define SC_NOTIFICATIONPOSITION_NONE 0
+#define SC_NOTIFICATIONPOSITION_DEFAULT 1
+#define SC_NOTIFICATIONPOSITION_BOTTOMRIGHT 2
+#define SC_NOTIFICATIONPOSITION_CENTER 3
 #define SCI_SHOWNOTIFICATION 2091
 #define SCI_VISIBLEFROMDOCLINE 2220
 #define SCI_DOCLINEFROMVISIBLE 2221
@@ -749,7 +759,9 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define TAB_COMPLETION_DEFAULT 1
 #define TAB_COMPLETION_LATEX 2
 #define SCI_TAB 2327
+#define SCI_LINEINDENT 2813
 #define SCI_BACKTAB 2328
+#define SCI_LINEDEDENT 2814
 #define SCI_NEWLINE 2329
 #define SCI_FORMFEED 2330
 #define SCI_VCHOME 2331
@@ -967,6 +979,9 @@ typedef sptr_t (*SciFnDirectStatus)(sptr_t ptr, unsigned int iMessage, uptr_t wP
 #define SCI_SETPOSITIONCACHE 2514
 #define SCI_GETPOSITIONCACHE 2515
 #define SCI_COPYALLOWLINE 2519
+#define SCI_CUTALLOWLINE 2810
+#define SCI_SETCOPYSEPARATOR 2811
+#define SCI_GETCOPYSEPARATOR 2812
 #define SCI_GETCHARACTERPOINTER 2520
 #define SCI_GETRANGEPOINTER 2643
 #define SCI_GETGAPPOSITION 2644
@@ -1334,13 +1349,6 @@ struct Sci_RangeToFormatFull {
 	struct Sci_Rectangle rcPage;
 	struct Sci_CharacterRangeFull chrg;
 };
-
-#ifndef __cplusplus
-/* For the GTK platform, g-ir-scanner needs to have these typedefs. This
- * is not required in C++ code and actually seems to break ScintillaEditPy */
-typedef struct Sci_NotifyHeader Sci_NotifyHeader;
-typedef struct SCNotification SCNotification;
-#endif
 
 struct Sci_NotifyHeader {
 	/* Compatible with Windows NMHDR.

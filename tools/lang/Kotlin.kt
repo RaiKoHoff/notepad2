@@ -1,4 +1,4 @@
-// Kotlin 1.9 https://kotlinlang.org/docs/home.html
+// Kotlin 2.0 https://kotlinlang.org/docs/home.html
 
 //! Keywords		===========================================================
 // https://kotlinlang.org/docs/keyword-reference.html
@@ -21,13 +21,11 @@ when while
 // Soft Keywords
 by
 catch constructor
-delegate dynamic
-field file finally
+dynamic
+finally
 get
 import init
-param property
-receiver
-set setparam
+set
 value
 where
 
@@ -50,6 +48,18 @@ reified
 sealed suspend
 tailrec
 vararg
+
+//! annotation		===========================================================
+// https://kotlinlang.org/docs/annotations.html#annotation-use-site-targets
+@delegate
+@field
+@file
+@get
+@param
+@property
+@receiver
+@set
+@setparam
 
 //! Library			===========================================================
 // Kotlin Standard Library

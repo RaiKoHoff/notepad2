@@ -48,7 +48,12 @@ struct SplitView {
 	const char *segment2 = nullptr;
 	size_t length = 0;
 
-	SplitView(const SplitVector<char> &instance) noexcept;
+	char operator[](size_t position) const noexcept {
+		if (position < length1) {
+			return segment1[position];
+		}
+		return segment2[position];
+	}
 
 	char CharAt(size_t position) const noexcept {
 		if (position < length1) {
@@ -77,11 +82,11 @@ private:
 	SplitVector<char> style;
 
 	bool collectingUndo;
-	std::unique_ptr<UndoHistory> uh;
+	const std::unique_ptr<UndoHistory> uh;
 
 	std::unique_ptr<ChangeHistory> changeHistory;
 
-	std::unique_ptr<ILineVector> plv;
+	const std::unique_ptr<ILineVector> plv;
 
 	bool UTF8LineEndOverlaps(Sci::Position position) const noexcept;
 	bool UTF8IsCharacterBoundary(Sci::Position position) const;
@@ -103,13 +108,15 @@ public:
 
 	/// Retrieving positions outside the range of the buffer works and returns 0
 	char CharAt(Sci::Position position) const noexcept;
-	unsigned char UCharAt(Sci::Position position) const noexcept;
+	unsigned char UCharAt(Sci::Position position) const noexcept {
+		return CharAt(position);
+	}
 	void GetCharRange(char *buffer, Sci::Position position, Sci::Position lengthRetrieve) const noexcept;
 	char StyleAt(Sci::Position position) const noexcept;
 	void GetStyleRange(unsigned char *buffer, Sci::Position position, Sci::Position lengthRetrieve) const noexcept;
 	const char *BufferPointer();
 	const char *RangePointer(Sci::Position position, Sci::Position rangeLength) noexcept;
-	const char *StyleRangePointer(Sci::Position position, Sci::Position rangeLength) noexcept;
+	int CheckRange(const char *chars, const char *styles, Sci::Position position, Sci::Position rangeLength) const noexcept;
 	Sci::Position GapPosition() const noexcept;
 	SplitView AllView() const noexcept;
 
@@ -163,7 +170,7 @@ public:
 
 	/// The save point is a marker in the undo stack where the container has stated that
 	/// the buffer was saved. Undo and redo can move over the save point.
-	void SetSavePoint() noexcept;
+	void SetSavePoint();
 	bool IsSavePoint() const noexcept;
 
 	void TentativeStart() noexcept;
@@ -177,6 +184,7 @@ public:
 	}
 	void BeginUndoAction(bool mayCoalesce = false) noexcept;
 	void EndUndoAction() noexcept;
+	int UndoSequenceDepth() const noexcept;
 	void AddUndoAction(Sci::Position token, bool mayCoalesce);
 	void DeleteUndoHistory() noexcept;
 

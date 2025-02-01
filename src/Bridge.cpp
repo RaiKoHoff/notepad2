@@ -1,7 +1,7 @@
 /******************************************************************************
 *
 *
-* Notepad2
+* Notepad4
 *
 * Bridge.cpp
 *   Functionalities implemented in C++:
@@ -33,23 +33,14 @@ struct IUnknown;
 
 #include "SciCall.h"
 #include "VectorISA.h"
-#if !NP2_FORCE_COMPILE_C_AS_CPP
-extern "C" {
-#endif
-
 #include "Helpers.h"
 #include "Dialogs.h"
-#include "Notepad2.h"
+#include "Notepad4.h"
 #include "Edit.h"
 #include "Styles.h"
-
-#if !NP2_FORCE_COMPILE_C_AS_CPP
-}
-#endif
 #include "resource.h"
 
 // Global settings...
-#if NP2_FORCE_COMPILE_C_AS_CPP
 extern HWND hwndMain;
 extern PrintHeaderOption iPrintHeader;
 extern PrintFooterOption iPrintFooter;
@@ -58,16 +49,6 @@ extern int iPrintZoom;
 extern RECT pageSetupMargin;
 extern HWND hwndStatus;
 extern WCHAR defaultTextFontName[LF_FACESIZE];
-#else
-extern "C" HWND hwndMain;
-extern "C" PrintHeaderOption iPrintHeader;
-extern "C" PrintFooterOption iPrintFooter;
-extern "C" int iPrintColor;
-extern "C" int iPrintZoom;
-extern "C" RECT pageSetupMargin;
-extern "C" HWND hwndStatus;
-extern "C" WCHAR defaultTextFontName[LF_FACESIZE];
-#endif
 
 namespace {
 
@@ -84,10 +65,10 @@ inline UINT GetLocaleMeasurement() noexcept {
 	UINT measurement = MeasurementInternational;
 #if _WIN32_WINNT >= _WIN32_WINNT_VISTA
 	GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IMEASURE | LOCALE_RETURN_NUMBER,
-		(LPWSTR)(&measurement), sizeof(UINT) / sizeof(WCHAR));
+		reinterpret_cast<LPWSTR>(&measurement), sizeof(UINT) / sizeof(WCHAR));
 #else
 	GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_IMEASURE | LOCALE_RETURN_NUMBER,
-		(LPWSTR)(&measurement), sizeof(UINT) / sizeof(WCHAR));
+		reinterpret_cast<LPWSTR>(&measurement), sizeof(UINT) / sizeof(WCHAR));
 #endif
 	return measurement;
 }
@@ -119,7 +100,7 @@ void EditPrintInit() noexcept {
 //
 // EditPrint() - Code from SciTEWin::Print()
 //
-extern "C" bool EditPrint(HWND hwnd, LPCWSTR pszDocTitle, BOOL bDefault) {
+bool EditPrint(HWND hwnd, LPCWSTR pszDocTitle, BOOL bDefault) noexcept {
 	PRINTDLG pdlg;
 	memset(&pdlg, 0, sizeof(PRINTDLG));
 	pdlg.lStructSize = sizeof(PRINTDLG);
@@ -227,11 +208,11 @@ extern "C" bool EditPrint(HWND hwnd, LPCWSTR pszDocTitle, BOOL bDefault) {
 	// area of the page.
 
 	// Convert device coordinates into logical coordinates
-	DPtoLP(hdc, (LPPOINT)&rectMargins, 2);
-	DPtoLP(hdc, (LPPOINT)&rectPhysMargins, 2);
+	DPtoLP(hdc, reinterpret_cast<LPPOINT>(&rectMargins), 2);
+	DPtoLP(hdc, reinterpret_cast<LPPOINT>(&rectPhysMargins), 2);
 
 	// Convert page size to logical units and we're done!
-	DPtoLP(hdc, (LPPOINT) &ptPage, 1);
+	DPtoLP(hdc, reinterpret_cast<LPPOINT>(&ptPage), 1);
 
 	const int fontSize = SciCall_StyleGetSizeFractional(STYLE_DEFAULT);
 
@@ -247,7 +228,7 @@ extern "C" bool EditPrint(HWND hwnd, LPCWSTR pszDocTitle, BOOL bDefault) {
 							DEFAULT_QUALITY,
 							DEFAULT_PITCH,
 							defaultTextFontName);
-	SelectObject(hdc, fontHeader);
+	SelectFont(hdc, fontHeader);
 	GetTextMetrics(hdc, &tm);
 	headerLineHeight = tm.tmHeight + tm.tmExternalLeading;
 
@@ -266,7 +247,7 @@ extern "C" bool EditPrint(HWND hwnd, LPCWSTR pszDocTitle, BOOL bDefault) {
 							DEFAULT_QUALITY,
 							DEFAULT_PITCH,
 							defaultTextFontName);
-	SelectObject(hdc, fontFooter);
+	SelectFont(hdc, fontFooter);
 	GetTextMetrics(hdc, &tm);
 	footerLineHeight = tm.tmHeight + tm.tmExternalLeading;
 
@@ -314,26 +295,17 @@ extern "C" bool EditPrint(HWND hwnd, LPCWSTR pszDocTitle, BOOL bDefault) {
 	// Set print zoom...
 	SciCall_SetPrintMagnification(iPrintZoom);
 
-	Sci_Position lengthDoc = SciCall_GetLength();
-	const Sci_Position lengthDocMax = lengthDoc;
-	Sci_Position lengthPrinted = 0;
+	Sci_Position lengthDoc = endPos;
+	Sci_Position lengthPrinted = startPos;
 
 	// Requested to print selection
-	if (pdlg.Flags & PD_SELECTION) {
-		if (startPos > endPos) {
-			lengthPrinted = endPos;
-			lengthDoc = startPos;
-		} else {
-			lengthPrinted = startPos;
-			lengthDoc = endPos;
-		}
-
-		lengthPrinted = sci::max<Sci_Position>(lengthPrinted, 0);
-		lengthDoc = sci::min(lengthDoc, lengthDocMax);
+	if (pdlg.Flags & PD_NOSELECTION) {
+		lengthPrinted = 0;
+		lengthDoc = SciCall_GetLength();
 	}
 
 	// We must substract the physical margins from the printable area
-	struct Sci_RangeToFormatFull frPrint;
+	Sci_RangeToFormatFull frPrint;
 	frPrint.hdc = hdc;
 	frPrint.hdcTarget = hdc;
 	frPrint.rc.left		= rectMargins.left - rectPhysMargins.left;
@@ -381,7 +353,7 @@ extern "C" bool EditPrint(HWND hwnd, LPCWSTR pszDocTitle, BOOL bDefault) {
 
 			SetTextColor(hdc, RGB(0, 0, 0));
 			SetBkColor(hdc, RGB(255, 255, 255));
-			SelectObject(hdc, fontHeader);
+			SelectFont(hdc, fontHeader);
 			const UINT ta = SetTextAlign(hdc, TA_BOTTOM);
 			RECT rcw = {
 				frPrint.rc.left, frPrint.rc.top - headerLineHeight - headerLineHeight / 2,
@@ -398,7 +370,7 @@ extern "C" bool EditPrint(HWND hwnd, LPCWSTR pszDocTitle, BOOL bDefault) {
 			if (iPrintHeader == PrintHeaderOption_FilenameAndDateTime || iPrintHeader == PrintHeaderOption_FilenameAndDate) {
 				SIZE sizeInfo;
 				const int len = lstrlen(dateString);
-				SelectObject(hdc, fontFooter);
+				SelectFont(hdc, fontFooter);
 				GetTextExtentPoint32(hdc, dateString, len, &sizeInfo);
 				rcw.left = frPrint.rc.right - 10 - sizeInfo.cx;
 				ExtTextOut(hdc, rcw.left + 5, rcw.bottom,
@@ -409,10 +381,10 @@ extern "C" bool EditPrint(HWND hwnd, LPCWSTR pszDocTitle, BOOL bDefault) {
 			SetTextAlign(hdc, ta);
 			if (iPrintHeader != PrintHeaderOption_LeaveBlank) {
 				HPEN pen = CreatePen(0, 1, RGB(0, 0, 0));
-				HPEN penOld = (HPEN)SelectObject(hdc, pen);
+				HPEN penOld = SelectPen(hdc, pen);
 				MoveToEx(hdc, frPrint.rc.left, frPrint.rc.top - headerLineHeight / 4, nullptr);
 				LineTo(hdc, frPrint.rc.right, frPrint.rc.top - headerLineHeight / 4);
-				SelectObject(hdc, penOld);
+				SelectPen(hdc, penOld);
 				DeleteObject(pen);
 			}
 		}
@@ -427,7 +399,7 @@ extern "C" bool EditPrint(HWND hwnd, LPCWSTR pszDocTitle, BOOL bDefault) {
 			SetBkColor(hdc, RGB(255, 255, 255));
 
 			if (iPrintFooter == PrintFooterOption_PageNumber) {
-				SelectObject(hdc, fontFooter);
+				SelectFont(hdc, fontFooter);
 				const UINT ta = SetTextAlign(hdc, TA_TOP);
 				const RECT rcw = {
 					frPrint.rc.left, frPrint.rc.bottom + footerLineHeight / 2,
@@ -443,11 +415,11 @@ extern "C" bool EditPrint(HWND hwnd, LPCWSTR pszDocTitle, BOOL bDefault) {
 
 				SetTextAlign(hdc, ta);
 				HPEN pen = ::CreatePen(0, 1, RGB(0, 0, 0));
-				HPEN penOld = (HPEN)SelectObject(hdc, pen);
+				HPEN penOld = SelectPen(hdc, pen);
 				SetBkColor(hdc, RGB(0, 0, 0));
 				MoveToEx(hdc, frPrint.rc.left, frPrint.rc.bottom + footerLineHeight / 4, nullptr);
 				LineTo(hdc, frPrint.rc.right, frPrint.rc.bottom + footerLineHeight / 4);
-				SelectObject(hdc, penOld);
+				SelectPen(hdc, penOld);
 				DeleteObject(pen);
 			}
 
@@ -505,7 +477,7 @@ static UINT_PTR CALLBACK PageSetupHook(HWND hwnd, UINT uiMsg, WPARAM wParam, LPA
 			p1 = p2;
 		}
 
-		ComboBox_SetCurSel(hwndCtl, (int)iPrintHeader);
+		ComboBox_SetCurSel(hwndCtl, static_cast<int>(iPrintHeader));
 		ComboBox_SetExtendedUI(hwndCtl, TRUE);
 
 		// Set footer options
@@ -521,7 +493,7 @@ static UINT_PTR CALLBACK PageSetupHook(HWND hwnd, UINT uiMsg, WPARAM wParam, LPA
 			p1 = p2;
 		}
 
-		ComboBox_SetCurSel(hwndCtl, (int)iPrintFooter);
+		ComboBox_SetCurSel(hwndCtl, static_cast<int>(iPrintFooter));
 		ComboBox_SetExtendedUI(hwndCtl, TRUE);
 
 		// Set color options
@@ -555,9 +527,9 @@ static UINT_PTR CALLBACK PageSetupHook(HWND hwnd, UINT uiMsg, WPARAM wParam, LPA
 				iPrintZoom = 100;
 			}
 
-			iPrintHeader = (PrintHeaderOption)SendDlgItemMessage(hwnd, IDC_PAGESETUP_HEADER_LIST, CB_GETCURSEL, 0, 0);
-			iPrintFooter = (PrintFooterOption)SendDlgItemMessage(hwnd, IDC_PAGESETUP_FOOTER_LIST, CB_GETCURSEL, 0, 0);
-			iPrintColor	 = (int)SendDlgItemMessage(hwnd, IDC_PAGESETUP_COLOR_MODE_LIST, CB_GETCURSEL, 0, 0);
+			iPrintHeader = static_cast<PrintHeaderOption>(SendDlgItemMessage(hwnd, IDC_PAGESETUP_HEADER_LIST, CB_GETCURSEL, 0, 0));
+			iPrintFooter = static_cast<PrintFooterOption>(SendDlgItemMessage(hwnd, IDC_PAGESETUP_FOOTER_LIST, CB_GETCURSEL, 0, 0));
+			iPrintColor	 = static_cast<int>(SendDlgItemMessage(hwnd, IDC_PAGESETUP_COLOR_MODE_LIST, CB_GETCURSEL, 0, 0));
 		}
 		break;
 
@@ -568,7 +540,7 @@ static UINT_PTR CALLBACK PageSetupHook(HWND hwnd, UINT uiMsg, WPARAM wParam, LPA
 	return 0;
 }
 
-extern "C" void EditPrintSetup(HWND hwnd) {
+void EditPrintSetup(HWND hwnd) noexcept {
 	DLGTEMPLATE *pDlgTemplate = LoadThemedDialogTemplate(MAKEINTRESOURCE(IDD_PAGESETUP), g_hInstance);
 
 	PAGESETUPDLG pdlg;
@@ -608,7 +580,7 @@ extern "C" void EditPrintSetup(HWND hwnd) {
 namespace { // copy as RTF
 
 #if (__cplusplus > 201703L || (defined(_MSVC_LANG) && _MSVC_LANG > 201703L)) && ( \
-	(defined(_MSC_VER) && _MSC_VER >= 1920 && (defined(_WIN64) || !defined(__clang__))) || \
+	(defined(_MSC_VER) && _MSC_VER >= 1928 && (defined(_WIN64) || !defined(__clang__))) || \
 	(defined(_LIBCPP_VERSION) && _LIBCPP_VERSION >= 16000) || \
 	(!defined(_LIBCPP_VERSION) && defined(__GNUC__) && __GNUC__ >= 11) )
 using std::make_unique_for_overwrite; // requires C++20 library support
@@ -648,7 +620,7 @@ DocumentStyledText GetDocumentStyledText(uint8_t (&styleMap)[STYLE_MAX + 1], con
 	for (size_t offset = 0; offset < textLength; offset++) {
 		const uint8_t style = styledText[offset];
 		styleUsed[style >> 5] |= (1U << (style & 31));
-		maxStyle = max_u(style, maxStyle);
+		maxStyle = max<unsigned>(style, maxStyle);
 	}
 
 	++maxStyle;
@@ -744,7 +716,7 @@ void GetRTFNextControl(const char **style, char *control) noexcept {
 	}
 	const size_t len = pos - *style;
 	memcpy(control, *style, len);
-	*(control + len) = '\0';
+	control[len] = '\0';
 	*style = pos;
 }
 
@@ -774,7 +746,7 @@ constexpr int GetRTFFontSize(int size) noexcept {
 	return size / (SC_FONT_SIZE_MULTIPLIER / 2);
 }
 
-std::string SaveToStreamRTF(const char *styledText, size_t textLength, Sci_Position startPos, Sci_Position endPos) {
+void SaveToStreamRTF(std::string &os, const char *styledText, size_t textLength, Sci_Position startPos, Sci_Position endPos) {
 	uint8_t styleMap[STYLE_MAX + 1];
 	const auto [styleList, styleCount, cpEdit] = GetDocumentStyledText(styleMap, styledText, textLength);
 	const std::unique_ptr<std::string[]> styles = make_unique_for_overwrite<std::string[]>(styleCount);
@@ -789,7 +761,7 @@ std::string SaveToStreamRTF(const char *styledText, size_t textLength, Sci_Posit
 	char fmtbuf[RTF_MAX_STYLEDEF];
 	memset(fmtbuf, 0, 4);
 	unsigned fmtlen = sprintf(fmtbuf, RTF_HEADEROPEN RTF_FONTDEFOPEN, legacyACP);
-	std::string os(fmtbuf, fmtlen);
+	os += std::string_view{fmtbuf, fmtlen};
 
 	int fontCount = 0;
 	int colorCount = 0;
@@ -978,7 +950,6 @@ std::string SaveToStreamRTF(const char *styledText, size_t textLength, Sci_Posit
 	}
 
 	os += RTF_PARAGRAPH_END RTF_BODYCLOSE;
-	return os;
 }
 
 }
@@ -993,9 +964,8 @@ enum {
 	SpaceOption_NewLineBefore = 8,
 	SpaceOption_NewLineAfter = 16,
 	SpaceOption_DanglingStmt = 32,
-	SpaceOption_KeepNewLine = 64,
-	SpaceOption_PushBrace = 128,
-	SpaceOption_PopBrace = 256,
+	SpaceOption_PushBrace = 64,
+	SpaceOption_PopBrace = 128,
 };
 
 int AddStyleSeparator(LPCEDITLEXER pLex, int ch, int chPrev, int style) noexcept {
@@ -1007,7 +977,7 @@ int AddStyleSeparator(LPCEDITLEXER pLex, int ch, int chPrev, int style) noexcept
 	// a++ + ++b, a + +1, a-- - --b, a - -1
 	if (ch == '+' || ch == '-') {
 		if (style == SCE_CSS_OPERATOR2 && pLex->iLexer == SCLEX_CSS) {
-			// '+' and '-' inside calc() function requires space on both side
+			// '+' and '-' inside math function requires space on both side
 			return SpaceOption_SpaceBefore | SpaceOption_SpaceAfter;
 		}
 		if (ch == chPrev) {
@@ -1015,28 +985,30 @@ int AddStyleSeparator(LPCEDITLEXER pLex, int ch, int chPrev, int style) noexcept
 		}
 	}
 	// var name; return .5; CSS property: 1 #1 .5 --name;
-	else if (BitTestEx(DefaultWordCharSet, chPrev)) {
-		if (BitTestEx(DefaultWordCharSet, ch) || ch == '$' || ch == '#') {
+	if (BitTestEx(DefaultWordCharSet, chPrev)) {
+		if (BitTestEx(DefaultWordCharSet, ch) || ch == '$' || ch == '#' || (ch == '-' && pLex->iLexer == SCLEX_CSS)) {
+			// TODO: improve CSS An+B when B is negative, https://www.w3.org/TR/css-syntax-3/#anb-microsyntax
 			return SpaceOption_SpaceBefore;
 		}
-		if ((ch == '.' || ch == '-') && style != pLex->operatorStyle && style != pLex->operatorStyle2) {
+		if (ch == '.' && style != pLex->operatorStyle && style != pLex->operatorStyle2) {
 			return SpaceOption_SpaceBefore;
 		}
 	}
 	return SpaceOption_None;
 }
 
-std::string CodePretty(LPCEDITLEXER pLex, const char *styledText, size_t textLength) {
+void CodePretty(std::string &output, LPCEDITLEXER pLex, const char *styledText, size_t textLength) {
 	char fmtbuf[128];
-	std::string output;
 	std::string braceStack(1, '\0'); // sentinel
 	memset(fmtbuf, 0, 4);
 
 	unsigned fmtlen = 0;
 	uint32_t blockLevel = 0;
 	uint32_t indentPrev = 0;
-	int chPrev = 0;
-	int chPrevNonWhite = 0;
+	uint8_t chPrev = 0;
+	uint8_t chPrevNonWhite = 0;
+	bool commentEndEOL = false;
+	bool defaultCase = false;
 
 	unsigned eol = '\r' | ('\n' << 8);
 	unsigned eolWidth = SciCall_GetEOLMode();
@@ -1050,44 +1022,70 @@ std::string CodePretty(LPCEDITLEXER pLex, const char *styledText, size_t textLen
 
 	uint8_t braceTop = '\0';
 	uint8_t stylePrev = styledText[0];
-	int styleBefore = stylePrev;
+	uint8_t styleBefore = stylePrev;
 	const char * const textBuffer = styledText + textLength + 1;
 	for (size_t offset = 0; offset < textLength; offset++) {
+		if (fmtlen >= maxFmtLen) {
+			// keep last character and eol in the buffer
+			output += std::string_view{fmtbuf, fmtlen - 4};
+			memcpy(fmtbuf, &fmtbuf[fmtlen - 4], 4);
+			fmtlen = 4;
+		}
+
 		const uint8_t style = styledText[offset];
 		if (style == 0) {
 			styleBefore = 0;
 			continue;
 		}
-		if (fmtlen >= maxFmtLen) {
-			// keep eol in the buffer
-			output += std::string_view{fmtbuf, fmtlen - 2};
-			memcpy(fmtbuf, &fmtbuf[fmtlen - 2], 2);
-			fmtlen = 2;
-		}
 
 		int spaceOption = SpaceOption_None;
+		unsigned operatorLen = 0;
 		const uint8_t ch = textBuffer[offset];
 		if (style <= pLex->commentStyleMarker) {
-			// keep new line after block comment
-			if (styledText[offset + 1] == 0 && (textBuffer[offset + 1] == '\n' || textBuffer[offset + 1] == '\r')) {
-				spaceOption = SpaceOption_KeepNewLine;
+			if (ch == '/' && (chPrev == '\n' || styleBefore == 0 || styleBefore > pLex->commentStyleMarker) && textBuffer[offset + 1] == '/') {
+				commentEndEOL = true; // fix indentation after comment line
+			} else if (styledText[offset + 1] == 0 && (textBuffer[offset + 1] == '\n' || textBuffer[offset + 1] == '\r')) {
+				commentEndEOL = true; // keep new line after block comment
+				spaceOption = SpaceOption_NewLineAfter;
 			}
 		} else if (style != styleBefore) {
 			spaceOption = AddStyleSeparator(pLex, ch, chPrev, style);
+			if (style == SCE_JS_WORD && pLex->iLexer == SCLEX_JAVASCRIPT && (ch == 'c' || ch == 'd')) {
+				if ((textBuffer[offset + 1] == 'a' || textBuffer[offset + 1] == 'e')
+					&& (textBuffer[offset + 2] == 's' || textBuffer[offset + 2] == 'f')) {
+					defaultCase = true;
+					spaceOption |= SpaceOption_NewLineBefore;
+				}
+			}
 			if (chPrev == ')') {
-				if (stylePrev == pLex->operatorStyle || stylePrev == pLex->operatorStyle2) {
-					if (pLex->iLexer != SCLEX_CSS) {
+				if (pLex->iLexer != SCLEX_JSON && (stylePrev == pLex->operatorStyle || stylePrev == pLex->operatorStyle2)) {
+					if (pLex->iLexer == SCLEX_CSS) {
+						if ((ch == '+' || ch == '-') || (ch != ':' && style != SCE_CSS_OPERATOR)) { // :not([class]):hover
+							spaceOption |= SpaceOption_SpaceBefore; // CSS property: function() value
+						}
+					} else if (style != SCE_JS_OPERATOR && style != SCE_JS_OPERATOR2) {
 						spaceOption |= SpaceOption_NewLineBefore | SpaceOption_DanglingStmt;
 						indentPrev++; // if (), for (), while () statement
-					} else if (ch != ':') { // :not([class]):hover
-						spaceOption |= SpaceOption_SpaceBefore; // property: function() value
 					}
 				}
+			} else if ((stylePrev == SCE_CSS_AT_RULE && pLex->iLexer == SCLEX_CSS)
+				|| (stylePrev == SCE_JS_WORD && pLex->iLexer == SCLEX_JAVASCRIPT
+					&& (style <= SCE_JS_OPERATOR_PF || ch == '{' || ch == '[' || ch == '!' || ch == '~' || (ch == '(' && chPrev != 't')))) {
+				// not set(), get();
+				spaceOption |= SpaceOption_SpaceBefore;
 			}
 		}
 		if (style == pLex->operatorStyle || style == pLex->operatorStyle2) {
 			if (ch == ':') {
 				spaceOption |= SpaceOption_SpaceAfter; // property: value
+				if (pLex->iLexer == SCLEX_JAVASCRIPT) {
+					if (defaultCase && braceTop == '{') {
+						defaultCase = false;
+						spaceOption |= SpaceOption_NewLineAfter;
+					} else if (stylePrev != SCE_JS_KEY && stylePrev != SCE_JS_LABEL && (stylePrev != SCE_JS_WORD || chPrev != 't')) {
+						spaceOption |= SpaceOption_SpaceBefore; // ternary operator, not set: / get:
+					}
+				}
 			} else if (ch == ',') {
 				if (pLex->iLexer == SCLEX_JSON || braceTop == braceObject || braceTop == bracketArray) {
 					spaceOption |= SpaceOption_NewLineAfter;
@@ -1116,6 +1114,9 @@ std::string CodePretty(LPCEDITLEXER pLex, const char *styledText, size_t textLen
 						braceTop = ch;
 						if (ch == '{') {
 							spaceOption |= SpaceOption_NewLineAfter | SpaceOption_IndentAfter;
+							if (stylePrev >= SCE_JS_IDENTIFIER) {
+								spaceOption |= SpaceOption_SpaceBefore;
+							}
 						}
 					}
 				} else if (ch == '{' || pLex->iLexer == SCLEX_JSON) {
@@ -1131,13 +1132,80 @@ std::string CodePretty(LPCEDITLEXER pLex, const char *styledText, size_t textLen
 				if (pLex->iLexer == SCLEX_JAVASCRIPT && static_cast<uint8_t>(ch - braceTop) < 3) {
 					spaceOption |= SpaceOption_PopBrace;
 				}
-			} else if (ch == '(' || ch == ')') {
-				if (pLex->iLexer == SCLEX_JAVASCRIPT) {
+			} else if (pLex->iLexer != SCLEX_JSON) {
+				if (pLex->iLexer == SCLEX_CSS) {
+					const uint8_t chNext = textBuffer[offset + 1];
+					if (style == SCE_CSS_OPERATOR2
+						|| ch == '>' // child combinator
+						|| (ch == '&' && chNext != ':' && chNext != '.' && chNext != ')') // nesting selector, &:hover, &.class, :not(&)
+						|| (ch == '~' && chNext != '=') // subsequent-sibling combinator
+						|| (ch == '|' && chNext == '|') // column combinator
+						// next-sibling combinator
+						|| (ch == '+' && styledText[offset + 1] != SCE_CSS_NUMBER && styledText[offset + 1] != SCE_CSS_DIMENSION)
+						) {
+						spaceOption |= SpaceOption_SpaceAfter;
+						if (ch == '|') {
+							operatorLen = 2;
+						}
+						if (chPrev != '(') { // :has(> img)
+							spaceOption |= SpaceOption_SpaceBefore;
+						}
+					} else if (ch == '!') {
+						spaceOption |= SpaceOption_SpaceBefore; // !important
+					}
+				} else {
 					if (ch == '(') {
 						braceTop = '(';
 						spaceOption |= SpaceOption_PushBrace;
-					} else if (braceTop == '(') {
-						spaceOption |= SpaceOption_PopBrace;
+					} else if (ch == ')') {
+						if (braceTop == '(') {
+							spaceOption |= SpaceOption_PopBrace;
+						}
+					} else if (ch != '.' && ch != '~' && ch != '$') {
+						// https://tc39.es/ecma262/#sec-punctuators
+						// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators
+						// !		!=		!==
+						// %		%=
+						// &	&&	&=		&&=
+						// *	**	*=		**=
+						// +	++	+=
+						// -	--	-=
+						// /		/=
+						// <	<<	<=		<<=
+						// =	=>	==		===
+						// >	>>	>=		>>=	>>>		>>>=
+						// ?	?.	??		??=
+						// ^		^=
+						// |	||	|=		||=
+						uint8_t chNext = textBuffer[offset + 1];
+						if (chNext == '=' || (ch != '!' && ch == chNext)) {
+							operatorLen = 2;
+							spaceOption |= SpaceOption_SpaceBefore | SpaceOption_SpaceAfter;
+							chNext = textBuffer[offset + 2];
+							if (chNext == '=' || chNext == '>') {
+								operatorLen = 3;
+								if (chNext == '>' && textBuffer[offset + 3] == '=') {
+									operatorLen = 4;
+								}
+							}
+						} else if (ch == '+' || ch == '-') {
+							// detect unary / binary operator, similar to FollowExpression()
+							if (stylePrev == SCE_JS_WORD) {
+								spaceOption |= SpaceOption_SpaceBefore;
+							} else if (chPrevNonWhite == ')' || chPrevNonWhite == ']'
+								|| (stylePrev >= SCE_JS_NUMBER && stylePrev <= SCE_JS_OPERATOR_PF)
+								|| (stylePrev >= SCE_JS_IDENTIFIER && stylePrev <= SCE_JS_CONSTANT)) {
+								spaceOption |= SpaceOption_SpaceBefore | SpaceOption_SpaceAfter;
+							}
+						} else if (ch == '*' && stylePrev == SCE_JS_WORD) {
+							// yield*, function*
+							spaceOption |= SpaceOption_SpaceAfter;
+						} else if (ch != '!' && (ch != '?' || chNext != '.')) {
+							spaceOption |= SpaceOption_SpaceBefore | SpaceOption_SpaceAfter;
+							if (ch == '=' && chNext == '>') {
+								operatorLen = 2;
+							}
+						}
 					}
 				}
 			}
@@ -1150,6 +1218,9 @@ std::string CodePretty(LPCEDITLEXER pLex, const char *styledText, size_t textLen
 				|| ((ch == ']' || ch == '}') && chPrevNonWhite == ch - 2))) { // empty [], {}
 				chPrev = '\0';
 				fmtlen -= eolWidth;
+				if ((spaceOption & SpaceOption_NewLineBefore) == 0) {
+					chPrev = fmtbuf[fmtlen - 1];
+				}
 			}
 			if (spaceOption & SpaceOption_PushBrace) {
 				braceStack.push_back(static_cast<char>(braceTop));
@@ -1190,17 +1261,26 @@ std::string CodePretty(LPCEDITLEXER pLex, const char *styledText, size_t textLen
 			if (ch > ' ' && style > pLex->commentStyleMarker) {
 				chPrevNonWhite = ch;
 			}
-			chPrev = ch;
-			fmtbuf[fmtlen++] = static_cast<char>(ch);
+			if (operatorLen > 1) {
+				memcpy(&fmtbuf[fmtlen], textBuffer + offset, operatorLen);
+				fmtlen += operatorLen;
+				offset += operatorLen - 1;
+				chPrevNonWhite = chPrev = fmtbuf[fmtlen - 1];
+			} else {
+				chPrev = ch;
+				fmtbuf[fmtlen++] = static_cast<char>(ch);
+			}
 		}
-		if (spaceOption & (SpaceOption_NewLineAfter | SpaceOption_KeepNewLine)) {
+		if (spaceOption & SpaceOption_NewLineAfter) {
 			blockLevel += spaceOption & SpaceOption_IndentAfter;
 			chPrev = '\n';
 			// don't add indentation inside comment and string
-			if (((spaceOption & SpaceOption_KeepNewLine) == 0 && style <= pLex->commentStyleMarker)
+			if ((!commentEndEOL && style <= pLex->commentStyleMarker)
 				|| (style >= pLex->stringStyleFirst && style <= pLex->stringStyleLast)) {
 				chPrev = '\r';
 			}
+			commentEndEOL = false;
+			defaultCase = false;
 			memcpy(&fmtbuf[fmtlen], &eol, 2);
 			fmtlen += eolWidth;
 		} else if (spaceOption & SpaceOption_SpaceAfter) {
@@ -1213,31 +1293,36 @@ std::string CodePretty(LPCEDITLEXER pLex, const char *styledText, size_t textLen
 	if (fmtlen != 0) {
 		output += std::string_view{fmtbuf, fmtlen};
 	}
-	return output;
 }
 
 }
 
-extern "C" void EditFormatCode(int menu) {
+void EditFormatCode(int menu) noexcept {
 	LPCEDITLEXER pLex = pLexCurrent;
 	if (menu != IDM_EDIT_COPYRTF && pLex->iLexer != SCLEX_JSON && pLex->iLexer != SCLEX_CSS && pLex->iLexer != SCLEX_JAVASCRIPT) {
 		return;
 	}
-	const Sci_Position startPos = SciCall_GetSelectionStart();
-	const Sci_Position endPos = SciCall_GetSelectionEnd();
+	Sci_Position startPos = SciCall_GetSelectionStart();
+	Sci_Position endPos = SciCall_GetSelectionEnd();
+	bool wholeDoc = false;
 	if (startPos == endPos) {
-		return;
+		wholeDoc = true;
+		startPos = 0;
+		endPos = SciCall_GetLength();
 	}
 
 	try {
 		SciCall_EnsureStyledTo(endPos);
-		const std::unique_ptr<char[]> styledText = make_unique_for_overwrite<char[]>(2*(endPos - startPos) + 1);
+		const std::unique_ptr<char[]> styledText = make_unique_for_overwrite<char[]>(2*(endPos - startPos) + 2);
 		const Sci_TextRangeFull tr { { startPos, endPos }, styledText.get() };
 		const size_t textLength = SciCall_GetStyledTextFull(&tr);
+		std::string output;
+		std::string_view result;
+		bool changed = false;
 
 		if (menu == IDM_EDIT_COPYRTF) {
 			// code from SciTEWin::CopyAsRTF()
-			const std::string output = SaveToStreamRTF(styledText.get(), textLength, startPos, endPos);
+			SaveToStreamRTF(output, styledText.get(), textLength, startPos, endPos);
 			//printf("%s:\n%s\n", __func__, output.c_str());
 			const size_t len = output.length() + 1; // +1 for NUL
 			HGLOBAL handle = ::GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, len);
@@ -1279,12 +1364,22 @@ extern "C" void EditFormatCode(int menu) {
 			}
 			styledText[index] = '\0';
 			if (index < textLength) {
-				EditReplaceMainSelection(index, styledText.get());
+				changed = true;
+				result = {styledText.get(), index};
 			}
 		} else {
-			const std::string output = CodePretty(pLex, styledText.get(), textLength);
+			CodePretty(output, pLex, styledText.get(), textLength);
 			if (output.length() != textLength) {
-				EditReplaceMainSelection(output.length(), output.c_str());
+				changed = true;
+				result = output;
+			}
+		}
+		if (changed) {
+			if (wholeDoc) {
+				SciCall_TargetWholeDocument();
+				SciCall_ReplaceTarget(result.length(), result.data());
+			} else {
+				EditReplaceMainSelection(result.length(), result.data());
 			}
 		}
 	} catch (...) {

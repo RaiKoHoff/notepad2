@@ -1,4 +1,4 @@
-// This file is part of Notepad2.
+// This file is part of Notepad4.
 // See License.txt for details about distribution and modification.
 //! Lexer for Configuration Files.
 
@@ -265,7 +265,7 @@ void FoldConfDoc(Sci_PositionU startPos, Sci_Position length, int /*initStyle*/,
 		if (atEOL || (i == endPos - 1)) {
 			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			const int levelUse = levelCurrent;
-			int lev = levelUse | levelNext << 16;
+			int lev = levelUse | (levelNext << 16);
 			if (levelUse < levelNext)
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			styler.SetLevel(lineCurrent, lev);
@@ -278,4 +278,4 @@ void FoldConfDoc(Sci_PositionU startPos, Sci_Position length, int /*initStyle*/,
 
 }
 
-LexerModule lmConfig(SCLEX_CONFIG, ColouriseConfDoc, "conf", FoldConfDoc);
+extern const LexerModule lmConfig(SCLEX_CONFIG, ColouriseConfDoc, "conf", FoldConfDoc);

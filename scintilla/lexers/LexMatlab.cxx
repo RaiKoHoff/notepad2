@@ -1,4 +1,4 @@
-// This file is part of Notepad2.
+// This file is part of Notepad4.
 // See License.txt for details about distribution and modification.
 //! Lexer for Matlab, Octave, Scilab and Gnuplot (treated as same as Octave).
 
@@ -112,7 +112,7 @@ void ColouriseMatlabDoc(Sci_PositionU startPos, Sci_Position length, int initSty
 			break;
 		case SCE_MAT_IDENTIFIER:
 			if (!IsIdentifierChar(sc.ch)) {
-				char s[128];	// Matlab max indentifer length = 63, Octave unlimited
+				char s[64];	// Matlab max indentifer length = 63, Octave unlimited
 				sc.GetCurrent(s, sizeof(s));
 
 				if (keywords.InList(s)) {
@@ -184,11 +184,8 @@ void ColouriseMatlabDoc(Sci_PositionU startPos, Sci_Position length, int initSty
 			break;
 		case SCE_MAT_COMMENTBLOCK:
 			if (IsBlockCommentEnd(lexType, sc, visibleChars)) {
-				if (IsMatlabOctave(lexType)) {
+				if (commentLevel > 0 && IsMatlabOctave(lexType)) {
 					--commentLevel;
-					if (commentLevel < 0) {
-						commentLevel = 0;
-					}
 				}
 				if (commentLevel == 0) {
 					sc.Forward();
@@ -384,7 +381,7 @@ void FoldMatlabDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, L
 		if (atEOL || (i == endPos - 1)) {
 			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			const int levelUse = levelCurrent;
-			int lev = levelUse | levelNext << 16;
+			int lev = levelUse | (levelNext << 16);
 			if (levelUse < levelNext)
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			styler.SetLevel(lineCurrent, lev);
@@ -397,4 +394,4 @@ void FoldMatlabDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, L
 
 }
 
-LexerModule lmMatlab(SCLEX_MATLAB, ColouriseMatlabDoc, "matlab", FoldMatlabDoc);
+extern const LexerModule lmMatlab(SCLEX_MATLAB, ColouriseMatlabDoc, "matlab", FoldMatlabDoc);

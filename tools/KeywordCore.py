@@ -22,9 +22,14 @@ LexerKeywordIndexList = {}
 # X11 and SVG color names
 ColorNameList = set()
 CSharpKeywordMap = {}
+GroovyKeyword = []
+HtmlVoidTagList = """area base basefont br col command embed frame hr
+img input isindex keygen link meta param source track wbr
+p""".split()
 JavaKeywordMap = {}
 JavaScriptKeywordMap = {}
-GroovyKeyword = []
+SGMLKeyword = []
+VBScriptKeyword = []
 
 def RemoveDuplicateKeyword(keywordMap, orderedKeys):
 	unique = set()
@@ -67,6 +72,7 @@ def BuildKeywordContent(rid, lexer, keywordList, keywordCount=16):
 	output = []
 	attrList = []
 	indexList = LexerKeywordIndexList.setdefault(lexer, {})
+	maxKeywordLen = 0
 	prefix = lexer[3:-4] + 'KeywordIndex_'
 	for index, item in enumerate(keywordList):
 		comment, items, attr = item
@@ -94,15 +100,23 @@ def BuildKeywordContent(rid, lexer, keywordList, keywordCount=16):
 			length = len(lines) + sum(len(line) for line in lines)
 			if length >= 0xffff:
 				print(rid, comment, 'string exceeds 64 KiB:', length)
+			if attr & KeywordAttr.PrefixSpace:
+				attr &= ~KeywordAttr.PrefixSpace
+				lines[0] = ' ' + lines[0]
 			output.extend('"' + line + ' "' for line in lines)
 		else:
-			output.append('NULL')
+			output.append('nullptr')
 		if index + 1 < keywordCount:
 			output.append("")
 
 		indexName = build_enum_name(comment)
 		# keyword index for lexer
 		if (attr & KeywordAttr.NoLexer) == 0 and comment != 'unused':
+			if items:
+				length = max(len(item) for item in items)
+				if attr & KeywordAttr.Special:
+					length += 1 # punctuation prefix
+				maxKeywordLen = max(maxKeywordLen, length)
 			if indexName in indexList:
 				assert index == indexList[indexName][0], (rid, lexer, comment)
 			else:
@@ -121,9 +135,13 @@ def BuildKeywordContent(rid, lexer, keywordList, keywordCount=16):
 		if attr != KeywordAttr.Default:
 			attrList.append((index, attr, comment))
 
+	if maxKeywordLen:
+		maxKeywordLen += 2 # extra + '\0'
+		if '@' not in indexList or indexList['@'][0] < maxKeywordLen:
+			indexList['@'] = (maxKeywordLen, 0)
 	count = keywordCount - len(keywordList)
 	if count:
-		output.append(", NULL" * count)
+		output.append(", nullptr" * count)
 	if attrList:
 		AllKeywordAttrList[rid] = attrList
 	return output, attrList
@@ -160,6 +178,14 @@ def UpdateAutoCompletionCache(path):
 	cache = BuildAutoCompletionCache()
 	Regenerate(path, '//Cache', cache)
 
+
+def sub_extract(pattern, doc, flags=0):
+	lines = []
+	def extract(m):
+		lines.append(m.group(0))
+		return ''
+	doc = re.sub(pattern, lambda m: extract(m), doc, flags=flags)
+	return doc, '\n'.join(lines)
 
 def split_api_section(doc, comment, commentKind=0):
 	if commentKind == 0:
@@ -562,6 +588,45 @@ def parse_batch_api_file(path):
 		('command options', keywordMap['options'], KeywordAttr.NoLexer),
 	]
 
+def parse_cangjie_api_file(path):
+	sections = read_api_file(path, '//')
+	keywordMap = {
+		'function': ['main()', 'init()']
+	}
+	for key, doc in sections:
+		if key in ('keywords', 'types'):
+			keywordMap[key] = doc.split()
+		elif key in ('macro', 'annotation'):
+			keywordMap[key] = re.findall(r'@(\w+\(?)', doc)
+		elif key == 'api':
+			keywordMap['class'] = re.findall(r'class\s+(\w+)', doc)
+			keywordMap['struct'] = re.findall(r'struct\s+(\w+)', doc)
+			keywordMap['interface'] = re.findall(r'interface\s+(\w+)', doc)
+			keywordMap['enumeration'] = re.findall(r'enum\s+(\w+)', doc)
+			items = re.findall(r'func\s+(\w+)', doc)
+			keywordMap['function'].extend(item + '()' for item in items)
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'keywords',
+		'types',
+		'class',
+		'struct',
+		'interface',
+		'enumeration',
+	])
+
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('types', keywordMap['types'], KeywordAttr.Default),
+		('macro', keywordMap['macro'], KeywordAttr.NoLexer | KeywordAttr.Special | KeywordAttr.NoAutoComp),
+		('annotation', keywordMap['annotation'], KeywordAttr.Special | KeywordAttr.NoAutoComp),
+		('class', keywordMap['class'], KeywordAttr.Default),
+		('struct', keywordMap['struct'], KeywordAttr.Default),
+		('interface', keywordMap['interface'], KeywordAttr.Default),
+		('enumeration', keywordMap['enumeration'], KeywordAttr.Default),
+		('function', keywordMap['function'], KeywordAttr.NoLexer),
+	]
+
 def parse_coffeescript_api_file(path):
 	sections = read_api_file(path, '#')
 	keywordMap = {}
@@ -779,23 +844,27 @@ def parse_css_api_file(pathList):
 	}
 
 	values = []
+	functions = []
 	for path in pathList:
 		for line in read_file(path).splitlines():
 			line = line.strip()
 			if not line or line.startswith('//'):
 				continue
-			if line[0] == '@':
+			marker = line[0]
+			if marker == '@':
 				rule = line.split()[0][1:]
 				keywordMap['at rules'].append(rule)
-			elif line[0] == '!':
+			elif marker == '!':
 				values.append(line[1:])
-			elif line[0] == ':':
+			elif marker == ':':
 				line = line.rstrip(')')
 				if line[1] == ':':
 					keywordMap['pseudo elements'].append(line[2:])
 				else:
 					keywordMap['pseudo classes'].append(line[1:])
-			elif line[0].isalpha():
+			elif marker == '=':
+				functions.extend(item[:-1] for item in line[1:].split())
+			elif marker.isalpha():
 				line = re.sub(r'\(.*?\)', '(', line)
 				index = line.find(':')
 				if index > 0:
@@ -808,14 +877,15 @@ def parse_css_api_file(pathList):
 	items = []
 	for value in keywordMap.values():
 		items.extend(value)
-	keywordMap['values'] = set(values) - ColorNameList - set(items)
+	values = set(values) - ColorNameList - set(items) - set(functions)
 	return [
 		('properties', keywordMap['properties'], KeywordAttr.Default),
 		('at rules', keywordMap['at rules'], KeywordAttr.Special),
 		('pseudo classes', keywordMap['pseudo classes'], KeywordAttr.Special),
 		('pseudo elements', keywordMap['pseudo elements'], KeywordAttr.Special),
+		('math functions', functions, KeywordAttr.Default),
 		('color names', ColorNameList, KeywordAttr.NoLexer),
-		('values', keywordMap['values'], KeywordAttr.NoLexer),
+		('values', values, KeywordAttr.NoLexer),
 	]
 
 def parse_dlang_api_file(path):
@@ -1223,16 +1293,24 @@ def parse_haxe_api_file(path):
 	]
 
 def parse_html_api_file(path):
+	doc = read_file(path)
+	doc = re.sub(r'<!--.*?-->', '', doc, flags=re.DOTALL | re.MULTILINE)
+	doc, text = sub_extract(r'".*?"', doc, flags=re.DOTALL | re.MULTILINE)
+	values = re.findall(r'[\w:\-/]+', text)
+	doc, text = sub_extract(r'<!.*?>', doc, flags=re.DOTALL | re.MULTILINE)
+	doc, text = sub_extract(r'<[?/]?[\w+:\-]+>?', doc)
+	keywords = re.findall(r'[\w+:\-]+', text)
+	attributes = re.findall(r'[\w:\-]+', doc)
+	attributes += ['^aria-', '^data-']
+	values = set(values) - set(keywords) - set(attributes)
 	return [
-		('tag', [], KeywordAttr.Special),
-		('JavaScript', [], KeywordAttr.NoAutoComp),
-		('VBScript', [], KeywordAttr.MakeLower | KeywordAttr.NoAutoComp),
-		('Python', [], KeywordAttr.Default),
-		('PHP', [], KeywordAttr.Default),
-		('SGML', [], KeywordAttr.Default),
-		('attribute', [], KeywordAttr.Special),
-		('event handler', [], KeywordAttr.Special),
-		('value', [], KeywordAttr.NoLexer | KeywordAttr.Special),
+		('tag', keywords, KeywordAttr.Special),
+		('void tag', HtmlVoidTagList, KeywordAttr.NoAutoComp | KeywordAttr.PrefixSpace),
+		('JavaScript', JavaScriptKeywordMap['keywords'], KeywordAttr.NoAutoComp),
+		('VBScript', VBScriptKeyword, KeywordAttr.MakeLower | KeywordAttr.NoAutoComp),
+		('SGML', SGMLKeyword, KeywordAttr.Default),
+		('attribute', attributes, KeywordAttr.Special),
+		('value', values, KeywordAttr.NoLexer | KeywordAttr.Special),
 	]
 
 def parse_inno_setup_api_file(path):
@@ -1568,8 +1646,8 @@ def parse_kotlin_api_file(path):
 	sections = read_api_file(path, '//')
 	keywordMap = {}
 	for key, doc in sections:
-		if key == 'kdoc':
-			items = re.findall(r'@(\w+)', doc)
+		if key in ('kdoc', 'annotation'):
+			items = set(re.findall(r'@(\w+)', doc))
 		elif key == 'library':
 			items = re.findall(r'annotation\s+class\s+(\w+)', doc)
 			annotations = set(items)
@@ -1590,7 +1668,7 @@ def parse_kotlin_api_file(path):
 			keywordMap['class'] = classes
 			keywordMap['interface'] = interfaces
 			keywordMap['enumeration'] = enums
-			keywordMap['annotation'] = annotations
+			keywordMap['annotation'].update(annotations)
 
 			items = re.findall(r'fun\s+.*?(\w+\()', doc, re.DOTALL)
 			keywordMap['function'] = items
@@ -1612,7 +1690,6 @@ def parse_kotlin_api_file(path):
 		'class',
 		'interface',
 		'enumeration',
-		'annotation',
 	])
 	return [
 		('keywords', keywordMap['keywords'], KeywordAttr.Default),
@@ -1841,6 +1918,7 @@ def parse_php_api_file(path):
 		('constant', keywordMap['constant'], KeywordAttr.NoLexer),
 		('function', keywordMap['function'], KeywordAttr.NoLexer),
 		('misc', keywordMap['misc'], KeywordAttr.NoLexer),
+		('void tag', HtmlVoidTagList, KeywordAttr.NoAutoComp | KeywordAttr.PrefixSpace),
 		('JavaScript', JavaScriptKeywordMap['keywords'], KeywordAttr.NoAutoComp),
 		('phpdoc', keywordMap['phpdoc'], KeywordAttr.NoLexer | KeywordAttr.NoAutoComp | KeywordAttr.Special),
 	]
@@ -2202,6 +2280,24 @@ def parse_rust_api_file(path):
 		('function', keywordMap['function'], KeywordAttr.NoLexer),
 	]
 
+def parse_sas_api_file(path):
+	sections = read_api_file(path, '/*')
+	keywordMap = {}
+	for key, doc in sections:
+		key = key.split()[0]
+		if key == 'keywords':
+			keywordMap[key] = doc.split()
+		elif key == 'macro':
+			keywordMap[key] = re.findall(r'%(\w+\(?)', doc)
+		elif key == 'functions':
+			keywordMap[key] = re.findall(r'\w+\(?', doc)
+
+	return [
+		('keywords', keywordMap['keywords'], KeywordAttr.Default),
+		('macro', keywordMap['macro'], KeywordAttr.NoAutoComp | KeywordAttr.Special),
+		('functions', keywordMap['functions'], KeywordAttr.Default),
+	]
+
 def parse_scala_api_file(path):
 	sections = read_api_file(path, '//')
 	keywordMap = {}
@@ -2478,14 +2574,68 @@ def parse_vim_api_file(path):
 		('commands', keywordMap['commands'], KeywordAttr.Default),
 	]
 
-def parse_visual_basic_api_file(path):
+def parse_visual_basic_api_file(pathList):
+	keywordMap = {
+		'types': [],
+		'vba keywords': [],
+		'directives': [],
+		'enumeration': [],
+		'attributes': [],
+		'misc': [],
+	}
+	for path in pathList:
+		name = os.path.basename(path)
+		sections = read_api_file(path, "'")
+		for key, doc in sections:
+			items = []
+			if key in ('keywords', 'vba keywords', 'types', 'enumeration', 'constants'):
+				items = doc.replace('()', '(').split()
+			elif key == 'attributes':
+				items = re.findall(r'(\w+\()', doc)
+			elif key == 'directives':
+				items = re.findall(r'#(\w+)', doc)
+			elif key == 'objects':
+				items = re.findall(r'^\s+(\w+\(?)', doc, re.MULTILINE)
+				keywordMap['misc'].extend(items)
+				items = re.findall(r'^(\w+)\s*\{', doc, re.MULTILINE)
+			elif key == 'functions':
+				items = re.findall(r'^(\w+\(?)', doc, re.MULTILINE)
+			else:
+				print(key, name)
+			if key in keywordMap:
+				keywordMap[key].extend(items)
+			else:
+				keywordMap[key] = items
+
+	items = keywordMap['vba keywords']
+	if items:
+		functions = keywordMap['functions']
+		items = [word for word in items if f'{word}(' not in functions]
+		keywordMap['vba keywords'] = items
+
+	RemoveDuplicateKeyword(keywordMap, [
+		'types',
+		'functions',
+		'keywords',
+		'objects',
+		'enumeration',
+		'vba keywords',
+		'misc',
+	])
+	if not items:
+		VBScriptKeyword.extend(keywordMap['keywords'])
 	return [
-		('keywords', [], KeywordAttr.MakeLower),
-		('type keyword', [], KeywordAttr.MakeLower),
-		('demoted keyword', [], KeywordAttr.MakeLower),
-		('preprocessor', [], KeywordAttr.MakeLower | KeywordAttr.NoAutoComp | KeywordAttr.Special),
-		('attribute', [], KeywordAttr.MakeLower),
-		('constant', [], KeywordAttr.MakeLower),
+		('keywords', keywordMap['keywords'], KeywordAttr.MakeLower),
+		('type keyword', keywordMap['types'], KeywordAttr.MakeLower),
+		('VBA keyword', keywordMap['vba keywords'], KeywordAttr.MakeLower),
+		('preprocessor', keywordMap['directives'], KeywordAttr.MakeLower | KeywordAttr.NoAutoComp | KeywordAttr.Special),
+		('attribute', keywordMap['attributes'], KeywordAttr.MakeLower),
+		('class', keywordMap['objects'], KeywordAttr.MakeLower),
+		('interface', [], KeywordAttr.MakeLower),
+		('enumeration', keywordMap['enumeration'], KeywordAttr.MakeLower),
+		('constant', keywordMap['constants'], KeywordAttr.MakeLower),
+		('basic function', keywordMap['functions'], KeywordAttr.MakeLower),
+		('misc', keywordMap['misc'], KeywordAttr.NoLexer),
 	]
 
 def parse_verilog_api_file(pathList):
@@ -2609,16 +2759,23 @@ def parse_winhex_api_file(path):
 	]
 
 def parse_xml_api_file(path):
+	doc = read_file(path)
+	doc = re.sub(r'<!--.*?-->', '', doc, flags=re.DOTALL | re.MULTILINE)
+	doc, text = sub_extract(r'".*?"', doc, flags=re.DOTALL | re.MULTILINE)
+	values = re.findall(r'[\w:\-/]+', text)
+	doc, text = sub_extract(r'<!.*?>', doc, flags=re.DOTALL | re.MULTILINE)
+	keywords = re.findall(r'\w+', text)
+	attributes = re.findall(r'[\w:\-]+', doc)
+	values = set(values) - set(attributes)
+	SGMLKeyword.extend(keywords)
 	return [
 		('tag', [], KeywordAttr.Default),
+		('void tag', [], KeywordAttr.Default),
 		('JavaScript', [], KeywordAttr.Default),
 		('VBScript', [], KeywordAttr.Default),
-		('Python', [], KeywordAttr.Default),
-		('PHP', [], KeywordAttr.Default),
-		('SGML', [], KeywordAttr.Default),
-		('attribute', [], KeywordAttr.NoLexer),
-		('event handler', [], KeywordAttr.Default),
-		('value', [], KeywordAttr.NoLexer),
+		('SGML', keywords, KeywordAttr.Default),
+		('attribute', attributes, KeywordAttr.NoLexer),
+		('value', values, KeywordAttr.NoLexer),
 	]
 
 def parse_yaml_api_file(path):
@@ -2668,10 +2825,22 @@ def UpdateLexerKeywordAttr(indexPath, lexerPath):
 		if indexList:
 			items = [(value[0], key, value[1]) for key, value in indexList.items()]
 			items.sort()
-			prev = (-1, '')
+			prev = (-1, '', '')
 			output.append('enum {')
 			for item in items:
 				value, key, rid = item
+				if key == '@':
+					# round up to 16*n + 4 or 16*n + 8 for easy zero init
+					size, extra = value & ~15, value & 15
+					if extra > 8:
+						size += 16
+					elif extra > 4:
+						size += 8
+					elif extra > 0:
+						size += 4
+					#print(lexer, value, size)
+					output.append(f'\tMaxKeywordSize = {size},')
+					continue
 				if value == prev[0]:
 					print(f'{lexer} same keyword index {value}: ({key} {rid[7:]}), ({prev[1]} {prev[2][7:]})')
 				output.append(f'\tKeywordIndex_{key} = {value},')

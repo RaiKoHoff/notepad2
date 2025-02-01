@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <cstdint>
 #include <cassert>
 #include <cstring>
 #include <cstdio>
@@ -95,6 +96,8 @@ public:
 
 using namespace Scintilla;
 using namespace Scintilla::Internal;
+
+namespace {
 
 template <typename POS>
 class LineStartIndex final {
@@ -333,37 +336,28 @@ public:
 	}
 };
 
-SplitView::SplitView(const SplitVector<char> &instance) noexcept {
-	length = instance.Length();
-	length1 = instance.GapPosition();
-	if (length1 == 0) {
-		// Assign segment2 to segment1 / length1 to avoid useless test against 0 length1
-		length1 = length;
-	}
-	segment1 = instance.ElementPointer(0);
-	segment2 = instance.ElementPointer(length1) - length1;
+std::unique_ptr<ILineVector> LineVectorCreate(bool largeDocument) {
+	if (largeDocument)
+		return std::make_unique<LineVector<Sci::Position>>();
+	else
+		return std::make_unique<LineVector<int>>();
+}
+
 }
 
 CellBuffer::CellBuffer(bool hasStyles_, bool largeDocument_) :
-	hasStyles(hasStyles_), largeDocument(largeDocument_) {
+	hasStyles(hasStyles_), largeDocument(largeDocument_),
+	uh{std::make_unique<UndoHistory>()},
+	plv{LineVectorCreate(largeDocument_)} {
 	readOnly = false;
 	utf8Substance = false;
 	utf8LineEnds = LineEndType::Default;
 	collectingUndo = true;
-	uh = std::make_unique<UndoHistory>();
-	if (largeDocument)
-		plv = std::make_unique<LineVector<Sci::Position>>();
-	else
-		plv = std::make_unique<LineVector<int>>();
 }
 
 CellBuffer::~CellBuffer() noexcept = default;
 
 char CellBuffer::CharAt(Sci::Position position) const noexcept {
-	return substance.ValueAt(position);
-}
-
-unsigned char CellBuffer::UCharAt(Sci::Position position) const noexcept {
 	return substance.ValueAt(position);
 }
 
@@ -411,8 +405,12 @@ const char *CellBuffer::RangePointer(Sci::Position position, Sci::Position range
 	return substance.RangePointer(position, rangeLength);
 }
 
-const char *CellBuffer::StyleRangePointer(Sci::Position position, Sci::Position rangeLength) noexcept {
-	return hasStyles ? style.RangePointer(position, rangeLength) : nullptr;
+int CellBuffer::CheckRange(const char *chars, const char *styles, Sci::Position position, Sci::Position rangeLength) const noexcept {
+	int result = substance.CheckRange(chars, position, rangeLength);
+	if (hasStyles) {
+		result |= style.CheckRange(styles, position, rangeLength);
+	}
+	return result;
 }
 
 Sci::Position CellBuffer::GapPosition() const noexcept {
@@ -420,7 +418,18 @@ Sci::Position CellBuffer::GapPosition() const noexcept {
 }
 
 SplitView CellBuffer::AllView() const noexcept {
-	return SplitView(substance);
+	const size_t length = substance.Length();
+	size_t length1 = substance.GapPosition();
+	if (length1 == 0) {
+		// Assign segment2 to segment1 / length1 to avoid useless test against 0 length1
+		length1 = length;
+	}
+	return SplitView {
+		substance.ElementPointer(0),
+		length1,
+		substance.ElementPointer(length1) - length1,
+		length
+	};
 }
 
 // The char* returned is to an allocation owned by the undo history
@@ -608,7 +617,7 @@ Sci::Line CellBuffer::LineFromPositionIndex(Sci::Position pos, LineCharacterInde
 	return plv->LineFromPositionIndex(pos, lineCharacterIndex);
 }
 
-void CellBuffer::SetSavePoint() noexcept {
+void CellBuffer::SetSavePoint() {
 	uh->SetSavePoint();
 	if (changeHistory) {
 		changeHistory->SetSavePoint();
@@ -700,7 +709,7 @@ void CellBuffer::ResetLineEnds() {
 	unsigned char chBeforePrev = 0;
 	unsigned char chPrev = 0;
 	for (Sci::Position i = 0; i < length; i++) {
-		const unsigned char ch = substance.ValueAt(position + i);
+		const unsigned char ch = substance[position + 1];
 		if (ch == '\r') {
 			InsertLine(lineInsert, (position + i) + 1, atLineStart);
 			lineInsert++;
@@ -833,12 +842,12 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 		const __m256i vectLF = _mm256_set1_epi8('\n');
 		do {
 			bool lastCR = false;
-			const __m256i chunk1 = _mm256_loadu_si256((__m256i *)ptr);
-			const __m256i chunk2 = _mm256_loadu_si256((__m256i *)(ptr + sizeof(__m256i)));
-			uint64_t maskLF = (uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk1, vectLF));
-			uint64_t maskCR = (uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk1, vectCR));
-			maskLF |= ((uint64_t)(uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m256i);
-			maskCR |= ((uint64_t)(uint32_t)_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m256i);
+			const __m256i chunk1 = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(ptr));
+			const __m256i chunk2 = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(ptr + sizeof(__m256i)));
+			uint64_t maskLF = mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk1, vectLF));
+			uint64_t maskCR = mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk1, vectCR));
+			maskLF |= static_cast<uint64_t>(mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m256i);
+			maskCR |= static_cast<uint64_t>(mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m256i);
 
 			if (maskCR) {
 				lastCR = _addcarry_u64(0, maskCR, maskCR, &maskCR);
@@ -894,18 +903,18 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 		do {
 			bool lastCR = false;
 			// unaligned loading: line starts at random position.
-			const __m128i chunk1 = _mm_loadu_si128((__m128i *)ptr);
-			const __m128i chunk2 = _mm_loadu_si128((__m128i *)(ptr + sizeof(__m128i)));
-			const __m128i chunk3 = _mm_loadu_si128((__m128i *)(ptr + 2*sizeof(__m128i)));
-			const __m128i chunk4 = _mm_loadu_si128((__m128i *)(ptr + 3*sizeof(__m128i)));
-			uint64_t maskCR = (uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
-			uint64_t maskLF = (uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
-			maskCR |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
-			maskLF |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m128i);
-			maskCR |= ((uint64_t)(uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectCR))) << 2*sizeof(__m128i);
-			maskLF |= ((uint64_t)(uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectLF))) << 2*sizeof(__m128i);
-			maskLF |= ((uint64_t)(uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectLF))) << 3*sizeof(__m128i);
-			maskCR |= ((uint64_t)(uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectCR))) << 3*sizeof(__m128i);
+			const __m128i chunk1 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(ptr));
+			const __m128i chunk2 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(ptr + sizeof(__m128i)));
+			const __m128i chunk3 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(ptr + 2*sizeof(__m128i)));
+			const __m128i chunk4 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(ptr + 3*sizeof(__m128i)));
+			uint64_t maskCR = mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
+			uint64_t maskLF = mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
+			maskCR |= mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR)) << sizeof(__m128i);
+			maskLF |= mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF)) << sizeof(__m128i);
+			maskCR |= static_cast<uint64_t>(mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectCR))) << 2*sizeof(__m128i);
+			maskLF |= static_cast<uint64_t>(mm_movemask_epi8(_mm_cmpeq_epi8(chunk3, vectLF))) << 2*sizeof(__m128i);
+			maskLF |= static_cast<uint64_t>(mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectLF))) << 3*sizeof(__m128i);
+			maskCR |= static_cast<uint64_t>(mm_movemask_epi8(_mm_cmpeq_epi8(chunk4, vectCR))) << 3*sizeof(__m128i);
 
 			if (maskCR) {
 				lastCR = _addcarry_u64(0, maskCR, maskCR, &maskCR);
@@ -960,12 +969,12 @@ void CellBuffer::BasicInsertString(const Sci::Position position, const char * co
 		do {
 			bool lastCR = false;
 			// unaligned loading: line starts at random position.
-			const __m128i chunk1 = _mm_loadu_si128((__m128i *)ptr);
-			const __m128i chunk2 = _mm_loadu_si128((__m128i *)(ptr + sizeof(__m128i)));
-			uint32_t maskCR = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
-			uint32_t maskLF = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
-			maskLF |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF))) << sizeof(__m128i);
-			maskCR |= ((uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR))) << sizeof(__m128i);
+			const __m128i chunk1 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(ptr));
+			const __m128i chunk2 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(ptr + sizeof(__m128i)));
+			uint32_t maskCR = mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectCR));
+			uint32_t maskLF = mm_movemask_epi8(_mm_cmpeq_epi8(chunk1, vectLF));
+			maskLF |= mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectLF)) << sizeof(__m128i);
+			maskCR |= mm_movemask_epi8(_mm_cmpeq_epi8(chunk2, vectCR)) << sizeof(__m128i);
 
 			if (maskCR) {
 				lastCR = _addcarry_u32(0, maskCR, maskCR, &maskCR);
@@ -1255,11 +1264,13 @@ void CellBuffer::BasicDeleteChars(const Sci::Position position, const Sci::Posit
 				} else {
 					RemoveLine(lineRemove);
 				}
-			} else if (utf8LineEnds != LineEndType::Default && !UTF8IsAscii(ch)) {
-				const unsigned char next3[3] = { ch, chNext,
-					static_cast<unsigned char>(substance.ValueAt(position + i + 2)) };
-				if (UTF8IsSeparator(next3) || UTF8IsNEL(next3)) {
-					RemoveLine(lineRemove);
+			} else if (utf8LineEnds != LineEndType::Default) {
+				if (!UTF8IsAscii(ch)) {
+					const unsigned char next3[3] = { ch, chNext,
+						static_cast<unsigned char>(substance.ValueAt(position + i + 2)) };
+					if (UTF8IsSeparator(next3) || UTF8IsNEL(next3)) {
+						RemoveLine(lineRemove);
+					}
 				}
 			}
 
@@ -1295,6 +1306,10 @@ void CellBuffer::BeginUndoAction(bool mayCoalesce) noexcept {
 
 void CellBuffer::EndUndoAction() noexcept {
 	uh->EndUndoAction();
+}
+
+int CellBuffer::UndoSequenceDepth() const noexcept {
+	return uh->UndoSequenceDepth();
 }
 
 void CellBuffer::AddUndoAction(Sci::Position token, bool mayCoalesce) {

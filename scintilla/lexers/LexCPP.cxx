@@ -1,4 +1,4 @@
-// This file is part of Notepad2.
+// This file is part of Notepad4.
 // See License.txt for details about distribution and modification.
 //! Lexer for C/C++, Resource Script, Objective C/C++, IDL/ODL
 
@@ -204,12 +204,12 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 
 		case SCE_C_IDENTIFIER:
 			if (!iswordstart(sc.ch)) {
-				char s[256];
+				char s[64];
 				sc.GetCurrent(s, sizeof(s));
 
 				//int len = static_cast<int>(strlen(s));
 				//bool pps = (len > 4 && s[0] == '_' && s[1] == '_' && s[len - 1] == '_' && s[len - 2] == '_');
-				//char tu[256]{};
+				//char tu[64]{};
 				//if (pps)
 				//	strncpy(tu, s + 2, len - 4);
 				// __attribute__()
@@ -308,7 +308,6 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 				} else if (iswordchar(s[0]) && (IsASpace(sc.ch) || sc.ch == '[' || sc.ch == ')' || sc.ch == '>'
 					|| sc.ch == '*' || sc.ch == '&' || sc.ch == ':')) {
 					bool is_class = false;
-					Sci_PositionU pos = sc.currentPos;
 					const int next_char = nextChar;
 
 					if (sc.ch == ':' && sc.chNext == ':') { // C++
@@ -319,6 +318,7 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 							if (!IsUpperCase(s[0])) is_class = false;
 						}
 					} else if (next_char == ')' || next_char == '>' || next_char == '[' || next_char == '*' || next_char == '&') {
+						Sci_PositionU pos = sc.currentPos;
 						while (IsASpace(styler.SafeGetCharAt(pos))) pos++;
 						pos++;
 						while (IsASpace(styler.SafeGetCharAt(pos))) pos++;
@@ -555,7 +555,8 @@ void ColouriseCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 						sc.SetState((chNext == '/') ? SCE_C_COMMENTLINE : SCE_C_COMMENT);
 						sc.Forward(2);
 						if (sc.ch == '!' || (sc.ch == chNext && sc.chNext != chNext)) {
-							sc.ChangeState((chNext == '/') ? SCE_C_COMMENTLINEDOC : SCE_C_COMMENTDOC);
+							static_assert(SCE_C_COMMENTLINEDOC - SCE_C_COMMENTLINE == SCE_C_COMMENTDOC - SCE_C_COMMENT);
+							sc.ChangeState(sc.state + SCE_C_COMMENTLINEDOC - SCE_C_COMMENTLINE);
 						}
 						continue;
 					} else if (IsNumberStart(sc.ch, sc.chNext)) {
@@ -960,7 +961,7 @@ void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lexe
 		if (atEOL || (i == endPos - 1)) {
 			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			const int levelUse = levelCurrent;
-			int lev = levelUse | levelNext << 16;
+			int lev = levelUse | (levelNext << 16);
 			if (levelUse < levelNext)
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			styler.SetLevel(lineCurrent, lev);
@@ -976,4 +977,4 @@ void FoldCppDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lexe
 
 }
 
-LexerModule lmCPP(SCLEX_CPP, ColouriseCppDoc, "cpp", FoldCppDoc);
+extern const LexerModule lmCPP(SCLEX_CPP, ColouriseCppDoc, "cpp", FoldCppDoc);

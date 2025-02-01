@@ -1,4 +1,4 @@
-// This file is part of Notepad2.
+// This file is part of Notepad4.
 // See License.txt for details about distribution and modification.
 
 #include <cstdint>
@@ -36,10 +36,12 @@ bool LexAccessor::MatchLowerCase(Sci_Position pos, const char *s) noexcept {
 	return true;
 }
 
-void LexAccessor::GetRange(Sci_PositionU startPos_, Sci_PositionU endPos_, char *s, Sci_PositionU len) noexcept {
+void LexAccessor::GetRange(Sci_PositionU startPos_, Sci_PositionU endPos_, char *s, Sci_PositionU len) const noexcept {
 	assert(s != nullptr);
 	assert(startPos_ <= endPos_ && len != 0);
+	//memset(s, 0, len);
 	endPos_ = sci::min(endPos_, startPos_ + len - 1);
+	//endPos_ = sci::min(endPos_, static_cast<Sci_PositionU>(lenDoc));
 	len = endPos_ - startPos_;
 	if (startPos_ >= static_cast<Sci_PositionU>(startPos) && endPos_ <= static_cast<Sci_PositionU>(endPos)) {
 		const char * const p = buf + (startPos_ - startPos);
@@ -50,21 +52,23 @@ void LexAccessor::GetRange(Sci_PositionU startPos_, Sci_PositionU endPos_, char 
 	s[len] = '\0';
 }
 
-void LexAccessor::GetRangeLowered(Sci_PositionU startPos_, Sci_PositionU endPos_, char *s, Sci_PositionU len) noexcept {
+void LexAccessor::GetRangeLowered(Sci_PositionU startPos_, Sci_PositionU endPos_, char *s, Sci_PositionU len) const noexcept {
 	GetRange(startPos_, endPos_, s, len);
 	ToLowerCase(s);
 }
 
-std::string LexAccessor::GetRange(Sci_PositionU startPos_, Sci_PositionU endPos_) {
+std::string LexAccessor::GetRange(Sci_PositionU startPos_, Sci_PositionU endPos_) const {
 	assert(startPos_ < endPos_);
+	//endPos_ = sci::min(endPos_, static_cast<Sci_PositionU>(lenDoc));
 	const Sci_PositionU len = endPos_ - startPos_;
 	std::string s(len, '\0');
 	GetRange(startPos_, endPos_, s.data(), len + 1);
 	return s;
 }
 
-std::string LexAccessor::GetRangeLowered(Sci_PositionU startPos_, Sci_PositionU endPos_) {
+std::string LexAccessor::GetRangeLowered(Sci_PositionU startPos_, Sci_PositionU endPos_) const {
 	assert(startPos_ < endPos_);
+	//endPos_ = sci::min(endPos_, static_cast<Sci_PositionU>(lenDoc));
 	const Sci_PositionU len = endPos_ - startPos_;
 	std::string s(len, '\0');
 	GetRangeLowered(startPos_, endPos_, s.data(), len + 1);
@@ -242,7 +246,7 @@ void BacktrackToStart(const LexAccessor &styler, int stateMask, Sci_PositionU &s
 			const Sci_PositionU endPos = startPos + lengthDoc;
 			startPos = (line == 0)? 0 : styler.LineStart(line);
 			lengthDoc = endPos - startPos;
-			initStyle = (startPos == 0)? 0 : styler.StyleAt(startPos - 1);
+			initStyle = (startPos == 0)? 0 : styler.StyleIndexAt(startPos - 1);
 		}
 	}
 }
@@ -252,7 +256,7 @@ Sci_PositionU LookbackNonWhite(LexAccessor &styler, Sci_PositionU startPos, unsi
 	maxSpaceStyle &= 0xff;
 	do {
 		--startPos;
-		const unsigned style = styler.StyleAt(startPos);
+		const unsigned style = styler.StyleIndexAt(startPos);
 		if (style > maxSpaceStyle) {
 			stylePrevNonWhite = style;
 			chPrevNonWhite = static_cast<unsigned char>(styler[startPos]);
@@ -277,7 +281,7 @@ Sci_PositionU CheckBraceOnNextLine(LexAccessor &styler, Sci_Line line, int opera
 		return 0;
 	}
 
-	int style = styler.StyleAt(bracePos);
+	int style = styler.StyleIndexAt(bracePos);
 	if (style != operatorStyle) {
 		return 0;
 	}
@@ -289,7 +293,7 @@ Sci_PositionU CheckBraceOnNextLine(LexAccessor &styler, Sci_Line line, int opera
 	// ignore current line, e.g. current line is preprocessor.
 	if (ignoreStyle) {
 		while (startPos < endPos) {
-			style = styler.StyleAt(startPos);
+			style = styler.StyleIndexAt(startPos);
 			if (style > maxSpaceStyle) {
 				break;
 			}
@@ -301,7 +305,7 @@ Sci_PositionU CheckBraceOnNextLine(LexAccessor &styler, Sci_Line line, int opera
 	}
 
 	while (endPos >= startPos) {
-		style = styler.StyleAt(endPos);
+		style = styler.StyleIndexAt(endPos);
 		if (style > maxSpaceStyle) {
 			break;
 		}

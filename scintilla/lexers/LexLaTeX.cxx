@@ -1,4 +1,4 @@
-// This file is part of Notepad2.
+// This file is part of Notepad4.
 // See License.txt for details about distribution and modification.
 //! Lexer for LaTeX.
 
@@ -354,7 +354,7 @@ void FoldLatexDoc(Sci_PositionU startPos, Sci_Position length, int /*initStyle*/
 		if (atEOL || (i == endPos - 1)) {
 			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			const int levelUse = levelCurrent;
-			int lev = levelUse | levelNext << 16;
+			int lev = levelUse | (levelNext << 16);
 			if (levelUse < levelNext)
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			styler.SetLevel(lineCurrent, lev);
@@ -366,4 +366,4 @@ void FoldLatexDoc(Sci_PositionU startPos, Sci_Position length, int /*initStyle*/
 
 }
 
-LexerModule lmLatex(SCLEX_LATEX, ColouriseLatexDoc, "latex", FoldLatexDoc);
+extern const LexerModule lmLatex(SCLEX_LATEX, ColouriseLatexDoc, "latex", FoldLatexDoc);

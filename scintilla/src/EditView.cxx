@@ -435,7 +435,7 @@ struct LayoutWorker {
 		const int endPos = ll->numCharsInLine;
 		if (endPos - startPos > blockSize*2 && !model.BidirectionalEnabled()) {
 			posInLine = std::max<uint32_t>(posInLine, ll->caretPosition) + blockSize;
-			if (posInLine > static_cast<uint32_t>(endPos)) {
+			if (static_cast<int>(endPos - posInLine) < blockSize) {
 				posInLine = endPos;
 			} else if (option < LayoutLineOption::IdleUpdate) {
 				// layout as much as possible to avoid unexpected scrolling
@@ -599,15 +599,7 @@ uint64_t EditView::LayoutLine(const EditModel &model, Surface *surface, const Vi
 			const uint8_t *styles = ll->styles.get();
 
 			if (lineLength != 0) {
-				const char *docStyles = model.pdoc->StyleRangePointer(posLineStart, lineLength);
-				if (docStyles) { // HasStyles
-					allSame = memcmp(docStyles, styles, lineLength);
-				}
-
-				const char *docChars = model.pdoc->RangePointer(posLineStart, lineLength);
-				const char *chars = ll->chars.get();
-				// NOLINTNEXTLINE(bugprone-suspicious-string-compare)
-				allSame |= memcmp(docChars, chars, lineLength);
+				allSame = model.pdoc->CheckRange(ll->chars.get(), reinterpret_cast<const char *>(styles), posLineStart, lineLength);
 			}
 
 			const int styleByteLast = (posLineEnd == posLineStart) ? 0 : model.pdoc->StyleIndexAt(posLineEnd - 1);
@@ -659,7 +651,7 @@ uint64_t EditView::LayoutLine(const EditModel &model, Surface *surface, const Vi
 	const bool partialLine = validity == LineLayout::ValidLevel::lines
 		&& ll->PartialPosition() && width == ll->widthLine;
 	if (validity == LineLayout::ValidLevel::invalid
-		|| (option != LayoutLineOption::KeepPosition && ll->PartialPosition())) {
+		|| (option != LayoutLineOption::PaintText && ll->PartialPosition())) {
 		//if (ll->maxLineLength > LayoutWorker::blockSize) {
 		//	printf("start layout line=%zd, posInLine=%d\n", line + 1, posInLine);
 		//}
@@ -761,8 +753,9 @@ uint64_t EditView::LayoutLine(const EditModel &model, Surface *surface, const Vi
 		}
 
 		validity = LineLayout::ValidLevel::lines;
-		if (partialLine && option == LayoutLineOption::AutoUpdate && linesWrapped != ll->lines) {
-			(const_cast<EditModel &>(model)).OnLineWrapped(line, ll->lines);
+		if (linesWrapped != ll->lines && ((option == LayoutLineOption::AutoUpdate && partialLine)
+			|| (option == LayoutLineOption::PaintText && ll->PartialPosition()))) {
+			const_cast<EditModel &>(model).OnLineWrapped(line, ll->lines, static_cast<int>(option));
 		}
 	}
 	ll->validity = validity;
@@ -781,7 +774,7 @@ void EditView::UpdateBidiData(const EditModel &model, const ViewStyle &vstyle, L
 
 		for (int charsInLine = 0; charsInLine < ll->numCharsInLine; charsInLine++) {
 			const int charWidth = UTF8DrawBytes(&ll->chars[charsInLine], ll->numCharsInLine - charsInLine);
-			const Representation *repr = model.reprs.RepresentationFromCharacter(std::string_view(&ll->chars[charsInLine], charWidth));
+			const Representation *repr = model.reprs->RepresentationFromCharacter(std::string_view(&ll->chars[charsInLine], charWidth));
 
 			ll->bidiData->widthReprs[charsInLine] = 0.0f;
 			if (repr && ll->chars[charsInLine] != '\t') {
@@ -1197,12 +1190,12 @@ void EditView::DrawEOL(Surface *surface, const EditModel &model, const ViewStyle
 			std::string_view ctrlChar;
 			Sci::Position widthBytes = 1;
 			RepresentationAppearance appearance = RepresentationAppearance::Blob;
-			const Representation *repr = model.reprs.RepresentationFromCharacter(std::string_view(&ll->chars[eolPos], ll->numCharsInLine - eolPos));
+			const Representation *repr = model.reprs->RepresentationFromCharacter(std::string_view(&ll->chars[eolPos], ll->numCharsInLine - eolPos));
 			if (repr) {
 				// Representation of whole text
 				widthBytes = ll->numCharsInLine - eolPos;
 			} else {
-				repr = model.reprs.RepresentationFromCharacter(std::string_view(&ll->chars[eolPos], 1));
+				repr = model.reprs->RepresentationFromCharacter(std::string_view(&ll->chars[eolPos], 1));
 			}
 			if (repr) {
 				ctrlChar = repr->GetStringRep();
@@ -1343,7 +1336,7 @@ void EditView::DrawFoldDisplayText(Surface *surface, const EditModel &model, con
 	const XYPOSITION spaceWidth = vsDraw.styles[ll->EndLineStyle()].spaceWidth;
 	const XYPOSITION virtualSpace = model.sel.VirtualSpaceFor(
 		model.pdoc->LineEnd(line)) * spaceWidth;
-	rcSegment.left = xStart + ll->positions[ll->numCharsInLine] - subLineStart + virtualSpace + vsDraw.aveCharWidth;
+	rcSegment.left = xStart + ll->positions[ll->lastSegmentEnd] - subLineStart + virtualSpace + vsDraw.aveCharWidth;
 	rcSegment.right = rcSegment.left + widthFoldDisplayText + margin*2;
 
 	const ColourOptional background = vsDraw.Background(model.GetMark(line), model.caret.active, ll->containsCaret);
@@ -1847,9 +1840,10 @@ void DrawWrapIndentAndMarker(Surface *surface, const ViewStyle &vsDraw, const Li
 // is at the end of a text segment.
 // This function should only be called if iDoc is within the main selection.
 InSelection CharacterInCursesSelection(Sci::Position iDoc, const EditModel &model, const ViewStyle &vsDraw) noexcept {
-	const SelectionPosition &posCaret = model.sel.RangeMain().caret;
-	const bool caretAtStart = posCaret < model.sel.RangeMain().anchor && posCaret.Position() == iDoc;
-	const bool caretAtEnd = posCaret > model.sel.RangeMain().anchor &&
+	const SelectionRange &rangeMain = model.sel.RangeMain();
+	const SelectionPosition &posCaret = rangeMain.caret;
+	const bool caretAtStart = posCaret < rangeMain.anchor && posCaret.Position() == iDoc;
+	const bool caretAtEnd = posCaret > rangeMain.anchor &&
 		vsDraw.DrawCaretInsideSelection(false, false) &&
 		model.pdoc->MovePositionOutsideChar(posCaret.Position() - 1, -1) == iDoc;
 	return (caretAtStart || caretAtEnd) ? InSelection::inNone : InSelection::inMain;
@@ -2709,6 +2703,7 @@ void EditView::PaintText(Surface *surfaceWindow, const EditModel &model, const V
 			surface->SetMode(model.CurrentSurfaceMode());
 		}
 
+		model.SetIdleTaskTime(EditModel::MaxPaintTextTime);
 		const Point ptOrigin = model.GetVisibleOriginInMain();
 
 		const int screenLinePaintFirst = static_cast<int>(rcArea.top) / vsDraw.lineHeight;
@@ -2747,31 +2742,17 @@ void EditView::PaintText(Surface *surfaceWindow, const EditModel &model, const V
 
 		Sci::Line lineDocPrevious = -1;	// Used to avoid laying out one document line multiple times
 		LineLayout *ll = nullptr;
-		int phaseCount;
-		DrawPhase phases[8];
+		DrawPhase phase = DrawPhase::all;
 		if ((phasesDraw == PhasesDraw::Multiple) && !bufferedDraw) {
-			phases[0] = DrawPhase::back;
-			phases[1] = DrawPhase::indicatorsBack;
-			phases[2] = DrawPhase::text;
-			phases[3] = DrawPhase::indentationGuides;
-			phases[4] = DrawPhase::indicatorsFore;
-			phases[5] = DrawPhase::selectionTranslucent;
-			phases[6] = DrawPhase::lineTranslucent;
-			phases[7] = DrawPhase::carets;
-			phaseCount = 8;
-		} else {
-			phases[0] = DrawPhase::all;
-			phaseCount = 1;
+			phase = DrawPhase::back;
 		}
-
-		for (int phaseIndex = 0; phaseIndex < phaseCount; phaseIndex++) {
-			const DrawPhase phase = phases[phaseIndex];
-			int ypos = 0;
-			if (!bufferedDraw)
-				ypos += screenLinePaintFirst * vsDraw.lineHeight;
+		for (;;) {
 			int yposScreen = screenLinePaintFirst * vsDraw.lineHeight;
+			int ypos = bufferedDraw ? 0 : yposScreen;
+			const int bottom = static_cast<int>(rcArea.bottom);
 			Sci::Line visibleLine = model.TopLineOfMain() + screenLinePaintFirst;
-			while (visibleLine < model.pcs->LinesDisplayed() && yposScreen < rcArea.bottom) {
+			const Sci::Line linesDisplayed = model.pcs->LinesDisplayed();
+			while (visibleLine < linesDisplayed && yposScreen < bottom) {
 
 				const Sci::Line lineDoc = model.pcs->DocFromDisplay(visibleLine);
 				// Only visible lines should be handled by the code within the loop
@@ -2787,12 +2768,19 @@ void EditView::PaintText(Surface *surfaceWindow, const EditModel &model, const V
 				if (lineDoc != lineDocPrevious) {
 					lineDocPrevious = lineDoc;
 					ll = RetrieveLineLayout(lineDoc, model);
-					LayoutLine(model, surface, vsDraw, ll, model.wrapWidth, LayoutLineOption::KeepPosition);
+					LayoutLine(model, surface, vsDraw, ll, model.wrapWidth, LayoutLineOption::PaintText);
+					if (model.BidirectionalEnabled()) {
+						// Fill the line bidi data
+						UpdateBidiData(model, vsDraw, ll);
+					}
 				}
 #if defined(TIME_PAINTING)
 				durLayout += ep.Reset();
 #endif
-				if (ll) {
+				{
+#if defined(__clang__)
+					__builtin_assume(ll != nullptr); // suppress [clang-analyzer-core.CallAndMessage]
+#endif
 					ll->containsCaret = vsDraw.selection.visible && (lineDoc == lineCaret)
 						&& (ll->lines == 1 || !vsDraw.caretLine.subLine || ll->InLine(caretOffset, subLine));
 
@@ -2813,11 +2801,6 @@ void EditView::PaintText(Surface *surfaceWindow, const EditModel &model, const V
 						rcSpacer.right = rcSpacer.left;
 						rcSpacer.left -= 1;
 						surface->FillRectangleAligned(rcSpacer, Fill(vsDraw.styles[StyleDefault].back));
-					}
-
-					if (model.BidirectionalEnabled()) {
-						// Fill the line bidi data
-						UpdateBidiData(model, vsDraw, ll);
 					}
 
 					DrawLine(surface, model, vsDraw, ll, lineDoc, visibleLine, xStart, rcLine, subLine, phase);
@@ -2845,7 +2828,7 @@ void EditView::PaintText(Surface *surfaceWindow, const EditModel &model, const V
 					}
 
 					lineWidthMaxSeen = std::max(
-						lineWidthMaxSeen, static_cast<int>(ll->positions[ll->numCharsInLine]));
+						lineWidthMaxSeen, static_cast<int>(ll->positions[ll->lastSegmentEnd]));
 #if defined(TIME_PAINTING)
 					durCopy += ep.Duration();
 #endif
@@ -2858,6 +2841,11 @@ void EditView::PaintText(Surface *surfaceWindow, const EditModel &model, const V
 				yposScreen += vsDraw.lineHeight;
 				visibleLine++;
 			}
+
+			if (phase >= DrawPhase::carets) {
+				break;
+			}
+			phase = static_cast<DrawPhase>(static_cast<int>(phase) * 2);
 		}
 #if defined(TIME_PAINTING)
 		if (durPaint < 0.00000001)
@@ -2972,10 +2960,10 @@ Sci::Position EditView::FormatRange(bool draw, CharacterRangeFull chrg, Scintill
 
 	// Turn off change history marker backgrounds
 	constexpr unsigned int changeMarkers =
-		1u << static_cast<unsigned int>(MarkerOutline::HistoryRevertedToOrigin) |
-		1u << static_cast<unsigned int>(MarkerOutline::HistorySaved) |
-		1u << static_cast<unsigned int>(MarkerOutline::HistoryModified) |
-		1u << static_cast<unsigned int>(MarkerOutline::HistoryRevertedToModified);
+		(1u << static_cast<unsigned int>(MarkerOutline::HistoryRevertedToOrigin)) |
+		(1u << static_cast<unsigned int>(MarkerOutline::HistorySaved)) |
+		(1u << static_cast<unsigned int>(MarkerOutline::HistoryModified)) |
+		(1u << static_cast<unsigned int>(MarkerOutline::HistoryRevertedToModified));
 	vsPrint.maskInLine &= ~changeMarkers;
 
 	const Sci::Line linePrintStart = model.pdoc->SciLineFromPosition(chrg.cpMin);

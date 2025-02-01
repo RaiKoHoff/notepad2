@@ -57,18 +57,10 @@ struct IUnknown;
 #if _WIN32_WINNT >= _WIN32_WINNT_WIN8
 #define kSystemLibraryLoadFlags		LOAD_LIBRARY_SEARCH_SYSTEM32
 #else
-#if NP2_FORCE_COMPILE_C_AS_CPP
 extern DWORD kSystemLibraryLoadFlags;
-#else
-extern "C" DWORD kSystemLibraryLoadFlags;
-#endif
 #endif
 
-#if NP2_FORCE_COMPILE_C_AS_CPP
 extern UINT g_uSystemDPI;
-#else
-extern "C" UINT g_uSystemDPI;
-#endif
 
 using namespace Scintilla;
 
@@ -121,7 +113,7 @@ void Scintilla_LoadDpiForWindow(void) {
 	}
 }
 
-UINT GetWindowDPI(HWND hwnd) NP2F_noexcept {
+UINT GetWindowDPI(HWND hwnd) noexcept {
 	if (fnGetDpiForWindow) {
 		return fnGetDpiForWindow(hwnd);
 	}
@@ -136,7 +128,7 @@ UINT GetWindowDPI(HWND hwnd) NP2F_noexcept {
 	return g_uSystemDPI;
 }
 
-int SystemMetricsForDpi(int nIndex, UINT dpi) NP2F_noexcept {
+int SystemMetricsForDpi(int nIndex, UINT dpi) noexcept {
 	if (fnGetSystemMetricsForDpi) {
 		return fnGetSystemMetricsForDpi(nIndex, dpi);
 	}
@@ -148,7 +140,7 @@ int SystemMetricsForDpi(int nIndex, UINT dpi) NP2F_noexcept {
 	return value;
 }
 
-BOOL AdjustWindowRectForDpi(LPRECT lpRect, DWORD dwStyle, DWORD dwExStyle, UINT dpi) NP2F_noexcept {
+BOOL AdjustWindowRectForDpi(LPRECT lpRect, DWORD dwStyle, DWORD dwExStyle, UINT dpi) noexcept {
 	if (fnAdjustWindowRectExForDpi) {
 		return fnAdjustWindowRectExForDpi(lpRect, dwStyle, FALSE, dwExStyle, dpi);
 	}
@@ -390,7 +382,7 @@ std::shared_ptr<Font> Font::Allocate(const FontParameters &fp) {
 		std::wstring wsFamily;
 		DWRITE_FONT_WEIGHT weight = static_cast<DWRITE_FONT_WEIGHT>(fp.weight);
 		DWRITE_FONT_STYLE style = fp.italic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL;
-		DWRITE_FONT_STRETCH stretch = DWRITE_FONT_STRETCH_NORMAL;
+		DWRITE_FONT_STRETCH stretch = static_cast<DWRITE_FONT_STRETCH>(fp.stretch);
 		if (!GetDWriteFontProperties(lf, wsFamily, weight, style, stretch)) {
 			wsFamily = WStringFromUTF8(fp.faceName);
 		}
@@ -443,11 +435,19 @@ std::shared_ptr<Font> Font::Allocate(const FontParameters &fp) {
 // when less than safe size otherwise allocate on heap and free automatically.
 template<typename T, size_t lengthStandard>
 class VarBuffer {
-	T * const buffer;
+	T *buffer;
 	T bufferStandard[lengthStandard];
 public:
-	explicit VarBuffer(size_t length) :
-		buffer {(length > lengthStandard) ? new T[length] : bufferStandard} {
+	VarBuffer() noexcept {
+		buffer = bufferStandard;
+	}
+	explicit VarBuffer(size_t length): buffer{bufferStandard} {
+		allocate(length);
+	}
+	void allocate(size_t length) {
+		if (length > lengthStandard) {
+			buffer = new T[length];
+		}
 		static_assert(__is_standard_layout(T));
 		memset(buffer, 0, length*sizeof(T));
 	}
@@ -477,14 +477,16 @@ public:
 	}
 };
 
-constexpr size_t stackBufferLength = 512;
+constexpr size_t stackBufferLength = 480; // max value to keep stack usage under 4096
 class TextWide {
-	wchar_t * const buffer;
+	wchar_t *buffer;
 	UINT len;	// Using UINT instead of size_t as most Win32 APIs take UINT.
 	wchar_t bufferStandard[stackBufferLength];
 public:
-	TextWide(std::string_view text, int codePage) :
-		buffer {(text.length() > stackBufferLength) ? new wchar_t[text.length()] : bufferStandard} {
+	TextWide(std::string_view text, int codePage): buffer {bufferStandard} {
+		if (text.length() > stackBufferLength) {
+			buffer = new wchar_t[text.length()];
+		}
 		if (codePage == CpUtf8) {
 			len = static_cast<UINT>(UTF16FromUTF8(text, buffer, text.length()));
 		} else {
@@ -513,8 +515,59 @@ public:
 	}
 };
 
-using TextPositions = VarBuffer<XYPOSITION, stackBufferLength>;
-using TextPositionsI = VarBuffer<int, stackBufferLength>;
+class TextWideD2D {
+	XYPOSITION *positions = nullptr;
+	wchar_t * buffer;
+	UINT len;	// Using UINT instead of size_t as most Win32 APIs take UINT.
+	// reuse bufferStandard for both text and position, since only one is active
+	XYPOSITION bufferStandard[stackBufferLength];
+public:
+	TextWideD2D(std::string_view text, int codePage): buffer {reinterpret_cast<wchar_t *>(bufferStandard)} {
+		if (text.length() > stackBufferLength*sizeof(XYPOSITION)/sizeof(wchar_t)) {
+			buffer = new wchar_t[text.length()];
+		}
+		if (codePage == CpUtf8) {
+			len = static_cast<UINT>(UTF16FromUTF8(text, buffer, text.length()));
+		} else {
+			// Support Asian string display in 9x English
+			len = ::MultiByteToWideChar(codePage, 0, text.data(), static_cast<int>(text.length()),
+				buffer, static_cast<int>(text.length()));
+		}
+	}
+	const wchar_t *data() const noexcept {
+		return buffer;
+	}
+	UINT length() const noexcept {
+		return len;
+	}
+	XYPOSITION *position() noexcept {
+		return positions;
+	}
+	void allocate() {
+		positions = bufferStandard;
+		if (len > stackBufferLength) {
+			positions = new XYPOSITION[len];
+		}
+		memset(positions, 0, len*sizeof(XYPOSITION));
+	}
+
+	// Deleted so TextWideD2D objects can not be copied.
+	TextWideD2D(const TextWideD2D &) = delete;
+	TextWideD2D(TextWide &&) = delete;
+	TextWideD2D &operator=(const TextWideD2D &) = delete;
+	TextWideD2D &operator=(TextWideD2D &&) = delete;
+
+	~TextWideD2D() noexcept {
+		if (buffer != static_cast<void *>(bufferStandard)) {
+			delete[]buffer;
+		}
+		if (positions != bufferStandard) {
+			delete[]positions;
+		}
+	}
+};
+
+using TextPositionsGDI = VarBuffer<int, stackBufferLength>;
 
 class SurfaceGDI final : public Surface {
 	HDC hdc{};
@@ -947,7 +1000,7 @@ inline DWORD Proportional(ColourRGBA a, ColourRGBA b, XYPOSITION t) noexcept {
 	const __m128i i32x4Back = rgba_to_abgr_epi32_sse4_si32(b.AsInteger());
 	// a + t * (b - a)
 	__m128 f32x4Fore = _mm_cvtepi32_ps(_mm_sub_epi32(i32x4Back, i32x4Fore));
-	f32x4Fore = _mm_mul_ps(f32x4Fore, _mm_set1_ps((float)t));
+	f32x4Fore = _mm_mul_ps(f32x4Fore, _mm_set1_ps(static_cast<float>(t)));
 	f32x4Fore = _mm_add_ps(f32x4Fore, _mm_cvtepi32_ps(i32x4Fore));
 	// component * alpha / 255
 	const __m128 f32x4Alpha = _mm_broadcastss_ps(f32x4Fore);
@@ -965,7 +1018,7 @@ inline DWORD Proportional(ColourRGBA a, ColourRGBA b, XYPOSITION t) noexcept {
 	const __m128i i32x4Back = rgba_to_abgr_epi32_sse2_si32(b.AsInteger());
 	// a + t * (b - a)
 	__m128 f32x4Fore = _mm_cvtepi32_ps(_mm_sub_epi32(i32x4Back, i32x4Fore));
-	f32x4Fore = _mm_mul_ps(f32x4Fore, _mm_set1_ps((float)t));
+	f32x4Fore = _mm_mul_ps(f32x4Fore, _mm_set1_ps(static_cast<float>(t)));
 	f32x4Fore = _mm_add_ps(f32x4Fore, _mm_cvtepi32_ps(i32x4Fore));
 	// component * alpha / 255
 	const uint32_t alpha = _mm_cvttss_si32(f32x4Fore);
@@ -1182,9 +1235,10 @@ void SurfaceGDI::MeasureWidths(const Font *font_, std::string_view text, XYPOSIT
 	int fit = 0;
 	int i = 0;
 	const int len = static_cast<int>(text.length());
+	TextPositionsGDI poses;
 	if (mode.codePage == CpUtf8) {
 		const TextWide tbuf(text, CpUtf8);
-		TextPositionsI poses(tbuf.length());
+		poses.allocate(tbuf.length());
 		if (!::GetTextExtentExPointW(hdc, tbuf.data(), tbuf.length(), maxWidthMeasure, &fit, poses.data(), &sz)) {
 			// Failure
 			return;
@@ -1202,7 +1256,7 @@ void SurfaceGDI::MeasureWidths(const Font *font_, std::string_view text, XYPOSIT
 			}
 		}
 	} else {
-		TextPositionsI poses(len);
+		poses.allocate(len);
 		if (!::GetTextExtentExPointA(hdc, text.data(), len, maxWidthMeasure, &fit, poses.data(), &sz)) {
 			// Eeek - a NULL DC or other foolishness could cause this.
 			return;
@@ -1274,7 +1328,7 @@ void SurfaceGDI::MeasureWidthsUTF8(const Font *font_, std::string_view text, XYP
 	int i = 0;
 	const int len = static_cast<int>(text.length());
 	const TextWide tbuf(text, CpUtf8);
-	TextPositionsI poses(tbuf.length());
+	TextPositionsGDI poses(tbuf.length());
 	if (!::GetTextExtentExPointW(hdc, tbuf.data(), tbuf.length(), maxWidthMeasure, &fit, poses.data(), &sz)) {
 		// Failure
 		return;
@@ -1373,9 +1427,9 @@ static_assert(sizeof(D2D1_RECT_F) == sizeof(__m128));
 
 inline D2D1_RECT_F RectangleFromPRectangleEx(PRectangle prc) noexcept {
 	D2D1_RECT_F rc;
-	const __m256d f64x4 = _mm256_load_pd((double *)(&prc));
+	const __m256d f64x4 = _mm256_load_pd(reinterpret_cast<double *>(&prc));
 	const __m128 f32x4 = _mm256_cvtpd_ps(f64x4);
-	_mm_storeu_ps((float *)(&rc), f32x4);
+	_mm_storeu_ps(reinterpret_cast<float *>(&rc), f32x4);
 	return rc;
 }
 
@@ -1395,9 +1449,9 @@ static_assert(sizeof(D2D1_POINT_2F) == sizeof(__m64));
 
 inline D2D1_POINT_2F DPointFromPointEx(Point point) noexcept {
 	D2D1_POINT_2F pt;
-	const __m128d f64x2 = _mm_load_pd((double *)(&point));
+	const __m128d f64x2 = _mm_load_pd(reinterpret_cast<double *>(&point));
 	const __m128 f32x2 = _mm_cvtpd_ps(f64x2);
-	_mm_storel_pi((__m64 *)(&pt), f32x2);
+	_mm_storel_pi(reinterpret_cast<__m64 *>(&pt), f32x2);
 	return pt;
 }
 
@@ -1426,7 +1480,7 @@ inline D2D_COLOR_F ColorFromColourAlpha(ColourRGBA colour) noexcept {
 	__m128 f32x4 = _mm_cvtepi32_ps(i32x4);
 	f32x4 = _mm_div_ps(f32x4, _mm_set1_ps(255.0f));
 	D2D_COLOR_F color;
-	_mm_storeu_ps((float *)&color, f32x4);
+	_mm_storeu_ps(reinterpret_cast<float *>(&color), f32x4);
 	return color;
 }
 
@@ -1448,6 +1502,28 @@ constexpr D2D1_RECT_F RectangleInset(D2D1_RECT_F rect, FLOAT inset) noexcept {
 		rect.right - inset,
 		rect.bottom - inset
 	};
+}
+
+using Geometry = std::unique_ptr<ID2D1PathGeometry, UnknownReleaser>;
+
+Geometry GeometryCreate() noexcept {
+	ID2D1PathGeometry *geometry = nullptr;
+	const HRESULT hr = pD2DFactory->CreatePathGeometry(&geometry);
+	if (FAILED(hr) || !geometry) {
+		return {};
+	}
+	return Geometry(geometry);
+}
+
+using GeometrySink = std::unique_ptr<ID2D1GeometrySink, UnknownReleaser>;
+
+GeometrySink GeometrySinkCreate(ID2D1PathGeometry *geometry) noexcept {
+	ID2D1GeometrySink *sink = nullptr;
+	const HRESULT hr = geometry->Open(&sink);
+	if (FAILED(hr) || !sink) {
+		return {};
+	}
+	return GeometrySink(sink);
 }
 
 }
@@ -1500,7 +1576,7 @@ public:
 	int PixelDivisions() const noexcept override;
 	int DeviceHeightFont(int points) const noexcept override;
 	void SCICALL LineDraw(Point start, Point end, Stroke stroke) override;
-	static ID2D1PathGeometry *Geometry(const Point *pts, size_t npts, D2D1_FIGURE_BEGIN figureBegin) noexcept;
+	static Geometry GeometricFigure(const Point *pts, size_t npts, D2D1_FIGURE_BEGIN figureBegin) noexcept;
 	void SCICALL PolyLine(const Point *pts, size_t npts, Stroke stroke) override;
 	void SCICALL Polygon(const Point *pts, size_t npts, FillStroke fillStroke) override;
 	void SCICALL RectangleDraw(PRectangle rc, FillStroke fillStroke) override;
@@ -1696,13 +1772,10 @@ void SurfaceD2D::LineDraw(Point start, Point end, Stroke stroke) {
 	ReleaseUnknown(pStrokeStyle);
 }
 
-ID2D1PathGeometry *SurfaceD2D::Geometry(const Point *pts, size_t npts, D2D1_FIGURE_BEGIN figureBegin) noexcept {
-	ID2D1PathGeometry *geometry = nullptr;
-	HRESULT hr = pD2DFactory->CreatePathGeometry(&geometry);
-	if (SUCCEEDED(hr) && geometry) {
-		ID2D1GeometrySink *sink = nullptr;
-		hr = geometry->Open(&sink);
-		if (SUCCEEDED(hr) && sink) {
+Geometry SurfaceD2D::GeometricFigure(const Point *pts, size_t npts, D2D1_FIGURE_BEGIN figureBegin) noexcept {
+	Geometry geometry = GeometryCreate();
+	if (geometry) {
+		if (const GeometrySink sink = GeometrySinkCreate(geometry.get())) {
 			sink->BeginFigure(DPointFromPointEx(pts[0]), figureBegin);
 			for (size_t i = 1; i < npts; i++) {
 				sink->AddLine(DPointFromPointEx(pts[i]));
@@ -1710,7 +1783,6 @@ ID2D1PathGeometry *SurfaceD2D::Geometry(const Point *pts, size_t npts, D2D1_FIGU
 			sink->EndFigure((figureBegin == D2D1_FIGURE_BEGIN_FILLED) ?
 				D2D1_FIGURE_END_CLOSED : D2D1_FIGURE_END_OPEN);
 			sink->Close();
-			ReleaseUnknown(sink);
 		}
 	}
 	return geometry;
@@ -1722,7 +1794,7 @@ void SurfaceD2D::PolyLine(const Point *pts, size_t npts, Stroke stroke) {
 		return;
 	}
 
-	ID2D1PathGeometry *geometry = Geometry(pts, npts, D2D1_FIGURE_BEGIN_HOLLOW);
+	const Geometry geometry = GeometricFigure(pts, npts, D2D1_FIGURE_BEGIN_HOLLOW);
 	PLATFORM_ASSERT(geometry);
 	if (!geometry) {
 		return;
@@ -1743,23 +1815,21 @@ void SurfaceD2D::PolyLine(const Point *pts, size_t npts, Stroke stroke) {
 	const HRESULT hr = pD2DFactory->CreateStrokeStyle(
 		strokeProps, nullptr, 0, &pStrokeStyle);
 	if (SUCCEEDED(hr)) {
-		pRenderTarget->DrawGeometry(geometry, pBrush, stroke.WidthF(), pStrokeStyle);
+		pRenderTarget->DrawGeometry(geometry.get(), pBrush, stroke.WidthF(), pStrokeStyle);
 	}
 	ReleaseUnknown(pStrokeStyle);
-	ReleaseUnknown(geometry);
 }
 
 void SurfaceD2D::Polygon(const Point *pts, size_t npts, FillStroke fillStroke) {
 	PLATFORM_ASSERT(pRenderTarget && (npts > 2));
 	if (pRenderTarget) {
-		ID2D1PathGeometry *geometry = Geometry(pts, npts, D2D1_FIGURE_BEGIN_FILLED);
+		const Geometry geometry = GeometricFigure(pts, npts, D2D1_FIGURE_BEGIN_FILLED);
 		PLATFORM_ASSERT(geometry);
 		if (geometry) {
 			D2DPenColourAlpha(fillStroke.fill.colour);
-			pRenderTarget->FillGeometry(geometry, pBrush);
+			pRenderTarget->FillGeometry(geometry.get(), pBrush);
 			D2DPenColourAlpha(fillStroke.stroke.colour);
-			pRenderTarget->DrawGeometry(geometry, pBrush, fillStroke.stroke.WidthF());
-			ReleaseUnknown(geometry);
+			pRenderTarget->DrawGeometry(geometry.get(), pBrush, fillStroke.stroke.WidthF());
 		}
 	}
 }
@@ -1982,13 +2052,10 @@ void SurfaceD2D::Stadium(PRectangle rc, FillStroke fillStroke, Ends ends) {
 		PRectangle rcInner = rc;
 		rcInner.left += radius;
 		rcInner.right -= radius;
-		ID2D1PathGeometry *pathGeometry = nullptr;
-		const HRESULT hrGeometry = pD2DFactory->CreatePathGeometry(&pathGeometry);
-		if (FAILED(hrGeometry) || !pathGeometry)
+		const Geometry pathGeometry = GeometryCreate();
+		if (!pathGeometry)
 			return;
-		ID2D1GeometrySink *pSink = nullptr;
-		const HRESULT hrSink = pathGeometry->Open(&pSink);
-		if (SUCCEEDED(hrSink) && pSink) {
+		if (const GeometrySink pSink = GeometrySinkCreate(pathGeometry.get())) {
 			switch (leftSide) {
 			case Ends::leftFlat:
 				pSink->BeginFigure(DPointFromPoint(Point(rc.left + halfStroke, rc.top + halfStroke)), D2D1_FIGURE_BEGIN_FILLED);
@@ -2041,12 +2108,10 @@ void SurfaceD2D::Stadium(PRectangle rc, FillStroke fillStroke, Ends ends) {
 			pSink->Close();
 		}
 
-		ReleaseUnknown(pSink);
 		D2DPenColourAlpha(fillStroke.fill.colour);
-		pRenderTarget->FillGeometry(pathGeometry, pBrush);
+		pRenderTarget->FillGeometry(pathGeometry.get(), pBrush);
 		D2DPenColourAlpha(fillStroke.stroke.colour);
-		pRenderTarget->DrawGeometry(pathGeometry, pBrush, fillStroke.stroke.WidthF());
-		ReleaseUnknown(pathGeometry);
+		pRenderTarget->DrawGeometry(pathGeometry.get(), pBrush, fillStroke.stroke.WidthF());
 	}
 }
 
@@ -2526,7 +2591,7 @@ void SurfaceD2D::DrawTextTransparent(PRectangle rc, const Font *font_, XYPOSITIO
 
 namespace {
 
-HRESULT MeasurePositions(const Font *font_, TextPositions &poses, const TextWide &tbuf) {
+HRESULT MeasurePositions(const Font *font_, TextWideD2D &tbuf) {
 	const FontDirectWrite *pfm = down_cast<const FontDirectWrite *>(font_);
 	if (!pfm->pTextFormat) {
 		// Unexpected failure like no access to DirectWrite so give up.
@@ -2543,6 +2608,7 @@ HRESULT MeasurePositions(const Font *font_, TextPositions &poses, const TextWide
 		return E_FAIL;
 	}
 
+	tbuf.allocate();
 	VarBuffer<DWRITE_CLUSTER_METRICS, stackBufferLength> clusterMetrics(tbuf.length());
 	UINT32 count = 0;
 	const HRESULT hrGetCluster = pTextLayout->GetClusterMetrics(clusterMetrics.data(), tbuf.length(), &count);
@@ -2553,6 +2619,7 @@ HRESULT MeasurePositions(const Font *font_, TextPositions &poses, const TextWide
 	// A cluster may be more than one WCHAR, such as for "ffi" which is a ligature in the Candara font
 	XYPOSITION position = 0.0;
 	UINT ti = 0;
+	XYPOSITION * const poses = tbuf.position();
 	for (UINT32 ci = 0; ci < count; ci++) {
 		const int length = clusterMetrics[ci].length;
 		const XYPOSITION width = clusterMetrics[ci].width;
@@ -2568,11 +2635,11 @@ HRESULT MeasurePositions(const Font *font_, TextPositions &poses, const TextWide
 }
 
 void SurfaceD2D::MeasureWidths(const Font *font_, std::string_view text, XYPOSITION *positions) {
-	const TextWide tbuf(text, mode.codePage);
-	TextPositions poses(tbuf.length());
-	if (FAILED(MeasurePositions(font_, poses, tbuf))) {
+	TextWideD2D tbuf(text, mode.codePage);
+	if (FAILED(MeasurePositions(font_, tbuf))) {
 		return;
 	}
+	const XYPOSITION * const poses = tbuf.position();
 	if (mode.codePage == CpUtf8) {
 		// Map the widths given for UTF-16 characters back onto the UTF-8 input string
 		size_t i = 0;
@@ -2664,13 +2731,13 @@ void SurfaceD2D::DrawTextTransparentUTF8(PRectangle rc, const Font *font_, XYPOS
 }
 
 void SurfaceD2D::MeasureWidthsUTF8(const Font *font_, std::string_view text, XYPOSITION *positions) {
-	const TextWide tbuf(text, CpUtf8);
-	TextPositions poses(tbuf.length());
-	if (FAILED(MeasurePositions(font_, poses, tbuf))) {
+	TextWideD2D tbuf(text, CpUtf8);
+	if (FAILED(MeasurePositions(font_, tbuf))) {
 		return;
 	}
 	// Map the widths given for UTF-16 characters back onto the UTF-8 input string
 	size_t i = 0;
+	const XYPOSITION * const poses = tbuf.position();
 	for (UINT ui = 0; ui < tbuf.length(); ui++) {
 		const unsigned char uch = text[i];
 		const unsigned int byteCount = UTF8BytesOfLead(uch);
@@ -3135,19 +3202,15 @@ public:
 			points[i].y = arrow[i][1] * scale;
 		}
 
-		ID2D1PathGeometry *geometry_ = nullptr;
-		hr = pD2DFactory->CreatePathGeometry(&geometry_);
-		if (FAILED(hr) || !geometry_) {
+		const Geometry geometry = GeometryCreate();
+		if (!geometry) {
 			return false;
 		}
-		const std::unique_ptr<ID2D1PathGeometry, UnknownReleaser> geometry(geometry_);
 
-		ID2D1GeometrySink *sink_ = nullptr;
-		hr = geometry->Open(&sink_);
-		if (FAILED(hr) || !sink_) {
+		const GeometrySink sink = GeometrySinkCreate(geometry.get());
+		if (!sink) {
 			return false;
 		}
-		const std::unique_ptr<ID2D1GeometrySink, UnknownReleaser> sink(sink_);
 
 		sink->BeginFigure(points[0], D2D1_FIGURE_BEGIN_FILLED);
 		for (size_t i = 1; i < nPoints; i++) {
@@ -3405,15 +3468,15 @@ class ListBoxX final : public ListBox {
 	int MinClientWidth() const noexcept;
 	int TextOffset() const noexcept;
 	POINT GetClientExtent() const noexcept;
-	POINT MinTrackSize() const;
-	POINT MaxTrackSize() const;
+	POINT MinTrackSize() const noexcept;
+	POINT MaxTrackSize() const noexcept;
 	void SetRedraw(bool on) noexcept;
 	void OnDoubleClick();
 	void OnSelChange();
 	void ResizeToCursor();
 	void StartResize(WPARAM) noexcept;
 	LRESULT NcHitTest(WPARAM, LPARAM) const noexcept;
-	void CentreItem(int n);
+	void CentreItem(int n) noexcept;
 	void Paint(HDC) noexcept;
 	static LRESULT CALLBACK ControlWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
 
@@ -3451,7 +3514,7 @@ public:
 	void ClearRegisteredImages() noexcept override;
 	void SetDelegate(IListBoxDelegate *lbDelegate) noexcept override;
 	void SetList(const char *list, char separator, char typesep) override;
-	void SCICALL SetOptions(ListOptions options_) noexcept override;
+	void SCICALL SetOptions(const ListOptions &options_) noexcept override;
 	void Draw(const DRAWITEMSTRUCT *pDrawItem);
 	LRESULT WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 	static LRESULT CALLBACK StaticWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
@@ -3786,7 +3849,7 @@ void ListBoxX::SetList(const char *list, const char separator, const char typese
 	SetRedraw(true);
 }
 
-void ListBoxX::SetOptions(ListOptions options_) noexcept {
+void ListBoxX::SetOptions(const ListOptions &options_) noexcept {
 	colorText = ColourOfElement(options_.fore, COLOR_WINDOWTEXT);
 	colorBackground = ColourOfElement(options_.back, COLOR_WINDOW);
 	colorHighlightText = ColourOfElement(options_.foreSelected, COLOR_HIGHLIGHTTEXT);
@@ -3816,14 +3879,14 @@ int ListBoxX::MinClientWidth() const noexcept {
 	return 12 * (aveCharWidth + aveCharWidth / 3);
 }
 
-POINT ListBoxX::MinTrackSize() const {
+POINT ListBoxX::MinTrackSize() const noexcept {
 	PRectangle rc = PRectangle::FromInts(0, 0, MinClientWidth(), ItemHeight());
 	AdjustWindowRect(&rc);
 	POINT ret = { static_cast<LONG>(rc.Width()), static_cast<LONG>(rc.Height()) };
 	return ret;
 }
 
-POINT ListBoxX::MaxTrackSize() const {
+POINT ListBoxX::MaxTrackSize() const noexcept {
 	const int width = maxCharWidth * maxItemCharacters + static_cast<int>(TextInset.x) * 2 +
 		TextOffset() + SystemMetricsForDpi(SM_CXVSCROLL, dpi);
 	PRectangle rc = PRectangle::FromInts(0, 0,
@@ -4024,7 +4087,7 @@ POINT ListBoxX::GetClientExtent() const noexcept {
 	return ret;
 }
 
-void ListBoxX::CentreItem(int n) {
+void ListBoxX::CentreItem(int n) noexcept {
 	// If below mid point, scroll up to centre, but with more items below if uneven
 	if (n >= 0) {
 		const POINT extent = GetClientExtent();
@@ -4050,7 +4113,7 @@ void ListBoxX::Paint(HDC hDC) noexcept {
 	const RECT rc = { 0, 0, extent.x, extent.y };
 	FillRectColour(bitmapDC, &rc, colorBackground);
 	// Paint the entire client area and vertical scrollbar
-	::SendMessage(lb, WM_PRINT, reinterpret_cast<WPARAM>(bitmapDC), PRF_CLIENT | PRF_NONCLIENT);
+	::SendMessage(lb, WM_PRINT, AsInteger<WPARAM>(bitmapDC), PRF_CLIENT | PRF_NONCLIENT);
 	::BitBlt(hDC, 0, 0, extent.x, extent.y, bitmapDC, 0, 0, SRCCOPY);
 	// Select a stock brush to prevent warnings from BoundsChecker
 	SelectBrush(bitmapDC, GetStockBrush(WHITE_BRUSH));
@@ -4061,7 +4124,7 @@ void ListBoxX::Paint(HDC hDC) noexcept {
 
 LRESULT CALLBACK ListBoxX::ControlWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR /*dwRefData*/) {
 	try {
-		ListBoxX *lbx = static_cast<ListBoxX *>(PointerFromWindow(::GetParent(hWnd)));
+		ListBoxX *lbx = PointerFromWindow<ListBoxX *>(::GetParent(hWnd));
 		switch (iMessage) {
 		case WM_ERASEBKGND:
 			return TRUE;
@@ -4127,7 +4190,7 @@ LRESULT ListBoxX::WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam
 			WS_CHILD | WS_VSCROLL | WS_VISIBLE |
 			LBS_OWNERDRAWFIXED | LBS_NODATA | LBS_NOINTEGRALHEIGHT,
 			0, 0, 150, 80, hWnd,
-			reinterpret_cast<HMENU>(static_cast<ptrdiff_t>(ctrlID)),
+			AsPointer<HMENU>(static_cast<ptrdiff_t>(ctrlID)),
 			hinstanceParent,
 			nullptr);
 		::SetWindowSubclass(lb, ControlWndProc, 0, 0);
@@ -4158,13 +4221,13 @@ LRESULT ListBoxX::WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam
 		break;
 
 	case WM_MEASUREITEM: {
-		MEASUREITEMSTRUCT *pMeasureItem = reinterpret_cast<MEASUREITEMSTRUCT *>(lParam);
+		MEASUREITEMSTRUCT *pMeasureItem = AsPointer<MEASUREITEMSTRUCT *>(lParam);
 		pMeasureItem->itemHeight = ItemHeight();
 	}
 	break;
 
 	case WM_DRAWITEM:
-		Draw(reinterpret_cast<DRAWITEMSTRUCT *>(lParam));
+		Draw(AsPointer<DRAWITEMSTRUCT *>(lParam));
 		break;
 
 	case WM_DESTROY:
@@ -4178,7 +4241,7 @@ LRESULT ListBoxX::WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam
 		return TRUE;
 
 	case WM_GETMINMAXINFO: {
-		MINMAXINFO *minMax = reinterpret_cast<MINMAXINFO*>(lParam);
+		MINMAXINFO *minMax = AsPointer<MINMAXINFO*>(lParam);
 		minMax->ptMaxTrackSize = MaxTrackSize();
 		minMax->ptMinTrackSize = MinTrackSize();
 	}
@@ -4230,7 +4293,7 @@ LRESULT ListBoxX::WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam
 	}
 
 	case WM_NCCALCSIZE: {
-		LPRECT rect = reinterpret_cast<LPRECT>(lParam);
+		LPRECT rect = AsPointer<LPRECT>(lParam);
 		::InflateRect(rect, -ListBoxXFakeFrameSize, -ListBoxXFakeFrameSize);
 		return 0;
 	}
@@ -4284,11 +4347,11 @@ LRESULT ListBoxX::WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam
 
 LRESULT CALLBACK ListBoxX::StaticWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam) {
 	if (iMessage == WM_CREATE) {
-		CREATESTRUCT *pCreate = reinterpret_cast<CREATESTRUCT *>(lParam);
+		CREATESTRUCT *pCreate = AsPointer<CREATESTRUCT *>(lParam);
 		SetWindowPointer(hWnd, pCreate->lpCreateParams);
 	}
 	// Find C++ object associated with window.
-	ListBoxX *lbx = static_cast<ListBoxX *>(PointerFromWindow(hWnd));
+	ListBoxX *lbx = PointerFromWindow<ListBoxX *>(hWnd);
 	if (lbx) {
 		return lbx->WndProc(hWnd, iMessage, wParam, lParam);
 	} else {
