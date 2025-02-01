@@ -32,8 +32,8 @@
 #include "Geometry.h"
 #include "Platform.h"
 
-#include "SciLexer.h"
 #include "Scintilla.h"
+#include "SciLexer.h"
 
 //#include "CharacterCategory.h"
 #include "LexerModule.h"
@@ -238,8 +238,7 @@ void ScintillaBase::AutoCompleteInsert(Sci::Position startPos, Sci::Position rem
 	} else {
 		// MultiAutoComplete::Each
 		for (size_t r = 0; r < sel.Count(); r++) {
-			if (!RangeContainsProtected(sel.Range(r).Start().Position(),
-				sel.Range(r).End().Position())) {
+			if (!RangeContainsProtected(sel.Range(r))) {
 				Sci::Position positionInsert = sel.Range(r).Start().Position();
 				positionInsert = RealizeVirtualSpace(positionInsert, sel.Range(r).caret.VirtualSpace());
 				if (positionInsert - removeLen >= 0) {
@@ -248,8 +247,7 @@ void ScintillaBase::AutoCompleteInsert(Sci::Position startPos, Sci::Position rem
 				}
 				const Sci::Position lengthInserted = pdoc->InsertString(positionInsert, text);
 				if (lengthInserted > 0) {
-					sel.Range(r).caret.SetPosition(positionInsert + lengthInserted);
-					sel.Range(r).anchor.SetPosition(positionInsert + lengthInserted);
+					sel.Range(r) = SelectionRange(positionInsert + lengthInserted);
 				}
 				sel.Range(r).ClearVirtualSpace();
 			}
@@ -290,8 +288,16 @@ void ScintillaBase::AutoCompleteStart(Sci::Position lenEntered, const char *list
 		ac.options,
 	};
 
+	int lineHeight;
+	if (vs.autocStyle != StyleDefault) {
+		const AutoSurface surfaceMeasure(this);
+		lineHeight = static_cast<int>(std::lround(surfaceMeasure->Height(vs.styles[vs.autocStyle].font.get())));
+	} else {
+		lineHeight = vs.lineHeight;
+	}
+
 	ac.Start(wMain, idAutoComplete, sel.MainCaret(), PointMainCaret(),
-		lenEntered, vs.lineHeight, IsUnicodeMode(), technology, options);
+		lenEntered, lineHeight, IsUnicodeMode(), technology, options);
 
 	const PRectangle rcClient = GetClientRectangle();
 	Point pt = LocationFromPosition(sel.MainCaret() - lenEntered);
@@ -324,8 +330,8 @@ void ScintillaBase::AutoCompleteStart(Sci::Position lenEntered, const char *list
 	rcac.right = rcac.left + widthLB;
 	rcac.bottom = static_cast<XYPOSITION>(std::min(static_cast<int>(rcac.top) + heightLB, static_cast<int>(rcPopupBounds.bottom)));
 	ac.lb->SetPositionRelative(rcac, &wMain);
-	ac.lb->SetFont(vs.styles[StyleDefault].font.get());
-	const int aveCharWidth = static_cast<int>(vs.styles[StyleDefault].aveCharWidth);
+	ac.lb->SetFont(vs.styles[vs.autocStyle].font.get());
+	const int aveCharWidth = static_cast<int>(vs.styles[vs.autocStyle].aveCharWidth);
 	ac.lb->SetAverageCharWidth(aveCharWidth);
 	ac.lb->SetDelegate(this);
 
@@ -370,6 +376,9 @@ void ScintillaBase::AutoCompleteMove(int delta) {
 }
 
 void ScintillaBase::AutoCompleteMoveToCurrentWord() {
+	if (FlagSet(ac.options, AutoCompleteOption::SelectFirstItem)) {
+		return;
+	}
 	const std::string wordCurrent = RangeText(ac.posStart - ac.startLen, sel.MainCaret());
 	ac.Select(wordCurrent.c_str());
 }
@@ -499,10 +508,12 @@ void ScintillaBase::CallTipShow(Point pt, NotificationPosition notifyPos, const 
 	if (ct.UseStyleCallTip()) {
 		ct.SetForeBack(style.fore, style.back);
 	}
-	if (notifyPos == NotificationPosition::None) {
+	ct.innerMarginX = 0;
+	ct.innerMarginY = 0;
+	if (notifyPos == NotificationPosition::Default) {
 		ct.innerMarginX = 12;
 		ct.innerMarginY = 10;
-	} else {
+	} else if (notifyPos > NotificationPosition::Default) {
 		ct.innerMarginX = std::max(24, vs.lineHeight);
 		ct.innerMarginY = std::max(20, vs.lineHeight);
 	}
@@ -528,7 +539,7 @@ void ScintillaBase::CallTipShow(Point pt, NotificationPosition notifyPos, const 
 		rc.top += offset;
 		rc.bottom += offset;
 	}
-	if (notifyPos != NotificationPosition::None) {
+	if (notifyPos > NotificationPosition::Default) {
 		const XYPOSITION height = rc.Height();
 		const XYPOSITION width = rc.Width();
 		switch (notifyPos) {
@@ -998,6 +1009,14 @@ sptr_t ScintillaBase::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 	case Message::AutoCGetMaxWidth:
 		return maxListWidth;
 
+	case Message::AutoCSetStyle:
+		vs.autocStyle = static_cast<int>(wParam);
+		InvalidateStyleRedraw();
+		break;
+
+	case Message::AutoCGetStyle:
+		return vs.autocStyle;
+
 	case Message::RegisterImage:
 		ac.lb->RegisterImage(static_cast<int>(wParam), ConstCharPtrFromSPtr(lParam));
 		break;
@@ -1019,12 +1038,12 @@ sptr_t ScintillaBase::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		return ac.GetTypesep();
 
 	case Message::CallTipShow:
-		CallTipShow(LocationFromPosition(wParam), NotificationPosition::None,
+		CallTipShow(LocationFromPosition(wParam), NotificationPosition::Default,
 			ConstCharPtrFromSPtr(lParam));
 		break;
 
 	case Message::ShowNotification:
-		CallTipShow(LocationFromPosition(0), static_cast<NotificationPosition>(wParam + 1),
+		CallTipShow(LocationFromPosition(wParam >> 2), static_cast<NotificationPosition>(wParam & 3),
 			ConstCharPtrFromSPtr(lParam));
 		break;
 
@@ -1084,7 +1103,7 @@ sptr_t ScintillaBase::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		break;
 
 	case Message::SetILexer:
-		DocumentLexState()->SetInstance(static_cast<ILexer5 *>(PtrFromSPtr(lParam)));
+		DocumentLexState()->SetInstance(AsPointer<ILexer5 *>(lParam));
 		break;
 
 	case Message::GetLexer:
@@ -1123,8 +1142,8 @@ sptr_t ScintillaBase::WndProc(Message iMessage, uptr_t wParam, sptr_t lParam) {
 		return StringResult(lParam, DocumentLexState()->GetName());
 
 	case Message::PrivateLexerCall:
-		return reinterpret_cast<sptr_t>(
-			DocumentLexState()->PrivateCall(static_cast<int>(wParam), PtrFromSPtr(lParam)));
+		return AsInteger<sptr_t>(
+			DocumentLexState()->PrivateCall(static_cast<int>(wParam), AsPointer<void *>(lParam)));
 
 	case Message::PropertyNames:
 		return StringResult(lParam, DocumentLexState()->PropertyNames());

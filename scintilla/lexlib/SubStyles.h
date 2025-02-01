@@ -71,7 +71,7 @@ public:
 		}
 	}
 
-	void SetIdentifiers(int style, const char *identifiers) {
+	void SetIdentifiers(int style, const char *identifiers, bool lowerCase) {
 		RemoveStyle(style);
 		if (!identifiers)
 			return;
@@ -80,7 +80,12 @@ public:
 			while (*cpSpace && static_cast<uint8_t>(*cpSpace) > ' ')
 				cpSpace++;
 			if (cpSpace > identifiers) {
-				const std::string word(identifiers, cpSpace - identifiers);
+				std::string word(identifiers, cpSpace - identifiers);
+				if (lowerCase) {
+					for (char &ch : word) {
+						ch = MakeLowerCase(ch);
+					}
+				}
 				wordToStyle[word] = style;
 			}
 			identifiers = cpSpace;
@@ -89,6 +94,10 @@ public:
 		}
 	}
 };
+
+// This is the common configuration: 64 sub-styles allocated from 128 to 191
+constexpr int SubStylesFirst = 0x80;
+constexpr int SubStylesAvailable = 0x40;
 
 class SubStyles {
 	int classifications;
@@ -119,7 +128,7 @@ class SubStyles {
 
 public:
 
-	SubStyles(const char *baseStyles_, int styleFirst_, int stylesAvailable_, int secondaryDistance_) :
+	SubStyles(const char *baseStyles_, int styleFirst_, int stylesAvailable_ = SubStylesAvailable, int secondaryDistance_ = 0) :
 		classifications(0),
 		baseStyles(baseStyles_),
 		styleFirst(styleFirst_),
@@ -132,7 +141,7 @@ public:
 		}
 	}
 
-	int Allocate(int styleBase, int numberStyles) {
+	int Allocate(int styleBase, int numberStyles) noexcept {
 		const int block = BlockFromBaseStyle(styleBase);
 		if (block >= 0) {
 			if ((allocated + numberStyles) > stylesAvailable)
@@ -186,10 +195,10 @@ public:
 		return last;
 	}
 
-	void SetIdentifiers(int style, const char *identifiers) {
+	void SetIdentifiers(int style, const char *identifiers, bool lowerCase=false) {
 		const int block = BlockFromStyle(style);
 		if (block >= 0)
-			classifiers[block].SetIdentifiers(style, identifiers);
+			classifiers[block].SetIdentifiers(style, identifiers, lowerCase);
 	}
 
 	void Free() noexcept {

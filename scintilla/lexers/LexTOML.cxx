@@ -1,4 +1,4 @@
-// This file is part of Notepad2.
+// This file is part of Notepad4.
 // See License.txt for details about distribution and modification.
 //! Lexer for TOML.
 
@@ -73,21 +73,19 @@ constexpr bool IsTOMLUnquotedKey(int ch) noexcept {
 	return IsIdentifierChar(ch) || ch == '-';
 }
 
-bool IsTOMLKey(StyleContext& sc, int braceCount, const WordList *kwList) {
+bool IsTOMLKey(StyleContext &sc, int braceCount, LexerWordList keywordLists) {
+	const int state = sc.state;
 	if (braceCount) {
-		const int chNext = sc.GetDocNextChar();
+		const int chNext = sc.GetLineNextChar();
 		if (chNext == '=' || chNext == '.' || chNext == '-') {
 			sc.ChangeState(SCE_TOML_KEY);
 			return true;
 		}
 	}
-	if (sc.state == SCE_TOML_IDENTIFIER) {
+	if (state == SCE_TOML_IDENTIFIER) {
 		char s[8];
 		sc.GetCurrentLowered(s, sizeof(s));
-#if defined(__clang__)
-		__builtin_assume(kwList != nullptr); // suppress [clang-analyzer-core.CallAndMessage]
-#endif
-		if (kwList->InList(s)) {
+		if (keywordLists[0].InList(s)) {
 			sc.ChangeState(SCE_TOML_KEYWORD);
 		}
 	}
@@ -110,6 +108,7 @@ enum class TOMLKeyState {
 
 void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList keywordLists, Accessor &styler) {
 	int visibleChars = 0;
+	int chPrevNonWhite = 0;
 	int tableLevel = 0;
 	int braceCount = 0;
 	TOMLLineType lineType = TOMLLineType::None;
@@ -137,7 +136,7 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			if (!IsDecimalNumber(sc.chPrev, sc.ch, sc.chNext)) {
 				if (IsISODateTime(sc.ch, sc.chNext)) {
 					sc.ChangeState(SCE_TOML_DATETIME);
-				} else if (IsTOMLKey(sc, braceCount, nullptr)) {
+				} else if (IsTOMLKey(sc, braceCount, keywordLists)) {
 					keyState = TOMLKeyState::Unquoted;
 					continue;
 				}
@@ -146,7 +145,7 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_TOML_DATETIME:
 			if (!(IsIdentifierChar(sc.ch) || IsISODateTime(sc.ch, sc.chNext))) {
-				if (IsTOMLKey(sc, braceCount, nullptr)) {
+				if (IsTOMLKey(sc, braceCount, keywordLists)) {
 					keyState = TOMLKeyState::Unquoted;
 					continue;
 				}
@@ -155,7 +154,7 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 
 		case SCE_TOML_IDENTIFIER:
 			if (!IsIdentifierChar(sc.ch)) {
-				if (IsTOMLKey(sc, braceCount, &keywordLists[0])) {
+				if (IsTOMLKey(sc, braceCount, keywordLists)) {
 					keyState = TOMLKeyState::Unquoted;
 					continue;
 				}
@@ -194,14 +193,12 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 						if (sc.state == SCE_TOML_TABLE) {
 							++tableLevel;
 						} else {
+							chPrevNonWhite = '.';
 							sc.SetState(SCE_TOML_OPERATOR);
 							sc.ForwardSetState(SCE_TOML_KEY);
 							// TODO: skip space after dot
 							continue;
 						}
-					} else if (sc.state == SCE_TOML_KEY && sc.ch == '=') {
-						keyState = TOMLKeyState::End;
-						sc.SetState(SCE_TOML_OPERATOR);
 					} else if (sc.state == SCE_TOML_TABLE && sc.ch == ']') {
 						keyState = TOMLKeyState::End;
 						sc.Forward();
@@ -214,7 +211,10 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 						}
 					} else if (sc.state == SCE_TOML_KEY && !IsTOMLUnquotedKey(sc.ch)) {
 						const int chNext = sc.GetLineNextChar();
-						if (!AnyOf(chNext, '\'', '\"', '.', '=')) {
+						if (chNext == '=') {
+							keyState = TOMLKeyState::End;
+							sc.SetState(SCE_TOML_DEFAULT);
+						} else if (chNext != '.' && chPrevNonWhite != '.') {
 							sc.ChangeState(SCE_TOML_ERROR);
 							continue;
 						}
@@ -236,10 +236,13 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				}
 			} else if (sc.ch == GetStringQuote(sc.state) && (!IsTripleString(sc.state) || sc.MatchNext())) {
 				if (IsTripleString(sc.state)) {
-					sc.Advance(2);
+					// TODO: only at most 2+3 quotes at the end
+					while (sc.ch == sc.chNext) {
+						sc.Forward();
+					}
 				}
 				sc.Forward();
-				if (!IsTripleString(sc.state) && IsTOMLKey(sc, braceCount, nullptr)) {
+				if (!IsTripleString(sc.state) && IsTOMLKey(sc, braceCount, keywordLists)) {
 					keyState = TOMLKeyState::Unquoted;
 					continue;
 				}
@@ -259,9 +262,6 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 				sc.SetState(SCE_TOML_DEFAULT);
 			} else if (sc.ch == '#') {
 				sc.SetState(SCE_TOML_COMMENT);
-			} else if (sc.ch == ',') {
-				sc.SetState(SCE_TOML_OPERATOR);
-				sc.ForwardSetState(SCE_TOML_ERROR);
 			}
 			break;
 
@@ -298,19 +298,12 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 					sc.SetState(SCE_TOML_ERROR);
 				}
 			} else {
-				 if (sc.ch == '\'') {
-					if (sc.MatchNext('\'', '\'')) {
-						sc.SetState(SCE_TOML_TRIPLE_STRING_SQ);
+				 if (sc.ch == '\'' || sc.ch == '"') {
+					sc.SetState((sc.ch == '\'') ? SCE_TOML_STRING_SQ : SCE_TOML_STRING_DQ);
+					if (sc.MatchNext()) {
+						static_assert(SCE_TOML_TRIPLE_STRING_SQ - SCE_TOML_STRING_SQ == SCE_TOML_TRIPLE_STRING_DQ - SCE_TOML_STRING_DQ);
+						sc.ChangeState(sc.state + SCE_TOML_TRIPLE_STRING_SQ - SCE_TOML_STRING_SQ);
 						sc.Advance(2);
-					} else {
-						sc.SetState(SCE_TOML_STRING_SQ);
-					}
-				} else if (sc.ch == '"') {
-					if (sc.MatchNext('"', '"')) {
-						sc.SetState(SCE_TOML_TRIPLE_STRING_DQ);
-						sc.Advance(2);
-					} else {
-						sc.SetState(SCE_TOML_STRING_DQ);
 					}
 				} else if (IsADigit(sc.ch)) {
 					sc.SetState(SCE_TOML_NUMBER);
@@ -333,7 +326,8 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			}
 		}
 
-		if (visibleChars == 0 && !isspacechar(sc.ch)) {
+		if (!isspacechar(sc.ch)) {
+			chPrevNonWhite = sc.ch;
 			++visibleChars;
 		}
 		if (sc.atLineEnd) {
@@ -341,6 +335,7 @@ void ColouriseTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSt
 			styler.SetLineState(sc.currentLine, lineState);
 			lineType = TOMLLineType::None;
 			visibleChars = 0;
+			chPrevNonWhite = 0;
 			tableLevel = 0;
 			keyState = TOMLKeyState::Unquoted;
 		}
@@ -427,4 +422,4 @@ void FoldTOMLDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int /*initStyle
 
 }
 
-LexerModule lmTOML(SCLEX_TOML, ColouriseTOMLDoc, "toml", FoldTOMLDoc);
+extern const LexerModule lmTOML(SCLEX_TOML, ColouriseTOMLDoc, "toml", FoldTOMLDoc);

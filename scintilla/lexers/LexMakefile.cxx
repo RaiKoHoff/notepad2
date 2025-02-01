@@ -1,4 +1,4 @@
-// This file is part of Notepad2.
+// This file is part of Notepad4.
 // See License.txt for details about distribution and modification.
 //! Lexer for Makefile of gmake, nmake, bmake, qmake
 
@@ -287,7 +287,7 @@ void FoldMakeDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lex
 		if (atEOL || (i == endPos - 1)) {
 			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			const int levelUse = levelCurrent;
-			int lev = levelUse | levelNext << 16;
+			int lev = levelUse | (levelNext << 16);
 			if (levelUse < levelNext)
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			styler.SetLevel(lineCurrent, lev);
@@ -300,4 +300,4 @@ void FoldMakeDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lex
 
 }
 
-LexerModule lmMakefile(SCLEX_MAKEFILE, ColouriseMakeDoc, "makefile", FoldMakeDoc);
+extern const LexerModule lmMakefile(SCLEX_MAKEFILE, ColouriseMakeDoc, "makefile", FoldMakeDoc);

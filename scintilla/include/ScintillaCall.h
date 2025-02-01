@@ -76,6 +76,7 @@ public:
 	std::string StringOfRange(Span span);
 	Position ReplaceTarget(std::string_view text);
 	Position ReplaceTargetRE(std::string_view text);
+	Position ReplaceTargetMinimal(std::string_view text);
 	Position SearchInTarget(std::string_view text);
 	Span SpanSearchInTarget(std::string_view text);
 
@@ -206,6 +207,8 @@ public:
 	void StyleSetHotSpot(int style, bool hotspot);
 	void StyleSetCheckMonospaced(int style, bool checkMonospaced);
 	bool StyleGetCheckMonospaced(int style);
+	void StyleSetStretch(int style, Scintilla::FontStretch stretch);
+	Scintilla::FontStretch StyleGetStretch(int style);
 	void StyleSetInvisibleRepresentation(int style, const char *representation);
 	int StyleGetInvisibleRepresentation(int style, char *representation);
 	std::string StyleGetInvisibleRepresentation(int style);
@@ -239,6 +242,22 @@ public:
 	int CharacterCategoryOptimization();
 	void BeginUndoAction();
 	void EndUndoAction();
+	int UndoSequence();
+	int UndoActions();
+	void SetUndoSavePoint(int action);
+	int UndoSavePoint();
+	void SetUndoDetach(int action);
+	int UndoDetach();
+	void SetUndoTentative(int action);
+	int UndoTentative();
+	void SetUndoCurrent(int action);
+	int UndoCurrent();
+	void PushUndoActionType(int type, Position pos);
+	void ChangeLastUndoActionText(Position length, const char *text);
+	int UndoActionType(int action);
+	Position UndoActionPosition(int action);
+	int UndoActionText(int action, char *text);
+	std::string UndoActionText(int action);
 	void IndicSetStyle(int indicator, Scintilla::IndicatorStyle indicatorStyle);
 	Scintilla::IndicatorStyle IndicGetStyle(int indicator);
 	void IndicSetFore(int indicator, Colour fore);
@@ -292,6 +311,8 @@ public:
 	int AutoCGetMaxWidth();
 	void AutoCSetMaxHeight(int rowCount);
 	int AutoCGetMaxHeight();
+	void AutoCSetStyle(int style);
+	int AutoCGetStyle();
 	void SetIndent(int indentSize);
 	int Indent();
 	void SetUseTabs(bool useTabs);
@@ -508,7 +529,9 @@ public:
 	void Cancel();
 	void DeleteBack();
 	void Tab(int what);
+	void LineIndent();
 	void BackTab();
+	void LineDedent();
 	void NewLine();
 	void FormFeed();
 	void VCHome();
@@ -686,6 +709,10 @@ public:
 	void SetPositionCache(int size);
 	int PositionCache();
 	void CopyAllowLine();
+	void CutAllowLine();
+	void SetCopySeparator(const char *separator);
+	int CopySeparator(char *separator);
+	std::string CopySeparator();
 	void *CharacterPointer();
 	void *RangePointer(Position start, Position lengthRange);
 	Position GapPosition();

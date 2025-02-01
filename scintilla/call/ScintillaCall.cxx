@@ -44,15 +44,15 @@ intptr_t ScintillaCall::Call(Message msg, uintptr_t wParam, intptr_t lParam) {
 }
 
 intptr_t ScintillaCall::CallPointer(Message msg, uintptr_t wParam, void *s) {
-	return Call(msg, wParam, reinterpret_cast<intptr_t>(s));
+	return Call(msg, wParam, AsInteger<intptr_t>(s));
 }
 
 intptr_t ScintillaCall::CallString(Message msg, uintptr_t wParam, const char *s) {
-	return Call(msg, wParam, reinterpret_cast<intptr_t>(s));
+	return Call(msg, wParam, AsInteger<intptr_t>(s));
 }
 
 intptr_t ScintillaCall::CallConstPointer(Message msg, uintptr_t wParam, const void *s) {
-	return Call(msg, wParam, reinterpret_cast<intptr_t>(s));
+	return Call(msg, wParam, AsInteger<intptr_t>(s));
 }
 
 std::string ScintillaCall::CallReturnString(Message msg, uintptr_t wParam) {
@@ -125,6 +125,10 @@ Position ScintillaCall::ReplaceTarget(std::string_view text) {
 
 Position ScintillaCall::ReplaceTargetRE(std::string_view text) {
 	return CallString(Message::ReplaceTargetRE, text.length(), text.data());
+}
+
+Position ScintillaCall::ReplaceTargetMinimal(std::string_view text) {
+	return CallString(Message::ReplaceTargetMinimal, text.length(), text.data());
 }
 
 Position ScintillaCall::SearchInTarget(std::string_view text) {
@@ -638,6 +642,14 @@ bool ScintillaCall::StyleGetCheckMonospaced(int style) {
 	return Call(Message::StyleGetCheckMonospaced, style);
 }
 
+void ScintillaCall::StyleSetStretch(int style, Scintilla::FontStretch stretch) {
+	Call(Message::StyleSetStretch, style, static_cast<intptr_t>(stretch));
+}
+
+FontStretch ScintillaCall::StyleGetStretch(int style) {
+	return static_cast<Scintilla::FontStretch>(Call(Message::StyleGetStretch, style));
+}
+
 void ScintillaCall::StyleSetInvisibleRepresentation(int style, const char *representation) {
 	CallString(Message::StyleSetInvisibleRepresentation, style, representation);
 }
@@ -768,6 +780,70 @@ void ScintillaCall::BeginUndoAction() {
 
 void ScintillaCall::EndUndoAction() {
 	Call(Message::EndUndoAction);
+}
+
+int ScintillaCall::UndoSequence() {
+	return static_cast<int>(Call(Message::GetUndoSequence));
+}
+
+int ScintillaCall::UndoActions() {
+	return static_cast<int>(Call(Message::GetUndoActions));
+}
+
+void ScintillaCall::SetUndoSavePoint(int action) {
+	Call(Message::SetUndoSavePoint, action);
+}
+
+int ScintillaCall::UndoSavePoint() {
+	return static_cast<int>(Call(Message::GetUndoSavePoint));
+}
+
+void ScintillaCall::SetUndoDetach(int action) {
+	Call(Message::SetUndoDetach, action);
+}
+
+int ScintillaCall::UndoDetach() {
+	return static_cast<int>(Call(Message::GetUndoDetach));
+}
+
+void ScintillaCall::SetUndoTentative(int action) {
+	Call(Message::SetUndoTentative, action);
+}
+
+int ScintillaCall::UndoTentative() {
+	return static_cast<int>(Call(Message::GetUndoTentative));
+}
+
+void ScintillaCall::SetUndoCurrent(int action) {
+	Call(Message::SetUndoCurrent, action);
+}
+
+int ScintillaCall::UndoCurrent() {
+	return static_cast<int>(Call(Message::GetUndoCurrent));
+}
+
+void ScintillaCall::PushUndoActionType(int type, Position pos) {
+	Call(Message::PushUndoActionType, type, pos);
+}
+
+void ScintillaCall::ChangeLastUndoActionText(Position length, const char *text) {
+	CallString(Message::ChangeLastUndoActionText, length, text);
+}
+
+int ScintillaCall::UndoActionType(int action) {
+	return static_cast<int>(Call(Message::GetUndoActionType, action));
+}
+
+Position ScintillaCall::UndoActionPosition(int action) {
+	return Call(Message::GetUndoActionPosition, action);
+}
+
+int ScintillaCall::UndoActionText(int action, char *text) {
+	return static_cast<int>(CallPointer(Message::GetUndoActionText, action, text));
+}
+
+std::string ScintillaCall::UndoActionText(int action) {
+	return CallReturnString(Message::GetUndoActionText, action);
 }
 
 void ScintillaCall::IndicSetStyle(int indicator, Scintilla::IndicatorStyle indicatorStyle) {
@@ -980,6 +1056,14 @@ void ScintillaCall::AutoCSetMaxHeight(int rowCount) {
 
 int ScintillaCall::AutoCGetMaxHeight() {
 	return static_cast<int>(Call(Message::AutoCGetMaxHeight));
+}
+
+void ScintillaCall::AutoCSetStyle(int style) {
+	Call(Message::AutoCSetStyle, style);
+}
+
+int ScintillaCall::AutoCGetStyle() {
+	return static_cast<int>(Call(Message::AutoCGetStyle));
 }
 
 void ScintillaCall::SetIndent(int indentSize) {
@@ -1271,15 +1355,15 @@ Position ScintillaCall::TextLength() {
 }
 
 void *ScintillaCall::DirectFunction() {
-	return reinterpret_cast<void *>(Call(Message::GetDirectFunction));
+	return AsPointer<void *>(Call(Message::GetDirectFunction));
 }
 
 void *ScintillaCall::DirectStatusFunction() {
-	return reinterpret_cast<void *>(Call(Message::GetDirectStatusFunction));
+	return AsPointer<void *>(Call(Message::GetDirectStatusFunction));
 }
 
 void *ScintillaCall::DirectPointer() {
-	return reinterpret_cast<void *>(Call(Message::GetDirectPointer));
+	return AsPointer<void *>(Call(Message::GetDirectPointer));
 }
 
 void ScintillaCall::SetOvertype(bool overType) {
@@ -1846,8 +1930,16 @@ void ScintillaCall::Tab(int what) {
 	Call(Message::Tab, what);
 }
 
+void ScintillaCall::LineIndent() {
+	Call(Message::LineIndent);
+}
+
 void ScintillaCall::BackTab() {
 	Call(Message::BackTab);
+}
+
+void ScintillaCall::LineDedent() {
+	Call(Message::LineDedent);
 }
 
 void ScintillaCall::NewLine() {
@@ -2011,7 +2103,7 @@ void ScintillaCall::SetViewEOL(bool visible) {
 }
 
 IDocumentEditable *ScintillaCall::DocPointer() {
-	return reinterpret_cast<IDocumentEditable *>(Call(Message::GetDocPointer));
+	return AsPointer<IDocumentEditable *>(Call(Message::GetDocPointer));
 }
 
 void ScintillaCall::SetDocPointer(IDocumentEditable *doc) {
@@ -2091,7 +2183,7 @@ int ScintillaCall::Zoom() {
 }
 
 IDocumentEditable *ScintillaCall::CreateDocument(Position bytes, Scintilla::DocumentOption documentOptions) {
-	return reinterpret_cast<IDocumentEditable *>(Call(Message::CreateDocument, bytes, static_cast<intptr_t>(documentOptions)));
+	return AsPointer<IDocumentEditable *>(Call(Message::CreateDocument, bytes, static_cast<intptr_t>(documentOptions)));
 }
 
 void ScintillaCall::AddRefDocument(IDocumentEditable *doc) {
@@ -2459,11 +2551,11 @@ void ScintillaCall::SetLengthForEncode(Position bytes) {
 }
 
 Position ScintillaCall::EncodedFromUTF8(const char *utf8, char *encoded) {
-	return CallPointer(Message::EncodedFromUTF8, reinterpret_cast<uintptr_t>(utf8), encoded);
+	return CallPointer(Message::EncodedFromUTF8, AsInteger<uintptr_t>(utf8), encoded);
 }
 
 std::string ScintillaCall::EncodedFromUTF8(const char *utf8) {
-	return CallReturnString(Message::EncodedFromUTF8, reinterpret_cast<uintptr_t>(utf8));
+	return CallReturnString(Message::EncodedFromUTF8, AsInteger<uintptr_t>(utf8));
 }
 
 Position ScintillaCall::FindColumn(Line line, Position column) {
@@ -2558,12 +2650,28 @@ void ScintillaCall::CopyAllowLine() {
 	Call(Message::CopyAllowLine);
 }
 
+void ScintillaCall::CutAllowLine() {
+	Call(Message::CutAllowLine);
+}
+
+void ScintillaCall::SetCopySeparator(const char *separator) {
+	CallString(Message::SetCopySeparator, 0, separator);
+}
+
+int ScintillaCall::CopySeparator(char *separator) {
+	return static_cast<int>(CallPointer(Message::GetCopySeparator, 0, separator));
+}
+
+std::string ScintillaCall::CopySeparator() {
+	return CallReturnString(Message::GetCopySeparator, 0);
+}
+
 void *ScintillaCall::CharacterPointer() {
-	return reinterpret_cast<void *>(Call(Message::GetCharacterPointer));
+	return AsPointer<void *>(Call(Message::GetCharacterPointer));
 }
 
 void *ScintillaCall::RangePointer(Position start, Position lengthRange) {
-	return reinterpret_cast<void *>(Call(Message::GetRangePointer, start, lengthRange));
+	return AsPointer<void *>(Call(Message::GetRangePointer, start, lengthRange));
 }
 
 Position ScintillaCall::GapPosition() {
@@ -2995,7 +3103,7 @@ Technology ScintillaCall::Technology() {
 }
 
 void *ScintillaCall::CreateLoader(Position bytes, Scintilla::DocumentOption documentOptions) {
-	return reinterpret_cast<void *>(Call(Message::CreateLoader, bytes, static_cast<intptr_t>(documentOptions)));
+	return AsPointer<void *>(Call(Message::CreateLoader, bytes, static_cast<intptr_t>(documentOptions)));
 }
 
 void ScintillaCall::FindIndicatorShow(Position start, Position end) {
@@ -3039,19 +3147,19 @@ LineEndType ScintillaCall::LineEndTypesActive() {
 }
 
 void ScintillaCall::SetRepresentation(const char *encodedCharacter, const char *representation) {
-	CallString(Message::SetRepresentation, reinterpret_cast<uintptr_t>(encodedCharacter), representation);
+	CallString(Message::SetRepresentation, AsInteger<uintptr_t>(encodedCharacter), representation);
 }
 
 int ScintillaCall::Representation(const char *encodedCharacter, char *representation) {
-	return static_cast<int>(CallPointer(Message::GetRepresentation, reinterpret_cast<uintptr_t>(encodedCharacter), representation));
+	return static_cast<int>(CallPointer(Message::GetRepresentation, AsInteger<uintptr_t>(encodedCharacter), representation));
 }
 
 std::string ScintillaCall::Representation(const char *encodedCharacter) {
-	return CallReturnString(Message::GetRepresentation, reinterpret_cast<uintptr_t>(encodedCharacter));
+	return CallReturnString(Message::GetRepresentation, AsInteger<uintptr_t>(encodedCharacter));
 }
 
 void ScintillaCall::ClearRepresentation(const char *encodedCharacter) {
-	Call(Message::ClearRepresentation, reinterpret_cast<uintptr_t>(encodedCharacter));
+	Call(Message::ClearRepresentation, AsInteger<uintptr_t>(encodedCharacter));
 }
 
 void ScintillaCall::ClearAllRepresentations() {
@@ -3059,19 +3167,19 @@ void ScintillaCall::ClearAllRepresentations() {
 }
 
 void ScintillaCall::SetRepresentationAppearance(const char *encodedCharacter, Scintilla::RepresentationAppearance appearance) {
-	Call(Message::SetRepresentationAppearance, reinterpret_cast<uintptr_t>(encodedCharacter), static_cast<intptr_t>(appearance));
+	Call(Message::SetRepresentationAppearance, AsInteger<uintptr_t>(encodedCharacter), static_cast<intptr_t>(appearance));
 }
 
 RepresentationAppearance ScintillaCall::RepresentationAppearance(const char *encodedCharacter) {
-	return static_cast<Scintilla::RepresentationAppearance>(Call(Message::GetRepresentationAppearance, reinterpret_cast<uintptr_t>(encodedCharacter)));
+	return static_cast<Scintilla::RepresentationAppearance>(Call(Message::GetRepresentationAppearance, AsInteger<uintptr_t>(encodedCharacter)));
 }
 
 void ScintillaCall::SetRepresentationColour(const char *encodedCharacter, ColourAlpha colour) {
-	Call(Message::SetRepresentationColour, reinterpret_cast<uintptr_t>(encodedCharacter), colour);
+	Call(Message::SetRepresentationColour, AsInteger<uintptr_t>(encodedCharacter), colour);
 }
 
 ColourAlpha ScintillaCall::RepresentationColour(const char *encodedCharacter) {
-	return static_cast<ColourAlpha>(Call(Message::GetRepresentationColour, reinterpret_cast<uintptr_t>(encodedCharacter)));
+	return static_cast<ColourAlpha>(Call(Message::GetRepresentationColour, AsInteger<uintptr_t>(encodedCharacter)));
 }
 
 void ScintillaCall::EOLAnnotationSetText(Line line, const char *text) {
@@ -3159,7 +3267,7 @@ void ScintillaCall::Colourise(Position start, Position end) {
 }
 
 void ScintillaCall::SetProperty(const char *key, const char *value) {
-	CallString(Message::SetProperty, reinterpret_cast<uintptr_t>(key), value);
+	CallString(Message::SetProperty, AsInteger<uintptr_t>(key), value);
 }
 
 void ScintillaCall::SetKeyWords(int keyWordSet, const char *keyWords) {
@@ -3167,15 +3275,15 @@ void ScintillaCall::SetKeyWords(int keyWordSet, const char *keyWords) {
 }
 
 int ScintillaCall::Property(const char *key, char *value) {
-	return static_cast<int>(CallPointer(Message::GetProperty, reinterpret_cast<uintptr_t>(key), value));
+	return static_cast<int>(CallPointer(Message::GetProperty, AsInteger<uintptr_t>(key), value));
 }
 
 std::string ScintillaCall::Property(const char *key) {
-	return CallReturnString(Message::GetProperty, reinterpret_cast<uintptr_t>(key));
+	return CallReturnString(Message::GetProperty, AsInteger<uintptr_t>(key));
 }
 
 int ScintillaCall::PropertyInt(const char *key, int defaultValue) {
-	return static_cast<int>(Call(Message::GetPropertyInt, reinterpret_cast<uintptr_t>(key), defaultValue));
+	return static_cast<int>(Call(Message::GetPropertyInt, AsInteger<uintptr_t>(key), defaultValue));
 }
 
 int ScintillaCall::LexerLanguage(char *language) {
@@ -3187,7 +3295,7 @@ std::string ScintillaCall::LexerLanguage() {
 }
 
 void *ScintillaCall::PrivateLexerCall(int operation, void *pointer) {
-	return reinterpret_cast<void *>(CallPointer(Message::PrivateLexerCall, operation, pointer));
+	return AsPointer<void *>(CallPointer(Message::PrivateLexerCall, operation, pointer));
 }
 
 int ScintillaCall::PropertyNames(char *names) {
@@ -3199,15 +3307,15 @@ std::string ScintillaCall::PropertyNames() {
 }
 
 TypeProperty ScintillaCall::PropertyType(const char *name) {
-	return static_cast<Scintilla::TypeProperty>(Call(Message::PropertyType, reinterpret_cast<uintptr_t>(name)));
+	return static_cast<Scintilla::TypeProperty>(Call(Message::PropertyType, AsInteger<uintptr_t>(name)));
 }
 
 int ScintillaCall::DescribeProperty(const char *name, char *description) {
-	return static_cast<int>(CallPointer(Message::DescribeProperty, reinterpret_cast<uintptr_t>(name), description));
+	return static_cast<int>(CallPointer(Message::DescribeProperty, AsInteger<uintptr_t>(name), description));
 }
 
 std::string ScintillaCall::DescribeProperty(const char *name) {
-	return CallReturnString(Message::DescribeProperty, reinterpret_cast<uintptr_t>(name));
+	return CallReturnString(Message::DescribeProperty, AsInteger<uintptr_t>(name));
 }
 
 int ScintillaCall::DescribeKeyWordSets(char *descriptions) {

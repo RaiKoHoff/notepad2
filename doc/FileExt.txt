@@ -138,6 +138,10 @@ Web Source Code
 	asp				Active Server Page
 	aspx			Active Server Page Extended File
 	jsp				Java Server Page
+	rhtml			ERB, HTML with embedded Ruby
+	vue				Vue Single-File Components, https://vuejs.org/guide/scaling-up/sfc.html
+	hbs				Ember Template, https://guides.emberjs.com/release/components/
+	svelte			Svelte Template, https://svelte.dev/docs/introduction
 	mht				MHTML Web Archive
 	htd				Adobe ExtendScript HTML file
 	htt				Hypertext Template File
@@ -219,6 +223,9 @@ blockdiag
 	diag
 
 
+Cangjie Source
+	cj
+
 CIL Assembly
 	il
 
@@ -258,6 +265,7 @@ Config File
 
 CSV File
 	csv
+	tsv
 
 
 D Source
@@ -275,15 +283,18 @@ Diff File
 
 Fortran Source
 	f
-	for
+	for				https://gcc.gnu.org/onlinedocs/gfortran/GNU-Fortran-and-GCC.html
 	ftn
 	fpp
 	f90
 	f95
 	f03
 	f08
+	f18
+	f77
 	f2k
 	hf
+	cuf				CUDA Fortran, https://github.com/llvm/llvm-project/blob/main/flang/lib/Frontend/FrontendOptions.cpp
 
 F# Source
 	fs
@@ -505,6 +516,10 @@ Rust Source
 	rs
 
 
+SAS File
+	sas
+	sps				https://libguides.library.kent.edu/SAS/syntax
+
 Scala Script
 	scala
 	sbt				Scala Build Tool
@@ -574,13 +589,15 @@ Vim Script
 
 Visual Basic
 	vb
-	bas				BASIC Source Code File
+
+	https://learn.microsoft.com/en-us/previous-versions/visualstudio/visual-basic-6/aa241721(v=vs.60)
+	bas				Visual Basic Module
 	frm				Visual Basic Text Form
 	cls				Program Class File
 	ctl				Visual Basic User Control Object File
-	pag				Visual Basic Property Page
+	pag				Visual Basic Property Page File
 	dsr				Visual Basic Active Designer File
-	dob				Visual Basic User Document
+	dob				ActiveX Document Form File
 
 
 WebAssembly
@@ -600,6 +617,8 @@ YAML Document
 	mir				LLVM Machine IR, https://llvm.org/docs/MIRLangRef.html
 	apinotes		Swift API Notes
 	ifs				LLVM IFS (Interface Stubs)
+	gyp				GYP
+	gypi			GYP
 
 Zig Source
 	zig

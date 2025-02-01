@@ -5,8 +5,8 @@
 // Copyright 1998-2001 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
 
-#include <cstdint>
 #include <cstdlib>
+#include <cstdint>
 
 #include <stdexcept>
 #include <string>
@@ -265,7 +265,7 @@ std::wstring WStringFromUTF8(std::string_view svu8) {
 // https://tools.ietf.org/html/rfc3629
 // UTF-8, a transformation format of ISO 10646
 //  4. Syntax of UTF-8 Byte Sequences
-// https://www.unicode.org/versions/Unicode13.0.0/
+// https://www.unicode.org/versions/Unicode15.1.0/
 //  3.9 Unicode Encoding Forms
 //      Table 3-7. Well-Formed UTF-8 Byte Sequences
 /*
@@ -393,19 +393,18 @@ int UTF8ClassifyMulti(const unsigned char *us, size_t len) noexcept {
 }
 
 bool UTF8IsValid(std::string_view svu8) noexcept {
-	const unsigned char *us = reinterpret_cast<const unsigned char *>(svu8.data());
+	const char *s = svu8.data();
 	size_t remaining = svu8.length();
 	while (remaining > 0) {
-		const int utf8Status = UTF8Classify(us, remaining);
+		const int utf8Status = UTF8Classify(s, remaining);
 		if (utf8Status & UTF8MaskInvalid) {
 			return false;
-		} else {
-			const int lenChar = utf8Status & UTF8MaskWidth;
-			us += lenChar;
-			remaining -= lenChar;
 		}
+		const int lenChar = utf8Status & UTF8MaskWidth;
+		s += lenChar;
+		remaining -= lenChar;
 	}
-	return remaining == 0;
+	return true;
 }
 
 // Replace invalid bytes in UTF-8 with the replacement character
@@ -414,7 +413,7 @@ std::string FixInvalidUTF8(const std::string &text) {
 	const char *s = text.c_str();
 	size_t remaining = text.size();
 	while (remaining > 0) {
-		const int utf8Status = UTF8Classify(reinterpret_cast<const unsigned char *>(s), remaining);
+		const int utf8Status = UTF8Classify(s, remaining);
 		if (utf8Status & UTF8MaskInvalid) {
 			// Replacement character 0xFFFD = UTF8:"efbfbd".
 			result.append("\xef\xbf\xbd");

@@ -13,7 +13,7 @@ def increase_style_resource_id_value(path, delta=100):
 		fp.write(updated)
 
 def generate_lexer_menu_resource_id(path):
-	dummy = {'id': 41000}
+	dummy = {'id': 40700}
 	def get_value():
 		result = str(dummy['id'])
 		dummy['id'] += 1
@@ -239,11 +239,13 @@ def find_new_texinfo_commands(path, lang):
 	doc = re.sub(r'@comment\W.+', '', doc)
 	macros = re.findall(r'@r?macro\s+(\w+)', doc)
 	macros.extend(re.findall(r'@alias\s+(\w+)', doc))
-	commands = re.findall(r'@(\w+)', doc)
+	# find inside "Command List" section
+	commands = re.findall(r'@itemx?\s+@@(\w+)', doc)
+	commands += ['c', 'comment', 'rmacro']
 	commands = set(commands) - set(macros)
 	with open('texinfo-new.texi', 'w', encoding='utf-8') as fd:
 		doc = '\n@'.join(sorted(commands - existing))
-		fd.write('mew commands:\n')
+		fd.write('new commands:\n')
 		fd.write(f'@{doc}\n')
 		fd.write('\nunknown commands:\n')
 		doc = '\n@'.join(sorted(existing - commands))
@@ -251,7 +253,7 @@ def find_new_texinfo_commands(path, lang):
 
 #increase_style_resource_id_value('../src/EditLexers/EditStyle.h')
 #generate_lexer_menu_resource_id('../src/resource.h')
-#check_encoding_list('../src/EditEncoding.c')
+#check_encoding_list('../src/EditEncoding.cpp')
 #diff_iso_encoding('iso-8859.log')
 
 # https://www.w3.org/Style/CSS/all-properties.en.json
@@ -260,4 +262,5 @@ def find_new_texinfo_commands(path, lang):
 #dump_all_css_properties('all-descriptors.en.json', 'descriptor', 'specification', 'URL')
 #find_new_css_properties('all-properties.en.json', 'all-descriptors.en.json', 'lang/CSS.css')
 
+#group_powershell_commands('.ps1')
 #find_new_texinfo_commands(r'texinfo.texi', 'lang/Texinfo.texi')

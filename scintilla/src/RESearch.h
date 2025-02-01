@@ -12,12 +12,12 @@ namespace Scintilla::Internal {
 class CharacterIndexer {
 public:
 	virtual char CharAt(Sci::Position index) const noexcept = 0;
-	virtual Sci::Position MovePositionOutsideChar(Sci::Position pos, Sci::Position moveDir) const noexcept = 0;
+	virtual Sci::Position MovePositionOutsideChar(Sci::Position pos, int moveDir) const noexcept = 0;
 };
 
 class RESearch {
 public:
-	explicit RESearch(const CharClassify *charClassTable);
+	explicit RESearch(const CharClassify *charClassTable) noexcept;
 	// No dynamic allocation so default copy constructor and assignment operator are OK.
 	void Clear() noexcept;
 	const char *Compile(const char *pattern, size_t length, Scintilla::FindOption flags);

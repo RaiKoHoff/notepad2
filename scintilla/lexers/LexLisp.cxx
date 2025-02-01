@@ -1,4 +1,4 @@
-// This file is part of Notepad2.
+// This file is part of Notepad4.
 // See License.txt for details about distribution and modification.
 //! Lexer for Lisp.
 
@@ -200,7 +200,7 @@ void FoldListDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lex
 		if (atEOL || (i == endPos - 1)) {
 			levelNext = sci::max(levelNext, SC_FOLDLEVELBASE);
 			const int levelUse = levelCurrent;
-			int lev = levelUse | levelNext << 16;
+			int lev = levelUse | (levelNext << 16);
 			if (levelUse < levelNext)
 				lev |= SC_FOLDLEVELHEADERFLAG;
 			styler.SetLevel(lineCurrent, lev);
@@ -212,4 +212,4 @@ void FoldListDoc(Sci_PositionU startPos, Sci_Position length, int initStyle, Lex
 
 }
 
-LexerModule lmLisp(SCLEX_LISP, ColouriseLispDoc, "lisp", FoldListDoc);
+extern const LexerModule lmLisp(SCLEX_LISP, ColouriseLispDoc, "lisp", FoldListDoc);

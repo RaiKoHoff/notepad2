@@ -1,4 +1,4 @@
-// This file is part of Notepad2.
+// This file is part of Notepad4.
 // See License.txt for details about distribution and modification.
 //! Lexer for CSV.
 
@@ -26,13 +26,14 @@ namespace {
 // https://commons.apache.org/proper/commons-csv/apidocs/org/apache/commons/csv/CSVFormat.html
 
 enum {
+	// see Styles.cpp
 	CsvOption_BackslashEscape = 1 << 15,
 	CsvOption_MergeDelimiter = 1 << 16,
 	CsvRowGroup = 100,
 };
 
-constexpr uint32_t asU4(const char *s) noexcept {
-	return *(const uint32_t *)s;
+inline uint32_t asU4(const char *s) noexcept {
+	return *reinterpret_cast<const uint32_t *>(s);
 }
 
 void ColouriseCSVDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initStyle, LexerWordList /*keywordLists*/, Accessor &styler) {
@@ -47,7 +48,7 @@ void ColouriseCSVDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 	initStyle = SCE_CSV_COLUMN_0;
 	Sci_Line lineCurrent = styler.GetLine(startPos);
 	if (lineCurrent > 0) {
-		rows = static_cast<int>(lineCurrent % CsvRowGroup);
+		rows = static_cast<int>((lineCurrent - 1) % CsvRowGroup);
 		const int lineState = styler.GetLineState(lineCurrent - 1);
 		if (lineState) {
 			quoted = true;
@@ -60,7 +61,6 @@ void ColouriseCSVDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 	styler.StartSegment(startPos);
 	Sci_PositionU lineStartNext = styler.LineStart(lineCurrent + 1);
 	const Sci_PositionU endPos = startPos + lengthDoc;
-	lineStartNext = sci::min(lineStartNext, endPos);
 
 	uint8_t chPrev = 0;
 	uint8_t chPrevNonWhite = delimiter;
@@ -126,7 +126,6 @@ void ColouriseCSVDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 			styler.SetLineState(lineCurrent, lineState);
 			lineCurrent++;
 			lineStartNext = styler.LineStart(lineCurrent + 1);
-			lineStartNext = sci::min(lineStartNext, endPos);
 		}
 	}
 
@@ -136,4 +135,4 @@ void ColouriseCSVDoc(Sci_PositionU startPos, Sci_Position lengthDoc, int initSty
 
 }
 
-LexerModule lmCSV(SCLEX_CSV, ColouriseCSVDoc, "csv");
+extern const LexerModule lmCSV(SCLEX_CSV, ColouriseCSVDoc, "csv");

@@ -59,39 +59,17 @@ def update_all_copyright_year():
 	print('update copyright year to:', year)
 	for path in [
 		'../doc/License.txt',
-		'../metapath/doc/License.txt',
-		'../metapath/src/metapath.rc',
-		'../metapath/src/version.h',
+		'../matepath/doc/License.txt',
+		'../matepath/src/matepath.rc',
+		'../matepath/src/version.h',
 		'../scintilla/License.txt',
-		'../src/Notepad2.rc',
+		'../src/Notepad4.rc',
 		'../src/Version.h',
 		'../License.txt']:
 		update_copyright_year(path, year)
 
 	for path in glob.glob('../locale/*/*.rc'):
 		update_copyright_year(path, year)
-
-def dump_static_linked_function(path):
-	result = {}
-	with open(path, encoding='utf-8') as fd:
-		for line in fd.readlines():
-			if line.count(':') > 1:
-				items = line.split()
-				func = items[1]
-				obj = items[-1]
-				if items[3] == 'f' and '<lambda_' not in func and items[4] != 'i':
-					if obj in result:
-						result[obj].append(func)
-					else:
-						result[obj] = [func]
-
-	path, ext = os.path.splitext(path)
-	path = f'{path}-crt{ext}'
-	print('write:', path)
-	with open(path, 'w', encoding='utf-8') as fd:
-		for obj, items in sorted(result.items()):
-			fd.write(obj + '\n')
-			fd.write(''.join(f'\t{func}\n' for func in sorted(items)))
 
 def quote_path(path):
 	return f'"{path}"' if ' ' in path else path
@@ -121,14 +99,17 @@ def generate_compile_commands(target, avx2=False, cxx=False):
 	cxxflags = []
 	# flags to run clang-tidy via vscode-clangd plugin, see https://clangd.llvm.org/
 	defines = ['NDEBUG', '_WINDOWS', 'NOMINMAX', 'WIN32_LEAN_AND_MEAN', 'STRICT_TYPED_ITEMIDS',
-		'UNICODE', '_UNICODE', '_CRT_SECURE_NO_WARNINGS', '_SCL_SECURE_NO_WARNINGS']
+		'UNICODE', '_UNICODE', '_CRT_SECURE_NO_WARNINGS', '_SCL_SECURE_NO_WARNINGS',
+		'BOOST_REGEX_STANDALONE', 'NO_CXX11_REGEX',
+	]
 	warnings = ['-Wextra', '-Wshadow', '-Wimplicit-fallthrough', '-Wformat=2', '-Wundef', '-Wcomma']
+	cxxwarn = ['-Wold-style-cast']
 
 	target_flag = '--target=' + target
 	msvc = 'msvc' in target
 	if msvc:
-		cflags.extend(['clang-cl.exe', target_flag, '/c', '/std:c17', '/O2'])
-		cxxflags.extend(['clang-cl.exe', target_flag, '/c', '/std:c++20', '/O2', '/EHsc', '/GR-'])
+		cflags.extend(['clang-cl.exe', target_flag, '-c', '/std:c17', '/O2'])
+		cxxflags.extend(['clang-cl.exe', target_flag, '-c', '/std:c++20', '/O2', '/EHsc', '/GR-'])
 		warnings.insert(0, '/W4')
 	else:
 		cflags.extend(['clang.exe', target_flag, '-municode', '-c', '-std=gnu17', '-O2'])
@@ -157,7 +138,9 @@ def generate_compile_commands(target, avx2=False, cxx=False):
 	cflags.extend(defines)
 	cxxflags.extend(defines)
 	cflags.extend(warnings)
-	cxxflags.extend(warnings)
+	cxxflags.extend(warnings + cxxwarn)
+	if cxx:
+		cflags.extend(cxxwarn)
 
 	config = [
 		('../src', ['../scintilla/include']),
@@ -165,7 +148,7 @@ def generate_compile_commands(target, avx2=False, cxx=False):
 		('../scintilla/lexlib', ['../include']),
 		('../scintilla/src', ['../include', '../lexlib']),
 		('../scintilla/win32', ['../include', '../src']),
-		('../metapath/src', []),
+		('../matepath/src', []),
 	]
 
 	def include_path(folder, path):
@@ -184,8 +167,14 @@ def generate_compile_commands(target, avx2=False, cxx=False):
 
 #update_all_project_toolset()
 #update_all_copyright_year()
-#dump_static_linked_function('bin/Release/x64/metapath.map')
-#dump_static_linked_function('bin/Release/x64/Notepad2.map')
-generate_compile_commands('x86_64-pc-windows-msvc', cxx=True)
+generate_compile_commands('x86_64-pc-windows-msvc', avx2=True)
+#generate_compile_commands('x86_64-pc-windows-msvc')
+#generate_compile_commands('i686-pc-windows-msvc')
+#generate_compile_commands('aarch64-pc-windows-msvc')
+#generate_compile_commands('arm-pc-windows-msvc')
+#generate_compile_commands('x86_64-w64-windows-gnu', avx2=True)
 #generate_compile_commands('x86_64-w64-windows-gnu')
+#generate_compile_commands('i686-w64-windows-gnu')
+#generate_compile_commands('aarch64-w64-windows-gnu')
+#generate_compile_commands('armv7-w64-windows-gnu')
 #run-clang-tidy --quiet -j4 1>tidy.log

@@ -1,43 +1,35 @@
-# Ruby 3.2 https://www.ruby-lang.org/en/documentation/
+# Ruby 3.4 https://www.ruby-lang.org/en/documentation/
 # https://docs.ruby-lang.org/en/
 # https://ruby-doc.org/
 # https://rubyreferences.github.io/
 
 #! Keywords			===========================================================
-# keywords_rdoc.html
+# https://docs.ruby-lang.org/en/master/syntax/keywords_rdoc.html
 __ENCODING__
 __LINE__
 __FILE__
 BEGIN
 END
-alias
-and
+alias and
 break
 defined?
-else
-elsif
-ensure
+else elsif ensure
 false
 in
-next
-nil
-not
+next nil not
 or
-redo
-rescue
-retry
-return
-self
-super
-then
-true
+redo rescue retry return
+self super
+then true
 undef
 when
-end
 yield
 
+# https://bugs.ruby-lang.org/issues/18980
+it
+
 #! Pre-defined constants	===================================================
-# globals_rdoc.html#label-Pre-defined+global+constants
+# https://docs.ruby-lang.org/en/master/globals_rdoc.html#label-Pre-Defined+Global+Constants
 TRUE
 FALSE
 NIL
@@ -60,6 +52,7 @@ RUBY_DESCRIPTION
 SCRIPT_LINES__
 
 #! code folding		===========================================================
+# https://docs.ruby-lang.org/en/master/syntax/control_expressions_rdoc.html
 begin
 end
 case
@@ -70,7 +63,7 @@ def end
 end
 do
 end
-for
+for do
 end
 if
 end
@@ -78,13 +71,13 @@ module end
 end
 unless
 end
-until
+until do
 end
-while
+while do
 end
 
 #! Pre-defined variables	===================================================
-# globals_rdoc.html
+# https://docs.ruby-lang.org/en/master/globals_rdoc.html#label-Pre-Defined+Global+Variables
 $DEBUG
 $LOAD_PATH
 $LOADED_FEATURES

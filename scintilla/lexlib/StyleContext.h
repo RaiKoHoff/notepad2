@@ -84,6 +84,8 @@ public:
 		} else {
 			atLineStart = false;
 			atLineEnd = true;
+			//! different from official Lexilla which set them to space.
+			// zero is consistent of GetRelative() and GetRelativeCharacter().
 			chPrev = 0;
 			ch = 0;
 			chNext = 0;
@@ -123,10 +125,17 @@ public:
 	Sci_Position LengthCurrent() const noexcept {
 		return currentPos - styler.GetStartSegment();
 	}
+	char GetRelativeChar(Sci_Position n) const noexcept {
+		return styler.SafeGetCharAt(currentPos + n);
+	}
 	int GetRelative(Sci_Position n) const noexcept {
 		return styler.SafeGetUCharAt(currentPos + n);
 	}
 #if 0
+	[[deprecated]]
+	int GetRelativeChar(Sci_Position n, char chDefault) const noexcept {
+		return styler.SafeGetCharAt(currentPos + n, chDefault);
+	}
 	[[deprecated]]
 	int GetRelative(Sci_Position n, char chDefault) const noexcept {
 		return styler.SafeGetUCharAt(currentPos + n, chDefault);

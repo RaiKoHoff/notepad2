@@ -252,6 +252,12 @@ struct CharacterExtracted {
 	}
 };
 
+struct CharacterWideInfo {
+	unsigned int lenCharacters = 0;
+	unsigned int lenBytes = 0;
+	wchar_t buffer[2]{};
+};
+
 /**
  */
 class Document : PerLine, public Scintilla::IDocument, public Scintilla::ILoader, public Scintilla::IDocumentEditable {
@@ -269,22 +275,21 @@ public:
 	};
 
 private:
-	int refCount;
+	int refCount = 0;
 	CellBuffer cb;
 	CharClassify charClass;
 #if 0
 	CharacterCategoryMap charMap;
 #endif
 	std::unique_ptr<CaseFolder> pcf;
-	Sci::Position endStyled;
-	int styleClock;
-	int enteredModification;
-	int enteredStyling;
-	int enteredReadOnlyCount;
+	Sci::Position endStyled = 0;
+	int styleClock = 0;
+	int enteredModification = 0;
+	int enteredStyling = 0;
+	int enteredReadOnlyCount = 0;
 
 	std::optional<bool> delaySavePoint;
-	bool matchesValid;
-	bool insertionSet;
+	bool insertionSet = false;
 	std::string insertion;
 
 	std::vector<WatcherWithUserData> watchers;
@@ -307,21 +312,24 @@ private:
 
 public:
 
-	Scintilla::EndOfLine eolMode;
+	Scintilla::EndOfLine eolMode = Scintilla::EndOfLine::CrLf;
 	/// Can also be SC_CP_UTF8 to enable UTF-8 mode
-	int dbcsCodePage;
-	Scintilla::LineEndType lineEndBitSet;
-	int tabInChars;
-	int indentInChars;
-	int actualIndentInChars;
-	bool useTabs;
-	bool tabIndents;
-	uint8_t forwardSafeChar;
-	uint8_t backwardSafeChar;
-	uint8_t backspaceUnindents;
+	int dbcsCodePage = Scintilla::CpUtf8;
+	Scintilla::LineEndType lineEndBitSet = Scintilla::LineEndType::Default;
+	int tabInChars = 8;
+	int indentInChars = 0;
+	int actualIndentInChars = 8;
+	bool useTabs = true;
+	bool tabIndents = true;
+	uint8_t backspaceUnindents = false;
+	uint8_t unused1 = 0;
+	uint8_t forwardSafeChar = 0x7f;
+	uint8_t backwardSafeChar = 0x7f;
+	uint8_t asciiForwardSafeChar = 0xff;
+	uint8_t asciiBackwardSafeChar = 0xff;
 	ActionDuration durationStyleOneUnit;
 
-	std::unique_ptr<IDecorationList> decorations;
+	const std::unique_ptr<IDecorationList> decorations;
 
 	explicit Document(Scintilla::DocumentOption options);
 	// Deleted so Document objects can not be copied.
@@ -369,7 +377,7 @@ public:
 	bool IsCrLf(Sci::Position pos) const noexcept;
 	int LenChar(Sci::Position pos, bool *invalid = nullptr) const noexcept;
 	bool InGoodUTF8(Sci::Position pos, Sci::Position &start, Sci::Position &end) const noexcept;
-	Sci::Position MovePositionOutsideChar(Sci::Position pos, Sci::Position moveDir, bool checkLineEnd = true) const noexcept;
+	Sci::Position MovePositionOutsideChar(Sci::Position pos, int moveDir, bool checkLineEnd = true) const noexcept;
 	Sci::Position NextPosition(Sci::Position pos, int moveDir) const noexcept;
 	bool NextCharacter(Sci::Position &pos, int moveDir) const noexcept;	// Returns true if pos changed
 	CharacterExtracted CharacterAfter(Sci::Position position) const noexcept;
@@ -412,7 +420,7 @@ public:
 	bool CanRedo() const noexcept {
 		return cb.CanRedo();
 	}
-	void DeleteUndoHistory() {
+	void DeleteUndoHistory() noexcept {
 		cb.DeleteUndoHistory();
 	}
 	bool SetUndoCollection(bool collectUndo) noexcept {
@@ -421,16 +429,17 @@ public:
 	bool IsCollectingUndo() const noexcept {
 		return cb.IsCollectingUndo();
 	}
-	void BeginUndoAction() {
-		cb.BeginUndoAction();
+	void BeginUndoAction(bool coalesceWithPrior = false) noexcept {
+		cb.BeginUndoAction(coalesceWithPrior);
 	}
-	void EndUndoAction() {
+	void EndUndoAction() noexcept {
 		cb.EndUndoAction();
 	}
+	int UndoSequenceDepth() const noexcept;
 	void AddUndoAction(Sci::Position token, bool mayCoalesce) {
 		cb.AddUndoAction(token, mayCoalesce);
 	}
-	void SetSavePoint() noexcept;
+	void SetSavePoint();
 	bool IsSavePoint() const noexcept {
 		return cb.IsSavePoint();
 	}
@@ -447,6 +456,21 @@ public:
 	bool TentativeActive() const noexcept {
 		return cb.TentativeActive();
 	}
+
+	int UndoActions() const noexcept;
+	void SetUndoSavePoint(int action) noexcept;
+	int UndoSavePoint() const noexcept;
+	void SetUndoDetach(int action) noexcept;
+	int UndoDetach() const noexcept;
+	void SetUndoTentative(int action) noexcept;
+	int UndoTentative() const noexcept;
+	void SetUndoCurrent(int action);
+	int UndoCurrent() const noexcept;
+	int UndoActionType(int action) const noexcept;
+	Sci::Position UndoActionPosition(int action) const noexcept;
+	std::string_view UndoActionText(int action) const noexcept;
+	void PushUndoActionType(int type, Sci::Position position);
+	void ChangeLastUndoActionText(size_t length, const char *text);
 
 	void ChangeHistorySet(bool enable) {
 		cb.ChangeHistorySet(enable);
@@ -469,9 +493,6 @@ public:
 	}
 	const char *RangePointer(Sci::Position position, Sci::Position rangeLength) noexcept {
 		return cb.RangePointer(position, rangeLength);
-	}
-	const char *StyleRangePointer(Sci::Position position, Sci::Position rangeLength) noexcept {
-		return cb.StyleRangePointer(position, rangeLength);
 	}
 	Sci::Position GapPosition() const noexcept {
 		return cb.GapPosition();
@@ -521,6 +542,9 @@ public:
 	void GetStyleRange(unsigned char *buffer, Sci::Position position, Sci::Position lengthRetrieve) const noexcept {
 		cb.GetStyleRange(buffer, position, lengthRetrieve);
 	}
+	int CheckRange(const char *chars, const char *styles, Sci::Position position, Sci::Position rangeLength) const noexcept {
+		return cb.CheckRange(chars, styles, position, rangeLength);
+	}
 	MarkerMask GetMark(Sci::Line line, bool includeChangeHistory) const noexcept;
 	Sci::Line MarkerNext(Sci::Line lineStart, MarkerMask mask) const noexcept;
 	int AddMark(Sci::Line line, int markerNum);
@@ -565,7 +589,7 @@ public:
 		cb.Allocate(newSize);
 	}
 
-	CharacterExtracted ExtractCharacter(Sci::Position position) const noexcept;
+	void ExtractCharacter(Sci::Position position, CharacterWideInfo &charInfo) const noexcept;
 
 	bool IsWordStartAt(Sci::Position pos) const noexcept;
 	bool IsWordEndAt(Sci::Position pos) const noexcept;
@@ -671,7 +695,7 @@ class UndoGroup {
 	Document *pdoc;
 	bool groupNeeded;
 public:
-	UndoGroup(Document *pdoc_, bool groupNeeded_ = true) :
+	UndoGroup(Document *pdoc_, bool groupNeeded_ = true) noexcept :
 		pdoc(pdoc_), groupNeeded(groupNeeded_) {
 		if (groupNeeded) {
 			pdoc->BeginUndoAction();
@@ -732,7 +756,7 @@ public:
 		position(act.position),
 		length(act.lenData),
 		linesAdded(linesAdded_),
-		text(act.Data()),
+		text(act.data),
 		line(0),
 		foldLevelNow(Scintilla::FoldLevel::None),
 		foldLevelPrev(Scintilla::FoldLevel::None),
